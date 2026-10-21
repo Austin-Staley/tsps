@@ -228,7 +228,9 @@ For parallel OpenCode workers, assign disjoint quest/test files and separate tes
 in the same worktree. Name one integration owner for shared runtime, restarts and Git.
 Give each worker the pinned Quest Helper path, capture facts, expected report path and
 explicit forbidden mutations. For this workstream the installed Flash model is
-`deepseek/deepseek-flash` (check `opencode models` rather than guessing an alias):
+`deepseek/deepseek-flash`. Check `opencode models deepseek --verbose` for the actual
+release name (currently **DeepSeek V4.1 Flash 1017**), provider and cost rather than
+guessing an alias or assuming an endpoint is free:
 
 ```bash
 opencode run --auto -m deepseek/deepseek-flash --variant low --format json \
@@ -239,6 +241,22 @@ Keep the returned session id for a corrective `--session <id>` follow-up. Ask wo
 write a compact done report with changed files, red/green evidence, rejected findings and
 remaining limits. Review reports between independent work blocks; avoid constant polling
 or rereading raw streams. A done report is evidence to review, not permission to skip review.
+
+- Bound each source assignment to **one whole quest**, including its mandatory scenes and
+  final hand-in. It does not mean fixing only one finding. Compare every helper `loadSteps`
+  key with the action that earns that state and the varp/varbit actually sent; a durable
+  plugin stage can differ from the helper's wire value. Test the mapping and login resend.
+- Check the named NPC transcript pages as well as the quest transcript. Post-quest and
+  recovery dialogue may already exist on the NPC page; do not invent a missing-data fix.
+- Keep the OS process PID, execution-tool session id and OpenCode `ses_...` id distinct.
+  A detached launcher must survive its parent shell (for example,
+  `subprocess.Popen(..., start_new_session=True)` with separate output/error files).
+- Check provider retry status when work stops. A live process sleeping on a quota error
+  is not implementation progress. Preserve its context; before changing endpoints, abort
+  its old turn and confirm the actor has exited, then continue the same OpenCode session.
+- Reviews can run alongside other quests' implementations. Repair a quest only after its
+  own source/review actor stops; unrelated quests do not need to wait. Freeze reviewed
+  files and record the exact revision loaded by the static server for native proof.
 
 ## Combat and dangerous steps
 
