@@ -16,7 +16,7 @@ export enum ProjectionType {
     ORTHO,
 }
 
-type CameraEasing = "linear" | "ease_in_out_sine" | "ease_out_cubic" | "ease_out_sine";
+type CameraEasing = "linear" | "ease_in_out_sine" | "ease_out_cubic" | "ease_out_sine" | "ease_in_sine";
 interface CameraTween {
     cycles: number;
     elapsed: number;
@@ -244,6 +244,7 @@ export class Camera {
         if (tween.easing === "ease_in_out_sine") return (1 - Math.cos(Math.PI * progress)) / 2;
         if (tween.easing === "ease_out_cubic") return 1 - Math.pow(1 - progress, 3);
         if (tween.easing === "ease_out_sine") return Math.sin((Math.PI * progress) / 2);
+        if (tween.easing === "ease_in_sine") return 1 - Math.cos((Math.PI * progress) / 2);
         return progress;
     }
 
