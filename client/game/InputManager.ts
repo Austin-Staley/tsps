@@ -1021,14 +1021,15 @@ export class InputManager {
             this.isPinching = false;
             this.pinchStartDistance = 0;
             this.lastPinchDistance = 0;
-            // If one finger remains, start a fresh one-finger gesture.
+            // If one finger remains, start a fresh one-finger gesture: it may orbit the camera,
+            // but lifting it is the end of the pinch, not a tap where it rests.
             if (event.touches.length === 1 && this.element) {
                 const [x, y] = getMousePos(this.element, event.touches[0]);
                 this.prevTouchY = y;
                 this.prevTouchTime = performance.now();
                 this.touchScrollVelocityY = 0;
                 this.isTouchScrolling = false;
-                this.touchAdapter.onFingerDown(x, y, this.lastInputTimeMs);
+                this.touchAdapter.onFingerDown(x, y, this.lastInputTimeMs, true);
             }
             event.preventDefault();
             return;
