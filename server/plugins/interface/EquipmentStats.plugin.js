@@ -43,7 +43,6 @@ const SALVE_AMULETS = new Map([
 
 let BonusManager;
 let pluginApi;
-const lastEffectLines = new WeakMap();
 
 function component(childId) {
   return (EQUIPMENT_STATS_INTERFACE_ID << 16) | childId;
@@ -163,23 +162,7 @@ function render(player) {
   sender.sendString(`${getWeight(player, effects.slotWeights).toFixed(1)} kg`, component(50));
 }
 
-/** Tell the player when a full set effect starts or stops applying. */
-function announceEffects(player) {
-  if (!player) return;
-  const current = describeEffects(player).lines.join("\n");
-  const previous = lastEffectLines.get(player);
-  lastEffectLines.set(player, current);
-  if (previous === current) return;
-  const lines = current ? current.split("\n") : [];
-  if (lines.length > 0) {
-    player.sendMessage(`Equipment effects: ${lines.join("; ")}.`);
-  } else if (previous) {
-    player.sendMessage("Your equipment set effect is no longer active.");
-  }
-}
-
 function onEquipmentChanged({ player }) {
-  announceEffects(player);
   if (player?.getInterfaceId?.() === EQUIPMENT_STATS_INTERFACE_ID) {
     update(player);
   }
@@ -203,7 +186,6 @@ function open(player) {
     .sendSubInterface(MAIN_MODAL_TARGET_UID, EQUIPMENT_STATS_INTERFACE_ID, 0);
   player.getPacketSender().sendClientScript(SIDE_BUTTON_SWITCH_SCRIPT, INVENTORY_TAB);
   update(player);
-  announceEffects(player);
   return true;
 }
 
@@ -237,6 +219,5 @@ module.exports = {
       }
     });
     api.onCustomEvent?.("equipment:changed", onEquipmentChanged);
-    api.onPlayerLogin?.(({ player }) => announceEffects(player));
   },
 };

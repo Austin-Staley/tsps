@@ -1,6 +1,5 @@
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { CombatFactory } = require("../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
-const { applyPrayerDrainModifiers } = require("../../src/main/typescript/elvarg/game/content/combat/EquipmentEffects");
 const { CombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/CombatMethod");
 const { CombatType } = require("../../src/main/typescript/elvarg/game/content/combat/CombatType");
 const { Graphic } = require("../../src/main/typescript/elvarg/game/model/Graphic");
@@ -52,6 +51,7 @@ const COCOONS = [
   [3493, 9483, 0, 0, 2],
 ];
 
+let core;
 let TaskManager;
 let ItemOnGroundManager;
 let World;
@@ -155,7 +155,7 @@ class KalphiteQueenCombat extends CombatMethod {
       return;
     }
     const player = target.getAsPlayer();
-    const drain = applyPrayerDrainModifiers(player, 1, { attacker: hit.getAttacker?.() });
+    const drain = core.applyPrayerDrainModifiers(player, 1, { attacker: hit.getAttacker?.() });
     const skills = player.getSkillManager();
     const prayer = skills.getCurrentLevel?.(Skill.PRAYER);
     if (Number.isFinite(prayer) && prayer > 0 && drain > 0) {
@@ -295,6 +295,7 @@ module.exports = {
   name: "KalphiteQueen",
   members: true,
   register(api) {
+    core = api.core;
     TaskManager = api.getTaskManager();
     api.onCustomEvent("collection-log:category-count", collectionLogCount);
     api.onCustomEvent("combat-achievements:kill-count", combatAchievementsKillCount);

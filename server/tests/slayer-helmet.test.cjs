@@ -197,12 +197,13 @@ test("a scroll with no mask or helmet is left alone", () => {
   assert.equal(player.items.length, 2);
 });
 
-test("the first boosted hit tells the player the target is on task, once per target", () => {
+test("a boosted hit does not spam chat; the stats row carries the on-task state", () => {
   const player = createPlayer({ head: ItemIdentifiers.SLAYER_HELMET });
   onTask = true;
   modifiers.meleeHit(player, 42);
   modifiers.meleeHit(player, 42);
-  assert.equal(player.messages.filter((message) => /boosts your accuracy/.test(message)).length, 1);
+  assert.deepEqual(player.messages, []);
+  assert.equal(getTargetBonuses(player).slayer.active, true);
   onTask = false;
 });
 

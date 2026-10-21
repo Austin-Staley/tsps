@@ -535,11 +535,13 @@ function quiverBonuses({ player, bonuses }) {
 
 /** 1/3 of shots spend a charge; blessed quivers never do (Wiki). */
 function spendCharge({ attacker, hit }) {
-  if (!attacker || !hasSunfire(attacker)) return;
-  const quiver = wornQuiverItem(attacker);
+  if (!attacker?.isPlayer?.()) return;
+  const player = attacker.getAsPlayer?.() ?? attacker;
+  if (!hasSunfire(player)) return;
+  const quiver = wornQuiverItem(player);
   if (!quiver || stageOf(quiver.getId()) !== "charged") return;
   if (hit?.getCombatType?.() !== core().CombatType.RANGED) return;
-  if (activeAmmoId(attacker) <= 0) return;
+  if (activeAmmoId(player) <= 0) return;
   if (core().Misc.getRandom(2) !== 0) return;
   const left = itemCharges(quiver) - 1;
   if (left > 0) {
@@ -548,8 +550,8 @@ function spendCharge({ attacker, hit }) {
   }
   quiver.setId(idFor("uncharged", isLocked(quiver.getId())));
   setItemCharges(quiver, 0);
-  attacker.getEquipment().refreshItems();
-  attacker.sendMessage("Your Dizana's quiver has run out of charges.");
+  player.getEquipment().refreshItems();
+  player.sendMessage("Your Dizana's quiver has run out of charges.");
 }
 
 function avaRecovery(player) {

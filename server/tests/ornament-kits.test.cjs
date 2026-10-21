@@ -7,6 +7,9 @@ const path = require("node:path");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
+const { ItemIds } = require("../dist/util/IdEnums");
+const { Barrows } = require("../dist/game/content/combat/Barrows");
+
 const OrnamentKits = require("../plugins/items/OrnamentKits.plugin");
 const GracefulOutfit = require("../plugins/items/GracefulOutfit.plugin");
 const MakeOverMage = require("../plugins/npcs/MakeOverMage.plugin");
@@ -14,7 +17,11 @@ const MakeOverMage = require("../plugins/npcs/MakeOverMage.plugin");
 let itemOnItem = null;
 let itemAction = null;
 OrnamentKits.register({
-  core: { GameConstants: { DEFINITIONS_DIRECTORY: path.join(__dirname, "..", "data", "definitions") } },
+  core: {
+    GameConstants: { DEFINITIONS_DIRECTORY: path.join(__dirname, "..", "data", "definitions") },
+    ItemIdentifiers: ItemIds,
+    Barrows,
+  },
   onItemOnItem: (handler) => { itemOnItem = handler; },
   onItemAction: (handler) => { itemAction = handler; },
   log() {},
@@ -111,17 +118,15 @@ test("reverting swaps the id back without refunding the kit", () => {
 });
 
 test("a kit applies to a degraded Barrows piece, and Echo Ahrim's reverts to its stage", () => {
-  const { Barrows } = require("../dist/game/content/combat/Barrows");
   const kit = item(30451);
   const degraded = item(4857, { barrows: { remaining: 750 } });
   const player = createPlayer([kit, degraded]);
   const apply = { player, usedItem: kit, usedWithItem: degraded, usedItemId: 30451, usedWithItemId: 4857, handled: false };
   itemOnItem(apply);
   assert.equal(apply.handled, true);
-  assert.equal(degraded.getId(), 30445, "Echo ahrim's hood 100");
+  assert.equal(degraded.getId(), 30525, "Echo ahrim's hood 75 keeps the stage");
   assert.deepEqual(degraded.getMeta(), { barrows: { remaining: 750 } });
 
-  degraded.setId(30525);
   const revert = { player, item: degraded, itemId: 30525, option: "Revert", handled: false };
   itemAction(revert);
   assert.equal(revert.handled, true);

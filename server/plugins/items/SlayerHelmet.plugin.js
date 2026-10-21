@@ -69,22 +69,9 @@ function boostActive(player, style) {
   return onTask(player) && !salveApplies(player, style);
 }
 
-/** Player -> the target we last told them the headwear boosts them against. */
-const announced = new WeakMap();
-
-/** One line per target: the player can tell the on-task bonus applies to it. */
-function announceOnTask(player) {
-  const target = player.getCombat?.()?.getTarget?.();
-  if (!target?.isNpc?.() || announced.get(player) === target) return;
-  announced.set(player, target);
-  const label = headName(player).includes("slayer helmet") ? "Slayer helmet" : "black mask";
-  player.sendMessage?.(`Your ${label} boosts your accuracy and damage against this target.`);
-}
-
 function boost(style) {
   return (entity, value) => {
     if (!entity?.isPlayer?.() || !boostActive(entity.getAsPlayer(), style)) return value;
-    announceOnTask(entity.getAsPlayer());
     return style === "melee"
       ? Math.floor((value * MELEE_NUMERATOR) / MELEE_DENOMINATOR)
       : Math.floor((value * IMBUED_NUMERATOR) / IMBUED_DENOMINATOR);
@@ -98,7 +85,6 @@ const magicBoost = boost("magic");
 /** Ranged damage: 23/20, plus what other gear adds to it (the dragon hunter crossbow's 5). */
 function rangedDamageBoost(entity, value) {
   if (!entity?.isPlayer?.() || !boostActive(entity.getAsPlayer(), "ranged")) return value;
-  announceOnTask(entity.getAsPlayer());
   const bonus = { player: entity.getAsPlayer(), numerator: IMBUED_NUMERATOR };
   pluginApi.emitCustomEvent("slayer:imbued-ranged-bonus", bonus);
   return Math.floor((value * bonus.numerator) / IMBUED_DENOMINATOR);

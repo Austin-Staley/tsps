@@ -59,7 +59,10 @@ function applyKit(event) {
     return;
   }
   player.getInventory().deleteNumber(match.entry.kit, 1);
-  baseItem.setId(match.entry.result);
+  const stage = Barrows.stageOf(baseItem.getId?.()) ?? 0;
+  baseItem.setId(stage === 0
+    ? match.entry.result
+    : Barrows.stageItemIdFor(match.entry.result, stage) ?? match.entry.result);
   refresh(player);
   player.sendMessage(`You apply the ${match.entry.name.toLowerCase()}.`);
   event.handled = true;
@@ -91,6 +94,35 @@ module.exports = {
   _test: { loadKits: () => loadKits(), findEntry, applyKit, revertItem },
   register(api) {
     core = api.core;
+    const I = core.ItemIdentifiers;
+    core.Barrows.registerVariantStages(I.AHRIMS_HOOD, [
+      I.ECHO_AHRIMS_HOOD_100,
+      I.ECHO_AHRIMS_HOOD_75,
+      I.ECHO_AHRIMS_HOOD_50,
+      I.ECHO_AHRIMS_HOOD_25,
+      I.ECHO_AHRIMS_HOOD_0,
+    ], I.ECHO_AHRIMS_HOOD);
+    core.Barrows.registerVariantStages(I.AHRIMS_ROBETOP, [
+      I.ECHO_AHRIMS_ROBETOP_100,
+      I.ECHO_AHRIMS_ROBETOP_75,
+      I.ECHO_AHRIMS_ROBETOP_50,
+      I.ECHO_AHRIMS_ROBETOP_25,
+      I.ECHO_AHRIMS_ROBETOP_0,
+    ], I.ECHO_AHRIMS_ROBETOP);
+    core.Barrows.registerVariantStages(I.AHRIMS_ROBESKIRT, [
+      I.ECHO_AHRIMS_ROBESKIRT_100,
+      I.ECHO_AHRIMS_ROBESKIRT_75,
+      I.ECHO_AHRIMS_ROBESKIRT_50,
+      I.ECHO_AHRIMS_ROBESKIRT_25,
+      I.ECHO_AHRIMS_ROBESKIRT_0,
+    ], I.ECHO_AHRIMS_ROBESKIRT);
+    core.Barrows.registerVariantStages(I.AHRIMS_STAFF, [
+      I.ECHO_AHRIMS_STAFF_100,
+      I.ECHO_AHRIMS_STAFF_75,
+      I.ECHO_AHRIMS_STAFF_50,
+      I.ECHO_AHRIMS_STAFF_25,
+      I.ECHO_AHRIMS_STAFF_0,
+    ], I.ECHO_AHRIMS_STAFF);
     for (const entry of loadKits()) {
       if (entry.kit > 0) {
         byKitAndBase.set(`${entry.kit}|${entry.base}`, entry);

@@ -153,6 +153,8 @@ test("the Elysian passive stays at 70% for a 25% reduction", () => {
 test("the spectral shield halves NPC prayer drains, not PvP ones", () => {
   const spectral = wearing(ItemIds.SPECTRAL_SPIRIT_SHIELD);
   assert.equal(prayerDrain(spectral, 10, {}), 5);
+  assert.equal(prayerDrain(spectral, 5, {}), 2, "odd drains floor");
+  assert.equal(prayerDrain(spectral, 3, {}), 1);
   assert.equal(prayerDrain(spectral, 10, { attacker: { isPlayer: () => true } }), 10);
   assert.equal(prayerDrain(wearing(ItemIds.BLESSED_SPIRIT_SHIELD), 10, {}), 10);
   assert.equal(prayerDrain(wearing(ItemIds.ARCANE_SPIRIT_SHIELD), 10, {}), 10);

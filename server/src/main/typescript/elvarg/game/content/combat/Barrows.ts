@@ -6,20 +6,17 @@ const BASE_ITEMS = [
     4745, 4747, 4749, 4751, 4753, 4755, 4757, 4759,
 ];
 
-/** Echo Ahrim's ornament kit: the same pieces and stages, with their own cosmetic ids. */
-const ECHO_BASES: Record<number, number> = {
-    30445: 4708,
-    30447: 4712,
-    30449: 4714,
-    30568: 4710,
-};
+interface VariantStages {
+    /** The plain base item the cosmetic family degrades as. */
+    base: number;
+    /** The undegraded cosmetic id, when it differs from the 100% stage. */
+    baseId?: number;
+    /** 100%, 75%, 50%, 25% and broken ids, in that order. */
+    stages: number[];
+}
 
-const ECHO_STAGES: Record<number, number[]> = {
-    4708: [30519, 30525, 30531, 30537, 30543],
-    4712: [30521, 30527, 30533, 30539, 30545],
-    4714: [30523, 30529, 30535, 30541, 30547],
-    4710: [30570, 30571, 30572, 30573, 30574],
-};
+/** Cosmetic families registered by plugins (e.g. Echo Ahrim's). */
+const VARIANTS: VariantStages[] = [];
 
 const SETS = {
     ahrims: [4708, 4712, 4714, 4710],
@@ -34,11 +31,26 @@ export class Barrows {
     public static readonly AMULET_OF_THE_DAMNED_FULL = 12851;
     public static readonly AMULET_OF_THE_DAMNED = 12853;
 
-    public static baseItemId(itemId: number): number | null {
-        if (ECHO_BASES[itemId] != null) return ECHO_BASES[itemId];
-        for (const [base, stages] of Object.entries(ECHO_STAGES)) {
-            if (stages.includes(itemId)) return Number(base);
+    /** A cosmetic family that degrades as the plain base item (100/75/50/25/broken). */
+    public static registerVariantStages(base: number, stages: number[], baseId?: number): void {
+        if (!Number.isInteger(base) || stages.length !== 5 || !stages.every(Number.isInteger)
+            || (baseId !== undefined && !Number.isInteger(baseId))) {
+            throw new Error("Barrows.registerVariantStages needs a base and five stage ids");
         }
+        const existing = VARIANTS.findIndex((variant) => variant.base === base);
+        if (existing !== -1) VARIANTS.splice(existing, 1);
+        VARIANTS.push({ base, baseId, stages });
+    }
+
+    private static variantFor(itemId: number): VariantStages | null {
+        return VARIANTS.find((variant) =>
+            variant.base === itemId || variant.baseId === itemId || variant.stages.includes(itemId)
+        ) ?? null;
+    }
+
+    public static baseItemId(itemId: number): number | null {
+        const variant = this.variantFor(itemId);
+        if (variant) return variant.base;
         const index = BASE_ITEMS.indexOf(itemId);
         if (index !== -1) return itemId;
         if (itemId < 4856 || itemId >= 5000) return null;
@@ -57,9 +69,8 @@ export class Barrows {
     public static stageItemIdFor(itemId: number, stage: number): number | null {
         const base = this.baseItemId(itemId);
         if (base == null) return null;
-        if (ECHO_STAGES[base] != null && (ECHO_BASES[itemId] != null || ECHO_STAGES[base].includes(itemId))) {
-            return ECHO_STAGES[base][stage] ?? null;
-        }
+        const variant = this.variantFor(itemId);
+        if (variant) return variant.stages[stage] ?? null;
         return this.stageItemId(base, stage);
     }
 
@@ -67,12 +78,12 @@ export class Barrows {
     public static stageOf(itemId: number): number | null {
         const base = this.baseItemId(itemId);
         if (base == null) return null;
-        if (itemId >= 4856 && itemId < 5000) return (itemId - 4856) % 6;
-        const echo = ECHO_STAGES[base];
-        if (echo) {
-            const stage = echo.indexOf(itemId);
-            if (stage !== -1) return stage;
+        const variant = this.variantFor(itemId);
+        if (variant) {
+            const stage = variant.stages.indexOf(itemId);
+            return stage === -1 ? 0 : stage;
         }
+        if (itemId >= 4856 && itemId < 5000) return (itemId - 4856) % 6;
         return 0;
     }
 

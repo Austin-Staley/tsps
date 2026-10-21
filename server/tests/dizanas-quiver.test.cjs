@@ -297,6 +297,11 @@ test('one in three shots spends a charge, and exhausting it leaves the uncharged
   }
 });
 
+test("an NPC attacker never spends the quiver charge", () => {
+  const npc = { isPlayer: () => false };
+  assert.doesNotThrow(() => Quiver._test.spendCharge({ attacker: npc, hit: { getCombatType: () => core.CombatType.RANGED } }));
+});
+
 test("Ava's device applies its recovery without being consumed", () => {
   const player = fakePlayer();
   const device = new Item(I.AVAS_ASSEMBLER, 1);

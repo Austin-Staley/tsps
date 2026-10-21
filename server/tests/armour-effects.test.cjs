@@ -358,6 +358,11 @@ test("an Echo Ahrim's piece degrades through its own staged ids", () => {
   const { api } = buildApi();
   BarrowsEquipment.register(api);
   const { Barrows } = require("../dist/game/content/combat/Barrows");
+  const { ItemIds } = require("../dist/util/IdEnums");
+  Barrows.registerVariantStages(ItemIds.AHRIMS_HOOD, [
+    ItemIds.ECHO_AHRIMS_HOOD_100, ItemIds.ECHO_AHRIMS_HOOD_75, ItemIds.ECHO_AHRIMS_HOOD_50,
+    ItemIds.ECHO_AHRIMS_HOOD_25, ItemIds.ECHO_AHRIMS_HOOD_0,
+  ], ItemIds.ECHO_AHRIMS_HOOD);
   const { player, items, messages } = barrowsPlayer({ equipmentIds: { 0: 30445 } });
 
   for (let i = 0; i < 250; i++) BarrowsEquipment._test.degradeEquipment(player);
@@ -472,12 +477,13 @@ test("the equipment panel shows weight and set effects and re-renders on an equi
   api.emitCustomEvent("equipment:changed", { player });
   const weightRow = () => sent.filter((entry) => entry.uid === ((84 << 16) | 50)).at(-1).text;
   assert.equal(weightRow(), "-25.0 kg");
-  assert.ok(messages.includes("Equipment effects: Graceful set: +30% run energy restore."));
+  assert.ok(EquipmentStats._test.describeEffects(player).lines.includes("Graceful set: +30% run energy restore"));
+  assert.deepEqual(messages, [], "set effects are shown in the panel, not spammed in chat");
 
   items[1] = new Item(-1);
   api.emitCustomEvent("equipment:changed", { player });
   assert.equal(weightRow(), "-21.0 kg");
-  assert.ok(messages.includes("Your equipment set effect is no longer active."));
+  assert.ok(!EquipmentStats._test.describeEffects(player).lines.some((line) => line.startsWith("Graceful set:")));
 });
 
 test("Skillcape.forId resolves every cape variant", () => {

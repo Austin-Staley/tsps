@@ -2170,6 +2170,7 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      Barrows: require(`${combat}/Barrows`).Barrows,
       applyPrayerDrainModifiers: require(`${combat}/EquipmentEffects`).applyPrayerDrainModifiers,
       CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
