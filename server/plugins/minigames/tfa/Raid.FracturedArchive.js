@@ -12,13 +12,14 @@
 
 const Shared = require("./Shared.FracturedArchive");
 const Parties = require("./Parties.FracturedArchive");
-const Grouping = require("./Grouping.FracturedArchive");
 const Raid = require("./RaidState.FracturedArchive");
 
 /** Saved: "Yes, and don't ask again." at the Archive Door. */
 const ATTR_SKIP_WARNING = "fractured-archive:skip-entry-warning";
 
 const ENTRY_WARNING = "You are about to enter the Fractured Archive which is not a safe area. In addition, be aware that the raid uses various flashing effects that may cause discomfort to some users. Are you sure you wish to enter?";
+/** Estimate (not captured): a member arriving after the fight has started, or been won. */
+const LATE_MESSAGE = "Your party has already started the challenge. You can't join them now.";
 const ABANDON_WARNING = "You are about to <col=ad2800>abandon the raid</col>. If you do this, you <col=ad2800>will not</col> be able to return to your current run.";
 
 function raidIn(player) {
@@ -36,6 +37,10 @@ function enterArchive({ player }) {
   }
   if (!party.raid && !party.isLeader(player)) {
     Shared.mesbox(player, `Your leader, ${Shared.displayName(party.leader)}, must enter first.`);
+    return true;
+  }
+  if (party.raid && !party.raid.hasMember(player) && !party.raid.canJoin()) {
+    Shared.mesbox(player, LATE_MESSAGE);
     return true;
   }
   if (player.getAttribute(ATTR_SKIP_WARNING) === true) {
@@ -57,8 +62,7 @@ function goIn(player) {
   if (!party) return;
   const raid = party.raid ?? (party.isLeader(player) ? Raid.begin(player) : null);
   if (!raid) return;
-  for (const other of party.members) if (other !== player && !raid.member(other).roomKey) Grouping.refreshOverlay(other);
-  raid.enter(player);
+  if (!raid.enter(player) && !raid.hasMember(player)) Shared.mesbox(player, LATE_MESSAGE);
 }
 
 // ---------------------------------------------------------------- the Passageway out
@@ -105,6 +109,8 @@ function spectateClick(event) {
 function returnAfterLogout({ player }) {
   const left = player.getAttribute(Raid.ATTR_LOGOUT);
   if (left) {
+    // Nothing from spectating needs undoing here: untargetable, the blocked movement and the
+    // closed tabs live on the old session's player; a login starts clean and sends every tab.
     const raid = Raid.byId(left.raid);
     if (raid?.rejoin(player)) return;
     player.setAttribute(Raid.ATTR_LOGOUT, null);

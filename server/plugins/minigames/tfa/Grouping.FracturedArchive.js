@@ -49,7 +49,7 @@ function refreshOverlay(player) {
   const lines = Array.from({ length: Shared.MAX_PARTY_SIZE }, (_, i) =>
     (party?.members[i] ? Shared.displayName(party.members[i]) : "-"));
   sender.sendString(lines.join("<br>"), Shared.id("component", "LOBBY_NAMES"));
-  sender.sendVarbit(Shared.id("varbit", "PARTY_STATUS"), !party ? 0 : party.raid ? 2 : 1);
+  sender.sendVarbit(Shared.id("varbit", "PARTY_STATUS"), !party ? 0 : party.raid?.canJoin() ? 2 : 1);
   sender.sendConfig(Shared.id("varp", "CONTROLLER"), party ? party.controller : -1);
 }
 
@@ -65,10 +65,12 @@ function refreshParty(party) {
   }
 }
 
+/** Out of the party, unless already inside the Archive with it (the raid handles that). */
 function leaveParty(player) {
   const party = Parties.partyOf(player);
-  if (!party || party.raid) return;
+  if (!party || party.raid?.hasMember(player)) return;
   party.remove(player);
+  party.raid?.dropFromRoster(player);
   refreshParty(party);
   refreshOverlay(player);
 }

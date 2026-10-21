@@ -307,7 +307,7 @@ class Room {
 // ---------------------------------------------------------------- the raid
 
 class Raid {
-  constructor(party) {
+  constructor(party, leader) {
     this.id = nextRaidId++;
     this.party = party;
     party.raid = this;
@@ -317,7 +317,7 @@ class Raid {
     this.members = new Map();
     /** Members who logged out, by username: { fight }. */
     this.away = new Map();
-    /** Everyone who started: the HUD keeps their slots. */
+    /** The party when the leader went in: the HUD keeps their slots. */
     this.roster = [...party.members];
     this.area = new (areaClass())(this);
     this.room = null;
@@ -326,7 +326,8 @@ class Raid {
     this.timerStopped = 0;
     this.lastCycle = -1;
     this.over = false;
-    for (const player of party.members) this.add(player);
+    // Only the leader is in; the others join as they go through the door themselves.
+    this.add(leader);
     raids.set(this.id, this);
   }
 
@@ -341,6 +342,11 @@ class Raid {
 
   hasMember(player) {
     return this.players.includes(player);
+  }
+
+  /** Members still outside can go in until the room's challenge is started (estimate of when). */
+  canJoin() {
+    return !this.over && (!this.room || this.room.stage === STAGE.IDLE);
   }
 
   add(player) {
@@ -359,7 +365,11 @@ class Raid {
 
   /** In through the Archive Door: the fade, then the Archive (all timings captured). */
   enter(player) {
-    if (!this.players.includes(player) || this.member(player).roomKey) return;
+    if (!this.players.includes(player)) {
+      if (!this.party.has(player) || !this.canJoin()) return false;
+      this.add(player);
+    }
+    if (this.member(player).roomKey) return false;
     if (!this.room) this.buildRoom("GUARDIAN");
     const sender = player.getPacketSender();
     sender.sendConfig(Shared.id("varp", "SHOW_EXTRA_BAR"), 0);
@@ -370,6 +380,7 @@ class Raid {
     Shared.api().emitCustomEvent("boss-hud:reset", { player });
     player.getMovementQueue().reset().setBlockMovement(true);
     Shared.later(player, ENTER_MOVE_DELAY, () => this.arrive(player, this.room));
+    return true;
   }
 
   arrive(player, room) {
@@ -451,6 +462,7 @@ class Raid {
 
   challengeStarted() {
     this.timerStart = Shared.cycle();
+    this.refreshPartyStatus();
   }
 
   challengeEnded() {
@@ -488,12 +500,18 @@ class Raid {
     }
   }
 
-  /** The lobby overlay's "Step Inside Now!" for members not in yet. */
+  /** The lobby overlay's "Step Inside Now!" for members not in yet, while they still can. */
   refreshPartyStatus() {
-    for (const player of this.players) {
-      if (this.member(player).roomKey) continue;
-      player.getPacketSender().sendVarbit(Shared.id("varbit", "PARTY_STATUS"), 2);
+    for (const player of this.party.members) {
+      if (this.hasMember(player)) continue;
+      player.getPacketSender().sendVarbit(Shared.id("varbit", "PARTY_STATUS"), this.canJoin() ? 2 : 1);
     }
+  }
+
+  /** A member who never came in left the party: their HUD slot goes. */
+  dropFromRoster(player) {
+    this.roster = this.roster.filter((other) => other.getUsername() !== player.getUsername());
+    for (const other of this.players) if (this.member(other).hudOpen) this.openHud(other);
   }
 
   // ---------------------------------------------------------------- deaths
@@ -659,7 +677,8 @@ class Raid {
     player.getPacketSender().sendConfig(Shared.id("varp", "CONTROLLER"), -1);
     Shared.api().emitCustomEvent("boss-hud:hide", { player, fade: false, afterTicks: 0 });
     this.party.remove(player);
-    if (this.players.length === 0 && this.away.size === 0) this.dispose();
+    // Nobody left inside: the raid ends; anyone logged out finds no party when they return.
+    if (this.players.length === 0) this.dispose();
     else this.checkWipe();
   }
 
@@ -760,7 +779,7 @@ function begin(leader) {
   const party = Parties.partyOf(leader);
   if (!party) return null;
   if (party.raid) return party.raid;
-  const raid = new Raid(party);
+  const raid = new Raid(party, leader);
   raid.refreshPartyStatus();
   return raid;
 }

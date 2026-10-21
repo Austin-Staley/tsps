@@ -147,9 +147,11 @@ Captured details:
    - `tfa_client_partyslot` (the viewer's slot, from 1);
    - each slot's `tfa_client_p0-7`: 1-27 health, 30 dead, 31 not in the room;
    - the timer, script 10036 `(ticks, 1 = stopped)`, every tick.
-6. Members still outside see "Step Inside Now!".
+6. Members still outside see "Step Inside Now!". They go in by the door themselves, each joining the raid as they do; the leader has to be first.
+7. Nobody can join once the Inert Guardian has been touched (or after it is beaten): "Your party has already started the challenge. You can't join them now." (our wording), and "Step Inside Now!" goes back to "Party".
+8. A member who leaves the lobby or logs out before going in just leaves the party and their HUD slot. The raid ends as soon as nobody is left inside it.
 
-*Estimates:* needing a party, and the leader going in first.
+*Estimates:* needing a party, and the late-join message.
 
 **Instancing.** The Archive's first map square (region 16471, levels 0-1) is one `PrivateArea` per raid, at the real coordinates. Live copies it into an instance. The area is multi-combat, and teleports are refused ("You can't teleport out of the Archive.", *estimate*).
 
