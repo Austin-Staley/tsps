@@ -59,6 +59,21 @@ export class TeleportType {
         null,
         { sound: new Sound(965, 1, 15, 0), busy: true, repeatEndAnimation: true },
     );
+    /**
+     * Teleport scrolls, as in OSRS captures (docs/teleport-tablets.md): the scroll opens
+     * (teleport_scroll_open 3864, telescroll_teleport 1039, the spell teleport sound) and is used
+     * up on the click, and the player lands on the third tick (start tick 4, as above).
+     */
+    public static readonly TELE_SCROLL = new TeleportType(
+        4,
+        new Animation(3864, Priority.HIGH),
+        null,
+        Animation.DEFAULT_RESET_ANIMATION,
+        new Graphic(1039, GraphicHeight.LOW, Priority.HIGH),
+        null,
+        null,
+        { busy: true, repeatEndAnimation: true },
+    );
     public static readonly PURO_PURO = new TeleportType(9, new Animation(6601, Priority.HIGH), null, Animation.DEFAULT_RESET_ANIMATION, new Graphic(1118, GraphicHeight.LOW, Priority.HIGH), null, null);
 
     private readonly startAnim: Animation;
