@@ -387,3 +387,25 @@ test('Longhall door leaves use the cache open locs and unseal Atlas through real
   assert.ok(MapObjects.get(11620, new core.Location(3079, 3435, 0), null), 'east leaf closes back to 11620');
   assert.equal(route().success, false, 'closing both leaves seals the entrance again');
 });
+
+test('Below post-quest Willow visibility is main-varbit driven at the Nardah spawn', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const vars = (value) => ({ getVarp: () => 0, getVarbit: () => value });
+  assert.equal(CacheDefinitions.resolveNpc(10638, vars(10))?.id, 10655, 'start Willow before 15');
+  assert.equal(CacheDefinitions.resolveNpc(10638, vars(120)), undefined, 'start Willow hides after the betrayal');
+  assert.equal(CacheDefinitions.resolveNpc(10639, vars(25))?.id, 10655, 'entrance Willow mid-quest');
+  assert.equal(CacheDefinitions.resolveNpc(10639, vars(120)), undefined, 'entrance Willow hides at completion');
+  assert.equal(CacheDefinitions.resolveNpc(10641, vars(35)), undefined, 'Nardah parent is hidden mid-quest');
+  assert.equal(CacheDefinitions.resolveNpc(10641, vars(120))?.id, 10655, 'Nardah parent resolves to Willow only at main 120');
+
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const nardah = spawns.find((spawn) => spawn.name === 'Willow' && spawn.id === 10641);
+  assert.deepEqual([nardah.x, nardah.y], [3446, 2903], 'canonical post-quest Willow is the Nardah spawn');
+
+  const q = register('BelowIceMountain', 'below_ice_mountain'), p = player();
+  q.quest.setStage(p, 5); // Below STAGE_COMPLETE; 22 is the Ides completion value.
+  assert.equal(q.quest.getStage(p), 5);
+  assert.equal(q.quest.varbitValue(5, p), 120, 'Below completion wires main varbit 120');
+  assert.equal(p.varbits.get(12063), 120, 'the recorded completion packet is main 120');
+  assert.equal(q.variant(N.WILLOW, p), 'post-quest-dialogue-willow');
+});
