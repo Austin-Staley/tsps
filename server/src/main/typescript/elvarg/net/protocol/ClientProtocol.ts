@@ -1226,7 +1226,7 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
 }
 
 /** Camera easings by wire id; the client decodes the same order. */
-export const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine"] as const;
+export const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine", "ease_in_sine"] as const;
 export type CameraEasing = typeof CAMERA_EASINGS[number];
 
 export type CameraMovementOptions = {
