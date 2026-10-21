@@ -25,6 +25,7 @@ import {
     type WidgetActionEvent,
 } from "./widgetActionPayload";
 import { handleTradeWidgetAction, type WidgetActionTradeDeps } from "./widgetActionTrade";
+import { markInventoryOpFade } from "./inventoryOpFade";
 
 export type { WidgetActionEvent } from "./widgetActionPayload";
 
@@ -333,6 +334,7 @@ export class WidgetActionRouter {
             }
 
             sendWidgetAction(payload);
+            markInventoryOpFade(widgetManager, widget);
         } catch (err) {
             console.warn("[OsrsClient] widget action dispatch failed", err);
         }

@@ -1,4 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
+import { isInventoryOpFaded } from "../../../game/widgets/inventoryOpFade";
 import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
@@ -3083,8 +3084,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             // Scripts set w.transparency via cc_settrans; cache sets w.opacity (same semantics)
             // Clicked/dragged widget is semi-transparent (var14 = 128), except scrollbars.
             // Reference: UserComparator5.drawInterface: if (!var10.isScrollBar) { var14 = 128; }
+            // An inventory item whose op was just sent stays that way until the server answers.
             let trans = w.transparency ?? w.opacity ?? 0;
-            if ((isDragActive || isClickedWidget) && !w.isScrollBar) {
+            if ((isDragActive || isClickedWidget || isInventoryOpFaded(w)) && !w.isScrollBar) {
                 trans = 128;
             }
             const alpha = (255 - trans) / 255;
