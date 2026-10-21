@@ -27,7 +27,10 @@ const ELSEWHERE = new Set([
 ]);
 
 let useTablet;
+let castAlternate;
+let prompt;
 let diaries;
+const casts = [];
 const teleports = [];
 const tabletIds = new Map();
 
@@ -39,12 +42,19 @@ before(async () => {
         persistAttribute: () => {},
         onItemAction: (handler) => { useTablet = handler; },
         onPlayerLogin: () => {},
+        onSpellCast: (handler) => { castAlternate = handler; },
         onInterfaceActionClick: () => {},
+        sendMultiChatboxPrompt: (player, title, ...pairs) => { prompt = { title, pairs }; return true; },
         emitCustomEvent: (name, request) => {
             if (name === 'diary:is-complete') request.complete = diaries.has(`${request.diary} ${request.tier}`);
         },
     });
     TeleportHandler.checkReqs = () => true;
+    const { SpellTeleports: Spells } = PluginManager.getCoreApi();
+    Spells.handleSelf = (player, name, destination) => {
+        casts.push({ name, tile: destination && [destination.getX(), destination.getY(), destination.getZ()] });
+        return true;
+    };
     TeleportHandler.teleport = (player, destination, type) => teleports.push({ destination, type });
     for (let id = 0; id < CacheDefinitions.getCounts().items; id++) {
         const item = CacheDefinitions.getItem(id);
@@ -116,7 +126,7 @@ test('the Grand Exchange option needs the medium Varrock Diary', () => {
     const refused = use('varrock teleport', 'grand exchange');
     assert.equal(refused.event.handled, true);
     assert.equal(refused.teleport, undefined);
-    assert.deepEqual(refused.player.messages, ['You need to complete the medium Varrock Diary to do that.']);
+    assert.deepEqual(refused.player.messages, ['You must complete the medium, hard or elite tier of the Varrock achievement diary to use this feature.']);
 
     diaries = new Set(['varrock medium']);
     assert.deepEqual(use('varrock teleport', 'grand exchange').tile, [3165, 3477, 0]);
@@ -140,4 +150,47 @@ test('Revert turns a redirected tablet back into a Teleport to house tablet', ()
     assert.equal(event.handled, true);
     assert.equal(player.inventory.get(tabletIds.get('yanille teleport').id), 0);
     assert.equal(player.inventory.get(Items.TELEPORT_TO_HOUSE), 1);
+});
+
+/** Clicks an option on a spell, as NetworkBuilder emits it; unhandled means the usual cast. */
+function cast(spell, opId, player) {
+    player ??= playerWith(-1);
+    casts.length = 0;
+    prompt = undefined;
+    const event = { player, spellName: spell, spellWidget: -1, spellItemId: -1, opId, handled: false };
+    castAlternate(event);
+    return { event, player, cast: casts[0] };
+}
+
+test('the spell alternate option needs the diary; Cast still goes to the town', () => {
+    diaries = new Set();
+    const refused = cast('Varrock Teleport', 2);
+    assert.equal(refused.event.handled, true);
+    assert.equal(refused.cast, undefined);
+    assert.deepEqual(refused.player.messages, ['You must complete the medium, hard or elite tier of the Varrock achievement diary to use this feature.']);
+    assert.equal(cast('Varrock Teleport', 1).event.handled, false, 'Cast is the usual cast');
+
+    diaries = new Set(['varrock medium', 'kandarin hard', 'ardougne hard']);
+    assert.deepEqual(cast('Varrock Teleport', 2).cast.tile, [3165, 3477, 0]);
+    assert.deepEqual(cast('Camelot Teleport', 2).cast.tile, [2726, 3486, 0]);
+    assert.deepEqual(cast('Watchtower Teleport', 2).cast.tile, [2583, 3095, 0]);
+    assert.equal(cast('Watchtower Teleport', 3).event.handled, false);
+});
+
+test('Configure asks as in the capture, and the choice is shared with the tablets', () => {
+    diaries = new Set(['varrock medium']);
+    const { player } = cast('Varrock Teleport', 10);
+    assert.equal(prompt.title, 'Spellbook/portal default: Varrock');
+    assert.deepEqual(prompt.pairs.filter((entry) => typeof entry === 'string'), ['Change to the Grand Exchange.', 'Cancel.']);
+    prompt.pairs[1](player, 0, prompt.pairs[0]);
+    assert.deepEqual(player.messages, ['Your default option is now the Grand Exchange teleport.']);
+    assert.deepEqual(player.varbits, [[CacheDefinitions.getVarbitId('varrock_ge_teleport'), 1]]);
+    player.inventory.set(tabletIds.get('varrock teleport').id, 1);
+    assert.deepEqual(use('varrock teleport', 'break', player).tile, [3165, 3477, 0]);
+
+    cast('Varrock Teleport', 10, player);
+    assert.equal(prompt.title, 'Spellbook/portal default: Grand Exchange');
+    prompt.pairs[1](player, 0, prompt.pairs[0]);
+    assert.equal(player.messages.at(-1), 'Your default option is now the central Varrock teleport.');
+    assert.deepEqual(player.varbits.at(-1), [CacheDefinitions.getVarbitId('varrock_ge_teleport'), 0]);
 });

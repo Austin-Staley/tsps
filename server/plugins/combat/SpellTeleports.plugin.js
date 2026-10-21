@@ -7,6 +7,9 @@ const HOUSE_TABLET = "teleport to house";
 const HOUSE_TABLET_OPTIONS = new Set(["break", "inside", "outside"]);
 // One bit per alternate tablet (in teleport-tablets.json order), set when Break goes to the alternate.
 const ALTERNATES_ATTRIBUTE = "spell-teleports:alternates";
+// The spell's own options (client script 2615 names op1/op3 "Cast").
+const SPELL_ALTERNATE_OP = 2;
+const SPELL_CONFIGURE_OP = 10;
 const ALTERNATES = new Map(Object.entries(TABLETS.alternates).map(([name, data], index) => [name, { ...data, name, bit: 1 << index }]));
 
 function spellName(event) {
@@ -42,8 +45,13 @@ function diaryComplete(player, diary) {
   return request.complete;
 }
 
+const DIARY_TIERS = ["easy", "medium", "hard", "elite"];
+
+/** As captured for Varrock: "the medium, hard or elite tier of the Varrock achievement diary". */
 function diaryMessage(player, diary) {
-  player.sendMessage(`You need to complete the ${diary.tier} ${diary.name} Diary to do that.`);
+  const tiers = DIARY_TIERS.slice(DIARY_TIERS.indexOf(diary.tier));
+  const named = tiers.length > 1 ? `${tiers.slice(0, -1).join(", ")} or ${tiers.at(-1)}` : tiers[0];
+  player.sendMessage(`You must complete the ${named} tier of the ${diary.name} achievement diary to use this feature.`);
 }
 
 const alternateChosen = (player, alternate) => (Number(player.getAttribute(ALTERNATES_ATTRIBUTE)) & alternate.bit) !== 0;
@@ -70,6 +78,12 @@ function sendAlternate(player, alternate) {
   if (varbit != null) player.getPacketSender().sendVarbit(varbit, alternateChosen(player, alternate) ? 1 : 0);
 }
 
+function chooseAlternate(player, alternate, chosen) {
+  const bits = Number(player.getAttribute(ALTERNATES_ATTRIBUTE)) || 0;
+  player.setAttribute(ALTERNATES_ATTRIBUTE, chosen ? bits | alternate.bit : bits & ~alternate.bit);
+  sendAlternate(player, alternate);
+}
+
 function toggleDestination(event, alternate) {
   const { player } = event;
   event.handled = true;
@@ -77,8 +91,7 @@ function toggleDestination(event, alternate) {
     diaryMessage(player, alternate.diary);
     return;
   }
-  player.setAttribute(ALTERNATES_ATTRIBUTE, Number(player.getAttribute(ALTERNATES_ATTRIBUTE)) ^ alternate.bit);
-  sendAlternate(player, alternate);
+  chooseAlternate(player, alternate, !alternateChosen(player, alternate));
   const destination = alternateChosen(player, alternate) ? alternate.alternate : alternate.primary;
   player.sendMessage(`Your ${alternate.primary} teleport tablets will now take you to ${destination}.`);
 }
@@ -154,6 +167,45 @@ function syncAlternates({ player }) {
   }
 }
 
+/**
+ * Configure on the spell (rsprox capture): "Spellbook/portal default: <current>", then
+ * "Change to <other>" or "Cancel."; the change sets the varbit and confirms in the chatbox.
+ */
+function configureSpell(player, alternate) {
+  if (!diaryComplete(player, alternate.diary)) {
+    diaryMessage(player, alternate.diary);
+    return;
+  }
+  const chosen = alternateChosen(player, alternate);
+  const next = chosen ? alternate.configure.primary : alternate.configure.alternate;
+  pluginApi.sendMultiChatboxPrompt(player, `Spellbook/portal default: ${chosen ? alternate.alternate : alternate.primary}`,
+    next.change, () => {
+      chooseAlternate(player, alternate, !chosen);
+      player.sendMessage(next.message);
+    },
+    "Cancel.", () => {});
+}
+
+/**
+ * Varrock, Camelot and Watchtower Teleport (client script 2615): op1 and op3 cast to the town
+ * (op3 stands in for op1 once the alternate is the default) and are left to the usual cast;
+ * op2 casts to the alternate, behind the tablet's diary, and op10 configures.
+ */
+function castAlternate(event) {
+  const { player } = event;
+  const name = event.spellName?.trim().toLowerCase();
+  const alternate = ALTERNATES.get(name);
+  if (!alternate || (event.opId !== SPELL_ALTERNATE_OP && event.opId !== SPELL_CONFIGURE_OP)) return;
+  event.handled = true;
+  if (event.opId === SPELL_CONFIGURE_OP) {
+    configureSpell(player, alternate);
+  } else if (diaryComplete(player, alternate.diary)) {
+    core.SpellTeleports.handleSelf(player, name, tile(alternate.tile));
+  } else {
+    diaryMessage(player, alternate.diary);
+  }
+}
+
 function castSpell(event) {
   if (core.SpellTeleports.handleSelf(event.player, spellName(event))) {
     event.handled = true;
@@ -168,6 +220,7 @@ module.exports = {
     api.persistAttribute(ALTERNATES_ATTRIBUTE, 0);
     api.onItemAction(useTablet);
     api.onPlayerLogin(syncAlternates);
+    api.onSpellCast(castAlternate);
     api.onInterfaceActionClick(castSpell);
   },
 };

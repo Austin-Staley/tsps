@@ -615,6 +615,8 @@ export interface PluginSpellCastEvent {
   spellName: string;
   spellWidget: number;
   spellItemId: number;
+  /** The spellbook option clicked, from 1 ("Cast"); e.g. 2 is Varrock Teleport's "Grand Exchange". */
+  opId?: number;
   handled: boolean;
 }
 

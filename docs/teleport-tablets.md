@@ -32,6 +32,9 @@ There is no teleport sound of the player's own: a `sound_area` 200 on tick 1 of 
 - **Spell tablets** land where their spell does, from the standard, Lunar and Arceuus spell tables. The Ape Atoll tablet (`teletab_ape`) is the Arceuus one, so it goes to the Ape Atoll Dungeon, not the town.
 - **Redirected house tablets** (`redirects`) land at that town's house portal; Trollheim's lands where the Trollheim spell does. Revert turns one back into a Teleport to house tablet; the scroll of redirection isn't returned (Wiki).
 - **Varrock, Camelot and Watchtower** (`alternates`) have their own options: the town, its alternate (Grand Exchange, Seers' Village, Yanille) and Toggle. The alternate and Toggle need the medium Varrock, hard Kandarin or hard Ardougne Diary (Wiki). Toggle makes Break go to the alternate and sets the varbit the spellbook reads for it (`varrock_ge_teleport`, `seers_camelot_teleport`, `yanille_teleport_location`; client script 2615 treats 1 as the alternate). The alternate tiles are the middles of the captured spell landings the portal nexus already uses (GE around 3162-3165, 3476-3480; Seers' 2724-2727, 3483-3486).
+- **The spells** share this: Varrock, Camelot and Watchtower Teleport's op2 casts to the alternate behind the same diary, and op10 (Configure) changes the default. Client script 2615 sets the other options from the varbit: op1 "Cast" goes to the town, and once the alternate is the default op1 is hidden and op3 "Cast" goes to the town instead. Core already casts op1 and op3; `SpellCast` events now carry the op so the plugin can take op2 and op10 (`PluginSpellCastEvent.opId`).
+  - Configure, as captured: a chat menu "Spellbook/portal default: Varrock" with "Change to the Grand Exchange." and "Cancel."; choosing it sets the varbit and says "Your default option is now the Grand Exchange teleport." (back: "Change to Varrock." and "Your default option is now the central Varrock teleport."). Watchtower's menu is "Spellbook/portal default: Yanille" / "Change to the Watchtower" / "Cancel."; its other lines and Camelot's follow the Varrock ones.
+  - Without the diary, op2 is refused with "You must complete the medium, hard or elite tier of the Varrock achievement diary to use this feature." (captured); the tablets and the other two spells use the same line with their own tiers and diary.
 - **Teleport scrolls** (`scrolls`) use the scroll's Teleport option. Landing tiles come from captures where there are any (Lunar Isle, Pest Control, Iorwerth Camp, Mos Le'Harmless, Watson, Spider cave, Chasm of Fire) and from RuneLite's world map teleport data otherwise. Nardah keeps its tile beside the carpet merchant; its only capture is from a Leagues world.
 
 ## Teleport scrolls
@@ -65,7 +68,8 @@ Jewellery charge messages are all `7f007f` and spell the count out ("Your ring o
 - The Ancient, Cemetery, Ice plateau and Wilderness crabs tablets' Configure option (the Wilderness warning).
 - Volcanic mine and Guthixian temple teleports: no capture or RuneLite tile for their landing.
 - Quest requirements for using a tablet (Desert Treasure for Ancient tablets, Lunar Diplomacy, Watchtower).
-- The messages for a missing diary and for Toggle aren't captured; the text is ours.
+- The tablets' Toggle message isn't captured; the text is ours. So are Camelot's Configure lines and Watchtower's beyond its menu.
+- The house portals that "Spellbook/portal default" also sets.
 
 ## Not yet checked
 
