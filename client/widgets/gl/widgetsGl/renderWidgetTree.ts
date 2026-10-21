@@ -1,4 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
+import { isInventoryOpFaded } from "../../../game/widgets/inventoryOpFade";
 import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
@@ -500,80 +501,6 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     // would reverse widget ops (e.g., minimap orbs).
                     candEntries = ([] as any[]).concat(candEntries, base);
                 } catch {}
-
-                // Add spell-target entry if spell is selected and this is an inventory item
-                if (ClientState.isSpellSelected) {
-                    const itemId = candidate.itemId ?? -1;
-                    const candidateGroupId = candidate.groupId ?? candidate.uid >>> 16;
-                    const isInventoryItem = itemId >= 0 || candidateGroupId === 149;
-
-                    if (isInventoryItem) {
-                        // Get item name for target label
-                        let itemName = candidate.name || candidate.text || "";
-                        if (!itemName && itemId >= 0) {
-                            // Try to get item name from definition
-                            try {
-                                const objLoader = (opts.game as any)?.osrsClient?.objLoader;
-                                const itemDef = objLoader?.load?.(itemId);
-                                itemName = itemDef?.name || `Item ${itemId}`;
-                            } catch {
-                                itemName = `Item ${itemId}`;
-                            }
-                        }
-
-                        const itemTarget = itemName ? `<col=ff9040>${itemName}` : "";
-                        // spell-on-item entry uses selectedSpellActionName as the option
-                        // and "selectedSpellName -> <col=ff9040>item" as target text.
-                        const spellAction = ClientState.selectedSpellActionName || "Cast";
-                        const spellName = ClientState.selectedSpellName || "";
-                        const spellTarget =
-                            spellName && itemTarget
-                                ? `${spellName} -> ${itemTarget}`
-                                : itemTarget || spellName;
-                        const spellEntry = {
-                            option: spellAction,
-                            target: spellTarget,
-                            widgetAction: {
-                                slot: candidate.childIndex ?? candidate.uid & 0xffff,
-                                itemId: itemId,
-                            },
-                        };
-
-                        const explicitExamine = Array.isArray(candEntries)
-                            ? candEntries.find(
-                                  (e: any) =>
-                                      String(e?.option ?? "")
-                                          .trim()
-                                          .toLowerCase() === "examine",
-                              )
-                            : undefined;
-
-                        // Insert spell entry at the beginning (before Use, Drop, etc.)
-                        candEntries = [
-                            spellEntry,
-                            ...candEntries.filter((e: any) => {
-                                const lower = String(e?.option ?? "")
-                                    .trim()
-                                    .toLowerCase();
-                                return lower !== "cancel" && lower !== "examine";
-                            }),
-                        ];
-                        // Preserve explicit Examine if present on the base menu.
-                        if (explicitExamine) {
-                            candEntries.push({
-                                option:
-                                    typeof explicitExamine.option === "string"
-                                        ? explicitExamine.option
-                                        : "Examine",
-                                target:
-                                    typeof explicitExamine.target === "string"
-                                        ? explicitExamine.target
-                                        : itemTarget,
-                            });
-                        }
-                        candEntries.push({ option: "Cancel" });
-                    }
-                }
 
                 const real = UI_hasContextMenuOption(candEntries);
                 if (real) {
@@ -3083,8 +3010,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             // Scripts set w.transparency via cc_settrans; cache sets w.opacity (same semantics)
             // Clicked/dragged widget is semi-transparent (var14 = 128), except scrollbars.
             // Reference: UserComparator5.drawInterface: if (!var10.isScrollBar) { var14 = 128; }
+            // An inventory item whose op was just sent stays that way until the server answers.
             let trans = w.transparency ?? w.opacity ?? 0;
-            if ((isDragActive || isClickedWidget) && !w.isScrollBar) {
+            if ((isDragActive || isClickedWidget || isInventoryOpFaded(w)) && !w.isScrollBar) {
                 trans = 128;
             }
             const alpha = (255 - trans) / 255;

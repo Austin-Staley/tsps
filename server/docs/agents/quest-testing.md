@@ -327,6 +327,12 @@ Prefer a small, human-readable fix: plugin/domain data first, named ids (constan
 special-cases for one quest, no invisible global shims. Add the smallest test that fails
 before the fix. Batch related fixes and reload once rather than one fix per restart.
 
+Never hand-edit generated dialogue JSON to fix a conversation or resolve a merge.
+All JSON imported from `RSPSApp/osrsreboxed-db` must be fixed in its source/parser/export
+logic, regenerated and compared with a second dump from the same inputs. Import that
+output, including its related index; disclose any mismatch. See the generated-data rules
+in `AGENTS.md` and `server/AGENTS.md`.
+
 ## Review the whole quest, then review the fix
 
 Build a compact checklist from Quest Helper's `setupRequirements`, `setupSteps`,

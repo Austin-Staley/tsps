@@ -126,8 +126,14 @@ function createContext(core, server) {
       : null)
     .filter(Boolean);
 
-  const sleepTicks = (ticks) =>
-    new Promise((resolve) => setTimeout(resolve, ticks * GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE));
+  // Waits for `ticks` game ticks, counted by the world, not the clock: the server acts on input
+  // at the start of the player's next turn, so what was sent before has then happened.
+  const sleepTicks = (ticks) => new Promise((resolve) => {
+    const target = World.getProcessCycle() + ticks;
+    const pollMs = Math.max(1, Math.floor(GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE / 12));
+    const poll = () => (World.getProcessCycle() >= target ? resolve() : setTimeout(poll, pollMs));
+    setTimeout(poll, pollMs);
+  });
   // What the player is in the middle of; empty means idle.
   const activity = (p) => {
     const busy = [];

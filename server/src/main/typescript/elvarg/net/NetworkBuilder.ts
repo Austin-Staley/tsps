@@ -168,6 +168,24 @@ const WORLD_INTERACTIONS = new Set([
   "spell_on_ground",
 ]);
 
+/**
+ * Packets acted on as they arrive: connection upkeep, logging in, client-plugin traffic (voice
+ * signalling), free movement's real-time input (its client runs at most a tick ahead of the
+ * server's answer) and logout, which World answers on the tick itself. A logged-in player's other
+ * packets wait for the start of their next turn, as live OSRS acts on input on the next tick.
+ */
+const IMMEDIATE_PACKETS = new Set([
+  "hello",
+  "ping",
+  "raw",
+  "login",
+  "login_forget",
+  "handshake",
+  "plugin_message",
+  "movement_input",
+  "logout",
+]);
+
 /** Packets the client sends on its own, which don't count as the player's input. */
 const NON_INPUT_PACKETS = new Set([
   "hello",
@@ -274,6 +292,8 @@ export class ClientConnection {
   private loginFailure?: string;
   private input = Promise.resolve();
   private queuedInputFrames = 0;
+  /** Packets received since this player's last turn (see IMMEDIATE_PACKETS). */
+  private turnPackets: ClientMessages = [];
 
   constructor(private readonly channel: BinaryChannel) {
     channel.onData((frame) => {
@@ -331,13 +351,38 @@ export class ClientConnection {
     return this.loginFailure;
   }
 
-  private async dispatch(packets: ClientMessages): Promise<void> {
+  /**
+   * Acts on the packets received since this player's last turn, at the start of their turn.
+   * They run even after a disconnect: input that arrived still counts while the player is held
+   * in the world.
+   */
+  public processTurnPackets(): void {
+    if (this.turnPackets.length === 0) return;
+    const packets = this.turnPackets;
+    this.turnPackets = [];
+    // None of these await, so they all run now, inside the player's turn.
+    this.dispatch(packets, true).catch((error) => {
+      console.warn("[network] client packet rejected", error);
+    });
+  }
+
+  private async dispatch(packets: ClientMessages, turn = false): Promise<void> {
     // Frames already queued on the input chain can outlive the socket (a handshake
     // buffered before a disconnect, for example). A closed connection must not act
     // on them or build a player for a socket that is already gone.
-    if (this.closed) return;
+    if (this.closed && !turn) return;
     for (const packet of packets) {
-      if (this.closed) return;
+      if (this.closed && !turn) return;
+      if (!turn && this.player && !IMMEDIATE_PACKETS.has(packet.type)) {
+        if (this.turnPackets.length >= NetworkConstants.PACKET_QUEUE_LIMIT) {
+          console.warn("[network] client turn packet limit exceeded", { queued: this.turnPackets.length });
+          this.cleanup("input_limit");
+          this.channel.close(1008, "input limit");
+          return;
+        }
+        this.turnPackets.push(packet);
+        continue;
+      }
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
       if (this.player && !NON_INPUT_PACKETS.has(packet.type)) this.player.lastInputCycle = World.getProcessCycle();
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
@@ -1084,6 +1129,7 @@ export class ClientConnection {
     }
     const pending = this.pending;
     const session = new PlayerSession(this.channel);
+    session.setTurnPacketProcessor(() => this.processTurnPackets());
     const player = new Player(session, GameConstants.DEFAULT_LOCATION.clone());
     session.setPlayer(player);
     player.setUsername(pending.username);
