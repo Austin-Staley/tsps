@@ -117,9 +117,9 @@ function render(player) {
   const fallbackSpeed = typeof weapon?.getSpeed === "function" ? weapon.getSpeed() : 4;
   const baseSpeed = WeaponProfiles.attackSpeed(player, fallbackSpeed);
   const actualSpeed = player.getBaseAttackSpeed();
-  sender.sendString(`Base: ${(baseSpeed * 0.6).toFixed(1)}s`, component(53));
-  sender.sendString(`Actual: ${(actualSpeed * 0.6).toFixed(1)}s`, component(54));
-  sender.sendString(`${getWeight(player).toFixed(1)} kg`, component(51));
+  sender.sendString(`Base: ${(baseSpeed * 0.6).toFixed(1)}s`, component(52));
+  sender.sendString(`Actual: ${(actualSpeed * 0.6).toFixed(1)}s`, component(53));
+  sender.sendString(`${getWeight(player).toFixed(1)} kg`, component(50));
 }
 
 function update(player) {

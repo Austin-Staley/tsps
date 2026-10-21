@@ -1152,7 +1152,7 @@ test("boarding sends the raft's varbits and stats as live OSRS does", () => {
   Sailing.giveBoat(player, "raft", "the_pandemonium");
   Sailing.board(player, "the_pandemonium");
   try {
-    switchTab({ player, groupId: 593, childId: 46, handled: false });
+    switchTab({ player, groupId: 593, childId: 48, handled: false });
     // Boat slot (from 1) and type (raft 0).
     for (const [id, value] of [[19121, 1], [18554, 1], [19130, 1], [19137, 0], [19143, 0]]) {
       assert.equal(varbits.get(id), value, `varbit ${id}`);
@@ -1190,12 +1190,12 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
     switchTab(event);
     return event.handled;
   };
-  assert.equal(click(593, 46), true);
+  assert.equal(click(593, 48), true);
   assert.deepEqual(mounted, [], "not aboard: nothing to show");
 
   Sailing.giveBoat(player, "raft", "the_pandemonium");
   Sailing.board(player, "the_pandemonium");
-  click(593, 46);
+  click(593, 48);
   assert.deepEqual(mounted, [[161, 76, 937]]);
   assert.deepEqual(events, [[937, 1, 0, 12, 2], [937, 25, 0, 16, 30]],
     "View Combat Options and the raft's facility buttons get OSRS's event ranges");
@@ -1459,7 +1459,7 @@ test("boarding a new skiff sends its base-tier stats and only its cargo hold", (
   Sailing.giveBoat(player, "skiff", "the_pandemonium");
   Sailing.board(player, "the_pandemonium");
   try {
-    switchTab({ player, groupId: 593, childId: 46, handled: false });
+    switchTab({ player, groupId: 593, childId: 48, handled: false });
     // Wooden hull, bronze keel, wooden helm, sails and trim (the cache's part rows): HP 30 + 50.
     const expected = {
       19137: 1, // boat type: skiff

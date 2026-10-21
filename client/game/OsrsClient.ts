@@ -177,6 +177,7 @@ import { Cs2Vm, ScriptArgMagic, type ScriptEvent, createScriptEvent } from "../r
 import { setSpawnSearch } from "../rs/cs2/spawnSearch";
 import { Opcodes as Cs2Opcodes } from "../rs/cs2/Opcodes";
 import { BitmapFont } from "../rs/font/BitmapFont";
+import { resolveTextTemplates } from "../rs/font/textTemplates";
 import { encodeInteractionIndex } from "../rs/interaction/InteractionIndex";
 import { Inventory, InventorySlotInput } from "../rs/inventory/Inventory";
 import type { InventorySlot } from "../rs/inventory/Inventory";
@@ -294,6 +295,7 @@ import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
 import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
+import type { GraphicsDefaults } from "../rs/config/defaults/GraphicsDefaults";
 import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
@@ -1836,7 +1838,7 @@ export class OsrsClient {
                     this.chatTextMetrics.measureTextWidthOsrsMarkup(s, font);
 
                 // Handle <br> tags and newlines first
-                const normalized = text.replace(/<br\s*\/?>/gi, "\n");
+                const normalized = resolveTextTemplates(text).replace(/<br\s*\/?>/gi, "\n");
                 const paragraphs = normalized.split(/\n/);
                 const lines: string[] = [];
 
@@ -6532,7 +6534,7 @@ export class OsrsClient {
             // Phase 1: Loading title background (network fetch)
             await showPhase(5, "Loading title...");
             try {
-                await this.loginRenderer.loadTitleBackground();
+                await this.loginRenderer.loadTitleBackground(this.cacheSystem);
             } catch (e) {
                 console.warn("[OsrsClient] Title background load failed:", e);
             }
@@ -6547,7 +6549,18 @@ export class OsrsClient {
 
             // Phase 3: Loading sprites (cache parse)
             await showPhase(25, "Loading sprites...");
-            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem);
+            // The graphics defaults, decoded once: the login flames' colours, then the compass,
+            // scrollbars and heading arrows below.
+            let graphicsDefaults: GraphicsDefaults | undefined;
+            try {
+                graphicsDefaults = require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(
+                    cache.info,
+                    this.cacheSystem,
+                );
+            } catch (e) {
+                console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
+            }
+            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem, graphicsDefaults?.flamePalettes);
             if (!spritesLoaded) {
                 console.warn("[OsrsClient] Title sprites failed to load");
             }
@@ -6761,25 +6774,22 @@ export class OsrsClient {
             this.widgetManager.onGroupLoaded = (groupId) => {
                 for (const held of this.heldWidgetProperties.take(groupId)) this.handleWidgetPayload?.(held);
             };
-            try {
-                const { GraphicsDefaults } = require("../rs/config/defaults/GraphicsDefaults");
-                const graphicsDefaults = GraphicsDefaults.load(cache.info, this.cacheSystem);
-                if (graphicsDefaults?.compass >= 0) {
-                    this.widgetManager.compassSpriteId = graphicsDefaults.compass;
-                }
-                if (graphicsDefaults?.scrollBars >= 0) {
-                    this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
-                }
-            } catch (e) {
-                console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
+            if (graphicsDefaults && graphicsDefaults.compass >= 0) {
+                this.widgetManager.compassSpriteId = graphicsDefaults.compass;
             }
-            // The helm's heading arrows. Read apart from the above, waiting for the group to
-            // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
-            // missing for the whole session.
+            if (graphicsDefaults && graphicsDefaults.scrollBars >= 0) {
+                this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
+            }
+            // The helm's heading arrows. When the load above failed, the group may not have
+            // streamed in yet (a fresh browser cache): wait for it, or the arrows would be missing
+            // for the whole session.
             const cacheInfo = cache.info;
+            const loadedDefaults = graphicsDefaults;
             headingIndicator.loadStatus = "loading";
-            void retryOnMissingGroup(() =>
-                require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
+            void retryOnMissingGroup(
+                () =>
+                    loadedDefaults ??
+                    require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
             ).then((defaults) => {
                 headingIndicator.loadStatus = defaults
                     ? `loaded ${JSON.stringify(defaults.headingIndicatorModels)} (${cacheInfo.game} ${cacheInfo.revision}, index 17 ${this.cacheSystem.indexExists(17) ? "present" : "missing"})`
