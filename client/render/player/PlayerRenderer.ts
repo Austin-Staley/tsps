@@ -844,8 +844,10 @@ export class PlayerRenderer {
                     const duration = Math.max(1, seq.getSkeletalDuration?.() | 0);
                     const resolvedFrameIdx = (((frameIdx | 0) % duration) + duration) % duration;
                     const skeletal = mv.skeletalSeqLoader?.load?.(seq.skeletalId | 0);
-                    out = Model.copyAnimated(base, !skeletal?.hasAlphaTransform, true);
-                    if (skeletal) out.animateSkeletal(skeletal, resolvedFrameIdx | 0);
+                    // Still streaming in: draw nothing rather than cache the unanimated model.
+                    if (!skeletal) return undefined;
+                    out = Model.copyAnimated(base, !skeletal.hasAlphaTransform, true);
+                    out.animateSkeletal(skeletal, resolvedFrameIdx | 0);
                 } else if (seq?.frameIds && seq.frameIds.length > 0) {
                     const ids = seq.frameIds;
                     const idx = Math.max(
@@ -854,16 +856,13 @@ export class PlayerRenderer {
                     );
                     const frameKey = ids[idx] | 0;
                     const seqFrame = mv.seqFrameLoader?.load?.(frameKey);
-                    if (seqFrame) {
-                        out = Model.copyAnimated(
-                            base,
-                            !seqFrame.hasAlphaTransform,
-                            !seqFrame.hasColorTransform,
-                        );
-                        out.animate(seqFrame, undefined, !!seq.op14);
-                    } else {
-                        out = Model.copyAnimated(base, true, true);
-                    }
+                    if (!seqFrame) return undefined;
+                    out = Model.copyAnimated(
+                        base,
+                        !seqFrame.hasAlphaTransform,
+                        !seqFrame.hasColorTransform,
+                    );
+                    out.animate(seqFrame, undefined, !!seq.op14);
                 } else {
                     out = Model.copyAnimated(base, true, true);
                 }

@@ -34,4 +34,19 @@ streamed = false;
 const [, animated] = geometry.build(baseModel, 0, 0, anim);
 assert.equal(animated, false, "the CPU mesh says it is unanimated, so it is not cached");
 
+// A player's graphic (the arrow pullback, spot anim 19) is drawn and cached per frame: while the
+// frame streams in, there is nothing to draw, not the unanimated model (an arrow at the feet).
+const spotRenderer: any = {
+    renderer: { osrsClient: { ...client, spotAnimTypeLoader: factory.getSpotAnimTypeLoader() } },
+    buildSpotBaseModel: () => baseModel,
+    applySpotTransform() {},
+};
+(globalThis as any).self ??= globalThis; // PicoGL reads it when PlayerRenderer loads
+const { PlayerRenderer } = require("../render/player/PlayerRenderer");
+const spotFrame = PlayerRenderer.prototype.buildSpotFrameModelForFrame;
+streamed = false;
+assert.equal(spotFrame.call(spotRenderer, 19, 0), undefined, "no graphic while its frame is missing");
+streamed = true;
+assert.ok(spotFrame.call(spotRenderer, 19, 0), "the graphic once its frame has streamed in");
+
 console.log("player-pose-streaming ok");
