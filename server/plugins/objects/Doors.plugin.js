@@ -335,6 +335,9 @@ const GATE_PARTNER_OFFSETS = Object.freeze([
 ]);
 
 let DOOR_CATALOG = null;
+// Leaves of same-model double doors found by buildDoorCatalog. They only act as a double door
+// where both leaves stand side by side, so a lone one stays a single door.
+const SAME_MODEL_DOUBLE_DOOR_IDS = new Set();
 const OPEN_OBJECT_STATES = new Map();
 const RUNTIME_DOUBLE_DOOR_RECORDS = [];
 const PRIVATE_AREA_IDS = new WeakMap();
@@ -352,6 +355,7 @@ function buildDoorCatalog() {
   const closedToOpen = new Map();
   const openToClosed = new Map();
   const total = core.CacheDefinitions.getCounts().objects;
+  const sameModelPairs = [];
   for (let id = 0; id < total; id++) {
     const def = core.CacheDefinitions.getObject(id);
     if (!def || !DOOR_NAMES.has(def.name) || !hasAction(def.actions, "open")) {
@@ -381,6 +385,8 @@ function buildDoorCatalog() {
     // the same model and only differs by rotation). Pair consecutive same-model
     // doors so they still open; see e.g. Varrock Palace door 32464/32465.
     // Skip double-door leaves and already-paired ids so chains don't form.
+    // The same pair is also how the cache builds a double door's two leaves (11766/11767, the
+    // second mirrored), so it is registered as one too; see addSameModelDoubleDoor.
     if (
       hasAction(partner.actions, "open") &&
       !SELF_OPENING_DOOR_IDS.has(id + 1) &&
@@ -391,6 +397,7 @@ function buildDoorCatalog() {
     ) {
       closedToOpen.set(id, id + 1);
       openToClosed.set(id + 1, id);
+      sameModelPairs.push(id);
     }
     // An unused, actionless variant can sit between a door and its open loc: Varrock's
     // 11780 -> 11782 (Katrine's hideout, the Phoenix Gang ladder house), Lassar's 48262 -> 48264.
@@ -411,7 +418,41 @@ function buildDoorCatalog() {
     closedToOpen.set(closedId, openId);
     openToClosed.set(openId, closedId);
   }
+  for (const left of sameModelPairs) {
+    if (!SINGLE_DOOR_OPEN_IDS.has(left) && !SINGLE_DOOR_OPEN_IDS.has(left + 1)) addSameModelDoubleDoor(left, left + 1);
+  }
   return { closedToOpen, openToClosed };
+}
+
+// The open loc the cache's gameval names for a closed leaf (fai_varrock_member_gatel ->
+// fai_varrock_member_gatel_open, kr_camelot_metalgateclosedl -> kr_camelot_metalgateopenl).
+function namedOpenLeaf(closedId) {
+  const name = core.CacheDefinitions.getLocNames().get(closedId);
+  if (!name) return null;
+  const models = JSON.stringify(core.CacheDefinitions.getObject(closedId)?.models);
+  for (const candidate of [`${name}_open`, name.replace("closed", "open")]) {
+    const id = candidate === name ? null : core.CacheDefinitions.getLocId(candidate);
+    if (id != null && JSON.stringify(core.CacheDefinitions.getObject(id)?.models) === models) return id;
+  }
+  return null;
+}
+
+// Registers two same-model "Open" leaves as a double door that opens into their gameval-named
+// open locs, or swings them in place under their own ids when the cache names none.
+function addSameModelDoubleDoor(a, b) {
+  const openA = namedOpenLeaf(a);
+  const openB = namedOpenLeaf(b);
+  const [nextA, nextB] = openA != null && openB != null ? [openA, openB] : [a, b];
+  const family = [...new Set([a, b, nextA, nextB])];
+  for (const id of family) {
+    DOUBLE_DOOR_FAMILY_IDS_BY_ID.set(id, family);
+    SAME_MODEL_DOUBLE_DOOR_IDS.add(id);
+  }
+  for (const [id, partner] of [[a, b], [b, a], [nextA, nextB], [nextB, nextA]]) {
+    SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID.set(id, [partner]);
+  }
+  SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID.set(a, nextA);
+  SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID.set(b, nextB);
 }
 
 function getDoorCatalog() {
@@ -840,7 +881,7 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
     for (const partnerId of familyIds) {
       const partnerObject = core.MapObjects.get(partnerId, candidateLocation, privateArea)
         ?? privateArea?.resolveObject?.(partnerId, candidateLocation);
-      if (!partnerObject) {
+      if (!partnerObject || !isSameModelLeafPartner(object, objectId, partnerObject)) {
         continue;
       }
 
@@ -862,6 +903,13 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
   }
 
   return null;
+}
+
+// A same-model leaf pairs only with a leaf in the same wall line, never with a lone open door.
+function isSameModelLeafPartner(object, objectId, partnerObject) {
+  if (!SAME_MODEL_DOUBLE_DOOR_IDS.has(objectId)) return true;
+  return (Number(object.getFace?.() ?? object.face ?? 0) & 0x3) === (Number(partnerObject.getFace?.() ?? 0) & 0x3) &&
+    Number(object.getType?.() ?? object.type ?? 0) === Number(partnerObject.getType?.() ?? 0);
 }
 
 function buildDoubleDoorAnchorKey(records) {
