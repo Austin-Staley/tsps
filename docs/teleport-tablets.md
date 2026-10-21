@@ -24,6 +24,34 @@ There is no teleport sound of the player's own: a `sound_area` 200 on tick 1 of 
 - Every teleport type frees the player on the landing tick (movement, untargetable, click delay), as the capture's `busy` = 0 on tick 4 shows; it used to hold them two more ticks. The release comes before the arrival callback, so a plugin can still hold the player there (boarding a boat, entering a house).
 - `server/tests/teleport-tablets.test.cjs` runs a tablet teleport through the real task manager and checks each tick against the table above.
 
+## Which tablets go where
+
+`server/plugins/combat/data/teleport-tablets.json` holds what the spells don't:
+
+- **Spell tablets** land where their spell does, from the standard, Lunar and Arceuus spell tables. The Ape Atoll tablet (`teletab_ape`) is the Arceuus one, so it goes to the Ape Atoll Dungeon, not the town.
+- **Redirected house tablets** (`redirects`) land at that town's house portal; Trollheim's lands where the Trollheim spell does. Revert turns one back into a Teleport to house tablet; the scroll of redirection isn't returned (Wiki).
+- **Varrock, Camelot and Watchtower** (`alternates`) have their own options: the town, its alternate (Grand Exchange, Seers' Village, Yanille) and Toggle. The alternate and Toggle need the medium Varrock, hard Kandarin or hard Ardougne Diary (Wiki). Toggle makes Break go to the alternate and sets the varbit the spellbook reads for it (`varrock_ge_teleport`, `seers_camelot_teleport`, `yanille_teleport_location`; client script 2615 treats 1 as the alternate). The alternate tiles are the middles of the captured spell landings the portal nexus already uses (GE around 3162-3165, 3476-3480; Seers' 2724-2727, 3483-3486).
+- **Teleport scrolls** (`scrolls`) use the scroll's Teleport option. Landing tiles come from captures where there are any (Lunar Isle, Pest Control, Iorwerth Camp, Mos Le'Harmless, Watson, Spider cave, Chasm of Fire) and from RuneLite's world map teleport data otherwise. Nardah keeps its tile beside the carpet merchant; its only capture is from a Leagues world.
+
+## Teleport scrolls
+
+Facts from rsprox captures of teleport scrolls (Spider cave, 20 attempts in 14 recordings, rev 237-238; the others agree). Tick 0 is the click:
+
+| Tick | Sent |
+| --- | --- |
+| 0 | animation `teleport_scroll_open` (3864); map_anim `telescroll_teleport` (1039) on the player's tile; sound 200 (the spell teleport sound); the scroll leaves the inventory; varbit `busy` = 1 |
+| 3 | the teleport; animation reset; varbit `busy` = 0 |
+| 4 | animation reset again |
+
+`TELE_SCROLL` plays these, with the map_anim sent as a spotanim on the player. The scroll is used up on the click, after the usual teleport checks.
+
+## Not yet done
+
+- The Ancient, Cemetery, Ice plateau and Wilderness crabs tablets' Configure option (the Wilderness warning).
+- Volcanic mine and Guthixian temple teleports: no capture or RuneLite tile for their landing.
+- Quest requirements for using a tablet (Desert Treasure for Ancient tablets, Lunar Diplomacy, Watchtower).
+- The messages for a missing diary and for Toggle aren't captured; the text is ours.
+
 ## Not yet checked
 
 The landing tile: the capture landed one tile from our fixed Varrock teleport destination (3213, 3424). OSRS may pick a random tile around the destination; one capture can't tell.

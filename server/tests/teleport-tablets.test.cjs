@@ -78,3 +78,25 @@ test('every teleport frees the player on the tick they land, not two ticks later
     assert.ok(ticks[landed].includes('free'), 'free on the landing tick');
     assert.deepEqual(ticks.slice(landed + 1).flat(), [], 'and nothing holds them after');
 });
+
+test('a teleport scroll plays out as in the OSRS captures, tick by tick', (t) => {
+    const sendSound = Sounds.sendSound;
+    Sounds.sendSound = (_player, sound) => log(`sound ${sound.getId()}`);
+    t.after(() => { Sounds.sendSound = sendSound; });
+    const { player, ticks, log, nextTick } = recordingPlayer();
+
+    TeleportHandler.teleport(player, new Location(3658, 3404, 0), TeleportType.TELE_SCROLL, false, () => log('arrived'));
+    for (let tick = 0; tick < 6; tick++) {
+        TaskManager.process();
+        nextTick();
+    }
+
+    assert.deepEqual(ticks.slice(0, 5), [
+        ['locked', 'anim 3864', 'spotanim 1039', 'sound 200', 'varbit 12393=1'],
+        [],
+        [],
+        ['anim 65535', 'varbit 12393=0', 'teleport 3658,3404', 'free', 'arrived'],
+        ['anim 65535'],
+    ]);
+    assert.deepEqual(ticks.slice(5).flat(), [], 'nothing after');
+});
