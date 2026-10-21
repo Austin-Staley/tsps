@@ -21,6 +21,8 @@ const QUANTITY = 4396;
 // The new offer's price: a long varp from rev 241 (it was varbit 4398).
 const PRICE_LONG = 5753;
 const SELECTED_ITEM = 1151;
+// ge_offers:setup_desc, the examine text under the item name; the server sets it.
+const SETUP_DESC = uid(27);
 // Cache script 5733 reads pending client requests here, not accepted offers.
 // Keep them separate from the stockmarket opcode data.
 const OFFER_ITEMS = [3204, 3206, 3208, 3210, 3212, 3214, 3216, 3218];
@@ -164,7 +166,8 @@ function refresh(player, offer) {
     .sendVarbit(SELL, offer.sell ? 1 : 0)
     .sendVarbit(QUANTITY, offer.quantity)
     .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? price(offer.itemId) : 1)
-    .sendVarbit(SELECTED_SLOT, offer.slot + 1);
+    .sendVarbit(SELECTED_SLOT, offer.slot + 1)
+    .sendString(offer.itemId > 0 ? ItemDefinition.forId(offer.itemId).getExamine() ?? "" : "", SETUP_DESC);
 }
 
 function home(player) {

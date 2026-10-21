@@ -8,6 +8,7 @@ import { ClickCrossLayer } from "./ClickCrossLayer";
 import { GroundItemLabelLayer } from "./GroundItemLabelLayer";
 import { GroundItemMeshes } from "./GroundItemMeshes";
 import { HealthBarLayer } from "./HealthBarLayer";
+import { HintArrowLayer } from "./HintArrowLayer";
 import { HitsplatLayer } from "./HitsplatLayer";
 import { InteractHighlightLayer } from "./InteractHighlightLayer";
 import { OverlayHost } from "./OverlayHost";
@@ -51,6 +52,7 @@ export class WebGPUOverlays {
     private overheadText?: OverheadTextLayer;
     private overheadPrayer?: OverheadPrayerLayer;
     private tileText?: TileTextLayer;
+    private hintArrow?: HintArrowLayer;
     private initialized = false;
 
     constructor(protected readonly renderer: WebGPURenderer) {}
@@ -82,6 +84,7 @@ export class WebGPUOverlays {
             const groundItemLabels = new GroundItemLabelLayer(host, screen);
             const tileText = new TileTextLayer(host, screen);
             const clickCross = new ClickCrossLayer(host, screen);
+            const hintArrow = new HintArrowLayer(host, screen);
             const tileMarker = new TileMarkerLayer(
                 host,
                 device,
@@ -127,6 +130,7 @@ export class WebGPUOverlays {
             this.overheadText = overheadText;
             this.overheadPrayer = overheadPrayer;
             this.tileText = tileText;
+            this.hintArrow = hintArrow;
             this.wireHealthBarEvents(host);
             this.initialized = true;
         } catch (error) {
@@ -191,7 +195,7 @@ export class WebGPUOverlays {
 
     /** The canvas is at device pixel ratio; size sprites/text like WebGL's overlay scale sync (frame/render.ts). */
     private syncScale(scale: number): void {
-        for (const layer of [this.overheadText, this.hitsplats, this.overheadPrayer, this.clickCross, this.groundItemLabels, this.tileText]) {
+        for (const layer of [this.overheadText, this.hitsplats, this.overheadPrayer, this.clickCross, this.groundItemLabels, this.tileText, this.hintArrow]) {
             if (layer) layer.scale = scale;
         }
         if (this.healthBars) this.healthBars.scale = scale * RENDER_CONSTANTS.HEALTH_BAR_VISUAL_SCALE;
@@ -222,6 +226,7 @@ export class WebGPUOverlays {
             // ToFrameTexture group.
             this.overheadText?.draw();
             this.clickCross?.draw();
+            this.hintArrow?.draw();
             screen.flush(pass, clip);
 
             // PostPresent group, in OverlayManager registration order: tile markers, tile
@@ -261,6 +266,7 @@ export class WebGPUOverlays {
         this.overheadPrayer?.dispose();
         this.groundItemLabels?.dispose();
         this.tileText?.dispose();
+        this.hintArrow?.dispose();
         this.clickCross?.dispose();
         this.tileMarker?.dispose();
         this.interactHighlight?.dispose();
@@ -279,6 +285,7 @@ export class WebGPUOverlays {
         this.overheadText = undefined;
         this.overheadPrayer = undefined;
         this.tileText = undefined;
+        this.hintArrow = undefined;
         this.initialized = false;
     }
 
