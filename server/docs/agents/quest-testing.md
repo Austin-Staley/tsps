@@ -174,6 +174,52 @@ menu, NPC, quest list).
 Some plugins also keep sub-state in their own attributes (flags, puzzle progress, pending
 rewards). Check those when a stage looks right but the world does not.
 
+### Check the cache's completion contract
+
+The final `loadSteps` key is **not** a completion value. Quest Helper asks the cache's
+`QUEST_STATUS_GET` script (4029) whether the quest finished; script 4024 reads its progress.
+In cache `osrs-241_2026-10-20`, 4029 reads quest DB table 0, column 19 as the completion
+threshold and considers progress at or above it complete. For example, Clock Tower's helper
+still has finish steps at 5, 6 and 7; the cache requires varp 10 to reach **8**. A plugin
+completing its own saved stage at 6 must map that to the correct wire state.
+
+Read the current scripts rather than assuming these column numbers remain stable:
+
+```bash
+cd server
+yarn dump:cs2 4029 4024
+```
+
+Find the quest's DB row id in RuneLite's `net.runelite.api.Quest` enum (Clock Tower is 14).
+This read-only example uses the repository's decoders, from `server/`:
+
+```bash
+NODE_PATH="$PWD/node_modules" TS_NODE_COMPILER_OPTIONS='{"target":"es2020","module":"commonjs"}' \
+node -r ts-node/register/transpile-only <<'NODE'
+const { CachePipeline } = require('./dist/game/cache/CachePipeline');
+const { CacheIndexDat2 } = require('./dist/game/cache/codec/rs/cache/CacheIndex');
+const { IndexType } = require('./dist/game/cache/codec/rs/cache/IndexType');
+const { ByteBuffer } = require('../client/rs/io/ByteBuffer.ts');
+const { loadDbRow } = require('../client/rs/config/db/DbRowLoader.ts');
+(async () => {
+  await CachePipeline.initialize(process.cwd());
+  const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
+  const file = configs.getFile(38, 14); // DB rows archive, Clock Tower row.
+  if (!file) throw Error('Missing quest DB row');
+  const row = loadDbRow(14, new ByteBuffer(new Int8Array(file.data)));
+  console.log('table', row.tableId, 'completion', row.getColumn(19)?.values);
+})().catch(error => { console.error(error); process.exitCode = 1; });
+NODE
+```
+
+Script 4024's switch identifies the exact progress varp/varbit. Check a proposed parent-varp
+alias against the varbit's bit range: equivalent full-width reads can be valid, while a
+whole-varp write can overwrite siblings. Verify intermediate values, completion and bootstrap
+resend. Preserve existing durable saves through an explicit wire mapping when needed; do not
+renumber saved stages blindly. The completion threshold alone does not establish every later
+post-quest wire value. The [issue 728 cache reference](../quest-helper-728-cache.md) records
+this cache snapshot, separate from gameplay or native proof.
+
 ## Route facts: cache, transforms, tiles, items
 
 - Look ids up in this cache, not from memory:
