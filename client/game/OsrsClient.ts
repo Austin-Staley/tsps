@@ -255,6 +255,8 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
+import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
+import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
 import { CombatOptionsController } from "./combat/CombatOptionsController";
 import { HitsplatFlushController } from "./combat/HitsplatFlushController";
 import { ClientScriptLoader } from "./cs2/ClientScriptLoader";
@@ -2248,6 +2250,22 @@ export class OsrsClient {
             this.mobileChatKeyboard.show(hint, keyboardType);
         };
         this.cs2Vm.context.hideMobileKeyboard = () => this.mobileChatKeyboard.hide();
+        // That script runs in the frame loop, after the tap, where iOS will not open the
+        // keyboard: focus it from the touch itself when the tapped widget's script would.
+        const keyboardButtons = new KeyboardButtonProbe((id) => this.cs2Vm.context.loadScript(id));
+        this.inputManager.onCanvasTouchStart = (x, y) => {
+            const widgetManager = this.widgetManager;
+            if (!this.isLoggedIn() || !widgetManager) return;
+            const hits = collectInputWidgetsAtPoint(widgetManager, x, y);
+            for (let i = hits.length - 1; i >= 0; i--) {
+                const widget = hits[i];
+                if (widgetManager.isEffectivelyHidden((widget?.uid ?? 0) | 0)) continue;
+                if (keyboardButtons.widgetShowsKeyboard(widget)) {
+                    this.mobileChatKeyboard.show();
+                    return;
+                }
+            }
+        };
 
         // Wire up the deferred callbacks - triggers queued var changes after script execution
         this.cs2Vm.onVarpChange = (varpId) => {

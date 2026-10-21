@@ -3,6 +3,7 @@ export const WORLD_MAP_TARGET_UID = (161 << 16) | 18;
 export const WORLD_MAP_CLOSE_WIDGET_ID = (WORLD_MAP_GROUP_ID << 16) | 38;
 export const WORLD_MAP_ORB_WIDGET_IDS = [
   (160 << 16) | 55,
+  (897 << 16) | 50, // orbs_osm:worldmap (mobile)
   (895 << 16) | 53,
 ];
 

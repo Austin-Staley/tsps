@@ -147,11 +147,34 @@ function skipTutorial(player) {
   );
 }
 
-/** Ends the tutorial; an Ironman choice then opens the setup, any mode allowed as on the island. */
+/**
+ * Ends the tutorial. An Ironman choice opens the setup first, any mode allowed as on the island:
+ * it is a main modal, and the welcome box and quest-complete scroll that complete() opens would
+ * close it (on live, Paul asks on the island, long before Lumbridge). The skip finishes once the
+ * setup closes, with a mode chosen or not.
+ */
 function finishSkip(player, ironman) {
-  complete(player);
-  if (!ironman) return;
-  T.later(1, () => pluginApi.emitCustomEvent("ironman:open-setup", { player, upgrades: true, handled: false }));
+  if (!ironman) {
+    complete(player);
+    return;
+  }
+  T.later(1, () => {
+    const request = { player, upgrades: true, handled: false, onClosed: () => completeAfterChatbox(player) };
+    pluginApi.emitCustomEvent("ironman:open-setup", request);
+    if (!request.handled) complete(player);
+  });
+}
+
+/** complete() once no dialogue is up (the setup's "mode updated" statement, say), a tick at a time. */
+function completeAfterChatbox(player) {
+  T.later(1, () => {
+    if (player.isRegistered?.() === false || !T.isActive(player)) return;
+    if (player.getDialogueManager?.()?.isActive?.() === true) {
+      completeAfterChatbox(player);
+      return;
+    }
+    complete(player);
+  });
 }
 
 function talkToGielinorGuide(event) {

@@ -125,6 +125,9 @@ export class QuickPrayers {
     private static readonly QUICK_PRAYER_WIDGET_CHILD_ID = 4;
     private static readonly MINIMAP_WIDGET_GROUP_ID = 160;
     private static readonly MINIMAP_PRAYER_ORB_CHILD_ID = 20;
+    // orbs_osm:prayerbutton, the mobile toplevel's prayer orb.
+    private static readonly MOBILE_MINIMAP_WIDGET_GROUP_ID = 897;
+    private static readonly MOBILE_MINIMAP_PRAYER_ORB_CHILD_ID = 16;
     private static readonly SETUP_WIDGET_GROUP_ID = 77;
     private static readonly SETUP_WIDGET_CHILD_ID = 4;
     private static readonly SETUP_DONE_CHILD_ID = 5;
@@ -325,7 +328,11 @@ export class QuickPrayers {
             } else this.toggleQuickPrayers();
             return true;
         }
-        if (groupId === QuickPrayers.MINIMAP_WIDGET_GROUP_ID && childId === QuickPrayers.MINIMAP_PRAYER_ORB_CHILD_ID) {
+        if (
+            (groupId === QuickPrayers.MINIMAP_WIDGET_GROUP_ID && childId === QuickPrayers.MINIMAP_PRAYER_ORB_CHILD_ID) ||
+            (groupId === QuickPrayers.MOBILE_MINIMAP_WIDGET_GROUP_ID &&
+                childId === QuickPrayers.MOBILE_MINIMAP_PRAYER_ORB_CHILD_ID)
+        ) {
             if (buttonNum === 2) this.openSetup();
             else this.toggleQuickPrayers();
             return true;

@@ -428,17 +428,31 @@ test("arriving in Lumbridge clears the worn items completely: the weapon interfa
   assert.equal(player.getWeapon(), WeaponInterfaces.UNARMED, "fights unarmed, not with the bow");
 });
 
-test("skipping the island as an Ironman opens the setup with every mode; declining does not", () => {
+test("skipping the island as an Ironman opens the setup with every mode, then ends it; declining does not", () => {
   const Leave = require("../plugins/areas/tutorialisland/Leave.TutorialIsland");
   const { STEP } = require("../plugins/areas/tutorialisland/Common.TutorialIsland");
+  const IRONMAN_SETUP = 890;
 
   const { player } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
   Leave.finishSkip(player, true);
-  assert.equal(progress(player), STEP.COMPLETED, "the tutorial ends first");
   ticks(2);
+  assert.equal(progress(player), STEP.GIELINOR_TALK, "the setup comes first: the welcome box and quest scroll would close it");
   click(player, IRONMAN_SETUP_HARDCORE);
   player.getEnteredAmountAction().execute(1);
   assert.equal(player.getAttribute("ironman:mode"), "hardcore", "an upgrade is allowed, as on the island");
+  ticks(2);
+  assert.equal(progress(player), STEP.GIELINOR_TALK, "the mode-updated statement is still up");
+  player.getDialogueManager().reset();
+  ticks(2);
+  assert.equal(progress(player), STEP.COMPLETED, "the tutorial ends once the chatbox is free");
+
+  const { player: closed } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
+  Leave.finishSkip(closed, true);
+  ticks(2);
+  PluginManager.emitCustomEvent("interface:closed", { player: closed, interfaceId: IRONMAN_SETUP });
+  ticks(2);
+  assert.equal(progress(closed), STEP.COMPLETED, "closing the setup without a choice still ends the skip");
+  assert.equal(closed.getAttribute("ironman:mode") ?? "none", "none");
 
   const { player: declined } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
   Leave.finishSkip(declined, false);

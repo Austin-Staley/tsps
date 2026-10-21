@@ -1405,8 +1405,8 @@ function resumeTimedEffects({ player }) {
   }
 }
 
-/** The hitpoints orb's "Cure" (orbs:healthbutton). */
-const HEALTH_ORB_CURE_UID = (160 << 16) | 9;
+/** The hitpoints orb's "Cure" (orbs:healthbutton, and orbs_osm:healthbutton on mobile). */
+const HEALTH_ORB_CURE_UIDS = [(160 << 16) | 9, (897 << 16) | 5];
 /** The potions it can drink: those that cure poison or venom. */
 const CURE_POTIONS = new Set([
   "Antipoison", "Superantipoison", "Antidote+", "Antidote++", "Sanfew serum",
@@ -1464,7 +1464,7 @@ module.exports = {
       const { player, itemId, slot } = event;
       return handlePotionDrink(player, itemId, slot);
     });
-    api.onInterfaceActionButton(HEALTH_ORB_CURE_UID, cureFromHealthOrb);
+    for (const uid of HEALTH_ORB_CURE_UIDS) api.onInterfaceActionButton(uid, cureFromHealthOrb);
 
     api.onPlayerProcess(({ player }) => {
       if (player?.isPlayerBot?.()) {

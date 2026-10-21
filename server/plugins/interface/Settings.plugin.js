@@ -18,7 +18,8 @@ const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cach
 
 const ROOT_INTERFACE = 161;
 const MAIN_MODAL_UID = (ROOT_INTERFACE << 16) | 16;
-const XPDROPS_ORB_UID = (160 << 16) | 6;
+/** orbs:xp_drops, and orbs_osm:xp_drops on mobile. */
+const XPDROPS_ORB_UIDS = [(160 << 16) | 6, (897 << 16) | 2];
 const XPDROPS_OVERLAY_UID = (ROOT_INTERFACE << 16) | 9; // toplevel_osrs_stretch:xp_drops
 const XPDROPS_INTERFACE_ID = 122;
 const XPDROPS_SETUP_INTERFACE_ID = 137;
@@ -496,7 +497,7 @@ module.exports = {
   register(api) {
     api.persistAttribute(XPDROPS_ENABLED_ATTRIBUTE);
     api.onPlayerLogin(syncXpDrops);
-    api.onInterfaceActionButton(XPDROPS_ORB_UID, clickXpDrops);
+    for (const uid of XPDROPS_ORB_UIDS) api.onInterfaceActionButton(uid, clickXpDrops);
     for (const tab of TAB_VARBIT_MAP) {
       api.persistAttribute(keybindAttribute(tab.varbit), tab.defaultKey);
     }

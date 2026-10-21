@@ -30,16 +30,23 @@ function toOsrsKeyCode(domKeyCode: number): number {
     return -1;
 }
 
+/**
+ * Forced-landscape portrait mode (useSafariLandscapeLock) rotates the root 90deg clockwise.
+ * getBoundingClientRect then returns swapped (rotated) dimensions.
+ */
+export function isIosLandscapeRotated(): boolean {
+    const root = typeof document !== "undefined" ? document.documentElement : undefined;
+    return (
+        root?.dataset?.iosSafariForceLandscape === "1" &&
+        root?.dataset?.iosSafariForceLandscapeRotated === "1"
+    );
+}
+
 export function getMousePos(container: HTMLElement, event: MouseEvent | Touch): vec2 {
     const rect = container.getBoundingClientRect();
 
-    // Forced-landscape portrait mode rotates the root 90deg clockwise.
-    // In that case getBoundingClientRect returns swapped (rotated) dimensions,
-    // so use clientWidth/clientHeight for the unrotated layout dimensions.
-    const root = typeof document !== "undefined" ? document.documentElement : undefined;
-    const forceLandscape = root?.dataset?.iosSafariForceLandscape === "1";
-    const rotatedLandscape = root?.dataset?.iosSafariForceLandscapeRotated === "1";
-    const isIosRotated = forceLandscape && rotatedLandscape;
+    // When rotated, use clientWidth/clientHeight for the unrotated layout dimensions.
+    const isIosRotated = isIosLandscapeRotated();
 
     // Use getBoundingClientRect dimensions for baseW/baseH so that viewport-space
     // coordinates (event.clientX - rect.left) are correctly scaled to canvas buffer
