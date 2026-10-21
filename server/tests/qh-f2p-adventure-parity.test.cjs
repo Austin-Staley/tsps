@@ -267,6 +267,54 @@ test('post-quest Gnocci resolves to 7970 and the real Talk-to graph plays the af
   assert.equal(h.quest.getStage(p), 10, 'talking does not change the completed state');
 });
 
+test('Corsair returning-Colin transcript converges on TOLD for both Big Chompy states', () => {
+  const CABINBOY = 'quest.the_corsair_curse.cabinboy';
+  const COOK = 'quest.the_corsair_curse.cook';
+  const THIEF = 'quest.the_corsair_curse.thief';
+  const NAVIGATOR = 'quest.the_corsair_curse.navigator';
+  const told = "Oh. Oh, I see. Okay... I guess that means I didn't upset a mermaid after all. So the curse isn't my fault! Thank you!";
+  const standalone = "He's definitely not a mermaid.";
+  const branches = [
+    [false, "He's definitely not a mermaid.", "I've met that ogre before."],
+    [true, "I've met that ogre before. He lives with his dad in the Feldip Hills. He's definitely not a mermaid.", null],
+  ];
+  for (const [chompy, expectedLine, absentLine] of branches) {
+    const h = harness('CorsairCurse'), p = player();
+    h.bigChompy = chompy;
+    p.manager = new DialogueManager(p);
+    p.attrs.set(CABINBOY, 2);
+    p.attrs.set(COOK, 3);
+    p.attrs.set(THIEF, 6);
+    p.attrs.set(NAVIGATOR, 1);
+    assert.equal(runtime.startTranscript(h.api, p, N.CABIN_BOY_COLIN, 'The Corsair Curse', 'colin-s-curse-returning-to-colin'), true);
+    const texts = [];
+    let options = 0;
+    for (let guard = 0; guard < 80 && p.manager.getCurrent(); guard++) {
+      const current = p.manager.getCurrent();
+      if (typeof current.getOptions === 'function') options++;
+      if (typeof current.getText === 'function') texts.push(String(current.getText()));
+      p.manager.advance();
+    }
+    const transcript = texts.join('\n').replace(/\s+/g, ' ');
+    assert.equal(options, 0, `Big Chompy ${chompy}: returning Colin must not show the unrelated mermaid menu`);
+    assert.ok(transcript.includes(expectedLine), `Big Chompy ${chompy}: branch line missing`);
+    if (absentLine) assert.ok(!transcript.includes(absentLine), `Big Chompy ${chompy}: other branch line leaked`);
+    assert.equal(texts.includes(standalone), !chompy, `Big Chompy ${chompy}: standalone non-Chompy line`);
+    assert.ok(transcript.includes(told), `Big Chompy ${chompy}: TOLD line missing`);
+    assert.equal(p.attrs.get(CABINBOY), 3, `Big Chompy ${chompy}: cabinboy TOLD`);
+    assert.equal(p.attrs.get(COOK), 3, 'cook unchanged');
+    assert.equal(p.attrs.get(THIEF), 6, 'thief unchanged');
+    assert.equal(p.attrs.get(NAVIGATOR), 1, 'navigator unchanged');
+  }
+
+  const h = harness('CorsairCurse'), p = player();
+  p.attrs.set(CABINBOY, 2);
+  for (const fn of h.events['npc-dialogue:line'] ?? []) {
+    fn({ player: p, npcId: N.GNOCCI_THE_COOK, text: told });
+  }
+  assert.equal(p.attrs.get(CABINBOY), 2, 'a non-Colin NPC cannot set cabinboy TOLD');
+});
+
 test('Misthalin only the riddle fireplace responds to the knife, not the manor fireplaces', () => {
   const h = harness('MisthalinMystery'), p = player();
   h.quest.setStage(p, 95);
