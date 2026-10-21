@@ -23,8 +23,8 @@
  */
 module.exports = function registerAtFirstLightQuest(api) {
   const {
-    Animation, CountdownTask, DialogueChainBuilder, ItemStatementDialogue, ObjectDefinition, Skill,
-    ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, TaskManager,
+    Animation, CountdownTask, DialogueChainBuilder, Equipment, ItemStatementDialogue, ObjectDefinition,
+    Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, TaskManager,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript, loadTranscripts } = require("../QuestRuntime");
 
@@ -85,6 +85,8 @@ module.exports = function registerAtFirstLightQuest(api) {
   const CATSPEAK_AMULET_ITEM_IDS = [
     ItemIdentifiers.CATSPEAK_AMULET, // 4677
     ItemIdentifiers.CATSPEAK_AMULET_E_, // 6544
+    ItemIdentifiers.CATSPEAK_AMULET_2, // 17002
+    ItemIdentifiers.CATSPEAK_AMULET_E__2, // 17040
   ];
 
   // Loc 53011 "Cat bed" (Check), 53012 the no-op sibling at stage 11+.
@@ -193,7 +195,13 @@ module.exports = function registerAtFirstLightQuest(api) {
   }
 
   function hasCatspeakAmulet(player) {
-    return CATSPEAK_AMULET_ITEM_IDS.some((itemId) => held(player, itemId));
+    if (CATSPEAK_AMULET_ITEM_IDS.some((itemId) => held(player, itemId))) return true;
+    const amulet = player.getEquipment().get(Equipment.AMULET_SLOT);
+    return CATSPEAK_AMULET_ITEM_IDS.includes(amulet?.getId?.());
+  }
+
+  function understandsCats(player) {
+    return hasCatspeakAmulet(player) || isQuestComplete(player, "dragon_slayer_ii");
   }
 
   function canRepairBed(player) {
@@ -328,7 +336,7 @@ module.exports = function registerAtFirstLightQuest(api) {
       case "vL-AZN": // lost the toy mouse
         return sub(player, "mouseTaken") === 1 && !holdsMouse(player) && sub(player, "catDistract") === 0;
       case "SdFoGP": // no catspeak amulet or Dragon Slayer II
-        return !hasCatspeakAmulet(player);
+        return !understandsCats(player);
       case "xAmw_A": // has a toy mouse (wound)
         return held(player, WOUND_TOY_MOUSE_ITEM_ID) || sub(player, "catDistract") === 1;
       case "aXen1A": // already has a smooth leaf
@@ -489,7 +497,8 @@ module.exports = function registerAtFirstLightQuest(api) {
       startTranscript(api, player, KIKO_NPC_ID, PAGE, "a-missing-fox-petting-kiko");
       return;
     }
-    startTranscript(api, player, KIKO_NPC_ID, "Guild Hunter Kiko", "petting-kiko-without-a-catspeak-amulet");
+    startTranscript(api, player, KIKO_NPC_ID, "Guild Hunter Kiko",
+      understandsCats(player) ? "petting-kiko-with-a-catspeak-amulet" : "petting-kiko-without-a-catspeak-amulet");
   }
 
   /** Hunter.plugin.js would otherwise answer with rumours; claim the quest's stages only. */

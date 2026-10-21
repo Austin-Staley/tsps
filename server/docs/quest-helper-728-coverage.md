@@ -50,7 +50,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
 | The Ascent of Arceuus | `AscentOfArceuus` | Pending | Pending | Pending |
-| At First Light | `AtFirstLight` | Pending | Pending | Pending |
+| At First Light | `AtFirstLight` | Catspeak checks fixed; full route review pending | Focused source tests pass | Pending |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Pending | Pending | Pending |
 | Biohazard | `Biohazard` | Pending | Pending | Pending |
