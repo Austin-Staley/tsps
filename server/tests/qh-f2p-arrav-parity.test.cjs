@@ -41,6 +41,11 @@ function register() {
     };
   } });
   require('../plugins/quests/quests/ShieldOfArrav.Quest')(api);
+  if (!custom.has('quest:get-stage')) custom.set('quest:get-stage', []);
+  custom.get('quest:get-stage').push((request) => {
+    const value = request.player?.getAttribute?.(`quest.${request.key}.stage`);
+    request.stage = value === undefined || value === null ? null : Number(value);
+  });
   return { api, hooks, buttons, namedNpc, spawned, removed, ground, prompts, areas,
     quest: getRegisteredQuests().findLast((quest) => quest.key === 'shield_of_arrav'),
     emit: (event, payload) => api.emitCustomEvent(event, payload),
@@ -200,11 +205,15 @@ test('12WBZW reaches the quest handler through real NpcDialogues with event.npc'
   assert.deepEqual(attacks, [p]);
 });
 
-function realDispatchPlayer(shieldStage, ds2Stage, heroesStage) {
+function realDispatchPlayer(shieldStage, ds2Stage, heroesStage, extra = {}) {
   const attributes = new Map([['quest.shield_of_arrav.stage', shieldStage]]);
   if (ds2Stage !== undefined) attributes.set('quest.dragon_slayer_ii.stage', ds2Stage);
   if (heroesStage !== undefined) attributes.set('quest.heroes_quest.stage', heroesStage);
-  const items = new Map();
+  if (extra.tailStage !== undefined) attributes.set('quest.a_tail_of_two_cats.stage', extra.tailStage);
+  if (extra.golemStage !== undefined) attributes.set('quest.the_golem.stage', extra.golemStage);
+  if (extra.golemRetrieved !== undefined) attributes.set('quest.the_golem.retrieved_statuette', extra.golemRetrieved);
+  if (extra.gang !== undefined) attributes.set('shield-of-arrav.gang', extra.gang);
+  const items = extra.items ?? new Map();
   const state = { texts: [], packets: [], chain: null, sends: 0 };
   let packet;
   packet = new Proxy({}, { get: (_, method) => (...args) => { state.packets.push([method, ...args]); return packet; } });
@@ -271,6 +280,15 @@ function ensureRealPlugins() {
   // Production order: Heroes registers before Shield of Arrav.
   require('../plugins/quests/quests/HeroesQuest.Quest')(PluginManager.createApi('HeroesQuest'));
   require('../plugins/quests/quests/ShieldOfArrav.Quest')(PluginManager.createApi('ShieldOfArrav'));
+  // Production QUESTS order after Shield: TailOfTwoCats, then TheGolem.
+  require('../plugins/quests/quests/TailOfTwoCats.Quest')(PluginManager.createApi('TailOfTwoCats'));
+  require('../plugins/quests/quests/TheGolem.Quest')(PluginManager.createApi('TheGolem'));
+  // Test fixture for the runtime owner's quest:get-stage query, using the actual registry.
+  const queryFixture = PluginManager.createApi('ArravAuditQueryFixture');
+  queryFixture.onCustomEvent('quest:get-stage', (request) => {
+    const target = getRegisteredQuests().find((entry) => entry.key === request.key);
+    request.stage = target ? target.getStage(request.player) : null;
+  });
   PluginManager.registerPluginCandidate({
     pluginPath: 'NpcDialogues.plugin.js', pluginName: 'NpcDialogues',
     plugin: require('../plugins/npcs/NpcDialogues.plugin'), dependsOn: [],
@@ -369,4 +387,62 @@ test('shared gang NPCs keep Shield introductions before the book and preserve ac
     assert.equal(h.player.attributes.get('shield-of-arrav:black-arm-task'), undefined);
     assert.equal(h.player.attributes.get('shield-of-arrav:phoenix-task'), undefined);
   }
+});
+
+test('Shield defers Reldo to active A Tail of Two Cats and Curator to active The Golem', () => {
+  ensureRealPlugins();
+
+  for (const [tailStage, expected] of [
+    [4, /I have a cat related question\./],
+    [5, /So, about Robert the Strong\.\.\./],
+  ]) {
+    const h = realDispatchPlayer(0, undefined, undefined, { tailStage });
+    assert.equal(dispatchReldo(h.player).handled, true);
+    const text = dispatchText(h);
+    assert.match(text, expected, 'active Tail of Two Cats must own Reldo');
+    assert.doesNotMatch(text, /I'm in search of a quest\./, 'Shield must not hijack active Tail');
+    assert.equal(h.player.attributes.get('quest.shield_of_arrav.stage'), 0, 'Shield stage unchanged');
+    assert.equal(h.player.attributes.get('quest.a_tail_of_two_cats.stage'), tailStage, 'Tail stage unchanged');
+  }
+
+  const noTail = realDispatchPlayer(0);
+  assert.equal(dispatchReldo(noTail.player).handled, true);
+  assert.match(dispatchText(noTail), /I'm in search of a quest\./, 'inactive Tail still lets Shield start');
+
+  for (const { golemStage, retrieved } of [
+    { golemStage: 1, retrieved: false },
+    { golemStage: 2, retrieved: false },
+    { golemStage: 3, retrieved: true },
+  ]) {
+    const h = realDispatchPlayer(4, undefined, undefined, {
+      gang: 1, golemStage, golemRetrieved: retrieved, items: new Map([[763, 1]]),
+    });
+    assert.equal(dispatchNpc(h.player, core.NpcIdentifiers.CURATOR_HAIG_HALEN).handled, true);
+    const text = dispatchText(h);
+    assert.match(text, /I'm looking for a statuette recovered from the city of Uzer\./,
+      'The Golem must own the Curator conversation in stages 1..3');
+    assert.doesNotMatch(text, /I'm here about the Shield of Arrav\./, 'Shield must not hijack active Golem');
+    assert.equal(h.player.attributes.get('quest.shield_of_arrav.stage'), 4, 'Shield hand-in must not run');
+    assert.equal(h.player.items.get(763), 1, 'Shield half must not be consumed');
+    assert.equal(h.player.attributes.get('quest.the_golem.stage'), golemStage, 'Golem stage unchanged');
+  }
+
+  for (const golemStage of [4, 10]) {
+    const h = realDispatchPlayer(4, undefined, undefined, {
+      gang: 1, golemStage, golemRetrieved: true, items: new Map([[763, 1]]),
+    });
+    assert.equal(dispatchNpc(h.player, core.NpcIdentifiers.CURATOR_HAIG_HALEN).handled, true);
+    const text = dispatchText(h);
+    assert.match(text, /I'm here about the Shield of Arrav\./,
+      'Shield hand-in must resume after the statuette is placed or The Golem is complete');
+    assert.doesNotMatch(text, /statuette recovered from the city of Uzer/, 'Golem must no longer own the Curator');
+    assert.equal(h.player.attributes.get('quest.shield_of_arrav.stage'), 6, 'Shield hand-in must run');
+    assert.equal(h.player.items.get(763) || 0, 0, 'Shield half must be consumed by the hand-in');
+  }
+
+  const noGolem = realDispatchPlayer(4, undefined, undefined, { gang: 1, items: new Map([[763, 1]]) });
+  assert.equal(dispatchNpc(noGolem.player, core.NpcIdentifiers.CURATOR_HAIG_HALEN).handled, true);
+  const controlText = dispatchText(noGolem);
+  assert.match(controlText, /I'm here about the Shield of Arrav\./, 'Shield hand-in still runs when Golem is inactive');
+  assert.doesNotMatch(controlText, /statuette recovered from the city of Uzer/);
 });

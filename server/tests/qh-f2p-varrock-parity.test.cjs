@@ -214,3 +214,62 @@ test('Demon Slayer keeps the summon scene locked, then hands off unlocked at sto
   h.player.equipment.push({ getId: () => core.ItemIdentifiers.SILVERLIGHT });
   assert.equal(h.areas[0].canAttack(h.player, delrith), null, 'the real-area attack gate accepts Silverlight after the story');
 });
+
+// Real KnightsSword registration + real NpcDialogues/DialogueManager for stage-3 recovery.
+function knightsSetup() {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const custom = new Map(), named = new Map(), prompts = [];
+  const api = new Proxy({
+    core: { ...core },
+    persistAttribute() {},
+    onCustomEvent(name, fn) { const list = custom.get(name) ?? []; list.push(fn); custom.set(name, list); },
+    emitCustomEvent(name, event) { for (const fn of custom.get(name) ?? []) fn(event); },
+    onNpcInteraction(name, actions) { named.set(name, actions); },
+    onNpcDialogueVariant() {},
+    onNpcDialogueCondition() {},
+    onInterfaceActionButton() {},
+    onPlayerLogin() {},
+    sendMultiChatboxPrompt(player, title, ...args) { prompts.push({ player, title, args }); return true; },
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+  require('../plugins/quests/quests/KnightsSword.Quest')(api);
+  const quest = runtime.getRegisteredQuests().findLast((entry) => entry.key === 'the_knights_sword');
+  const attrs = new Map(), items = new Map(), varbits = new Map();
+  const inventory = { getAmount: (id) => items.get(id) ?? 0, isFull: () => false,
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)) };
+  const sender = new Proxy({ sendVarbit: (id, value) => { varbits.set(id, value); return sender; },
+    getVarbit: (id) => varbits.get(id) ?? 0 }, { get: (target, key) => target[key] ?? (() => sender) });
+  let location = new core.Location(3001, 3144, 0);
+  const player = { attrs, items, varbits,
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => inventory, getEquipment: () => ({ get: () => null }), getBanks: () => [],
+    getPacketSender: () => sender, getLocation: () => location, moveTo: (value) => { location = value; },
+    getSkillManager: () => ({ getCurrentLevel: () => 99, getCombatLevel: () => 99, addExperiences() {} }),
+    getUsername: () => 'Knight recovery', getAppearance: () => ({ isMale: () => true }), isRegistered: () => true,
+    getFrameUpdater: () => ({ clear() {} }), performAnimation() {}, performGraphic() {},
+  };
+  const manager = new DialogueManager(player);
+  player.getDialogueManager = () => manager;
+  return { quest, player, attrs, items, named, prompts, manager };
+}
+
+test('KnightsSword stage-3 interrupted pie recovery replays the captured sword request without a second pie', () => {
+  const h = knightsSetup();
+  h.attrs.set('quest.the_knights_sword.stage', 3);
+  const thurgo = core.NpcIdentifiers.THURGO;
+  const handler = h.named.get('Thurgo')?.['Talk-to'];
+  assert.ok(handler, 'production Thurgo Talk-to handler registered');
+  const event = { player: h.player, npcId: thurgo, definition: core.NpcDefinition.forId(thurgo) };
+  assert.equal(handler(event), true);
+  let prompt;
+  for (let step = 0; step < 20 && !prompt; step++) {
+    prompt = h.prompts.find((entry) => entry.args.includes('Can you make a special sword for me?'));
+    if (!prompt) h.manager.advance();
+  }
+  assert.ok(prompt, 'captured WITH_PIE sword-request option is reachable');
+  const index = prompt.args.indexOf('Can you make a special sword for me?');
+  prompt.args[index + 1]();
+  for (let step = 0; step < 20 && h.quest.getStage(h.player) < 4; step++) h.manager.advance();
+  assert.equal(h.quest.getStage(h.player), 4);
+  assert.equal(h.items.get(core.ItemIdentifiers.REDBERRY_PIE) ?? 0, 0, 'no second pie was consumed');
+});

@@ -98,6 +98,7 @@ function player() {
     getItems: () => [...items].filter(([, amount]) => amount > 0).map(([id, amount]) => ({ getId: () => id, getAmount: () => amount })),
     getFreeSlots: () => 28 - [...items].filter(([, amount]) => amount > 0).length,
     isFull: () => inventory.getFreeSlots() <= 0,
+    forceAdd: (_, item) => inventory.adds(item.getId(), item.getAmount()),
   };
   let packet, movementBlocked = false;
   const movementQueue = {
@@ -826,9 +827,14 @@ test('every selected Waterfall dialogue variant exists and conditions are answer
   for (const npcId of [NPC.almera, NPC.hudon, NPC.hadley, NPC.gerald, NPC.golrie]) {
     for (let stage = 0; stage <= 10; stage++) {
       q.quest.setStage(p, stage);
-      const variant = q.call('onNpcDialogueVariant', { npcId, player: p })[0];
-      if (variant == null) continue;
-      assert.ok(page.variants[variant], `${npcId} stage ${stage} names missing variant ${variant}`);
+      const selection = q.call('onNpcDialogueVariant', { npcId, player: p })[0];
+      if (selection == null) continue;
+      if (typeof selection === 'string') {
+        assert.ok(page.variants[selection], `${npcId} stage ${stage} names missing variant ${selection}`);
+      } else {
+        assert.ok(data[selection.page]?.variants?.[selection.variant],
+          `${npcId} stage ${stage} names missing ${selection.page}/${selection.variant}`);
+      }
     }
   }
   q.quest.setStage(p, 0);
@@ -851,5 +857,89 @@ test('every selected Waterfall dialogue variant exists and conditions are answer
     'If the player has placed all the runes:',
   ]) {
     assert.notEqual(q.call('onNpcDialogueCondition', { player: p, npcId: NPC.almera, text })[0], undefined, text);
+  }
+});
+
+test('postquest Hudon uses the canonical completion transcript page', () => {
+  const q = register(), p = player();
+  q.quest.setStage(p, STAGE.complete);
+  const selection = q.call('onNpcDialogueVariant', { npcId: NPC.hudon, player: p })[0];
+  assert.deepEqual(selection, {
+    page: 'Hudon',
+    variant: 'standard-dialogue-after-the-completion-of-waterfall-quest',
+  });
+  const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogues.json'), 'utf8'));
+  assert.ok(data.Hudon.variants[selection.variant], 'the canonical Hudon completion words exist');
+});
+
+test('fullbag reward overflow keeps every actual Waterfall item once', () => {
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const drops = [];
+  const originalRegister = ItemOnGroundManager.registerLocation;
+  ItemOnGroundManager.registerLocation = (owner, item, location) => {
+    drops.push({ id: item.getId(), amount: item.getAmount(), location });
+  };
+  const rewardPlayer = () => {
+    const p = player();
+    const inventory = new Inventory(p);
+    p.getInventory = () => inventory;
+    p.getLocation = () => new core.Location(2603, 9912, 0);
+    p.getUsername = () => 'WaterfallRewardTester';
+    p.getPrivateArea = () => null;
+    return { p, inventory };
+  };
+  const fill = (inventory, count, itemId = ID.rope) => {
+    for (let i = 0; i < count; i++) inventory.adds(itemId, 1);
+  };
+  try {
+    const q = register();
+
+    // Full bag: all five reward items (2 diamonds + 2 gold bars + 40 seeds) drop once.
+    const full = rewardPlayer();
+    q.quest.setStage(full.p, STAGE.amuletPlaced);
+    fill(full.inventory, 28);
+    assert.equal(full.inventory.isFull(), true, 'precondition: full bag');
+    assert.equal(q.quest.complete(full.p), true);
+    assert.equal(q.quest.getStage(full.p), STAGE.complete);
+    assert.deepEqual(drops.map((drop) => [drop.id, drop.amount]), [
+      [ID.diamond, 1], [ID.diamond, 1], [ID.gold, 1], [ID.gold, 1], [ID.seeds, 40],
+    ], 'actual cache stackability: nonstackables are dropped one at a time');
+    assert.equal(full.inventory.getItems().length, 28, 'no reward overwrites a full bag');
+    const afterFirst = drops.length;
+    assert.equal(q.quest.complete(full.p), false, 'completion remains once-only');
+    assert.equal(drops.length, afterFirst, 'repeating completion does not duplicate rewards');
+
+    const relogged = rewardPlayer();
+    q.quest.setStage(relogged.p, STAGE.complete);
+    assert.equal(q.quest.complete(relogged.p), false, 'a saved complete stage cannot reward again');
+    assert.equal(drops.length, afterFirst, 'relog/re-entry does not duplicate rewards');
+
+    // One free slot: only the first diamond fits; the rest drops, proving capacity is real.
+    drops.length = 0;
+    const oneFree = rewardPlayer();
+    q.quest.setStage(oneFree.p, STAGE.amuletPlaced);
+    fill(oneFree.inventory, 27);
+    assert.equal(q.quest.complete(oneFree.p), true);
+    assert.equal(oneFree.inventory.getAmount(ID.diamond), 1);
+    assert.equal(oneFree.inventory.getAmount(ID.gold), 0);
+    assert.deepEqual(drops.map((drop) => [drop.id, drop.amount]), [
+      [ID.diamond, 1], [ID.gold, 1], [ID.gold, 1], [ID.seeds, 40],
+    ]);
+
+    // Existing stackable seeds merge into the occupied slot rather than dropping.
+    drops.length = 0;
+    const stacked = rewardPlayer();
+    q.quest.setStage(stacked.p, STAGE.amuletPlaced);
+    fill(stacked.inventory, 27);
+    stacked.inventory.adds(ID.seeds, 1);
+    assert.equal(q.quest.complete(stacked.p), true);
+    assert.equal(stacked.inventory.getAmount(ID.seeds), 41);
+    assert.ok(!drops.some((drop) => drop.id === ID.seeds), 'stackable seeds merge when the bag is full');
+    assert.deepEqual(drops.map((drop) => [drop.id, drop.amount]), [
+      [ID.diamond, 1], [ID.diamond, 1], [ID.gold, 1], [ID.gold, 1],
+    ]);
+  } finally {
+    ItemOnGroundManager.registerLocation = originalRegister;
   }
 });

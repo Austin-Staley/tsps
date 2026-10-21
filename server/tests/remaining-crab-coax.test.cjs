@@ -100,6 +100,7 @@ function setup() {
       adds(id, count) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
       getFreeSlots: () => 28,
+      isFull: () => false,
     }),
     getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99, addExperiences(skill, amount) { xp.push([skill, amount]); } }),
     getLocation: () => location.getX ? location : new core.Location(location.x, location.y, location.z),

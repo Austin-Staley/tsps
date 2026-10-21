@@ -1473,7 +1473,9 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     if (quest.getStage(player) < STAGE_PREPARE) setStage(player, STAGE_PREPARE);
     const tile = new Location(2722, 4905, 0);
     if (!itemOnGroundManager.getGroundItem(player.getUsername(), DEMONIC_SIGIL_ITEM_ID, tile)) {
-      itemOnGroundManager.registerLocation(player, new Item(DEMONIC_SIGIL_ITEM_ID, 1), tile);
+      // World-owned, not cutscene-owned: the Tanya scene PrivateArea is
+      // destroyed at tick 10 and would deregister a private-area item.
+      itemOnGroundManager.registerLocation(player, new Item(DEMONIC_SIGIL_ITEM_ID, 1), tile, null);
     }
     return true;
   }
@@ -1508,7 +1510,12 @@ module.exports = function registerShadowOfTheStormQuest(api) {
         tanyaKilled(player);
       }
     });
-    Scenes.later(scene, 10, () => Scenes.end(player));
+    Scenes.later(scene, 10, () => {
+      Scenes.end(player);
+      // The sigil was created while the player was inside the scene area, so
+      // refresh ground items now that they are back in the world.
+      itemOnGroundManager.onRegionChange(player);
+    });
   }
 
   function handleAgrithNaarBeforeDeath(event) {

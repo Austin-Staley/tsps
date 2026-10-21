@@ -51,6 +51,7 @@ module.exports = function registerPryingTimesQuest(api) {
   const {
     Equipment,
     GameObject,
+    Item,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -886,10 +887,13 @@ module.exports = function registerPryingTimesQuest(api) {
     const skills = player.getSkillManager();
     skills.addExperiences(Skill.SMITHING, SMITHING_XP);
     skills.addExperiences(Skill.SAILING, SAILING_XP);
-    // registerQuest adds the rewardItemId coupon; top the stack up to 25.
-    if (freeSlots(player) >= 1) {
-      player.getInventory().adds(SAWMILL_COUPON_ITEM_ID, SAWMILL_COUPONS - 1);
-    }
+    // QuestRuntime adds the first coupon. Use the engine's normal reward
+    // overflow (merge an existing stack, or drop at the reward tile) instead of
+    // silently skipping the other 24 when the inventory is full.
+    player.getInventory().forceAdd(
+      player,
+      new Item(SAWMILL_COUPON_ITEM_ID, SAWMILL_COUPONS - 1)
+    );
   }
 
   api.persistAttribute(STEVE_LOG_ATTRIBUTE);

@@ -456,7 +456,8 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   }
 
   function setUrnEmblem(player, slot, type) {
-    const next = urnState(player) | (type << ((slot - 1) * 4));
+    const shift = (slot - 1) * 4;
+    const next = (urnState(player) & ~(0xf << shift)) | ((type & 0xf) << shift);
     player.setAttribute(URNS_ATTRIBUTE, next | 0);
   }
 
@@ -1118,6 +1119,21 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         event.handled = true;
         player.sendMessage(`The ${urnName(player)} urn is empty.`);
         return;
+      case "T-XWqk": // remove the emblem from a full urn
+        removeUrnEmblem(event);
+        return;
+      case "5n8so9": // swap for baboon
+        swapUrnEmblem(event, EMBLEM_TYPE_BABOON);
+        return;
+      case "-ZAIcb": // swap for human
+        swapUrnEmblem(event, EMBLEM_TYPE_HUMAN);
+        return;
+      case "PvgO3l": // swap for crocodile
+        swapUrnEmblem(event, EMBLEM_TYPE_CROCODILE);
+        return;
+      case "OzGmtr": // swap for scarab
+        swapUrnEmblem(event, EMBLEM_TYPE_SCARAB);
+        return;
       case "vRtBKz": // lever by the urns: only the exact riddle map unlocks it
         event.handled = true;
         if (!urnPuzzleComplete(player)) {
@@ -1271,6 +1287,28 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     player.getInventory().deleteNumber(itemId, 1);
     setUrnEmblem(player, slot, type);
     player.sendMessage(`You put the ${EMBLEM_NAME_BY_TYPE[type]} emblem in the ${URN_NAME_BY_SLOT[slot]} urn.`);
+  }
+
+  function removeUrnEmblem(event) {
+    const { player } = event;
+    const slot = urnSlotByPlayer.get(player);
+    const type = slot ? urnEmblem(player, slot) : 0;
+    event.handled = true;
+    if (!type || freeSlots(player) === 0) return;
+    player.getInventory().adds(EMBLEM_ITEM_BY_TYPE[type], 1);
+    setUrnEmblem(player, slot, 0);
+  }
+
+  function swapUrnEmblem(event, type) {
+    const { player } = event;
+    const slot = urnSlotByPlayer.get(player);
+    const oldType = slot ? urnEmblem(player, slot) : 0;
+    const newItem = EMBLEM_ITEM_BY_TYPE[type];
+    event.handled = true;
+    if (!oldType || oldType === type || !hasItem(player, newItem)) return;
+    player.getInventory().deleteNumber(newItem, 1);
+    setUrnEmblem(player, slot, type);
+    player.getInventory().adds(EMBLEM_ITEM_BY_TYPE[oldType], 1);
   }
 
   // ==========================================================================

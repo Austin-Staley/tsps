@@ -495,7 +495,7 @@ module.exports = function registerScrambledQuest(api) {
     }
     if (stage >= STAGE_MEN && stage < STAGE_GATHERED) {
       for (const [key, config] of MAN_CONFIG) spawnAt(player, `man-town-${key}`, config.npcId, config.town);
-    } else if (stage >= STAGE_GATHERED && stage < STAGE_FINALE) {
+    } else if (stage >= STAGE_GATHERED) {
       for (const [key, config] of MAN_CONFIG) spawnAt(player, `man-temple-${key}`, config.npcId, config.temple);
     }
 
@@ -578,6 +578,7 @@ module.exports = function registerScrambledQuest(api) {
 
   function selectAcatzinVariant(player) {
     if (quest.isComplete(player)) return V_ACATZIN_POST;
+    if (quest.getStage(player) >= STAGE_FINALE) return selectGatherVariant(player, EGGS[0]);
     if (man(player, MAN_ACATZIN) >= 7) return selectGatherVariant(player, EGGS[0]);
     if (man(player, MAN_ACATZIN) === 0) return V_ACATZIN_INTRO;
     if (held(player, FIXED_AXE_ITEM_ID) || held(player, DAMAGED_AXE_ITEM_ID)) return V_ACATZIN_AXE;
@@ -586,6 +587,7 @@ module.exports = function registerScrambledQuest(api) {
 
   function selectNezketiVariant(player) {
     if (quest.isComplete(player)) return V_NEZKETI_POST;
+    if (quest.getStage(player) >= STAGE_FINALE) return selectGatherVariant(player, EGGS[1]);
     if (man(player, MAN_NEZKETI) >= 7) return selectGatherVariant(player, EGGS[1]);
     if (man(player, MAN_NEZKETI) === 0) return V_NEZKETI_INTRO;
     return hasAnyTea(player) ? V_NEZKETI_TEA : V_NEZKETI_AGAIN;
@@ -593,6 +595,7 @@ module.exports = function registerScrambledQuest(api) {
 
   function selectKauayotlVariant(player) {
     if (quest.isComplete(player)) return V_KAUAYOTL_POST;
+    if (quest.getStage(player) >= STAGE_FINALE) return selectGatherVariant(player, EGGS[2]);
     if (man(player, MAN_KAUAYOTL) >= 7) return selectGatherVariant(player, EGGS[2]);
     if (man(player, MAN_KAUAYOTL) === 0) return V_KAUAYOTL_INTRO;
     if (man(player, MAN_KAUAYOTL) >= 3) return V_KAUAYOTL_AFTER;
@@ -986,8 +989,10 @@ module.exports = function registerScrambledQuest(api) {
     if (npcId !== PET_EGG_NPC_ID || !quest.isComplete(player)) return;
     event.handled = true;
     if (!hasBit(player, BIT_PET_EGG_RECEIVED)) {
-      setBit(player, BIT_PET_EGG_RECEIVED);
+      const before = player.getInventory().getAmount(PET_EGG_ITEM_ID);
       player.getInventory().adds(PET_EGG_ITEM_ID, 1);
+      if (player.getInventory().getAmount(PET_EGG_ITEM_ID) <= before) return;
+      setBit(player, BIT_PET_EGG_RECEIVED);
       player.sendMessage("The egg wibbles fondly. You gain an egg.");
     }
   }

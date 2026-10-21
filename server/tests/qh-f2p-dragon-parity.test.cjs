@@ -29,8 +29,14 @@ before(async () => {
   RegionManager.loadMapFiles(2932, 9640, true);
 });
 
-function harness(withDoors = false, withLadders = false) {
-  const hooks = {}, events = {}, objects = [], ground = [], clicks = new Map(), interactions = new Map(), tasks = [];
+function harness(withDoors = false, withLadders = false, withPrince = false) {
+  const hooks = {}, events = {}, objects = [], ground = [], clicks = new Map(), interactions = new Map(), tasks = [], stageQueries = [];
+  // QuestRuntime fixture for the quest:get-stage query: answer from registered quest metadata,
+  // never from raw stage attributes.
+  (events['quest:get-stage'] ??= []).push(request => {
+    stageQueries.push({ player: request.player, key: request.key });
+    request.stage = runtime.getRegisteredQuests().find(entry => entry.key === request.key)?.getStage?.(request.player) ?? 0;
+  });
   const taskManager = {
     submit(task) { task.setRunning(true); tasks.push(task); },
     cancelTasks(key) { for (const task of tasks.filter(entry => entry.key === key)) task.stop(); },
@@ -64,8 +70,9 @@ function harness(withDoors = false, withLadders = false) {
   require('../plugins/quests/quests/DragonSlayer.Quest')(api);
   if (withDoors) require('../plugins/objects/Doors.plugin').register(api);
   if (withLadders) require('../plugins/objects/Ladders.plugin').register(api);
+  if (withPrince) require('../plugins/quests/quests/PrinceAliRescue.Quest')(api);
   return {
-    hooks, events, objects, ground, clicks, interactions,
+    hooks, events, objects, ground, clicks, interactions, stageQueries,
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
     runTasks(cycles = 8) {
       let active = [...tasks];
@@ -562,4 +569,71 @@ test('Dragon Slayer routes Melzar FUNLADDERTOP 2605 into the real basement and k
   assert.equal(clickExit(unrelatedExit, unrelatedDoor).handled, false);
   assert.deepEqual([unrelatedExit.getLocation().getX(), unrelatedExit.getLocation().getY()], [2999, 3000],
     'no generic Exit door handler exists outside the four cache placements');
+});
+
+test('Dragon Slayer Ned selector defers to Prince Ali wig while preserving DS voyage', () => {
+  const h = harness(false, false, true);
+  const ds = runtime.getRegisteredQuests().find(entry => entry.key === 'dragon_slayer_i');
+  const prince = runtime.getRegisteredQuests().find(entry => entry.key === 'prince_ali_rescue');
+  assert.ok(ds && prince, 'Dragon Slayer and Prince Ali Rescue are registered');
+  const pick = (p, npcId = N.NED) =>
+    (h.hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId })).find(Boolean);
+  const setStages = (p, dsStage, princeStage) => {
+    ds.setStage(p, dsStage);
+    prince.setStage(p, princeStage);
+  };
+  const isPrinceWig = choice => choice?.page === 'Prince Ali Rescue'
+    && choice.variant === 'preparations-for-rescue-talking-to-ned';
+
+  // DS complete must never permanently shadow the reachable Prince wig request.
+  const complete = player();
+  setStages(complete, 10, 20);
+  assert.ok(isPrinceWig(pick(complete)), 'DS complete defers Ned to Prince wig');
+
+  const crandor = player();
+  setStages(crandor, 8, 20);
+  crandor.moveTo(new core.Location(3098, 3257, 0));
+  assert.ok(isPrinceWig(pick(crandor)), 'DS Ned-ready on land defers to Prince wig');
+  assert.ok(h.stageQueries.some(query => query.key === 'prince_ali_rescue' && query.player === crandor),
+    'Ned priority used the registered quest:get-stage query');
+
+  const afterReach = player();
+  setStages(afterReach, 9, 20);
+  afterReach.moveTo(new core.Location(3098, 3257, 0));
+  assert.ok(isPrinceWig(pick(afterReach)), 'DS after-Crandor land dialogue defers to Prince wig');
+
+  const onShip = player();
+  setStages(onShip, 8, 20);
+  onShip.moveTo(new core.Location(3048, 3207, 1));
+  const shipChoice = pick(onShip);
+  assert.equal(shipChoice.page, 'Dragon Slayer I');
+  assert.equal(shipChoice.variant, 'the-dragon-of-crandor-talking-to-ned-on-the-lady-lumbridge');
+
+  const early = player();
+  setStages(early, 2, 20);
+  early.moveTo(new core.Location(3098, 3257, 0));
+  assert.ok(isPrinceWig(pick(early)), 'active DS instructions defer to a missing Prince wig');
+
+  const earlyWithWig = player();
+  setStages(earlyWithWig, 2, 20);
+  earlyWithWig.moveTo(new core.Location(3098, 3257, 0));
+  earlyWithWig.items.set(I.WIG_2, 1);
+  assert.equal(pick(earlyWithWig).page, 'Dragon Slayer I');
+
+  const withWig = player();
+  setStages(withWig, 8, 20);
+  withWig.moveTo(new core.Location(3098, 3257, 0));
+  withWig.items.set(I.WIG_2, 1);
+  const dsChoice = pick(withWig);
+  assert.equal(dsChoice.page, 'Dragon Slayer I');
+  assert.equal(dsChoice.variant, 'the-dragon-of-crandor-talking-to-ned-after-giving-him-the-crandor-map');
+
+  const completeWithWig = player();
+  setStages(completeWithWig, 10, 20);
+  completeWithWig.items.set(I.WIG_2, 1);
+  assert.equal(pick(completeWithWig), undefined, 'DS complete does not claim Ned even when Prince has the wig');
+
+  const inactive = player();
+  setStages(inactive, 0, 20);
+  assert.ok(isPrinceWig(pick(inactive)), 'inactive DS already defers to Prince wig');
 });

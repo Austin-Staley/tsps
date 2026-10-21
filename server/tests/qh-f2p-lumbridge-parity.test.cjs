@@ -451,3 +451,81 @@ test('real PluginManager Veos Talk-to recovers rewards and keeps the Port Sarim 
   emitTalk(legacy, 10723, 3054, 3245);
   assert.equal(legacy.items.get(24361), undefined, 'old completed save still gets no retro box after Talk-to');
 });
+
+test('Rune Mysteries defers mid-quest Duke to real shared/other-quest dialogue', () => {
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  if (!global.__lumbridgeRealNpcDialogues) {
+    PluginManager.registerPluginCandidate({
+      pluginPath: 'NpcDialogues.plugin.js', pluginName: 'NpcDialogues',
+      plugin: require('../plugins/npcs/NpcDialogues.plugin'), dependsOn: [],
+    });
+    global.__lumbridgeRealNpcDialogues = true;
+  }
+  if (!global.__lumbridgeRuneDukeRepro) {
+    require('../plugins/quests/quests/RuneMysteries.Quest')(PluginManager.createApi('RuneDukeRepro'));
+    require('../plugins/quests/quests/IdesOfMilk.Quest')(PluginManager.createApi('IdesDukeRepro'));
+    global.__lumbridgeRuneDukeRepro = true;
+  }
+  const rune = getRegisteredQuests().findLast((entry) => entry.key === 'rune_mysteries');
+  const ides = getRegisteredQuests().findLast((entry) => entry.key === 'the_ides_of_milk');
+  const definition = core.NpcDefinition.forId(815);
+  const npc = {
+    getId: () => 815, getCurrentDefinition: () => definition,
+    getLocation: () => new core.Location(3209, 3222, 1), getIndex: () => 75,
+  };
+  const make = () => {
+    const p = player();
+    p.manager = new DialogueManager(p);
+    p.getDialogueManager = () => p.manager;
+    rune.setStage(p, 2);
+    return p;
+  };
+  const talk = (p) => {
+    const event = { player: p, npc, npcId: 815, clickType: 1, location: { x: 3209, y: 3222, z: 1 }, handled: false };
+    assert.equal(PluginManager.emitNpcInteraction(event), true);
+  };
+  const toMenu = (p) => {
+    const lines = [];
+    for (let step = 0; step < 20; step++) {
+      const menu = MultiChatboxPrompt.getPending(p);
+      if (menu) return { menu, lines };
+      const current = p.manager.getCurrent();
+      if (!current) break;
+      lines.push(current.getText?.());
+      p.manager.advance();
+    }
+    return { menu: null, lines };
+  };
+  const finish = (p) => {
+    const lines = [];
+    for (let step = 0; step < 30; step++) {
+      const current = p.manager.getCurrent();
+      if (!current) break;
+      lines.push(current.getText?.());
+      p.manager.advance();
+    }
+    return lines;
+  };
+
+  const plain = make();
+  talk(plain);
+  const shared = toMenu(plain);
+  assert.ok(shared.menu, 'no other active quest: shared Duke menu must show');
+  assert.deepEqual(shared.menu.options, [
+    'I seek a shield that will protect me from dragonbreath.',
+    'Have you any quests for me?',
+    'Where can I find money?',
+  ]);
+  assert.ok(!shared.menu.options.includes('What did you want me to do again?'), 'stale Rune mid-quest page must not play');
+  assert.equal(MultiChatboxPrompt.handleInterfaceActionClick({ player: plain, groupId: 219, slot: 3 }), true);
+  const moneyLines = finish(plain);
+  assert.ok(moneyLines.some((line) => /blacksmiths are prosperous/.test(line ?? '')), 'real shared Duke response must play ' + JSON.stringify(moneyLines));
+
+  const other = make();
+  ides.setStage(other, 10);
+  talk(other);
+  const idesLines = finish(other);
+  assert.ok(idesLines.includes('Greetings. I come seeking a business permit.'), 'active Ides of Milk Duke dialogue must win before/through Rune deferral');
+  assert.ok(!idesLines.includes('What did you want me to do again?'), 'Rune must not shadow an active shared Duke quest');
+});

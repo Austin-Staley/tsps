@@ -1,6 +1,6 @@
 /** Prince Ali Rescue. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerPrinceAliRescueQuest(api) {
-  const { ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, Location, GameObject, Animation, Skill, Task, TaskManager, StatementDialogue } = api.core;
+  const { ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, Location, GameObject, Animation, Skill, Task, TaskManager, StatementDialogue, Item } = api.core;
   const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const VARP_PRINCE_ALI_RESCUE = 273;
@@ -290,7 +290,9 @@ module.exports = function registerPrinceAliRescueQuest(api) {
   }
 
   function reward(player) {
-    player.getInventory().adds(COINS_ITEM_ID, 700);
+    // Coins merge with an existing stack; a full bag with no coin stack keeps the
+    // 700-coin reward as a ground drop instead of completing and losing it.
+    player.getInventory().forceAdd(player, new Item(COINS_ITEM_ID, 700));
   }
 
   function selectVariant({ npcId, player }) {

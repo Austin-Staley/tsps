@@ -1125,3 +1125,65 @@ test('Beneath Cursed Sands: VNowdJ releases the camera before the Akh, then 100 
   h.emit('npc-dialogue:action', { player: p, stepId: 'oyt_LF' });
   assert.equal(p.xp ?? 0, 50000, 'no duplicate reward');
 });
+test('Beneath Cursed Sands: full urn Remove and Swap apply real state and recovery', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const raw = CacheDefinitions.getObject(43979);
+  const urn = { ...raw, getId: () => raw.id, getName: () => raw.name, getInteractions: () => raw.actions };
+  h.quest.setStage(p, 46);
+  p.attributes.set('beneath-cursed-sands:urns', 4 << 8); // wrong scarab in centre-south slot 3
+  h.object(p, 43979, 1, urn, new core.Location(3394, 9247, 0));
+  h.action(p, 11474, 'T-XWqk');
+  assert.equal(p.items.get(I.SCARAB_EMBLEM), 1);
+  assert.equal(p.attributes.get('beneath-cursed-sands:urns'), 0);
+
+  p.attributes.set('beneath-cursed-sands:urns', 2 << 4); // human in centre-north slot 2
+  p.items.set(I.CROCODILE_EMBLEM, 1);
+  h.object(p, 43979, 1, urn, new core.Location(3394, 9249, 0));
+  h.action(p, 11474, 'PvgO3l');
+  assert.equal(p.attributes.get('beneath-cursed-sands:urns') & (0xf << 4), 3 << 4);
+  assert.equal(p.items.get(I.CROCODILE_EMBLEM) ?? 0, 0);
+  assert.equal(p.items.get(I.HUMAN_EMBLEM), 1);
+});
+
+test('Beneath Cursed Sands: full inventory refuses urn removal without state loss', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const raw = CacheDefinitions.getObject(43979);
+  const urn = { ...raw, getId: () => raw.id, getName: () => raw.name, getInteractions: () => raw.actions };
+  h.quest.setStage(p, 46);
+  p.attributes.set('beneath-cursed-sands:urns', 4 << 8);
+  p.full = true;
+  h.object(p, 43979, 1, urn, new core.Location(3394, 9247, 0));
+  h.action(p, 11474, 'T-XWqk');
+  assert.equal(p.attributes.get('beneath-cursed-sands:urns'), 4 << 8);
+  assert.equal(p.items.get(I.SCARAB_EMBLEM) ?? 0, 0);
+});
+
+test('Contact: completed Jex uses his canonical standard dialogue', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.quest.setStage(p, 130);
+  assert.equal(h.variant({ player: p, npcId: 3875, npc: {} }), 'standard-dialogue');
+});
+test('Beneath Cursed Sands: real Inventory full bag preserves the urn on Remove', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { Item } = require('../dist/game/model/Item');
+  const inv = new Inventory(p);
+  for (let slot = 0; slot < 28; slot++) inv.setItem(slot, new Item(1000 + slot, 1));
+  p.getInventory = () => inv;
+  const raw = CacheDefinitions.getObject(43979);
+  const urn = { ...raw, getId: () => raw.id, getName: () => raw.name, getInteractions: () => raw.actions };
+  h.quest.setStage(p, 46);
+  p.attributes.set('beneath-cursed-sands:urns', 4 << 8);
+  h.object(p, 43979, 1, urn, new core.Location(3394, 9247, 0));
+  h.action(p, 11474, 'T-XWqk');
+  assert.equal(p.attributes.get('beneath-cursed-sands:urns'), 4 << 8);
+  assert.equal(inv.getAmount(I.SCARAB_EMBLEM), 0);
+});

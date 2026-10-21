@@ -14,7 +14,7 @@ runtime.startTranscript = (api, player, npcId, page, variant, select) => {
 };
 
 function setup(register, options = {}) {
-  const hooks = { custom: new Map(), variants: [], conditions: [], login: [], logout: [], zoneEnter: [], objects: [], itemActions: [], itemOnNpc: [], itemOnObject: [], npcs: [] };
+  const hooks = { custom: new Map(), variants: [], conditions: [], login: [], logout: [], zoneEnter: [], objects: [], itemActions: [], itemOnNpc: [], itemOnObject: [], itemOnItem: [], npcs: [] };
   const tasks = [];
   const spawned = [], removed = [], ground = [], cameras = [], shakes = [], statements = [], sceneObjects = [];
   let tick = 0;
@@ -48,7 +48,7 @@ function setup(register, options = {}) {
     onItemAction(fn) { hooks.itemActions.push(fn); },
     onItemOnNpc(fn) { hooks.itemOnNpc.push(fn); },
     onItemOnObject(fn) { hooks.itemOnObject.push(fn); },
-    onItemOnItem() {},
+    onItemOnItem(fn) { hooks.itemOnItem.push(fn); },
     onPlayerLogin(fn) { hooks.login.push(fn); },
     onPlayerLogout(fn) { hooks.logout.push(fn); },
     onZoneEnter(zone, fn) { hooks.zoneEnter.push(fn); },
@@ -68,7 +68,8 @@ function setup(register, options = {}) {
     removeNpc(npc) { removed.push(npc); },
     getItemOnGroundManager: () => ({
       getGroundItem: (owner, id, location) => ground.find((item) => item.id === id && item.location.x === location.x && item.location.y === location.y),
-      registerLocation: (player, item, location) => ground.push({ id: item.getId(), location }),
+      registerLocation: (player, item, location, privateArea = player.getPrivateArea()) => ground.push({ id: item.getId(), location, privateArea }),
+      onRegionChange() {},
     }),
     getWorld: () => ({ getNpcs: () => [] }),
   }, { get(target, key) { return target[key] ?? (() => {}); } });
@@ -102,7 +103,7 @@ function setup(register, options = {}) {
     getSkillManager: () => ({ getCurrentLevel: () => 99, addExperiences() {} }),
     getLocation: () => location,
     moveTo(value) { location = value; },
-    getPrivateArea: () => null,
+    getPrivateArea: () => player?.__area ?? null,
     getArea: () => player.__area,
     setUntargetable() {},
     getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
@@ -356,7 +357,9 @@ test('Shadow of the Storm: first-ritual camera, BOOM, portal loc and Tanya actor
 
   for (let tick = 0; tick < 8; tick++) h.advance();
   assert.equal(h.quest.getStage(h.player), 100);
-  assert.ok(h.ground.some((item) => item.id === I.DEMONIC_SIGIL), 'Tanya drops a sigil');
+  const tanyaSigil = h.ground.filter((item) => item.id === I.DEMONIC_SIGIL).at(-1);
+  assert.ok(tanyaSigil, 'Tanya drops a sigil');
+  assert.equal(tanyaSigil.privateArea, null, 'sigil is world-owned, not scene-owned');
   assert.ok(h.removed.some((npc) => npc.getId() === 919), 'cutscene Tanya is removed');
   assert.equal(h.removed.filter((npc) => npc.getId() === 1989).length, 3, 'ghosts are removed');
   for (let tick = 0; tick < 3; tick++) h.advance();
@@ -581,4 +584,34 @@ test('Shadow: server completion 130 mirrors the native 7-bit varbit as 125 on lo
   runtime.sendQuestVarps({ player: h.player });
   assert.equal(h.varbits.get(1372), 125, 'login replays 125, not wrapped 0');
   assert.equal(h.quest.getStage(h.player), 130);
+});
+
+test('The Golem: the curator is released after quest completion', () => {
+  const h = setup((api) => require('../plugins/quests/quests/TheGolem.Quest')(api));
+  const curator = h.core.NpcIdentifiers.CURATOR_HAIG_HALEN;
+  h.quest.setStage(h.player, 3);
+  assert.ok(h.hooks.variants[0]({ player: h.player, npcId: curator, npc: { getId: () => curator } }));
+  h.quest.setStage(h.player, 10);
+  assert.equal(h.hooks.variants[0]({ player: h.player, npcId: curator, npc: { getId: () => curator } }), null);
+});
+
+test('Shadow: real PrivateArea destruction removes scene items but keeps the world-owned sigil', async () => {
+  const path = require('node:path');
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.join(__dirname, '..'));
+  const { PrivateArea } = require('../dist/game/model/areas/impl/PrivateArea');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
+  const { Item } = require('../dist/game/model/Item');
+  const { Location } = require('../dist/game/model/Location');
+  class SceneArea extends PrivateArea { constructor() { super([]); } }
+  const area = new SceneArea();
+  const sceneSigil = new ItemOnGround(State.SEEN_BY_EVERYONE, 'shadow-audit', new Location(3100, 3100, 0), new Item(6748, 1), false, -1, area);
+  const worldSigil = new ItemOnGround(State.SEEN_BY_EVERYONE, 'shadow-audit', new Location(3100, 3101, 0), new Item(6748, 1), false, -1, null);
+  ItemOnGroundManager.register(sceneSigil);
+  ItemOnGroundManager.register(worldSigil);
+  assert.ok(ItemOnGroundManager.getGroundItem('shadow-audit', 6748, new Location(3100, 3100, 0), area));
+  area.destroy();
+  assert.equal(ItemOnGroundManager.getGroundItem('shadow-audit', 6748, new Location(3100, 3100, 0), null), null, 'scene-owned item is cleaned up');
+  assert.ok(ItemOnGroundManager.getGroundItem('shadow-audit', 6748, new Location(3100, 3101, 0), null), 'world-owned item survives');
+  ItemOnGroundManager.deregister(worldSigil);
 });

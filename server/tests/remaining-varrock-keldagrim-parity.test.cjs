@@ -12,6 +12,7 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const runtime = require('../plugins/quests/QuestRuntime');
 const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { World } = require('../dist/game/World');
 const core = PluginManager.getCoreApi();
@@ -237,6 +238,46 @@ test('Giant Dwarf clothes chain requires the book, fuel and 200 coins without ea
   h.action(p, N.VERMUNDI, 'xcf363');
   assert.equal(p.items.get(I.COINS), 0);
   assert.equal(p.items.get(I.EXQUISITE_CLOTHES), 1);
+});
+
+function fullGiantDwarfInventory(p, coins) {
+  const inventory = new Inventory(p);
+  inventory.resetItems();
+  for (let i = 0; i < 28 - 1; i++) inventory.adds(I.BONES, 1);
+  inventory.adds(I.COINS, coins);
+  p.getInventory = () => inventory;
+  return inventory;
+}
+
+test('Giant Dwarf clothes purchase keeps coins when a full bag leaves no room for the clothes', () => {
+  const h = harness('GiantDwarf'), p = player();
+  const inventory = fullGiantDwarfInventory(p, 201);
+  assert.equal(inventory.getFreeSlots(), 0);
+  h.action(p, N.VERMUNDI, 'xcf363');
+  assert.equal(inventory.getAmount(I.COINS), 201, 'the fee must not be taken without room for the clothes');
+  assert.equal(inventory.getAmount(I.EXQUISITE_CLOTHES), 0);
+  assert.notEqual(p.attrs.get('quest.giant_dwarf.clothes'), 5);
+  assert.ok(p.messages.includes("You couldn't hold all those items."));
+
+  inventory.deleteNumber(I.BONES, 1);
+  h.action(p, N.VERMUNDI, 'xcf363');
+  assert.equal(inventory.getAmount(I.COINS), 1);
+  assert.equal(inventory.getAmount(I.EXQUISITE_CLOTHES), 1);
+  assert.equal(p.attrs.get('quest.giant_dwarf.clothes'), 5);
+
+  h.action(p, N.VERMUNDI, 'xcf363');
+  assert.equal(inventory.getAmount(I.COINS), 1, 'a retry must not take another fee');
+  assert.equal(inventory.getAmount(I.EXQUISITE_CLOTHES), 1, 'a retry must not duplicate the clothes');
+});
+
+test('Giant Dwarf clothes purchase still succeeds when exactly 200 coins free a slot', () => {
+  const h = harness('GiantDwarf'), p = player();
+  const inventory = fullGiantDwarfInventory(p, 200);
+  assert.equal(inventory.getFreeSlots(), 0);
+  h.action(p, N.VERMUNDI, 'xcf363');
+  assert.equal(inventory.getAmount(I.COINS), 0);
+  assert.equal(inventory.getAmount(I.EXQUISITE_CLOTHES), 1);
+  assert.equal(p.attrs.get('quest.giant_dwarf.clothes'), 5);
 });
 
 test('Giant Dwarf boots need Thieving, support Telekinetic Grab and combine once', () => {

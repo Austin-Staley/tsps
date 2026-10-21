@@ -258,8 +258,15 @@ module.exports = function registerIdesOfMilkQuest(api) {
     return true;
   }
 
+  function hasEquippedAmulet(player) {
+    // Cache wearPos 2 (neck/amulet); the charged and empty amulets share it.
+    return (player.getEquipment?.()?.getItems?.() ?? []).some((item) =>
+      item?.getId?.() === COWBELL_AMULET_ITEM_ID || item?.getId?.() === CHARGED_COWBELL_AMULET_ITEM_ID);
+  }
+
   function hasAmulet(player) {
-    return held(player, COWBELL_AMULET_ITEM_ID) || held(player, CHARGED_COWBELL_AMULET_ITEM_ID);
+    return held(player, COWBELL_AMULET_ITEM_ID) || held(player, CHARGED_COWBELL_AMULET_ITEM_ID)
+      || hasEquippedAmulet(player);
   }
 
   function sethTalked(player) {
@@ -540,7 +547,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
       return;
     }
     if (stepId === "2ePb5b") {
-      grantItem(player, COWBELL_AMULET_ITEM_ID);
+      if (!hasAmulet(player)) grantItem(player, COWBELL_AMULET_ITEM_ID);
       return;
     }
     if (stepId === "O4owU9") {

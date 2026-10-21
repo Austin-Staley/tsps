@@ -5,6 +5,8 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { getRegisteredQuests, startTranscript } = require('../plugins/quests/QuestRuntime');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
 const core = PluginManager.getCoreApi();
 
 before(async () => {
@@ -90,6 +92,33 @@ function player() {
   return p;
 }
 
+test('post-quest Sir Amik defers to Recruitment Drive and still greets when it is complete', () => {
+  const api = PluginManager.createApi('qh-shared-amik-test');
+  require('../plugins/quests/quests/BlackKnightsFortress.Quest')(api);
+  require('../plugins/quests/quests/RecruitmentDrive.Quest')(api);
+  const definition = core.NpcDefinition.forId(4771);
+  const npc = { getId: () => 4771, getCurrentDefinition: () => definition, getLocation: () => new core.Location(2960, 3336, 2) };
+
+  const active = player();
+  active.attributes.set('quest.black_knights_fortress.stage', 4);
+  active.attributes.set('quest.recruitment_drive.stage', 0);
+  active.attributes.set('quest.points', 60);
+  const selected = PluginManager.emitNpcDialogueVariant({ player: active, npc, npcId: 4771, definition, pages: [] });
+  assert.equal(selected.variant, 'starting-out-talking-to-sir-amik-varze');
+  const activeEvent = { player: active, npc, npcId: 4771, definition, clickType: 1, handled: false };
+  assert.equal(PluginManager.emitNpcInteraction(activeEvent), false);
+  assert.equal(activeEvent.handled, false);
+
+  const complete = player();
+  complete.attributes.set('quest.black_knights_fortress.stage', 4);
+  complete.attributes.set('quest.recruitment_drive.stage', 4);
+  complete.attributes.set('quest.points', 60);
+  const completeEvent = { player: complete, npc, npcId: 4771, definition, clickType: 1, handled: false };
+  assert.equal(PluginManager.emitNpcInteraction(completeEvent), true);
+  assert.ok(complete.said.includes('Hello, friend!'));
+});
+
+
 test('Black Knights treats a Draynor cabbage like any item before the witch is overheard', () => {
   const { hooks, quest } = register('BlackKnightsFortress', 'black_knights_fortress');
   const p = player();
@@ -149,4 +178,75 @@ test("Pirate's Treasure stock-room crate needs the white apron worn before it gi
   assert.equal(p.items.get(core.ItemIdentifiers.KARAMJAN_RUM), 1);
   assert.equal(p.attributes.get('pirates-treasure.rum'), 0);
   assert.ok(p.messages.includes('You find your bottle of rum in amongst the bananas.'));
+});
+
+
+function rewardPlayer() {
+  const p = player();
+  const inventory = new Inventory(p);
+  p.getInventory = () => inventory;
+  return { p, inventory };
+}
+
+function fillSlots(inventory, count, coinAmount = 0) {
+  for (let slot = 0; slot < count; slot++) inventory.getItems()[slot] = new core.Item(1005, 1);
+  if (coinAmount > 0) inventory.getItems()[0] = new core.Item(core.ItemIdentifiers.COINS, coinAmount);
+  return inventory;
+}
+
+function captureDrops(action) {
+  const drops = [];
+  const previous = ItemOnGroundManager.registers;
+  ItemOnGroundManager.registers = (_player, item) => { drops.push(item); return item; };
+  try { action(); } finally { ItemOnGroundManager.registers = previous; }
+  return drops;
+}
+
+test('Black Knights onReward keeps 2500 coins for a full bag, existing stack and one free slot', () => {
+  const { quest } = register('BlackKnightsFortress', 'black_knights_fortress');
+  const full = rewardPlayer(); fillSlots(full.inventory, 28);
+  const dropped = captureDrops(() => quest.onReward(full.p, quest));
+  assert.equal(full.inventory.getAmount(core.ItemIdentifiers.COINS), 0);
+  assert.equal(dropped.length, 1);
+  assert.equal(dropped[0].getId(), core.ItemIdentifiers.COINS);
+  assert.equal(dropped[0].getAmount(), 2500);
+
+  const stacked = rewardPlayer(); fillSlots(stacked.inventory, 28, 1);
+  const merged = captureDrops(() => quest.onReward(stacked.p, quest));
+  assert.equal(merged.length, 0);
+  assert.equal(stacked.inventory.getAmount(core.ItemIdentifiers.COINS), 2501);
+
+  const oneFree = rewardPlayer(); fillSlots(oneFree.inventory, 27);
+  const fitted = captureDrops(() => quest.onReward(oneFree.p, quest));
+  assert.equal(fitted.length, 0);
+  assert.equal(oneFree.inventory.getAmount(core.ItemIdentifiers.COINS), 2500);
+});
+
+test('Prince Ali onReward keeps 700 coins for a full bag and an existing stack', () => {
+  const { quest } = register('PrinceAliRescue', 'prince_ali_rescue');
+  const full = rewardPlayer(); fillSlots(full.inventory, 28);
+  const dropped = captureDrops(() => quest.onReward(full.p, quest));
+  assert.equal(full.inventory.getAmount(core.ItemIdentifiers.COINS), 0);
+  assert.equal(dropped.length, 1);
+  assert.equal(dropped[0].getId(), core.ItemIdentifiers.COINS);
+  assert.equal(dropped[0].getAmount(), 700);
+
+  const stacked = rewardPlayer(); fillSlots(stacked.inventory, 28, 20);
+  const merged = captureDrops(() => quest.onReward(stacked.p, quest));
+  assert.equal(merged.length, 0);
+  assert.equal(stacked.inventory.getAmount(core.ItemIdentifiers.COINS), 720);
+});
+
+test('Black Knights completion rewards once even when the bag is full', () => {
+  const { quest } = register('BlackKnightsFortress', 'black_knights_fortress');
+  const full = rewardPlayer(); fillSlots(full.inventory, 28);
+  let first, second;
+  const dropped = captureDrops(() => {
+    first = quest.complete(full.p);
+    second = quest.complete(full.p);
+  });
+  assert.equal(first, true);
+  assert.equal(second, false);
+  assert.equal(dropped.length, 1);
+  assert.equal(quest.getStage(full.p), 4);
 });

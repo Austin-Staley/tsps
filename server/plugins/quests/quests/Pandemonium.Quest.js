@@ -1286,12 +1286,15 @@ module.exports = function registerPandemoniumQuest(api) {
   function grantReward(player) {
     const skills = player.getSkillManager();
     skills.addExperiences(Skill.SAILING, SAILING_XP);
-    // registerQuest adds the first coupon; top the stack up to 25.
-    if (freeSlots(player) >= 1) {
-      player.getInventory().adds(SAWMILL_COUPON_ITEM_ID, SAWMILL_COUPONS - 1);
+    const inventory = player.getInventory();
+    const Item = api.core.Item;
+    // registerQuest adds the first coupon; top the stack up to 25. forceAdd merges the
+    // stackable coupons and drops overflow instead of silently losing the quest rewards.
+    inventory.forceAdd(player, new Item(SAWMILL_COUPON_ITEM_ID, SAWMILL_COUPONS - 1));
+    for (let i = 0; i < REPAIR_KITS; i++) {
+      inventory.forceAdd(player, new Item(REPAIR_KIT_ITEM_ID, 1));
     }
-    if (freeSlots(player) >= 1) player.getInventory().adds(REPAIR_KIT_ITEM_ID, REPAIR_KITS);
-    if (freeSlots(player) >= 1) player.getInventory().adds(SPYGLASS_ITEM_ID, 1);
+    inventory.forceAdd(player, new Item(SPYGLASS_ITEM_ID, 1));
     player.getPacketSender().sendVarbit(VARBIT_RECEIVED_REPAIR_KITS, 1);
   }
 

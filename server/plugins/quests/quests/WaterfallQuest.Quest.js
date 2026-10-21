@@ -33,7 +33,7 @@
  */
 module.exports = function registerWaterfallQuest(api) {
   const {
-    ActionDialogue, DialogueChainBuilder, Equipment, ItemDefinition, ItemIdentifiers,
+    ActionDialogue, DialogueChainBuilder, Equipment, Item, ItemDefinition, ItemIdentifiers,
     ItemStatementDialogue, Location, NpcIdentifiers, Skill, StatementDialogue,
   } = api.core;
   const { openBook, registerQuest } = require("../QuestRuntime");
@@ -386,12 +386,22 @@ module.exports = function registerWaterfallQuest(api) {
     return ["I can start this quest by speaking to", "<col=800000>Almera</col> beside Baxtorian Falls."];
   }
 
+  /** Reward extras use the engine's drop-at-reward-tile overflow, never a pending bag. */
+  function giveReward(inventory, player, itemId, amount) {
+    if (ItemDefinition.forId(itemId)?.isStackable?.()) {
+      inventory.forceAdd(player, new Item(itemId, amount));
+      return;
+    }
+    for (let i = 0; i < amount; i++) inventory.forceAdd(player, new Item(itemId, 1));
+  }
+
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.ATTACK, ATTACK_XP);
     player.getSkillManager().addExperiences(Skill.STRENGTH, STRENGTH_XP);
-    player.getInventory().adds(DIAMOND_ITEM_ID, 2);
-    player.getInventory().adds(GOLD_BAR_ITEM_ID, 2);
-    player.getInventory().adds(MITHRIL_SEEDS_ITEM_ID, 40);
+    const inventory = player.getInventory();
+    giveReward(inventory, player, DIAMOND_ITEM_ID, 2);
+    giveReward(inventory, player, GOLD_BAR_ITEM_ID, 2);
+    giveReward(inventory, player, MITHRIL_SEEDS_ITEM_ID, 40);
   }
 
   function floodDownstream(player, lines) {
@@ -524,6 +534,9 @@ module.exports = function registerWaterfallQuest(api) {
   }
 
   function hudonVariant(stage) {
+    if (stage >= STAGE_COMPLETE) {
+      return { page: "Hudon", variant: "standard-dialogue-after-the-completion-of-waterfall-quest" };
+    }
     if (stage >= STAGE_ENTERED_DUNGEON) return "accessing-the-waterfall-dungeon-talking-to-hudon-after-discovering-the-chalice";
     if (stage >= STAGE_ENTERED_TOMB) return "obtaining-the-pebble-talking-to-hudon-after-visiting-glarial-s-tomb";
     if (stage >= STAGE_READ_BOOK) return "starting-out-talking-to-hudon-after-reading-the-book";

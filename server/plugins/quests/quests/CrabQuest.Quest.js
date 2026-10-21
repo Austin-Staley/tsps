@@ -803,8 +803,10 @@ module.exports = function registerCrabQuestQuest(api) {
       // The collection has no Drop option, so reclaiming it must not depend on
       // dropping it: a missing collection is handed back on the bottle itself.
       if (!hasItem(player, SHELL_COLLECTION_ITEM_ID)) {
-        player.sendMessage(SHELL_COLLECTION_RECOVERY_TEXT);
         grantShellCollection(player);
+        if (hasItem(player, SHELL_COLLECTION_ITEM_ID)) {
+          player.sendMessage(SHELL_COLLECTION_RECOVERY_TEXT);
+        }
         return;
       }
       startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-rave-reminiscing-at-the-bottle");

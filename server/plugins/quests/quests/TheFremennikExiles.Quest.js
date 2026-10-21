@@ -397,6 +397,9 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   const BASILISK_POINTS = 1;
   const MONSTROUS_POINTS = 3;
   const BASILISK_TARGET = 31;
+  const SECOND_KEG_LINE = "The chieftain quickly drinks the second keg and stumbles off.";
+  const SECOND_KEG_STEP_ID = "F4atZx";
+  const KEG_TAIL_VARIANT = "making-v-s-shield-making-the-shield-brundt-with-v-s-shield-without-two-kegs-of-beer-bringing-the-kegs-afterwards";
 
   const SCHEMA_ATTRIBUTE = "the-fremennik-exiles:schema";
   const SCHEMA_VERSION = 1;
@@ -1168,6 +1171,10 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   }
 
   function brundtVariant(player, npcId, stage) {
+    if (stage === STAGE_KEGS_DRUNK &&
+        (npcId === BRUNDT_SOUTH_EAST || npcId === BRUNDT_LONGHALL)) {
+      return { variant: KEG_TAIL_VARIANT, select: () => kegTailSteps() };
+    }
     if (npcId === BRUNDT_SOUTH_EAST) {
       if (stage < STAGE_EXILED || stage >= STAGE_MARKET) return null;
       if (stage < STAGE_EXILED_BRIEFED) {
@@ -1190,7 +1197,10 @@ module.exports = function registerTheFremennikExilesQuest(api) {
         // resolves standalone, so drop them and let the beer hand-over play.
         return {
           variant: "making-v-s-shield-making-the-shield-brundt-with-v-s-shield-and-two-kegs-of-beer",
-          select: (steps) => (Array.isArray(steps) ? steps.filter((step) => step.type !== "jump") : steps),
+          select: (steps) => [
+            ...(Array.isArray(steps) ? steps.filter((step) => step.type !== "jump") : []),
+            ...kegTailSteps(),
+          ],
         };
       }
       return "making-v-s-shield-making-the-shield-brundt-with-v-s-shield-without-two-kegs-of-beer-bringing-the-kegs-afterwards";
@@ -1241,7 +1251,13 @@ module.exports = function registerTheFremennikExilesQuest(api) {
     if (stage >= STAGE_CELEBRATION && stage < STAGE_COMPLETE) {
       return "longhall-celebration";
     }
-    // After completion, yield so Lunar Diplomacy can offer the Seal reclaim.
+    if (stage >= STAGE_COMPLETE) {
+      // Yield only when Lunar needs to replace a lost Seal; otherwise keep the
+      // Exiles postquest page on Brundt.
+      if (hasQuestCompleted(player, QUEST_KEYS.lunar_diplomacy) &&
+          !hasItemAnywhere(player, ItemIdentifiers.SEAL_OF_PASSAGE)) return null;
+      return "standard-dialogue-after-the-fremennik-exiles";
+    }
     return null;
   }
 
@@ -1459,6 +1475,9 @@ module.exports = function registerTheFremennikExilesQuest(api) {
       case "2pgrdA":
         finishCelebration(player);
         return;
+      case SECOND_KEG_STEP_ID:
+        if (stageOf(player) === STAGE_KEGS_DRUNK) setStage(player, STAGE_MARKET);
+        return;
       default:
         return;
     }
@@ -1548,19 +1567,29 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   }
 
   function drinkKegs(player) {
-    if (kegCount(player) >= 2) {
-      let remaining = 2;
-      for (const itemId of KEG_ITEMS) {
-        const take = Math.min(remaining, player.getInventory().getAmount(itemId));
-        if (take > 0) {
-          player.getInventory().deleteNumber(itemId, take);
-          remaining -= take;
-        }
+    if (stageOf(player) !== STAGE_KEGS_REQUESTED || kegCount(player) < 2) return;
+    let remaining = 2;
+    for (const itemId of KEG_ITEMS) {
+      const take = Math.min(remaining, player.getInventory().getAmount(itemId));
+      if (take > 0) {
+        player.getInventory().deleteNumber(itemId, take);
+        remaining -= take;
       }
-      // The wiki "above" continuation (second keg, shield hand-back, invasion
-      // cutscene) is dropped by the jump filter, so the next Brundt talk plays it.
-      setStage(player, STAGE_MARKET);
     }
+    setStage(player, STAGE_KEGS_DRUNK);
+  }
+
+  /** The shipped "bringing the kegs afterwards" branch from its Hey! tail. */
+  function kegTailSteps() {
+    const record = loadTranscripts(api)?.[PAGE];
+    const raw = record?.variants?.[KEG_TAIL_VARIANT] ?? [];
+    const start = raw.findIndex((step) => step?.player === "Hey!");
+    if (start < 0) return [];
+    return raw.slice(start).map((step) =>
+      step?.id === SECOND_KEG_STEP_ID
+        ? { ...step, type: "message", text: SECOND_KEG_LINE, box: { statement: true } }
+        : step
+    );
   }
 
   // ==========================================================================
@@ -2590,7 +2619,9 @@ module.exports = function registerTheFremennikExilesQuest(api) {
     skills.addExperiences(Skill.SLAYER, 50000);
     skills.addExperiences(Skill.CRAFTING, 50000);
     skills.addExperiences(Skill.RUNECRAFTING, 30000);
-    if (!hasAnyItemAnywhere(player, VS_SHIELD_ITEMS)) addItem(player, VS_SHIELD_ITEM);
+    if (!hasAnyItemAnywhere(player, VS_SHIELD_ITEMS)) {
+      player.getInventory().forceAdd(player, new Item(VS_SHIELD_ITEM, 1));
+    }
     player.getPacketSender().sendVarbit(VARBIT_BALLAD, 1);
     player.getPacketSender().sendVarbit(VARBIT_HELM_UNLOCK, 1);
   }

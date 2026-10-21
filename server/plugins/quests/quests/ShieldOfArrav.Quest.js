@@ -77,6 +77,12 @@ module.exports = function registerShieldOfArravQuest(api) {
   const PHOENIX_TASK_ATTRIBUTE = "shield-of-arrav:phoenix-task";
   const BLACKARM_TASK_ATTRIBUTE = "shield-of-arrav:black-arm-task";
 
+  const TAIL_OF_TWO_CATS_QUEST_KEY = "a_tail_of_two_cats";
+  const TAIL_OF_TWO_CATS_RELDO_STAGES = new Set([4, 5]);
+  const THE_GOLEM_QUEST_KEY = "the_golem";
+  const THE_GOLEM_CURATOR_MIN_STAGE = 1;
+  const THE_GOLEM_CURATOR_LAST_STAGE = 3;
+
   const PAGE = "Shield of Arrav";
   const START_HOOK = "quest:shield-of-arrav:start";
 
@@ -105,6 +111,17 @@ module.exports = function registerShieldOfArravQuest(api) {
   const charlieFirstAsk = new WeakMap();
 
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
+  const questStage = (player, key) => {
+    const request = { player, key, stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return Number.isInteger(request.stage) ? request.stage : null;
+  };
+  const tailOfTwoCatsOwnsReldo = (player) =>
+    TAIL_OF_TWO_CATS_RELDO_STAGES.has(questStage(player, TAIL_OF_TWO_CATS_QUEST_KEY));
+  const theGolemOwnsCurator = (player) => {
+    const stage = questStage(player, THE_GOLEM_QUEST_KEY);
+    return stage !== null && stage >= THE_GOLEM_CURATOR_MIN_STAGE && stage <= THE_GOLEM_CURATOR_LAST_STAGE;
+  };
   const charliePaid = (player) => {
     const value = player.getAttribute(CHARLIE_PAID_ATTRIBUTE);
     return value === true ? CHARLIE_FULL_PAYMENT : Number(value) || 0;
@@ -276,6 +293,7 @@ module.exports = function registerShieldOfArravQuest(api) {
     const stage = quest.getStage(player);
 
     if (RELDO_NPC_IDS.has(npcId)) {
+      if (tailOfTwoCatsOwnsReldo(player)) return null;
       if (stage === STAGE_NOT_STARTED) {
         // The first-time and "otherwise" branches are sibling conditions in one
         // transcript; remember which one this talk is before they are resolved.
@@ -357,6 +375,7 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
 
     if (npcId === CURATOR_NPC_ID) {
+      if (theGolemOwnsCurator(player)) return null;
       const own = ownShieldAndCert(player);
       if (!own || stage < STAGE_JOINED_GANG || stage >= STAGE_COMPLETE) return null;
       if (stage === STAGE_JOINED_GANG && hasItem(player, own.shield)) {
@@ -586,6 +605,7 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (action.toLowerCase() !== "talk-to") return;
 
     const { player } = event;
+    if (theGolemOwnsCurator(player)) return;
     const stage = quest.getStage(player);
     const own = ownShieldAndCert(player);
     if (!own || stage < STAGE_JOINED_GANG || stage >= STAGE_COMPLETE) return;

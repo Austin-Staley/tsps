@@ -312,10 +312,12 @@ module.exports = function registerRoyalTroubleQuest(api) {
   // ==========================================================================
 
   // Advisor Ghrim.
+  const GHRIM_PAGE = "Advisor Ghrim";
   const V_GHRIM_MAIN = "getting-started-talking-to-advisor-ghrim";
   const V_GHRIM_WAIT = "getting-started-talking-to-advisor-ghrim-after-starting-the-quest";
   const V_GHRIM_DUNGEON = "to-the-dungeon-with-you-talking-to-advisor-ghrim";
   const V_GHRIM_DUNGEON_2 = "to-the-dungeon-with-you-talking-to-advisor-ghrim-2";
+  const V_GHRIM_POST = "standard-dialogue-after-completing-royal-trouble";
 
   // King Vargas.
   const V_VARGAS_AFTER_START = "getting-started-talking-to-king-vargas-after-starting-the-quest";
@@ -344,9 +346,15 @@ module.exports = function registerRoyalTroubleQuest(api) {
   const V_ASTRID_POST = "post-quest-talking-to-princess-astrid";
 
   // Investigation speakers.
+  const GUNNHILD_PAGE = "Gardener Gunnhild";
+  const LEIF_PAGE = "Lumberjack Leif";
+  const MAGNUS_PAGE = "Miner Magnus";
   const V_GUNNHILD = "investigating-the-stolen-goods-talking-to-gardener-gunhild";
   const V_LEIF = "investigating-the-stolen-goods-talking-to-lumberjack-leif";
   const V_MAGNUS = "investigating-the-stolen-goods-talking-to-miner-magnus";
+  const V_GUNNHILD_AFTER_THRONE = "standard-dialogue-after-completion-of-throne-of-miscellania";
+  const V_LEIF_AFTER_THRONE = "standard-dialogue-after-throne-of-miscellania";
+  const V_MAGNUS_AFTER_THRONE = "standard-dialogue-after-throne-of-miscellania";
   const V_MATILDA = "investigating-the-stolen-goods-talking-to-matilda";
   const V_HELGA = "investigating-the-stolen-goods-talking-to-helga";
   const V_ASHILD = "investigating-the-stolen-goods-talking-to-ashild";
@@ -355,6 +363,8 @@ module.exports = function registerRoyalTroubleQuest(api) {
   const V_SAILOR = "to-the-dungeon-with-you-talking-to-the-sailor";
 
   // Guards / Donal / kids / boss.
+  const GUARD_PAGE = "Guard (Miscellania)";
+  const V_GUARD_POST = "standard-dialogue-after-completing-royal-trouble";
   const V_GUARD_NO_SCROLL = "to-the-dungeon-with-you-attempting-to-enter-the-dungeon-without-the-scroll";
   const V_GUARD_SCROLL = "to-the-dungeon-with-you-entering-the-dungeon-with-the-scroll";
   const V_GUARD_LAIR = "those-meddling-kids-leaving-the-giant-sea-snake-s-lair";
@@ -649,7 +659,7 @@ module.exports = function registerRoyalTroubleQuest(api) {
   function selectGhrim(player) {
     const stage = quest.getStage(player);
     if (!questComplete(player, "throne_of_miscellania")) return null;
-    if (stage >= STAGE_COMPLETE) return variant(PAGE, V_GHRIM_MAIN);
+    if (stage >= STAGE_COMPLETE) return variant(GHRIM_PAGE, V_GHRIM_POST);
     if (royalMisc(player) >= MISC_SCROLL) return variant(PAGE, V_GHRIM_DUNGEON_2);
     if (royalMisc(player) >= MISC_GHRIM) return variant(PAGE, V_GHRIM_DUNGEON);
     if (stage === STAGE_STARTED) return variant(PAGE, V_GHRIM_WAIT);
@@ -684,7 +694,11 @@ module.exports = function registerRoyalTroubleQuest(api) {
     if (stage === 0) return null; // Throne of Miscellania's post-quest Sigrid
     if (stage >= STAGE_COMPLETE) return variant(PAGE, V_SIGRID_POST);
     if (royalEtc(player) >= ETC_BOX) return variant(PAGE, V_SIGRID_AGAIN);
-    if (royalEtc(player) >= ETC_REPORTED) return variant(PAGE, V_SIGRID_BOX);
+    if (royalEtc(player) >= ETC_REPORTED) {
+      return held(player, HEAVY_BOX_ITEM_ID) || royalMisc(player) >= MISC_BOSS
+        ? variant(PAGE, V_SIGRID_BOX)
+        : variant(PAGE, V_SIGRID_AGAIN);
+    }
     if (royalEtc(player) >= ETC_SIGRID) {
       return hasAttribute(player, ETC_VILLAGERS_ATTRIBUTE)
         ? variant(PAGE, V_SIGRID_RETURN)
@@ -712,7 +726,12 @@ module.exports = function registerRoyalTroubleQuest(api) {
 
   function selectMiscWorker(player, npcId) {
     const misc = royalMisc(player);
-    if (misc < MISC_INVESTIGATE || misc >= MISC_GHRIM) return null;
+    if (misc < MISC_INVESTIGATE || misc >= MISC_GHRIM) {
+      if (!questComplete(player, "throne_of_miscellania")) return null;
+      if (npcId === NpcIdentifiers.GARDENER_GUNNHILD) return variant(GUNNHILD_PAGE, V_GUNNHILD_AFTER_THRONE);
+      if (npcId === NpcIdentifiers.LUMBERJACK_LEIF) return variant(LEIF_PAGE, V_LEIF_AFTER_THRONE);
+      return variant(MAGNUS_PAGE, V_MAGNUS_AFTER_THRONE);
+    }
     if (!hasAttribute(player, MISC_VILLAGERS_ATTRIBUTE)) {
       setAttributeFlag(player, MISC_VILLAGERS_ATTRIBUTE, true);
       player.getPacketSender().sendVarbit(VARBIT_MISC_VILLAGERS, 1);
@@ -743,6 +762,7 @@ module.exports = function registerRoyalTroubleQuest(api) {
   function selectDungeonGuard(player) {
     const stage = quest.getStage(player);
     if (stage === 0) return null;
+    if (quest.isComplete(player)) return variant(GUARD_PAGE, V_GUARD_POST);
     const misc = royalMisc(player);
     if (misc < MISC_SCROLL) return variant(PAGE, V_GUARD_NO_SCROLL);
     if (misc === MISC_SCROLL) return variant(PAGE, V_GUARD_SCROLL);

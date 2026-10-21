@@ -522,7 +522,12 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
       return stage >= STAGE_STARTED && stage < STAGE_SPIRITS ? ASKING_VARIANTS.get(npcId) : null;
     }
     if (npcId === GENIE_NPC_ID) {
-      if (stage < STAGE_MAYOR || stage >= STAGE_STATUETTE) return null;
+      if (stage < STAGE_MAYOR) return null;
+      if (stage >= STAGE_STATUETTE) {
+        return !quest.isComplete(player) && !held(player, STATUETTE_ITEM_ID)
+          ? "sole-split-talking-to-the-genie-after-losing-the-statuette"
+          : null;
+      }
       if (!hasBit(player, BIT_DEAL_ACCEPTED)) return "the-crevice-talking-to-the-genie";
       if (held(player, SOLE_ITEM_ID)) return "sole-split-returning-to-the-genie-with-the-mayor-s-sole";
       return "the-crevice-talking-to-the-genie-again-after-accepting-his-deal";
@@ -599,13 +604,18 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
       return;
     }
     if (stepId === "CqbO1I" || stepId === "UDr1XL") {
-      // "You trade the sole for the statuette." Idempotent: only the genie-deal
-      // stage trades, so a repeated message event cannot eat a second sole.
+      // "You trade the sole for the statuette." The first deal advances to 55;
+      // the recorded lost-statuette conversation trades another sole at 55.
       event.handled = true;
-      if (quest.getStage(player) === STAGE_GENIE_DEAL) {
+      const stage = quest.getStage(player);
+      const firstDeal = stepId === "CqbO1I" && stage === STAGE_GENIE_DEAL;
+      const replacement = stepId === "UDr1XL" && stage >= STAGE_STATUETTE &&
+        !quest.isComplete(player) && !held(player, STATUETTE_ITEM_ID) &&
+        held(player, SOLE_ITEM_ID);
+      if (firstDeal || replacement) {
         if (held(player, SOLE_ITEM_ID)) player.getInventory().deleteNumber(SOLE_ITEM_ID, 1);
         if (!held(player, STATUETTE_ITEM_ID)) player.getInventory().adds(STATUETTE_ITEM_ID, 1);
-        quest.setStage(player, STAGE_STATUETTE);
+        if (firstDeal) quest.setStage(player, STAGE_STATUETTE);
       }
       if (text) player.sendMessage(text);
       return;

@@ -215,7 +215,15 @@ module.exports = function registerSheepShearerQuest(api) {
     if (event.text === "Yes, okay. I can do that." && pendingStart.has(event.player)) {
       event.after = () => {
         pendingStart.delete(event.player);
-        if (quest.getStage(event.player) === 0) quest.setStage(event.player, STAGE_STARTED);
+        if (quest.getStage(event.player) !== 0) return;
+        // Fred's start gives shears unless the player already has them or has all 20 balls.
+        // Do not commit the start when that handout cannot fit.
+        if (!hasShears(event.player) && woolBalls(event.player) < TOTAL_BALLS_OF_WOOL
+          && event.player.getInventory().isFull()) {
+          event.player.getInventory().full();
+          return;
+        }
+        quest.setStage(event.player, STAGE_STARTED);
       };
     }
     const remaining = remainingWool(quest.getStage(event.player));

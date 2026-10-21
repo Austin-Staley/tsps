@@ -92,6 +92,7 @@ function setup() {
       getAmount: (id) => inventory.get(id) ?? 0,
       adds(id, count) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       addItem(item) { this.adds(item.getId(), item.getAmount()); },
+      forceAdd(_player, item) { this.adds(item.getId(), item.getAmount()); },
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
       delete(id, count) { this.deleteNumber(id, count); },
       getFreeSlots() { return 28 - [...inventory.values()].filter((count) => count > 0).length; },
@@ -773,4 +774,87 @@ test('stage 28 shipyard UI build consumes materials and advances once through th
     BoatManager.setDeckLoc = saved.setDeckLoc;
     delete require.cache[modulePath];
   }
+});
+
+test('Pandemonium completion extras survive stack, full and one-slot inventories once', () => {
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { Item } = require('../dist/game/model/Item');
+  const { World } = require('../dist/game/World');
+  const owner = 'pandereward';
+  const clearGround = () => {
+    const items = World.getItems();
+    for (let i = items.length - 1; i >= 0; i--) if (items[i].getOwner() === owner) items.splice(i, 1);
+  };
+  const ground = () => World.getItems()
+    .filter((item) => item.getOwner() === owner)
+    .map((item) => [item.getItem().getId(), item.getItem().getAmount()]);
+  const make = (freeSlots, existingCoupons = 0) => {
+    clearGround();
+    const h = setup();
+    h.player.getUsername = () => owner;
+    const inventory = new Inventory(h.player);
+    h.player.getInventory = () => inventory;
+    let slot = 0;
+    if (existingCoupons > 0) inventory.setItem(slot++, new Item(32083, existingCoupons));
+    for (; slot < 28 - freeSlots; slot++) inventory.setItem(slot, new Item(995, 1));
+    const quest = load(h, 'Pandemonium.Quest.js');
+    quest.setStage(h.player, 48);
+    return { h, inventory, quest };
+  };
+  const countGround = (id) => ground().filter(([itemId]) => itemId === id);
+  const couponGround = () => countGround(32083).reduce((total, [, amount]) => total + amount, 0);
+
+  let { h, inventory, quest } = make(0, 1);
+  assert.equal(quest.complete(h.player), true);
+  assert.equal(inventory.getAmount(32083), 26, 'existing stack gains all 25 coupons with no free slot');
+  assert.equal(countGround(31964).length, 2, 'both repair kits drop rather than being lost');
+  assert.equal(countGround(31803).length, 1, 'spyglass drops rather than being lost');
+  assert.equal(quest.complete(h.player), false, 'completion reward is once');
+  h.relog();
+  assert.equal(quest.complete(h.player), false, 'relog completion is not rewarded again');
+  assert.equal(inventory.getAmount(32083), 26);
+  assert.equal(ground().length, 3);
+
+  ({ h, inventory, quest } = make(1));
+  assert.equal(quest.complete(h.player), true);
+  assert.equal(inventory.getAmount(32083), 25, 'one free slot holds the coupon stack');
+  assert.equal(countGround(31964).length, 2);
+  assert.equal(countGround(31803).length, 1);
+
+  ({ h, inventory, quest } = make(4));
+  assert.equal(quest.complete(h.player), true);
+  assert.equal(inventory.getAmount(32083), 25);
+  assert.equal(inventory.getAmount(31964), 2, 'repair kits are granted one at a time');
+  assert.equal(inventory.getAmount(31803), 1);
+  assert.equal(ground().length, 0);
+
+  ({ h, inventory, quest } = make(0));
+  assert.equal(quest.complete(h.player), true);
+  assert.ok(couponGround() >= 24, 'the quest-specific 24 coupons are not silently lost');
+  assert.equal(countGround(31964).length, 2);
+  assert.equal(countGround(31803).length, 1);
+  clearGround();
+});
+
+test('Crab bottle recovery reports only after the collection is actually granted', () => {
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { Item } = require('../dist/game/model/Item');
+  const h = setup();
+  const quest = load(h, 'CrabQuest.Quest.js');
+  quest.setStage(h.player, 63);
+  const inventory = new Inventory(h.player);
+  h.player.getInventory = () => inventory;
+  for (let slot = 0; slot < 28; slot++) inventory.setItem(slot, new Item(995, 1));
+  const before = h.messages.length;
+  const event = {
+    player: h.player,
+    objectId: 62440,
+    clickType: 1,
+    location: new h.core.Location(3055, 2639, 0),
+    definition: { getActions: () => ['Reminisce'], getName: () => 'Bottle' },
+  };
+  for (const handler of h.hooks.objects) handler(event);
+  const said = h.messages.slice(before);
+  assert.ok(said.some((message) => message.includes("couldn't hold")), 'engine reports the full inventory');
+  assert.ok(!said.some((message) => message.includes('familiar shells')), 'recovery is not announced before it is given');
 });

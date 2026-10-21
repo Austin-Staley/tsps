@@ -655,6 +655,7 @@ module.exports = function registerHauntedMineQuest(api) {
     }
     if (stepId === A_COMPLETE) {
       event.handled = true;
+      if (!quest.isComplete(player) && quest.getStage(player) < STAGE_KEY_TAKEN) return;
       if (player.getInventory().getFreeSlots() < 1) {
         player.sendMessage("You don't have enough inventory space to cut a shard.");
         return;
@@ -704,6 +705,11 @@ module.exports = function registerHauntedMineQuest(api) {
 
   function cutCrystal(event) {
     const { player } = event;
+    if (!quest.isComplete(player) &&
+        (!quest.isStarted(player) || quest.getStage(player) < STAGE_KEY_TAKEN)) {
+      event.handled = true;
+      return;
+    }
     event.handled = true;
     if (!held(player, CHISEL_ITEM_ID)) {
       player.sendMessage("You need a chisel to cut a shard from the crystal.");

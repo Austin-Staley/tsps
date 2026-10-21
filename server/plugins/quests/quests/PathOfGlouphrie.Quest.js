@@ -365,6 +365,13 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   const MACHINE_MIGRATION_VERSION = 2;
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
+
+  /** Inventory or bank ownership for one-off quest tools; prevents duplicate recovery. */
+  function ownsAnywhere(player, itemId) {
+    if (held(player, itemId)) return true;
+    const banks = player.getBanks?.() ?? (player.getBank ? [player.getBank()] : []);
+    return banks.some((bank) => Number(bank?.getAmount?.(itemId) ?? 0) > 0);
+  }
   const isGolrie = (npcId) => GOLRIE_NPC_IDS.has(npcId);
   const isHazelmere = (npcId) => HAZELMERE_NPC_IDS.has(npcId);
 
@@ -971,6 +978,18 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
       return true;
     }
     if (hasBit(player, bit)) {
+      // Golden storeroom chest: QH says the crystal chime can be replaced here after loss.
+      if (key === "2789,4258" &&
+          !ownsAnywhere(player, CRYSTAL_CHIME_SEED_ITEM_ID) &&
+          !ownsAnywhere(player, CRYSTAL_CHIME_ITEM_ID)) {
+        if (player.getInventory().getFreeSlots() < 1) {
+          player.sendMessage("You need more inventory space.");
+          return true;
+        }
+        player.getInventory().adds(CRYSTAL_CHIME_SEED_ITEM_ID, 1);
+        player.sendMessage("You search the chest and find some old elven artefacts.");
+        return true;
+      }
       player.sendMessage("The chest is empty.");
       return true;
     }

@@ -11,6 +11,8 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
 const runtime = require('../plugins/quests/QuestRuntime');
@@ -20,6 +22,7 @@ const noop = () => {};
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  new NpcDefinitionLoader().load();
 });
 
 class CountdownTask {
@@ -133,6 +136,52 @@ function harness(questModule, completedQuests = new Set()) {
 
 const throne = () => require('../plugins/quests/quests/ThroneOfMiscellania.Quest');
 const royal = () => require('../plugins/quests/quests/RoyalTrouble.Quest');
+
+/** Play one real NpcDialogues Talk-to through the production transcript graph. */
+function playRealTalk(h, player, npcId, name) {
+  const originalVariant = PluginManager.emitNpcDialogueVariant;
+  const originalCondition = PluginManager.emitNpcDialogueCondition;
+  let handlers;
+  const api = new Proxy({
+    core,
+    onCustomEvent: (eventName, fn) => (h.events[eventName] ??= []).push(fn),
+    emitCustomEvent: (eventName, event) => { for (const fn of h.events[eventName] ?? []) fn(event); },
+    onAnyNpcInteraction: (registered) => { handlers = registered; },
+    sendMultiChatboxPrompt(target, title, ...pairs) {
+      target.prompt = { title, options: pairs.filter((_, index) => index % 2 === 0), pairs };
+      return true;
+    },
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+  PluginManager.emitNpcDialogueVariant = (event) =>
+    (h.hooks.onNpcDialogueVariant ?? []).map((fn) => fn(event)).find(Boolean) ?? null;
+  PluginManager.emitNpcDialogueCondition = (event) => {
+    for (const fn of h.hooks.onNpcDialogueCondition ?? []) {
+      const answer = fn(event);
+      if (answer !== null && answer !== undefined) return answer;
+    }
+    return null;
+  };
+  require('../plugins/npcs/NpcDialogues.plugin').register(api);
+  try {
+    handlers['Talk-to']({
+      player, npc: null, npcId, clickType: 1, handled: false,
+      definition: { getName: () => name, getId: () => npcId, getActions: () => ['Talk-to'] },
+    });
+    for (let step = 0; step < 200; step++) {
+      if (player.prompt) {
+        const prompt = player.prompt;
+        player.prompt = null;
+        prompt.pairs[1]();
+        continue;
+      }
+      if (!player.manager.getCurrent()) break;
+      player.manager.advance();
+    }
+  } finally {
+    PluginManager.emitNpcDialogueVariant = originalVariant;
+    PluginManager.emitNpcDialogueCondition = originalCondition;
+  }
+}
 
 function completeThronePrerequisites(set) {
   set.add('fremennik_trials');
@@ -353,6 +402,59 @@ test('Throne of Miscellania: anthem, treaty, giant pen, support and one completi
   h.action(p, N.KING_VARGAS, '7ukkOd');
   assert.equal(h.quest.getStage(p), 100);
   assert.equal(p.attributes.get('quest.points'), points, 'replaying the scroll cannot pay twice');
+});
+
+test('Royal Trouble: Sigrid replays the heavy-box hand-in only with the earned box, and pays once', () => {
+  const h = harness(royal(), new Set(['fremennik_trials', 'heroes_quest', 'throne_of_miscellania']));
+  const p = h.player();
+  p.manager = new DialogueManager(p);
+  p.getDialogueManager = () => p.manager;
+  h.quest.setStage(p, 20);
+  p.attributes.set('royal-trouble:royal-misc', 50);
+  p.attributes.set('royal-trouble:royal-etc', 20);
+
+  assert.match(h.variant(N.QUEEN_SIGRID, p).variant, /talking-to-sigrid-again$/,
+    'before the box, repeat Sigrid talk is the search reminder');
+  playRealTalk(h, p, N.QUEEN_SIGRID, 'Queen Sigrid');
+  assert.equal(p.attributes.get('royal-trouble:royal-etc'), 20, 'the real graph cannot advance to the letter');
+  assert.equal(p.items.get(I.COINS) ?? 0, 0, 'the real graph does not pay early');
+
+  p.items.set(I.HEAVY_BOX, 1);
+  assert.match(h.variant(N.QUEEN_SIGRID, p).variant, /with-the-heavy-box$/);
+  playRealTalk(h, p, N.QUEEN_SIGRID, 'Queen Sigrid');
+  assert.equal(p.items.get(I.HEAVY_BOX) ?? 0, 0, 'the hand-in consumes the box');
+  assert.equal(p.attributes.get('royal-trouble:royal-etc'), 40);
+  assert.equal(p.items.get(I.COINS), 20000, 'the earned hand-in pays once');
+
+  playRealTalk(h, p, N.QUEEN_SIGRID, 'Queen Sigrid');
+  assert.equal(p.items.get(I.COINS), 20000, 'repeat talk after the hand-in cannot pay again');
+});
+
+test('Royal Trouble: post-quest Ghrim, workers and dungeon guard use canonical variants', () => {
+  const h = harness(royal(), new Set(['fremennik_trials', 'heroes_quest', 'throne_of_miscellania']));
+  const p = h.player();
+  h.quest.setStage(p, 30);
+  p.attributes.set('royal-trouble:royal-misc', 130);
+  p.attributes.set('royal-trouble:royal-etc', 40);
+  assert.deepEqual(h.variant(N.ADVISOR_GHRIM, p), {
+    page: 'Advisor Ghrim', variant: 'standard-dialogue-after-completing-royal-trouble',
+  });
+  assert.deepEqual(h.variant(N.GUARD_14, p), {
+    page: 'Guard (Miscellania)', variant: 'standard-dialogue-after-completing-royal-trouble',
+  });
+  assert.deepEqual(h.variant(N.GARDENER_GUNNHILD, p), {
+    page: 'Gardener Gunnhild', variant: 'standard-dialogue-after-completion-of-throne-of-miscellania',
+  });
+
+  const before = h.player();
+  h.quest.setStage(before, 10);
+  before.attributes.set('royal-trouble:royal-misc', 0);
+  assert.deepEqual(h.variant(N.LUMBERJACK_LEIF, before), {
+    page: 'Lumberjack Leif', variant: 'standard-dialogue-after-throne-of-miscellania',
+  });
+  assert.deepEqual(h.variant(N.MINER_MAGNUS, before), {
+    page: 'Miner Magnus', variant: 'standard-dialogue-after-throne-of-miscellania',
+  });
 });
 
 test('Royal Trouble: investigation route, lift repair, diary, boss and rewards', () => {

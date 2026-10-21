@@ -1403,8 +1403,18 @@ module.exports = function registerTheFinalDawnQuest(api) {
       setStage(player, STAGE_EYAT);
       return true;
     }
+    // The fragment's canonical Destroy text says to ask Eyatlalli for another.
+    // Replay her recorded handoff until it succeeds; the action keeps the
+    // current Locate stage instead of regressing it.
+    if ((stage === STAGE_EYAT || stage === STAGE_LOCATE) && !held(player, KEYSTONE_FRAGMENT_ITEM)) {
+      play(player, EYATLALLI_TALK_ID, "interlopers-in-neypotzli-upon-entering-neypotzli");
+      return true;
+    }
     if (stage === STAGE_NEYPOTZLI) {
-      if (!held(player, KEYSTONE_FRAGMENT_ITEM)) give(player, KEYSTONE_FRAGMENT_ITEM, "You have no room for the keystone fragment.");
+      if (!held(player, KEYSTONE_FRAGMENT_ITEM)) {
+        play(player, EYATLALLI_TALK_ID, "interlopers-in-neypotzli-upon-entering-neypotzli");
+        return true;
+      }
       play(player, EYATLALLI_TALK_ID, "interlopers-in-neypotzli-upon-entering-neypotzli-talking-to-eyatlalli-again");
       return true;
     }
@@ -2674,7 +2684,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       case ACTION_FRAGMENT_GIVEN:
         if (!EYATLALLI_IDS.has(npcId)) return;
         if (!give(player, KEYSTONE_FRAGMENT_ITEM, "Eyatlalli holds out the fragment, but you have no room for it.")) return;
-        setStage(player, STAGE_NEYPOTZLI);
+        if (quest.getStage(player) < STAGE_NEYPOTZLI) setStage(player, STAGE_NEYPOTZLI);
         return;
       case ACTION_TWINS_ENDS:
         if (npcId !== ENNIUS_BOSS_ID) return;

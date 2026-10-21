@@ -14,6 +14,8 @@ const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Location } = require('../dist/game/model/Location');
 const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
 const ClimbLinks = require('../plugins/objects/ClimbLinks');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const { World } = require('../dist/game/World');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers, O = core.ObjectIdentifiers;
@@ -628,6 +630,59 @@ test('Temple login mirrors the captured reward varbit without re-granting it', (
   mid.attrs.set('temple-of-the-eye:stage-schema', 2);
   for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: mid });
   assert.equal(mid.varbits.get(13757), 0);
+});
+
+test('Temple completion delivers the medium pouch through real inventory overflow', () => {
+  const h = harness('TempleOfTheEye');
+  const before = World.getItems().length;
+  assert.equal(core.ItemDefinition.forId(I.MEDIUM_POUCH).isStackable(), false, 'real cache pouch is nonstackable');
+  const make = () => {
+    const p = player();
+    const inventory = new Inventory(p);
+    p.getInventory = () => inventory;
+    return { p, inventory };
+  };
+  const fill = (inventory, slots) => {
+    for (let i = 0; i < slots; i++) inventory.adds(1438, 1);
+  };
+
+  try {
+    const full = make();
+    fill(full.inventory, 28);
+    assert.equal(full.inventory.isFull(), true);
+    h.quest.setStage(full.p, 125);
+    assert.equal(h.quest.complete(full.p), true);
+    assert.equal(h.quest.getStage(full.p), 130);
+    assert.equal(full.inventory.getAmount(I.MEDIUM_POUCH), 0, 'full bag keeps the pouch out of inventory');
+    const dropped = World.getItems().slice(before).filter(entry => entry.getItem().getId() === I.MEDIUM_POUCH);
+    assert.equal(dropped.length, 1, 'engine overflow drops exactly one pouch');
+    assert.ok(dropped[0].getPosition().equals(full.p.getLocation()), 'pouch drops at the reward location');
+    assert.deepEqual(full.p.xp, [[core.Skill.RUNECRAFTING.getIndex(), 5000]]);
+    assert.equal(h.quest.complete(full.p), false, 'completion stays one-shot');
+    assert.equal(World.getItems().slice(before).filter(entry => entry.getItem().getId() === I.MEDIUM_POUCH).length, 1);
+    assert.deepEqual(full.p.xp, [[core.Skill.RUNECRAFTING.getIndex(), 5000]]);
+
+    const oneFree = make();
+    fill(oneFree.inventory, 27);
+    h.quest.setStage(oneFree.p, 125);
+    h.quest.complete(oneFree.p);
+    assert.equal(oneFree.inventory.getAmount(I.MEDIUM_POUCH), 1, 'one free slot receives the pouch');
+    assert.equal(World.getItems().slice(before).filter(entry => entry.getItem().getId() === I.MEDIUM_POUCH).length, 1,
+      'the one-free-slot case adds no extra ground pouch');
+
+    const owned = make();
+    owned.inventory.adds(I.MEDIUM_POUCH, 1);
+    h.quest.setStage(owned.p, 125);
+    h.quest.complete(owned.p);
+    assert.equal(owned.inventory.getAmount(I.MEDIUM_POUCH), 1, 'an existing pouch is not duplicated');
+
+    for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: full.p });
+    assert.equal(World.getItems().slice(before).filter(entry => entry.getItem().getId() === I.MEDIUM_POUCH).length, 1,
+      'relog does not re-grant the pouch');
+    assert.deepEqual(full.p.xp, [[core.Skill.RUNECRAFTING.getIndex(), 5000]]);
+  } finally {
+    World.getItems().splice(before);
+  }
 });
 
 test('Perilous Moons migrates legacy completed 31 without replaying rewards, but a fresh 31 still completes', () => {

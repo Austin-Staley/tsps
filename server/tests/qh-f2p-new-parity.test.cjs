@@ -97,7 +97,7 @@ function talkWorld(key) {
   }
 
   function player() {
-    const attributes = new Map(), items = new Map(), varbits = new Map(), packets = [];
+    const attributes = new Map(), items = new Map(), varbits = new Map(), packets = [], equipment = [];
     let free = 28, manager, location = new core.Location(3254, 3274, 0);
     const sender = new Proxy({ sendVarbit: (id, value) => { varbits.set(id, value); return sender; } }, {
       get: (target, key) => key in target ? target[key] : (...args) => { packets.push([key, ...args]); return sender; },
@@ -116,10 +116,13 @@ function talkWorld(key) {
       },
     };
     const p = {
-      attributes, items, varbits, packets, getFreeSlots: () => free,
+      attributes, items, varbits, packets, equipment, getFreeSlots: () => free,
       getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
       getInventory: () => inventory,
-      getEquipment: () => ({ get: () => null, getAmount: () => 0, getItems: () => [], refreshItems() {} }),
+      getEquipment: () => ({
+        get: () => null, getItems: () => equipment, refreshItems() {},
+        getAmount: (id) => equipment.filter((item) => item.getId() === id).length,
+      }),
       getPacketSender: () => sender,
       getDialogueManager: () => manager,
       getSkillManager: () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 10, getCombatLevel: () => 20 }),
@@ -408,4 +411,80 @@ test('Below post-quest Willow visibility is main-varbit driven at the Nardah spa
   assert.equal(q.quest.varbitValue(5, p), 120, 'Below completion wires main varbit 120');
   assert.equal(p.varbits.get(12063), 120, 'the recorded completion packet is main 120');
   assert.equal(q.variant(N.WILLOW, p), 'post-quest-dialogue-willow');
+});
+
+test('Below completion keeps the extra 1,999 coins in a full, stacked or one-slot bag', () => {
+  const { World } = require('../dist/game/World');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const q = register('BelowIceMountain', 'below_ice_mountain');
+  let sequence = 0;
+
+  function completeWith({ sharks, coins = 0 }) {
+    let packet;
+    packet = new Proxy({ sendVarbit() { return packet; }, sendConfig() { return packet; } }, {
+      get: (target, key) => key in target ? target[key] : () => packet,
+    });
+    const attrs = new Map([['quest.points', 16]]);
+    const username = `QhBelowReward${++sequence}`;
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getInventory: () => inventory, getPacketSender: () => packet,
+      getSkillManager: () => ({ getCurrentLevel: () => 99 }), getPrivateArea: () => null,
+      getLocation: () => new core.Location(2950, 5769, 0),
+      getUsername: () => username, getIndex: () => sequence, isPlayer: () => true, sendMessage() {},
+    };
+    const inventory = new Inventory(player);
+    if (sharks) inventory.adds(I.SHARK, sharks);
+    if (coins) inventory.adds(I.COINS, coins);
+    q.quest.setStage(player, 4); // Below STAGE_GUARDIAN_DEAD
+    const completed = q.quest.complete(player);
+    const ground = World.getItems()
+      .filter((item) => item.getOwner() === username && item.getItem().getId() === I.COINS)
+      .map((item) => ({ amount: item.getItem().getAmount(), x: item.getPosition().getX(), y: item.getPosition().getY() }));
+    const repeated = q.quest.complete(player);
+    const state = {
+      completed, repeated, qp: attrs.get('quest.points'), free: inventory.getFreeSlots(),
+      coins: inventory.getAmount(I.COINS), ground,
+    };
+    for (const item of World.getItems().filter((entry) => entry.getOwner() === username)) {
+      ItemOnGroundManager.deregister(item);
+    }
+    return state;
+  }
+
+  const full = completeWith({ sharks: 28 });
+  assert.equal(full.completed, true);
+  assert.equal(full.repeated, false, 'completion is once-only');
+  assert.equal(full.qp, 17);
+  assert.equal(full.coins, 0);
+  assert.deepEqual(full.ground, [{ amount: 2000, x: 2950, y: 5769 }]);
+
+  const stacked = completeWith({ sharks: 27, coins: 1 });
+  assert.equal(stacked.completed, true);
+  assert.equal(stacked.coins, 2001, 'forceAdd merges the full reward into an existing coin stack');
+  assert.deepEqual(stacked.ground, []);
+
+  const oneFree = completeWith({ sharks: 27 });
+  assert.equal(oneFree.completed, true);
+  assert.equal(oneFree.coins, 2000, 'one free slot holds the full reward');
+  assert.equal(oneFree.free, 0);
+  assert.deepEqual(oneFree.ground, []);
+});
+
+test('post-quest Gillie treats an equipped cowbell amulet as owned', () => {
+  const w = talkWorld('the_ides_of_milk');
+  try {
+    const p = w.player(), inventory = p.getInventory();
+    w.quest.setStage(p, 22);
+    p.setAttribute('quest.the_ides_of_milk.reward', 1);
+    p.setAttribute('quest.the_ides_of_milk.lamp', 1);
+    p.equipment.push({ getId: () => I.COWBELL_AMULET_2 });
+    assert.equal(w.talk(p, N.GILLIE_GROATS), true);
+    assert.equal(inventory.getAmount(I.COWBELL_AMULET), 0, 'equipped amulet must not be duplicated');
+    assert.equal(p.equipment.length, 1);
+    assert.ok(!w.spoken.some((line) => /I've lost that amulet/i.test(line)));
+  } finally {
+    w.cleanup();
+  }
 });

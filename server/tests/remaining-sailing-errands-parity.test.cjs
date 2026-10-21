@@ -118,7 +118,7 @@ function makeHarness(pluginFile, levels = {}, extraPlugins = []) {
   const movement = { blocked: false, reset() { return this; }, setBlockMovement(value) { this.blocked = value; return this; } };
   const sailing = { boats: [], activeBoatSlot: undefined };
   const hits = [], packets = [];
-  let shieldId = -1;
+  const equipped = new Map();
   const sender = new Proxy({
     sendVarbit(id, value) { varbits.set(id, value); return sender; },
     sendConfig(id, value) { varbits.set(id, value); return sender; },
@@ -139,6 +139,7 @@ function makeHarness(pluginFile, levels = {}, extraPlugins = []) {
     deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
     adds(id, count = 1) { inventory.set(id, (inventory.get(id) ?? 0) + count); return true; },
     addItem(item) { inventory.set(item.id, (inventory.get(item.id) ?? 0) + item.amount); },
+    forceAdd(_player, item) { inventory.set(item.id, (inventory.get(item.id) ?? 0) + item.amount); },
     getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
     isFull: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length <= 0,
   };
@@ -146,7 +147,7 @@ function makeHarness(pluginFile, levels = {}, extraPlugins = []) {
     getAttribute: (key) => attrs.get(key), setAttribute(key, value) { attrs.set(key, value); },
     getPacketSender: () => sender, getFrameUpdater: () => null, sendMessage(message) { messages.push(message); },
     getInventory: () => inventoryApi,
-    getEquipment: () => ({ get: () => ({ getId: () => shieldId }), getItems: () => [], hasItem: () => shieldId >= 0 }),
+    getEquipment: () => ({ get: (slot) => ({ getId: () => equipped.get(slot) ?? -1 }), getItems: () => [], hasItem: () => equipped.size > 0 }),
     getSailing: () => sailing,
     getMovementQueue: () => movement,
     setUntargetable() {},
@@ -166,7 +167,7 @@ function makeHarness(pluginFile, levels = {}, extraPlugins = []) {
   return {
     api, hooks, core, quest, attrs, inventory, varbits, messages, xp, player, tasks, spawned, removed,
     transcripts, playedDialogues, groundSpawns, persisted, emit, action, line, option, sailing, hits, packets,
-    setShield(id) { shieldId = id; },
+    setShield(id, slot = core.Equipment.SHIELD_SLOT) { equipped.set(slot, id); },
     tick(count = 1) {
       while (count-- > 0) {
         tick++;
@@ -766,7 +767,7 @@ test('Troubled Tortugans Shellbane specials use captured attacks and the tortuga
     h.tick(8);
     assert.equal(h.hits.at(-1).getDamage(), 6, 'unshielded whirlwind hits for the captured 6');
 
-    h.setShield(I.TORTUGAN_SHIELD);
+    h.setShield(I.TORTUGAN_SHIELD, h.core.Equipment.CAPE_SLOT);
     h.tick(12);
     assert.equal(h.hits.at(-1).getDamage(), 2, 'the shield reduces the captured hit');
   } finally {
@@ -1118,4 +1119,73 @@ test('Troubled Tortugans restores the captured combat_done Korel at stage 38 log
   assert.equal(typeof variant === 'string' ? variant : variant.variant,
     'part-3-talking-to-elder-korel');
   assert.equal(h.quest.getStage(h.player), 38, 'restoration does not inject progress');
+});
+
+
+// Coupon rewards are stackable: the quest's extra 24 must use engine overflow,
+// not be skipped when the inventory is full.
+function couponCompletion(pluginFile, key, completionStage) {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { Item } = require('../dist/game/model/Item');
+  const player = new Player(null);
+  player.getUsername = () => 'coupon-parity';
+  const sender = new Proxy({ getVarbit: () => 0, getVarp: () => 0,
+    sendVarbit: () => sender, sendConfig: () => sender, sendString: () => sender,
+    sendJingle: () => sender, sendInterfaceRemoval: () => sender, sendInterface: () => sender,
+    sendInterfaceFlagsRange: () => sender, sendInterfaceScript: () => sender,
+    sendItemOnInterfaces: () => sender, sendSubInterface: () => sender,
+    closeSubInterface: () => sender, sendQuestList: () => sender,
+  }, { get: (target, key) => target[key] ?? (() => sender) });
+  player.getPacketSender = () => sender;
+  const api = PluginManager.createApi('coupon-parity-test');
+  require(pluginFile)(api);
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === key).at(-1);
+  quest.setStage(player, completionStage);
+  return { player, quest, Item };
+}
+
+test('Current Affairs and Prying Times keep all 25 stackable coupons under full inventory', () => {
+  const { Item: ItemClass } = require('../dist/game/model/Item');
+  const { World } = require('../dist/game/World');
+  const I = PluginManager.getCoreApi().ItemIdentifiers;
+  const cases = [
+    ['../plugins/quests/quests/CurrentAffairs.Quest', 'current_affairs', 44],
+    ['../plugins/quests/quests/PryingTimes.Quest', 'prying_times', 34],
+  ];
+  for (const [file, key, completionStage] of cases) {
+    for (const mode of ['zeroFree', 'oneFree', 'existingStack']) {
+      const { player, quest } = couponCompletion(file, key, completionStage);
+      const inv = player.getInventory();
+      const filler = I.MAYOR_OF_CATHERBY;
+      const fill = mode === 'zeroFree' ? 28 : mode === 'oneFree' ? 27 : 27;
+      for (let i = 0; i < fill; i++) inv.addItem(new ItemClass(filler, 1));
+      if (mode === 'existingStack') inv.addItem(new ItemClass(I.SAWMILL_COUPON_OAK_PLANK_, 1));
+      const before = inv.getAmount(I.SAWMILL_COUPON_OAK_PLANK_);
+      quest.complete(player);
+      const inBag = inv.getAmount(I.SAWMILL_COUPON_OAK_PLANK_) - before;
+      const onGround = (World.getItems() ?? [])
+        .filter((entry) => entry.getItem?.()?.getId?.() === I.SAWMILL_COUPON_OAK_PLANK_)
+        .reduce((sum, entry) => sum + (entry.getItem?.()?.getAmount?.() ?? 0), 0);
+      if (mode === 'zeroFree') {
+        // QuestRuntime's default auto-1 overflow is owned by the common worker;
+        // this quest's extra 24 must reach the reward tile instead of vanishing.
+        assert.equal(onGround >= 24, true, `${key} zeroFree: extra 24 dropped at reward tile (ground ${onGround})`);
+      } else {
+        assert.equal(inBag, 25, `${key} ${mode}: all 25 stack in one slot`);
+      }
+    }
+  }
+});
+
+test('completed Current Affairs Arhein still replaces a lost duck', () => {
+  const h = makeHarness('../plugins/quests/quests/CurrentAffairs.Quest');
+  const N = h.core.NpcIdentifiers, I = h.core.ItemIdentifiers;
+  h.quest.setStage(h.player, 45);
+  assert.equal(h.hooks.variants[0]({ player: h.player, npcId: N.ARHEIN }),
+    'going-with-the-flow-talking-to-arhein-without-the-duck');
+  h.action(N.ARHEIN, 'VTzqPC');
+  assert.equal(h.inventory.get(I.CURRENT_DUCK), 1);
+  h.inventory.set(I.CURRENT_DUCK, 1);
+  assert.equal(h.hooks.variants[0]({ player: h.player, npcId: N.ARHEIN }),
+    'starting-off-talking-to-arhein-again');
 });

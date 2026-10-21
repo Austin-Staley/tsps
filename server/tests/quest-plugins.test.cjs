@@ -15727,6 +15727,7 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
       getInventory: () => ({
         getAmount: (id) => supplies.get(id) ?? 0,
         getFreeSlots: () => inventoryCapacity - [...supplies.values()].filter((amount) => amount > 0).length,
+        isFull: () => inventoryCapacity - [...supplies.values()].filter((amount) => amount > 0).length <= 0,
         adds: (id, amount = 1) => supplies.set(id, (supplies.get(id) ?? 0) + amount),
         deleteNumber: (id, amount = 1) => supplies.set(id, Math.max(0, (supplies.get(id) ?? 0) - amount)),
       }),
@@ -19688,7 +19689,7 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
     getSkillManager: () => ({ getCurrentLevel: () => 1 }),
     getPrayerActive: () => [],
     getEquipment: () => ({ getItems: () => equipment }),
-    getInventory: () => ({ adds: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount) }),
+    getInventory: () => ({ adds: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount), isFull: () => false }),
     getCombat: () => ({ getSelectedSpell: () => selectedSpell }),
     moveTo: (location) => { player.destination = location; },
     getPacketSender: () => new Proxy({}, { get: (_target, key) => key.startsWith('send') ? () => {} : undefined }),

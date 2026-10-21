@@ -664,10 +664,11 @@ module.exports = function registerRedReefQuest(api) {
 
   function paxtonVariant(player) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_DISPLAYS) {
-      return stage >= STAGE_RED_ROCK
-        ? "on-red-rock-talking-to-theodore-paxton-before-talking-to-the-receptionist"
-        : null;
+    if (stage < STAGE_DISPLAYS || stage >= STAGE_COMPLETE) {
+      // Theodore owns this dismissal at every pre-meeting stage, and the page has no
+      // post-quest variant; returning null here would make NpcDialogues fall back to
+      // the page's first variant, where Elder Raley speaks instead.
+      return "on-red-rock-talking-to-theodore-paxton-before-talking-to-the-receptionist";
     }
     if (stage === STAGE_DISPLAYS) {
       quest.setStage(player, STAGE_PAXTON_TASKED);
@@ -795,7 +796,8 @@ module.exports = function registerRedReefQuest(api) {
     const { player } = event;
     const option = String(event.option ?? "").trim();
     if (option === ZENITH_DISEMBARK_OPTION) {
-      if (quest.getStage(player) !== STAGE_RETURN_FLOOPA) return;
+      const stage = quest.getStage(player);
+      if (stage < STAGE_ZENITH_KNOWN || stage >= STAGE_COMPLETE) return;
       const zenith = ownedShips(player).get(ZENITH_SHIP_ID);
       if (!zenith || player.getArea?.()?.boat !== zenith.boat) return;
       sendDiving(player, 0);

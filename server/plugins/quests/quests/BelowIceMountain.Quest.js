@@ -20,6 +20,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     Graphic,
     HitDamage,
     HitMask,
+    Item,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -1681,8 +1682,10 @@ module.exports = function registerBelowIceMountainQuest(api) {
   }
 
   function grantReward(player) {
-    // registerQuest hands out one coin with the scroll; the bag holds 2,000.
-    player.getInventory().adds(COINS_ITEM_ID, 1999);
+    // registerQuest supplies the final coin; the bag holds the other 1,999. Coins
+    // stack, so forceAdd merges into an existing stack or drops the overflow at the
+    // reward tile instead of losing it to a full inventory.
+    player.getInventory().forceAdd(player, new Item(COINS_ITEM_ID, 1999));
   }
 
   function syncBootstrap({ player }) { syncVariables(player); }

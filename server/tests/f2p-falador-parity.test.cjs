@@ -44,6 +44,7 @@ function setup(module) {
     getAttribute: key => attrs.get(key), setAttribute(key, value) { attrs.set(key, value); }, getPacketSender: () => sender, getFrameUpdater: () => null,
     getInventory: () => ({ getAmount: id => inventory.get(id) ?? 0, isFull: () => full, full() { messages.push('Inventory full'); },
       adds(id, amount) { inventory.set(id, (inventory.get(id) ?? 0) + amount); },
+      forceAdd(_player, item) { inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()); },
       deleteNumber(id, amount) { assert.ok((inventory.get(id) ?? 0) >= amount, 'cannot consume missing item ' + id); inventory.set(id, inventory.get(id) - amount); } }),
     getEquipment: () => ({ get: slot => equipment.has(slot) ? { getId: () => equipment.get(slot) } : null }),
     getSkillManager: () => ({ getCurrentLevel: () => mining, getCombatLevel: () => combat, addExperiences(...args) { xp.push(args); } }),

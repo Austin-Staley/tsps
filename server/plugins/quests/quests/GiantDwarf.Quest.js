@@ -1146,6 +1146,13 @@ module.exports = function registerGiantDwarfQuest(api) {
           player.sendMessage(`You need ${CLOTHES_PRICE} coins to pay Vermundi.`);
           return;
         }
+        // Spending exactly the fee empties the coin slot; a larger stack keeps
+        // the bag full and the clothes would be lost after payment.
+        if (!hasItem(player, CLOTHES_ITEM) && player.getInventory().getFreeSlots() < 1 &&
+            player.getInventory().getAmount(COINS_ITEM) > CLOTHES_PRICE) {
+          player.sendMessage("You couldn't hold all those items.");
+          return;
+        }
         player.getInventory().deleteNumber(COINS_ITEM, CLOTHES_PRICE);
         if (!hasItem(player, CLOTHES_ITEM)) player.getInventory().adds(CLOTHES_ITEM, 1);
         setClothesState(player, CLOTHES_DONE);

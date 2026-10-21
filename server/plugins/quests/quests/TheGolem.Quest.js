@@ -350,7 +350,9 @@ module.exports = function registerTheGolemQuest(api) {
       return { page: PAGE, variant: "talking-to-elissa-in-the-digsite" };
     }
     if (npcId === CURATOR_NPC_ID) {
-      // Only the active quest has curator business; Dig Site owns him otherwise.
+      // Only the active quest has curator business; Dig Site/Bone Voyage own him
+      // after completion.
+      if (quest.isComplete(player)) return null;
       if (quest.getStage(player) < STAGE_REPAIR_GOLEM && !player.getAttribute(RETRIEVED_ATTRIBUTE)) {
         return null;
       }

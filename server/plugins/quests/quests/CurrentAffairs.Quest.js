@@ -36,15 +36,16 @@
  *   of the release ripple; collecting requires the stopped duck plus the boat
  *   within 12 tiles of the stop. The duck is placed west of the Obelisk of Water
  *   (2841,3422), and Collecting it is the "charting" step.
- * - Arhein has no post-quest variant on the page, so a completed player replays
- *   "starting-off-talking-to-arhein-again". Catherine's and Harry's post-quest
- *   pages are used as-is.
+ * - Arhein has no post-quest variant on the page. A completed player with the
+ *   duck keeps the post-quest page; without it, Quest Helper lets Arhein
+ *   replace the reward, so the recorded without-duck branch is reused.
+ *   Catherine's and Harry's post-quest pages are used as-is.
  * - The mayor's Consult/Feed item options use the Mayor of Catherby item page.
  * - The charcoal is required to use Form cr-4p's "Fill-in" but is not consumed;
  *   the "You need some charcoal..." refusal is the one line not from the wiki.
  */
 module.exports = function registerCurrentAffairsQuest(api) {
-  const { Skill, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Item, Skill, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const {
     registerQuest,
     refreshQuestList,
@@ -255,7 +256,13 @@ module.exports = function registerCurrentAffairsQuest(api) {
   function arheinVariant(player) {
     if (otherQuestOwnsArhein(player)) return null;
     const stage = quest.getStage(player);
-    if (quest.isComplete(player)) return "starting-off-talking-to-arhein-again"; // no post-quest variant
+    if (quest.isComplete(player)) {
+      // Quest Helper: a lost reward duck can be replaced by Arhein. Reuse the
+      // recorded without-duck branch; with the duck held keep the post-quest page.
+      return held(player, CURRENT_DUCK_ITEM_ID)
+        ? "starting-off-talking-to-arhein-again"
+        : "going-with-the-flow-talking-to-arhein-without-the-duck";
+    }
     if (stage === 0) return "starting-off-talking-to-arhein";
     if (stage < STAGE_FORM_HANDED_IN) return "starting-off-talking-to-arhein-again";
     if (stage === STAGE_FORM_HANDED_IN) return "long-live-the-mayor-talking-to-arhein";
@@ -1152,7 +1159,10 @@ module.exports = function registerCurrentAffairsQuest(api) {
     const skills = player.getSkillManager();
     skills.addExperiences(Skill.SAILING, 1400);
     skills.addExperiences(Skill.FISHING, 1000);
-    if (freeSlots(player) >= 1) player.getInventory().adds(SAWMILL_COUPON_ITEM_ID, 24);
+    // QuestRuntime adds the first coupon. The stack is stackable, so engine
+    // overflow can merge into an existing stack or drop the extra 24 at the
+    // reward tile instead of silently losing them.
+    player.getInventory().forceAdd(player, new Item(SAWMILL_COUPON_ITEM_ID, 24));
   }
 
   api.persistAttribute(FORM_ANSWERS_ATTRIBUTE);

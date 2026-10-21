@@ -87,6 +87,35 @@ function dialoguePlayer(items, attrs) {
   p.getDialogueManager = () => p.manager;
   return p;
 }
+function capacityPlayer() {
+  const { DialogueManager } = require(root + '/dist/game/model/dialogues/DialogueManager');
+  const { Inventory } = require(root + '/dist/game/model/container/impl/Inventory');
+  const p = player();
+  const inventory = new Inventory(p);
+  for (let slot = 0; slot < 28; slot++) inventory.setItem(slot, new core.Item(core.ItemIdentifiers.BUCKET, 1));
+  p.getInventory = () => inventory;
+  p.inventory = inventory;
+  p.manager = new DialogueManager(p);
+  p.getDialogueManager = () => p.manager;
+  return p;
+}
+
+function withConditions(hooks, fn) {
+  const { PluginManager } = require(root + '/dist/plugins/PluginManager');
+  const original = PluginManager.emitNpcDialogueCondition;
+  PluginManager.emitNpcDialogueCondition = event => {
+    for (const handler of hooks.onNpcDialogueCondition ?? []) {
+      const answer = handler(event);
+      if (typeof answer === 'boolean') return answer;
+    }
+    return null;
+  };
+  try {
+    return fn();
+  } finally {
+    PluginManager.emitNpcDialogueCondition = original;
+  }
+}
 
 function continueToMenu(p) {
   for (let step = 0; step < 400; step++) {
@@ -170,6 +199,36 @@ test('Sheep Shearer fills the remaining-wool blanks through the real partial han
   assert.ok(!texts.some(text => text.includes('[1-19]')), JSON.stringify(texts));
 });
 
+test('Sheep does not start when Fred cannot hand over shears on a full inventory', () => {
+  const runtime = require(root + '/plugins/quests/QuestRuntime');
+  const { api, hooks, quest } = questHarness('SheepShearer');
+  const I = core.ItemIdentifiers;
+  withConditions(hooks, () => {
+    const p = capacityPlayer();
+    const start = () => {
+      const choice = hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId: core.NpcIdentifiers.FRED_THE_FARMER })).find(Boolean);
+      assert.ok(choice);
+      runtime.startTranscript(api, p, core.NpcIdentifiers.FRED_THE_FARMER, choice.page, choice.variant);
+      continueToMenu(p);
+      choose(p, "I'm looking for a quest.");
+      continueToMenu(p);
+      choose(p, 'Yes.');
+      continueToMenu(p);
+    };
+    start();
+    assert.equal(quest.getStage(p), 0, 'full inventory must not commit the start');
+    assert.equal(p.inventory.getAmount(I.SHEARS), 0);
+    assert.ok(p.messages.some(message => /couldn't hold|Not enough space|free inventory slot/i.test(message)));
+
+    p.prompt = null;
+    p.manager.reset();
+    p.inventory.setItem(27, new core.Item(-1, 0));
+    start();
+    assert.equal(quest.getStage(p), 1);
+    assert.equal(p.inventory.getAmount(I.SHEARS), 1);
+  });
+});
+
 test('Doric starts from the shipped Talk-to and anvil-refusal graphs', () => {
   const runtime = require(root + '/plugins/quests/QuestRuntime');
   const { PluginManager } = require(root + '/dist/plugins/PluginManager');
@@ -230,6 +289,36 @@ test('Doric starts from the shipped Talk-to and anvil-refusal graphs', () => {
   } finally {
     PluginManager.emitNpcDialogueCondition = originalCondition;
   }
+});
+
+test('Doric does not start when the pickaxe handout cannot fit on a full inventory', () => {
+  const runtime = require(root + '/plugins/quests/QuestRuntime');
+  const { api, hooks, quest } = questHarness('DoricsQuest');
+  const I = core.ItemIdentifiers;
+  withConditions(hooks, () => {
+    const p = capacityPlayer();
+    const start = () => {
+      const choice = hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId: core.NpcIdentifiers.DORIC })).find(Boolean);
+      assert.ok(choice);
+      runtime.startTranscript(api, p, core.NpcIdentifiers.DORIC, choice.page, choice.variant);
+      continueToMenu(p);
+      choose(p, 'I wanted to use your anvils.');
+      continueToMenu(p);
+      choose(p, 'Yes.');
+      continueToMenu(p);
+    };
+    start();
+    assert.equal(quest.getStage(p), 0, 'full inventory must not commit the start');
+    assert.equal(p.inventory.getAmount(I.BRONZE_PICKAXE), 0);
+    assert.ok(p.messages.some(message => /couldn't hold|Not enough space/i.test(message)));
+
+    p.prompt = null;
+    p.manager.reset();
+    p.inventory.setItem(27, new core.Item(-1, 0));
+    start();
+    assert.equal(quest.getStage(p), 10);
+    assert.equal(p.inventory.getAmount(I.BRONZE_PICKAXE), 1);
+  });
 });
 
 test('the full quest registry dispatches the f2p-basics variants and conditions to their quests', () => {

@@ -128,6 +128,7 @@ function setup(pluginPath, questKey, options = {}) {
       adds(id, count = 1) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
       getFreeSlots: () => 28 - [...inventory.values()].filter((count) => count > 0).length,
+      forceAdd(_player, item) { inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()); },
     }),
     getEquipment: waterbirth
       ? () => ({ get: (slot) => ({ getId: () => slot === 3 ? weaponId : -1 }), contains: () => false })
@@ -377,6 +378,38 @@ test('Haunted Mine stairs cannot start or skip an ineligible quest', () => {
   assert.equal(h.quest.getStage(h.player), 11, 'completed players never re-enter the encounter stage');
 });
 
+test('Haunted crystal shortcut cannot complete before the crystal-key stage', () => {
+  const h = setup('../plugins/quests/quests/HauntedMine.Quest', 'haunted_mine');
+  const I = ITEMS(h), N = NPCS(h), O = OBJECTS(h);
+  const cut = require('../data/definitions/npc-dialogues.json')['Haunted Mine']
+    .variants['inside-the-mine-chiseling-a-crystal-outcrop'];
+  assert.ok(JSON.stringify(cut).includes('mFurEC'), 'the real crystal transcript contains the completion action');
+  const shortcut = require('../plugins/world/data/loc-teleports.json');
+  const shortcutRows = Array.isArray(shortcut) ? shortcut : Object.values(shortcut).flat();
+  assert.ok(shortcutRows.some((row) => row.id === 29332 && row.to?.[0] === 2800 && row.to?.[1] === 4429),
+    'canonical 29332 shortcut reaches the crystal room');
+  h.setSkill(h.core.Skill.CRAFTING, 35);
+  h.inventory.set(I.CHISEL, 1);
+  h.player.setAttribute('quest.points', 0);
+
+  h.object(O.CRYSTAL_OUTCROP);
+  h.action(N.ZEALOT, 'mFurEC');
+  assert.equal(h.quest.getStage(h.player), 0, 'stage 0 shortcut cut cannot complete');
+  assert.equal(h.inventory.get(I.SALVE_SHARD), undefined);
+  assert.equal(h.xp.length, 0);
+
+  h.quest.setStage(h.player, 1);
+  h.object(O.CRYSTAL_OUTCROP);
+  h.action(N.ZEALOT, 'mFurEC');
+  assert.equal(h.quest.getStage(h.player), 1, 'early quest without crystal key cannot complete');
+
+  h.quest.setStage(h.player, 10);
+  h.object(O.CRYSTAL_OUTCROP);
+  h.action(N.ZEALOT, 'mFurEC');
+  assert.equal(h.quest.getStage(h.player), 11);
+  assert.equal(h.inventory.get(I.SALVE_SHARD), 1);
+});
+
 test('Fremennik Exiles requirements follow Quest Helper (no Trials, Mining 60)', () => {
   const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
   const N = NPCS(h), S = h.core.Skill;
@@ -429,6 +462,8 @@ test('Fremennik Exiles captured stages: exile, shield, kegs, invasion, island, p
   assert.equal(h.quest.getStage(h.player), 60);
   h.inventory.set(I.KEG_OF_BEER_2, 2);
   h.action(N.BRUNDT_THE_CHIEFTAIN_8, 'CyJ-jx');
+  assert.equal(h.quest.getStage(h.player), 65);
+  h.action(N.BRUNDT_THE_CHIEFTAIN_8, 'F4atZx', 'The chieftain quickly drinks the second keg and stumbles off.', 'message');
   assert.equal(h.quest.getStage(h.player), 70);
   assert.equal(h.inventory.get(I.KEG_OF_BEER_2), 0);
 
@@ -690,6 +725,45 @@ test('Fremennik Exiles market death callback advances killPercent and stage', ()
   assert.equal(h.quest.getStage(h.player), 85);
 });
 
+test('Exiles completion drops V shield once when the real inventory is full', () => {
+  const { Item } = require('../dist/game/model/Item');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+  assert.equal(ItemDefinition.forId(ITEMS(setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles')).VS_SHIELD_2).isStackable(), false);
+  const dropped = [];
+  const original = ItemOnGroundManager.registers;
+  ItemOnGroundManager.registers = (_player, item) => { dropped.push(item); return null; };
+  try {
+    for (const fill of [28, 27]) {
+      const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+      const inventory = new Inventory(h.player);
+      inventory.resetItems();
+      for (let i = 0; i < fill; i++) inventory.adds(ITEMS(h).SHARK, 1);
+      h.player.getInventory = () => inventory;
+      h.quest.setStage(h.player, 125);
+      dropped.length = 0;
+      h.action(0, '2pgrdA');
+      assert.equal(h.quest.getStage(h.player), 130);
+      if (fill === 28) {
+        assert.equal(inventory.getAmount(ITEMS(h).VS_SHIELD_2), 0, 'full bag keeps the old add path red');
+        assert.equal(dropped.length, 1, 'full bag rewards drop once at the completion location');
+        assert.equal(dropped[0].getId(), ITEMS(h).VS_SHIELD_2);
+      } else {
+        assert.equal(inventory.getAmount(ITEMS(h).VS_SHIELD_2), 1, 'one free slot receives the shield');
+        assert.equal(dropped.length, 0);
+      }
+      const slayerXp = h.xp.filter((entry) => entry.skill === h.core.Skill.SLAYER).length;
+      h.action(0, '2pgrdA');
+      for (const login of h.hooks.logins) login({ player: h.player });
+      assert.equal(h.xp.filter((entry) => entry.skill === h.core.Skill.SLAYER).length, slayerXp, 'no duplicate completion XP');
+      if (fill === 28) assert.equal(dropped.length, 1, 'relog/repeat pays the dropped shield once');
+    }
+  } finally {
+    ItemOnGroundManager.registers = original;
+  }
+});
+
 test('combined real dispatch: Brundt 9263 offers Exiles before Lunar/FremennikTrials and keeps seal reclaim', () => {
   const plugin = (name) => {
     const api = PluginManager.createApi(name);
@@ -761,9 +835,16 @@ test('combined real dispatch: Brundt 9263 offers Exiles before Lunar/FremennikTr
   PluginManager.emitCustomEvent('npc-dialogue:choice', { player, npc, npcId: 9263, option: 'Yes.' });
   assert.equal(exiles.getStage(player), 5, 'real combined dispatch starts the quest');
 
-  // Completed Exiles yields again, preserving Lunar's lost-seal reclaim.
-  inventory.delete(core.ItemIdentifiers.SEAL_OF_PASSAGE);
+  // Completed Exiles with the seal held must keep its own postquest page.
+  const starts = [];
+  PluginManager.createApi('MineExilesPostQuestStarts').onCustomEvent('npc-dialogue:start', (event) => starts.push(event.variant));
   exiles.setStage(player, exiles.completionValue);
+  starts.length = 0;
+  assert.equal(talk().handled, true);
+  assert.ok(starts.includes('standard-dialogue-after-the-fremennik-exiles'), 'Exiles owns complete Brundt when the seal is held');
+
+  // Missing Seal: completed Exiles yields again, preserving Lunar's lost-seal reclaim.
+  inventory.delete(core.ItemIdentifiers.SEAL_OF_PASSAGE);
   assert.equal(talk().handled, true);
   assert.equal(exiles.getStage(player), exiles.completionValue);
 });
@@ -1078,6 +1159,84 @@ test('Waterbirth handler opens the real base-map door clipping and restores it',
   h.tick(25);
   assert.ok(MapObjects.get(8967, tile, null), 'the base door is restored with the support respawn');
   assert.equal(RegionManager.blocked(tile, null), true, 'base-map clipping closes again');
+});
+
+test('Exiles keg hand-in passes through 65 then 70 and shieldback without extra beers', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
+  const data = require('../data/definitions/npc-dialogues.json');
+  const record = data['The Fremennik Exiles'];
+  const I = ITEMS(setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles'));
+  const runVariant = (h, variant) => {
+    const manager = new DialogueManager(h.player);
+    h.player.getDialogueManager = () => manager;
+    const definition = { getId: () => 9263, getName: () => 'Brundt the Chieftain' };
+    const event = { player: h.player, npc: { getId: () => 9263 }, npcId: 9263, definition };
+    const raw = record.variants[variant];
+    const steps = raw.filter((step) => step.type !== 'jump');
+    startDialogue(h.api, event, steps, record.branches, {
+      player: h.player, npc: event.npc, npcId: 9263, definition, pages: [{ page: 'The Fremennik Exiles' }],
+    });
+    let guard = 0;
+    while (manager.getCurrent() && guard++ < 100) manager.advance();
+  };
+
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  h.quest.setStage(h.player, 60);
+  h.inventory.set(I.KEG_OF_BEER_2, 2);
+  const secondLines = [];
+  h.api.onCustomEvent('npc-dialogue:action', (event) => {
+    if (event.stepId === 'F4atZx') secondLines.push(event.text);
+  });
+  const manager = new DialogueManager(h.player);
+  h.player.getDialogueManager = () => manager;
+  const definition = { getId: () => 9263, getName: () => 'Brundt the Chieftain' };
+  const event = { player: h.player, npc: { getId: () => 9263 }, npcId: 9263, definition };
+  // Use the same quest-local selector the plugin exposes via npc-dialogue:start.
+  const starts = [];
+  h.api.onCustomEvent('npc-dialogue:start', (start) => starts.push(start));
+  h.hooks.namedNpcs.get('Brundt the Chieftain')['Talk-to']({
+    player: h.player, npcId: NPCS(h).BRUNDT_THE_CHIEFTAIN_8, npc: null, clickType: 1,
+  });
+  assert.equal(starts.length, 1);
+  const chosen = starts[0];
+  const withKegs = record.variants[chosen.variant];
+  startDialogue(h.api, event, chosen.select ? chosen.select(withKegs) : withKegs, record.branches, {
+    player: h.player, npc: event.npc, npcId: 9263, definition, pages: [{ page: 'The Fremennik Exiles' }],
+  });
+  let guard = 0;
+  while (manager.getCurrent() && h.quest.getStage(h.player) !== 65 && guard++ < 100) manager.advance();
+  assert.equal(h.quest.getStage(h.player), 65, 'first keg is the captured stage65 boundary');
+  assert.equal(h.inventory.get(I.KEG_OF_BEER_2), 0, 'both earned kegs are consumed once');
+  while (manager.getCurrent() && guard++ < 200) manager.advance();
+  assert.equal(h.quest.getStage(h.player), 70, 'player continues the captured second-keg message to 70');
+  assert.deepEqual(secondLines, ['The chieftain quickly drinks the second keg and stumbles off.']);
+
+  runVariant(h, 'basilisks-in-the-market-brundt');
+  assert.ok(h.quest.getStage(h.player) >= 76, 'shield handback/cutscene plays from the canonical 70 continuation');
+  assert.equal(h.inventory.get(I.VS_SHIELD_2), 1, 'V shield is handed back once');
+
+  const retry = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  retry.quest.setStage(retry.player, 65);
+  retry.inventory.set(I.KEG_OF_BEER_2, 2);
+  const retryStarts = [];
+  retry.api.onCustomEvent('npc-dialogue:start', (start) => retryStarts.push(start));
+  assert.equal(retry.hooks.namedNpcs.get('Brundt the Chieftain')['Talk-to']({
+    player: retry.player, npcId: NPCS(retry).BRUNDT_THE_CHIEFTAIN_8, npc: null, clickType: 1,
+  }), true);
+  assert.equal(retry.quest.getStage(retry.player), 65, 'opening the retry does not advance stage');
+  assert.equal(retry.inventory.get(I.KEG_OF_BEER_2), 2, 'retry never consumes replacement beers');
+  const retryStart = retryStarts[0];
+  const retryManager = new DialogueManager(retry.player);
+  retry.player.getDialogueManager = () => retryManager;
+  const retryEvent = { player: retry.player, npc: { getId: () => 9263 }, npcId: 9263, definition };
+  startDialogue(retry.api, retryEvent, retryStart.select(record.variants[retryStart.variant]), record.branches, {
+    player: retry.player, npc: retryEvent.npc, npcId: 9263, definition, pages: [{ page: 'The Fremennik Exiles' }],
+  });
+  guard = 0;
+  while (retryManager.getCurrent() && guard++ < 200) retryManager.advance();
+  assert.equal(retry.quest.getStage(retry.player), 70, 'interrupted stage65 resumes at 70');
+  assert.equal(retry.inventory.get(I.KEG_OF_BEER_2), 2);
 });
 
 test('Fremennik Exiles celebration plays through real NpcDialogues/DialogueManager and completes once', () => {

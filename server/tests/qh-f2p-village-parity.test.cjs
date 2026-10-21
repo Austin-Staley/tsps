@@ -365,6 +365,56 @@ test('Vampyre Slayer Harlow resolves stage 2 with real null bank tabs and runs b
 });
 
 
+function registerQuestForDispatch(name, pluginName) {
+  const before = {
+    variant: PluginManager.npcDialogueVariantHooks.length,
+    condition: PluginManager.npcDialogueConditionHooks.length,
+    interaction: PluginManager.npcInteractionHooks.length,
+  };
+  const api = new Proxy({ core }, { get(target, key) {
+    if (key in target) return target[key];
+    if (key === 'onNpcDialogueVariant') return (handler) => PluginManager.npcDialogueVariantHooks.push({ pluginName, handler });
+    if (key === 'onNpcDialogueCondition') return (handler) => PluginManager.npcDialogueConditionHooks.push({ pluginName, handler });
+    if (key === 'onNpcInteraction') return (names, actions) => {
+      const wanted = new Set([].concat(names));
+      for (const [action, handler] of Object.entries(actions ?? {})) {
+        PluginManager.npcInteractionHooks.push({ pluginName, handler: (event) => {
+          if (event.handled || event.definition?.getName?.() === undefined || !wanted.has(event.definition.getName())) return;
+          const clicked = event.definition.getActions()?.[event.clickType - 1];
+          if (clicked !== action) return;
+          if (handler(event) !== false) event.handled = true;
+        } });
+      }
+    };
+    if (key === 'onCustomEvent') return (eventName, handler) => {
+      const hooks = PluginManager.customEventHooks.get(eventName) ?? [];
+      hooks.push({ pluginName, handler });
+      PluginManager.customEventHooks.set(eventName, hooks);
+    };
+    if (key === 'emitCustomEvent') return (eventName, payload) => PluginManager.emitCustomEvent(eventName, payload);
+    return () => {};
+  } });
+  require(`../plugins/quests/quests/${name}.Quest`)(api);
+  return { cleanup() {
+    PluginManager.npcDialogueVariantHooks.length = before.variant;
+    PluginManager.npcDialogueConditionHooks.length = before.condition;
+    PluginManager.npcInteractionHooks.length = before.interaction;
+    for (const [eventName, hooks] of PluginManager.customEventHooks) {
+      const kept = hooks.filter((hook) => String(hook.pluginName) !== pluginName);
+      if (kept.length) PluginManager.customEventHooks.set(eventName, kept); else PluginManager.customEventHooks.delete(eventName);
+    }
+  } };
+}
+
+function apothecaryEvent(player) {
+  const entity = NPC.create(core.NpcIdentifiers.APOTHECARY, new core.Location(3195, 3404, 0));
+  const definition = entity.getCurrentDefinition(player);
+  return {
+    player, npc: entity, definition, npcId: entity.getContentId(player), npcIndex: entity.getIndex(),
+    clickType: 1, handled: false, location: { x: 3195, y: 3404, z: 0 },
+  };
+}
+
 function registerBartendersDispatch() {
   const before = {
     condition: PluginManager.npcDialogueConditionHooks.length,
@@ -509,5 +559,55 @@ test('Bartenders let exactly 2 coins free a full-bag slot at all three pubs and 
     player.failAddId = null;
   } finally {
     cleanup();
+  }
+});
+
+
+test('Romeo defers the Apothecary outside its window so A Tail of Two Cats answers', () => {
+  const romeo = registerQuestForDispatch('RomeoAndJuliet', 'RomeoTest');
+  const tail = registerQuestForDispatch('TailOfTwoCats', 'TailTest');
+  const index = require('../data/definitions/npc-dialogue-index.json');
+  const pages = (index['5036'] ?? []).map((entry) => ({ page: entry.page.replace(/^Transcript:/, ''), variants: entry.variants }));
+  try {
+    const player = realPlayer();
+    const I = core.ItemIdentifiers;
+    const variant = () => PluginManager.emitNpcDialogueVariant({ player, npcId: core.NpcIdentifiers.APOTHECARY, pages });
+
+    // A Tail of Two Cats stage 40 with a hat: its named Talk-to handler defers,
+    // then the variant dispatcher must let Tail answer instead of Romeo.
+    player.attributes.set('quest.a_tail_of_two_cats.stage', 40);
+    player.attributes.set('quest.romeo_and_juliet.stage', 0);
+    player.items.set(6547, 1); // Doctor's hat.
+    assert.equal(PluginManager.emitNpcInteraction(apothecaryEvent(player)), false, 'Tail named handler defers with the hat owned');
+    assert.equal(variant(), 'medical-emergency-talking-to-the-apothecary-again');
+
+    player.attributes.set('quest.romeo_and_juliet.stage', 100);
+    assert.equal(variant(), 'medical-emergency-talking-to-the-apothecary-again');
+
+    // Basic Apothecary fallback when neither quest claims him.
+    player.attributes.set('quest.a_tail_of_two_cats.stage', 0);
+    player.attributes.set('quest.romeo_and_juliet.stage', 0);
+    player.items.clear();
+    registerRealDialogues();
+    PluginManager.emitNpcInteraction(apothecaryEvent(player));
+    assert.match(currentText(player) ?? '', /I am the Apothecary\. I brew potions/);
+
+    // Romeo still owns its real windows: stage 40, and stage 50 only while the potion is missing.
+    player.attributes.set('quest.romeo_and_juliet.stage', 40);
+    assert.deepEqual(variant(), { page: 'Romeo & Juliet', variant: 'making-the-cadava-potion-talking-to-the-apothecary' });
+    player.attributes.set('quest.romeo_and_juliet.stage', 50);
+    assert.deepEqual(variant(), { page: 'Romeo & Juliet', variant: 'making-the-cadava-potion-talking-to-the-apothecary-again' });
+    player.items.set(I.CADAVA_POTION, 1);
+    assert.equal(variant(), null);
+    player.attributes.set('quest.romeo_and_juliet.stage', 60);
+    assert.equal(variant(), null);
+  } finally {
+    tail.cleanup();
+    romeo.cleanup();
+    for (const [eventName, hooks] of PluginManager.customEventHooks) {
+      const kept = hooks.filter((hook) => !String(hook.pluginName).endsWith('Test'));
+      if (kept.length) PluginManager.customEventHooks.set(eventName, kept); else PluginManager.customEventHooks.delete(eventName);
+    }
+    PluginManager.npcAnyInteractionHooks.length = 0;
   }
 });

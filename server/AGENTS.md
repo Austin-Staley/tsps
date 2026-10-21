@@ -72,6 +72,7 @@ module.exports = {
 | Where behaviour comes from, packet captures, reference codebases | [docs/agents/sources.md](docs/agents/sources.md) |
 | Measuring performance before and after a change (MCP load + perf tools) | [docs/agents/perf.md](docs/agents/perf.md) |
 | Checking behaviour in-game (MCP test tools, incl. headless screenshots/clips) | [docs/agents/testing.md](docs/agents/testing.md) |
+| Testing a quest start-to-finish (Quest Helper route, stages/varps, rewards, relog) | [docs/agents/quest-testing.md](docs/agents/quest-testing.md) |
 
 Project layout: [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). Gamemode-independent
 modules: [`docs/extrascripts.md`](../docs/extrascripts.md).

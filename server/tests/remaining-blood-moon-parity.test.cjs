@@ -85,7 +85,9 @@ function player(name = 'Parity') {
   let location = new core.Location(3210, 3220, 0), area = null;
   const packets = { interfaces: [], closes: [], cameras: [], varbits: [], scripts: [], strings: [] };
   const inv = { getAmount: id => items.get(id) ?? 0, contains: id => (items.get(id) ?? 0) > 0,
-    getFreeSlots: () => 28, adds(id, n = 1) { items.set(id, (items.get(id) ?? 0) + n); },
+    getFreeSlots: () => 28, isFull: () => false,
+    adds(id, n = 1) { items.set(id, (items.get(id) ?? 0) + n); },
+    forceAdd(_player, item) { items.set(item.getId(), (items.get(item.getId()) ?? 0) + (item.getAmount?.() ?? 1)); },
     deleteNumber(id, n = 1) { items.set(id, (items.get(id) ?? 0) - n); } };
   const packet = new Proxy({
     sendVarbit(id, value) { varbits.set(id, value); varbitHistory.push([id, value]); packets.varbits.push([id, value]); return packet; },
@@ -224,7 +226,8 @@ test('post-quest Efaritay reclaims a lost Tome once and never duplicates or lose
   // The real QA completion happened with 28/28 slots. The shared completion
   // add cannot store the Tome there; Efaritay's canonical reclaim covers it.
   const realInventory = p.getInventory;
-  p.getInventory = () => ({ contains: () => false, adds: () => false, getFreeSlots: () => 0 });
+  p.getInventory = () => ({ contains: () => false, adds: () => false, getFreeSlots: () => 0,
+    isFull: () => true, forceAdd: () => {} });
   h.emit('npc-dialogue:action', { player: p, stepId: 'BzMe5D' });
   assert.equal(h.quest.getStage(p), 110);
   assert.equal(p.items.get(TOME), undefined, 'a full inventory does not drop the reward on the floor');
@@ -267,7 +270,8 @@ test('post-quest Efaritay reclaims a lost Tome once and never duplicates or lose
   };
 
   // The real shipped transcript graph refuses cleanly with a full bag.
-  p.getInventory = () => ({ contains: () => false, adds: () => false, getFreeSlots: () => 0 });
+  p.getInventory = () => ({ contains: () => false, adds: () => false, getFreeSlots: () => 0,
+    isFull: () => true, forceAdd: () => {} });
   talkToEfaritay();
   assert.ok(String(p.manager.getCurrent()?.getText?.()).startsWith('I have a tome here for you'),
     'the destroyed-Tome variant is selected by the real Talk-to dispatch');
@@ -862,6 +866,60 @@ test('relog repairs only the stranded stage-25 courtyard save', () => {
   assert.equal(elsewhere.getLocation().getX(), 3200);
   assert.equal(elsewhere.getLocation().getY(), 3200);
   assert.equal(elsewhere.messages.some(m => m.includes('teleport sets you down')), false);
+});
+
+test('completed Blood Moon selects canonical post-quest Ivan dialogue without stealing active quests', () => {
+  const h = harness(), p = player('PostIvan');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 110);
+  const definition = { getName: () => 'Ivan Strom' };
+  const pages = [
+    { page: 'Ivan Strom', variants: ['standard-dialogue-after-completing-in-search-of-the-myreque'] },
+    { page: 'Sins of the Father', variants: [] },
+    { page: 'The Blood Moon Rises', variants: ['post-quest-dialogue-ivan'] },
+  ];
+  const chooseVariant = () => h.variants.map(fn => fn({ player: p, definition, pages })).find(Boolean) ?? null;
+  assert.deepEqual(chooseVariant(), { page: 'The Blood Moon Rises', variant: 'post-quest-dialogue-ivan' });
+
+  const kingDefinition = { getName: () => 'King Roald' };
+  const kingPages = [{ page: 'The Blood Moon Rises', variants: ['post-quest-dialogue-king-roald'] },
+    { page: 'Shield of Arrav', variants: [] }];
+  assert.equal(h.variants.map(fn => fn({ player: p, definition: kingDefinition, pages: kingPages })).find(Boolean) ?? null,
+    null, 'other shared NPCs keep their canonical start/active dialogue');
+
+  const stages = (h.events['quest:get-stage'] ??= []);
+  const complete = (h.events['quest:is-complete'] ??= []);
+  const setSins = (value, done) => {
+    stages.push(event => { if (event.key === 'sins_of_the_father') event.stage = value; });
+    complete.push(event => { if (event.key === 'sins_of_the_father') event.complete = done; });
+  };
+  setSins(0, false);
+  assert.deepEqual(chooseVariant(), { page: 'The Blood Moon Rises', variant: 'post-quest-dialogue-ivan' },
+    'a fresh competitor at stage 0 does not displace Ivan');
+  stages.pop(); complete.pop();
+  setSins(20, false);
+  assert.equal(chooseVariant(), null, 'an active Sins chapter keeps its Ivan conversation');
+  stages.pop(); complete.pop();
+  setSins(20, true);
+  assert.deepEqual(chooseVariant(), { page: 'The Blood Moon Rises', variant: 'post-quest-dialogue-ivan' },
+    'a completed competitor releases Ivan back to Blood Moon');
+  stages.pop(); complete.pop();
+
+  const hooks = [];
+  const api2 = new Proxy({}, { get: (_, key) => key === 'onAnyNpcInteraction'
+    ? actions => hooks.push(actions) : h.api[key] });
+  require('../plugins/npcs/NpcDialogues.plugin').register(api2);
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const originalVariant = PluginManager.emitNpcDialogueVariant;
+  PluginManager.emitNpcDialogueVariant = event => {
+    for (const fn of h.variants) { const result = fn(event); if (result) return result; }
+    return null;
+  };
+  const realDefinition = core.NpcDefinition.forId(5053);
+  hooks[0]['Talk-to']({ player: p, npc: { getId: () => 5053 }, npcId: 5053, definition: realDefinition });
+  PluginManager.emitNpcDialogueVariant = originalVariant;
+  assert.equal(String(p.manager.getCurrent()?.getText?.()).startsWith('Hey, PostIvan.'), true,
+    'the real Talk-to dispatch plays the Blood Moon post-quest line');
 });
 
 test('shipped Roy index selects the Blood Moon variant at stage 30 and reaches royClue', () => {

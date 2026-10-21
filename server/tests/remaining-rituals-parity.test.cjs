@@ -8,6 +8,7 @@ const runtime = require('../plugins/quests/QuestRuntime');
 const mining = require('../plugins/skills/Mining.plugin');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
 const npcDialogues = require('../plugins/npcs/NpcDialogues.plugin');
 npcDialogues.startDialogue = () => {};
 
@@ -149,6 +150,7 @@ function setup(pluginPath) {
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
       adds(id, count) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       addItem(entry) { inventory.set(entry.getId(), (inventory.get(entry.getId()) ?? 0) + entry.getAmount()); },
+      forceAdd(_player, entry) { inventory.set(entry.getId(), (inventory.get(entry.getId()) ?? 0) + entry.getAmount()); },
       getFreeSlots: () => 28,
       isFull: () => false,
     }),
@@ -819,4 +821,82 @@ test('Spirits ranged target validates the real Shoot option and generic ranged a
   event = h.npcInteraction(4763, { npc: target, clickType: 2 });
   assert.equal(event.handled, false, 'another owner target stays inert');
   assert.notEqual(h.varbits.get(1451), 1);
+});
+
+test('Spirits lost statuette reaches the recorded Genie recovery and re-trades in a full bag', () => {
+  const h = setup('../plugins/quests/quests/SpiritsOfTheElid.Quest');
+  const N = h.core.NpcIdentifiers, I = h.core.ItemIdentifiers;
+  const inventory = new Inventory(h.player);
+  h.player.getInventory = () => inventory;
+  h.quest.setStage(h.player, 55);
+  for (let i = 0; i < 27; i++) inventory.adds(I.SHARK, 1);
+  inventory.adds(I.SOLE, 1);
+  assert.equal(inventory.getFreeSlots(), 0);
+  const variant = h.hooks.variants[0]({ player: h.player, npcId: N.GENIE_3 });
+  assert.equal(variant, 'sole-split-talking-to-the-genie-after-losing-the-statuette');
+  const raw = require('../data/definitions/npc-dialogues.json')['Spirits of the Elid']
+    .variants[variant];
+  assert.match(JSON.stringify(raw), /UDr1XL/);
+  h.emit('npc-dialogue:action', { npcId: N.GENIE_3, stepId: 'UDr1XL' });
+  assert.equal(inventory.getAmount(I.SOLE), 0);
+  assert.equal(inventory.getAmount(I.STATUETTE_2), 1);
+  assert.equal(h.quest.getStage(h.player), 55);
+});
+
+function realInventorySetup() {
+  const h = setup('../plugins/quests/quests/TaiBwoWannaiTrio.Quest');
+  const inventory = new Inventory(h.player);
+  h.player.getInventory = () => inventory;
+  h.quest.setStage(h.player, 4);
+  return { h, inventory, I: h.core.ItemIdentifiers };
+}
+
+test("Tai completion delivers all 2,000 coins with a no-coin full bag and no duplicate", () => {
+  const manager = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager').ItemOnGroundManager;
+  const original = manager.registers;
+  const drops = [];
+  manager.registers = (_player, item) => drops.push({ id: item.getId(), amount: item.getAmount() });
+  try {
+    const { h, inventory, I } = realInventorySetup();
+    for (let i = 0; i < 28; i++) inventory.adds(I.SHARK, 1);
+    assert.equal(inventory.getFreeSlots(), 0);
+    h.action(h.core.NpcIdentifiers.TIMFRAKU, 'SUa3hN');
+    assert.equal(h.quest.getStage(h.player), 6);
+    assert.equal(inventory.getAmount(I.COINS), 0);
+    assert.deepEqual(drops, [
+      { id: I.COINS, amount: 1999 },
+      { id: I.COINS, amount: 1 },
+    ]);
+    assert.equal(drops.reduce((total, drop) => total + drop.amount, 0), 2000);
+    h.action(h.core.NpcIdentifiers.TIMFRAKU, 'SUa3hN');
+    assert.equal(drops.length, 2, 'completion reward is not repeated');
+    assert.equal(drops.reduce((total, drop) => total + drop.amount, 0), 2000);
+  } finally {
+    manager.registers = original;
+  }
+});
+
+test('Tai completion merges the extra coins into an existing stack and adds on one free slot', () => {
+  const manager = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager').ItemOnGroundManager;
+  const original = manager.registers;
+  const drops = [];
+  manager.registers = (_player, item) => drops.push(item);
+  try {
+    let { h, inventory, I } = realInventorySetup();
+    for (let i = 0; i < 27; i++) inventory.adds(I.SHARK, 1);
+    inventory.adds(I.COINS, 100);
+    assert.equal(inventory.getFreeSlots(), 0);
+    h.action(h.core.NpcIdentifiers.TIMFRAKU, 'SUa3hN');
+    assert.equal(drops.length, 0);
+    assert.equal(inventory.getAmount(I.COINS), 2100);
+
+    ({ h, inventory, I } = realInventorySetup());
+    for (let i = 0; i < 27; i++) inventory.adds(I.SHARK, 1);
+    assert.equal(inventory.getFreeSlots(), 1);
+    h.action(h.core.NpcIdentifiers.TIMFRAKU, 'SUa3hN');
+    assert.equal(drops.length, 0);
+    assert.equal(inventory.getAmount(I.COINS), 2000);
+  } finally {
+    manager.registers = original;
+  }
 });

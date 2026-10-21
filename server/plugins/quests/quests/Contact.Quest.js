@@ -475,6 +475,7 @@ module.exports = function registerContactQuest(api) {
     if (stage < STAGE_CAVES) {
       return "the-sect-of-scabaras-talking-to-jex-after-entering-the-tunnels";
     }
+    if (quest.isComplete(player)) return "standard-dialogue";
     return "beetle-battle-talking-to-jex";
   }
 

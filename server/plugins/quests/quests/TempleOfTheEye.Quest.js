@@ -1937,7 +1937,9 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     player.getPacketSender().sendVarbit(13757, 1);
     player.getSkillManager().addExperiences(Skill.RUNECRAFTING, 5000);
     if (!has(player, MEDIUM_POUCH_ITEM_ID) && !has(player, MEDIUM_POUCH_ITEM_ID_2)) {
-      give(player, MEDIUM_POUCH_ITEM_ID);
+      const inventory = player.getInventory();
+      if (inventory.isFull()) inventory.forceAdd(player, new Item(MEDIUM_POUCH_ITEM_ID, 1));
+      else give(player, MEDIUM_POUCH_ITEM_ID);
     }
   }
 

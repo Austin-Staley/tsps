@@ -399,7 +399,9 @@ module.exports = function registerTroubledTortugansQuest(api) {
   }
 
   function hasTortuganShield(player) {
-    return player.getEquipment?.().get?.(Equipment.SHIELD_SLOT)?.getId?.() === TORTUGAN_SHIELD_ITEM_ID;
+    const equipment = player.getEquipment?.();
+    // Item 31398 is worn on the back/cape slot (cache wearPos 1).
+    return equipment?.get?.(Equipment.CAPE_SLOT)?.getId?.() === TORTUGAN_SHIELD_ITEM_ID;
   }
 
   function damagePlayer(player, amount) {

@@ -227,14 +227,16 @@ module.exports = function registerRuneMysteriesQuest(api) {
     const stage = quest.getStage(player);
 
     if (npcId === DUKE_HORACIO_NPC_ID) {
-      // The Duke is shared with Dragon Slayer I, whose shield conversation lives
-      // on his own flat page. Once Rune Mysteries is complete the quest has
-      // nothing more to say through him, so step aside and let the other Duke
-      // branches (Dragon Slayer, the flat page) play.
+      // The Duke is shared with Dragon Slayer I and other quests. Rune Mysteries
+      // only owns his dialogue before/at the talisman handover; after that its
+      // "again" page has no valid branch (both guards are stage-1 only). Defer
+      // to another active quest, otherwise the shared flat Duke page, which
+      // carries the real mid-quest/talisman-recovery/shield lines.
       if (stage >= STAGE_COMPLETE) return null;
       if (stage === STAGE_NOT_STARTED) {
         return { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_DUKE_STARTING };
       }
+      if (stage >= STAGE_GIVEN_TALISMAN) return null;
       return { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_DUKE_AGAIN };
     }
 

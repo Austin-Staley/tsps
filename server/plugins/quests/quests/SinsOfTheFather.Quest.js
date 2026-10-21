@@ -489,6 +489,9 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const CARL_VIEW_RANGE = 10;
   const CARL_LOOKBACK_TICKS = 15; // capture 1637: every look-back pauses for 15 ticks
   const HIDEOUT_CRATE_OBJECT_ID = 32575; // actual cache Crate, Search (Old Man Ral's base)
+  const DISGUISE_CHEST_CLOSED_ID = 37986; // "Closed Chest" Open
+  const DISGUISE_CHEST_OPEN_ID = 37987; // "Open Chest" Search/Shut
+  const DISGUISE_CHEST_TILE = { x: 3600, y: 9617, z: 0 };
   const LAB_ESCAPE_GATE_ID = 37992; // "Gate" Escape (Kroy's lab)
   const SLEPE_ROWBOAT_OBJECT_ID = 32602; // cache "Row boat" Travel at Slepe
 
@@ -3070,6 +3073,56 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     return true;
   }
 
+  function ownsNoblePiece(player, itemId) {
+    if (held(player, itemId)) return true;
+    if ((player.getEquipment().getItems() || []).some((item) => item?.getId?.() === itemId)) return true;
+    return (player.getBanks?.() ?? []).some((bank) => Number(bank?.getAmount?.(itemId) ?? 0) > 0);
+  }
+
+  function disguiseChestEvent(event, objectId) {
+    if (!event?.player || event.objectId !== objectId) return false;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    const z = location?.z ?? location?.getZ?.() ?? 0;
+    return x === DISGUISE_CHEST_TILE.x && y === DISGUISE_CHEST_TILE.y && z === DISGUISE_CHEST_TILE.z;
+  }
+
+  function hasOpenDisguiseChest(player) {
+    const object = personalObjects.get(player)?.get(personalKey(DISGUISE_CHEST_TILE));
+    return object?.getId?.() === DISGUISE_CHEST_OPEN_ID;
+  }
+
+  function openDisguiseChest(event) {
+    if (quest.getStage(event.player) < STAGE_DISGUISE_MADE) return false;
+    if (!disguiseChestEvent(event, DISGUISE_CHEST_CLOSED_ID)) return false;
+    event.handled = true;
+    syncPersonalObject(event.player, DISGUISE_CHEST_TILE, DISGUISE_CHEST_OPEN_ID, 10, 2);
+    return true;
+  }
+
+  function searchDisguiseChest(event) {
+    const { player } = event;
+    if (quest.getStage(player) < STAGE_DISGUISE_MADE) return false;
+    if (!disguiseChestEvent(event, DISGUISE_CHEST_OPEN_ID) || !hasOpenDisguiseChest(player)) return false;
+    event.handled = true;
+    // Polmafi's spares are the noble disguise; after Damien's blood the set is scented.
+    const pieces = quest.getStage(player) >= STAGE_DAMIEN_DONE ? VYRE_NOBLE_SCENTED_IDS : VYRE_NOBLE_UNSCENTED_IDS;
+    for (const itemId of pieces) {
+      if (ownsNoblePiece(player, itemId)) continue;
+      if (!give(player, itemId, 1)) break;
+    }
+    return true;
+  }
+
+  function shutDisguiseChest(event) {
+    if (quest.getStage(event.player) < STAGE_DISGUISE_MADE) return false;
+    if (!disguiseChestEvent(event, DISGUISE_CHEST_OPEN_ID) || !hasOpenDisguiseChest(event.player)) return false;
+    event.handled = true;
+    clearPersonalObject(event.player, DISGUISE_CHEST_TILE);
+    return true;
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
     if (!player || event.handled) return;
@@ -3693,6 +3746,8 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   api.onNpcInteraction("Mordan Nikazsi", { "Talk-to": talkMordan });
   api.onNpcInteraction("Desmodus Lasiurus", { "Talk-to": talkDesmodus });
   api.onObjectInteraction("Barrel", { Inspect: handleBarrel });
+  api.onObjectInteraction("Closed Chest", { Open: openDisguiseChest });
+  api.onObjectInteraction("Open Chest", { Search: searchDisguiseChest, Shut: shutDisguiseChest });
   api.onObjectInteraction("Cracked wall", { Enter: handleCrackedWall });
   api.onObjectInteraction("Blisterwood tree", { Chop: chopBlisterwood });
   api.onObjectInteraction("Bookshelf", { Search: searchLabBookshelf });

@@ -199,6 +199,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   const HIDDEN_ATTRIBUTE = "secrets-of-the-north:hidden-room";
   const BRIBE_ATTRIBUTE = "secrets-of-the-north:bribe-paid";
   const SCROLL_READ_ATTRIBUTE = "secrets-of-the-north:scroll-read";
+  const SCROLL_HANDED_ATTRIBUTE = "secrets-of-the-north:scroll-handed-in";
   const BRAZIERS_ATTRIBUTE = "secrets-of-the-north:braziers";
   const HIDDEN_PASSAGE_ATTRIBUTE = "secrets-of-the-north:hidden-passage";
   // Captured child varbits (download/1694): NW=4, SE=1, NE=3, SW=2; 14758 is
@@ -1281,7 +1282,13 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         for (const key of KHAZARD_KEYS) removeTracked(player, key);
         removeTracked(player, "alomone:cult");
         // Stay at SCROLL_READ: the first Big Fish meeting is that stage's
-        // transcript, and its line moves the quest to STAGE_NORTH.
+        // transcript, and its line moves the quest to STAGE_NORTH. The native
+        // hand-in boundary is 52, which QH reads before the native56 step.
+        if (quest.getStage(player) === STAGE_SCROLL_READ) {
+          setFlag(player, SCROLL_HANDED_ATTRIBUTE, true);
+          // Force the same-stage varbit resend: local setStage() early-returns on equality.
+          quest.setStage(player, STAGE_SCROLL_READ);
+        }
         syncNpcs(player);
         return;
 
@@ -1708,6 +1715,15 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
           return;
         }
         if (stage >= STAGE_ICY_CHEST) {
+          if (stage >= STAGE_ICY_KEY && stage < STAGE_ICY_GATE && !has(player, ICY_KEY)) {
+            if (freeSlots(player) === 0) {
+              player.sendMessage("You need at least one free inventory slot to take the chest.");
+              return;
+            }
+            give(player, ICY_KEY);
+            player.sendMessage("You recover a key from within.");
+            return;
+          }
           player.sendMessage("The chest is empty.");
           return;
         }
@@ -2312,6 +2328,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   api.persistAttribute(HIDDEN_ATTRIBUTE);
   api.persistAttribute(BRIBE_ATTRIBUTE);
   api.persistAttribute(SCROLL_READ_ATTRIBUTE);
+  api.persistAttribute(SCROLL_HANDED_ATTRIBUTE, false);
   api.persistAttribute(BRAZIERS_ATTRIBUTE);
   api.persistAttribute(HIDDEN_PASSAGE_ATTRIBUTE, false);
   api.persistAttribute(TOLD_ATTRIBUTE, 0);
@@ -2322,7 +2339,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     name: "Secrets of the North",
     varpId: 3742, // sotn_primary
     varbitId: 14722, // sotn, bits 0-8
-    varbitValue: stage => NATIVE_STAGE_VARBIT[stage] ?? 0,
+    varbitValue: (stage, player) => stage === STAGE_SCROLL_READ && hasFlag(player, SCROLL_HANDED_ATTRIBUTE) ? 52 : NATIVE_STAGE_VARBIT[stage] ?? 0,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,

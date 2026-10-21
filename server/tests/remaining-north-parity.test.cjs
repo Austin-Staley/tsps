@@ -1469,3 +1469,117 @@ test('relogin while on the trail keeps progress and respawns the route NPCs', ()
   assert.equal(stage(h, p), 5);
   restored();
 });
+
+test('icy key loss: north chest restores it only after the key stage, with capacity/repeat guards', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  let active = true;
+  try { CachePipeline.getActive(); } catch { active = false; }
+  if (!active) await CachePipeline.initialize(path.resolve('.'));
+  RegionManager.init();
+
+  const api = PM.createApi('remaining-north-icy-key-recovery');
+  require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
+
+  function account() {
+    const p = new Player(null);
+    const varbits = [];
+    const messages = [];
+    const sender = new Proxy({}, { get: (_, key) => (...args) => {
+      if (key === 'sendVarbit') varbits.push([args[0], args[1]]);
+      return sender;
+    } });
+    p.getPacketSender = () => sender;
+    p.sendMessage = text => messages.push(text);
+    p.setNeedsPlacement(false);
+    return { p, varbits, messages };
+  }
+  const northChest = () => new GameObject(46619, new core.Location(2919, 10331, 0), 10, 2, null);
+  const openChest = p => PM.emitObjectInteraction({
+    player: p, object: northChest(), objectId: 46619, definition: ObjectDefinition.forId(46619),
+    clickType: 1, location: northChest().getLocation(), handled: false,
+  });
+
+  const a = account();
+  north.setStage(a.p, 28);
+  a.p.getInventory().resetItems();
+  a.p.getInventory().adds(I.ICY_CHEST, 1);
+  a.p.getInventory().adds(I.ANCIENT_JEWEL, 1);
+  PM.emitItemOnItem({ player: a.p, usedItem: new core.Item(I.ANCIENT_JEWEL, 1), usedItemId: I.ANCIENT_JEWEL, usedItemSlot: 0, usedWithItem: new core.Item(I.ICY_CHEST, 1), usedWithItemId: I.ICY_CHEST, usedWithItemSlot: 1, handled: false });
+  assert.equal(north.getStage(a.p), 29, 'first key is earned through the real item-on-item path');
+  assert.equal(a.p.getInventory().getAmount(I.ICY_KEY), 1);
+
+  a.p.getInventory().deleteNumber(I.ICY_KEY, 1);
+  openChest(a.p);
+  assert.equal(a.p.getInventory().getAmount(I.ICY_KEY), 1, 'lost key is restored from the north chest');
+  assert.match(a.messages.at(-1), /recover a key from within/i);
+  assert.equal(north.getStage(a.p), 29, 'recovery does not advance or reset the stage');
+
+  openChest(a.p);
+  assert.equal(a.p.getInventory().getAmount(I.ICY_KEY), 1, 'repeat chest does not duplicate the held key');
+  assert.match(a.messages.at(-1), /chest is empty/i);
+
+  const full = account();
+  north.setStage(full.p, 29);
+  full.p.getInventory().resetItems();
+  full.p.getInventory().adds(385, 28);
+  openChest(full.p);
+  assert.equal(full.p.getInventory().getAmount(I.ICY_KEY), 0, 'full inventory grants no key');
+  assert.match(full.messages.at(-1), /free inventory slot/i);
+
+  const early = account();
+  north.setStage(early.p, 28);
+  early.p.getInventory().resetItems();
+  openChest(early.p);
+  assert.equal(early.p.getInventory().getAmount(I.ICY_KEY), 0, 'no key before the icy chest/key stage');
+  assert.match(early.messages.at(-1), /chest is empty/i);
+});
+
+test('scroll hand-in sends QH native 52 while retaining the SCROLL_READ stage', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  let active = true;
+  try { CachePipeline.getActive(); } catch { active = false; }
+  if (!active) await CachePipeline.initialize(path.resolve('.'));
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  new NpcDefinitionLoader().load();
+  const api = PM.createApi('remaining-north-native52');
+  require('../plugins/npcs/NpcDialogues.plugin').register(api);
+  require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
+
+  const p = new Player(null);
+  const varbits = [];
+  const sender = new Proxy({}, { get: (_, key) => (...args) => {
+    if (key === 'sendVarbit') varbits.push([args[0], args[1]]);
+    return sender;
+  } });
+  p.getPacketSender = () => sender;
+  p.sendMessage = () => {};
+  p.setNeedsPlacement(false);
+  north.setStage(p, 12);
+  p.getInventory().resetItems();
+  p.getInventory().adds(I.DUSTY_SCROLL_3, 1);
+  varbits.length = 0;
+
+  const variant = 'the-mysterious-benefactor-talking-to-hazeel-or-general-khazard-after-reading-the-dusty-scroll';
+  assert.ok(runtime.startTranscript(api, p, N.HAZEEL_2, 'Secrets of the North', variant), 'real Hazeel hand-in transcript starts');
+  for (let i = 0; i < 200 && p.getDialogueManager().getCurrent(); i++) {
+    p.getDialogueManager().handleResume(231 << 16 | 5, 1);
+  }
+  assert.equal(north.getStage(p), 12, 'hand-in keeps the internal SCROLL_READ stage');
+  assert.equal(p.getInventory().getAmount(I.DUSTY_SCROLL_3), 0, 'hand-in still consumes the scroll');
+  assert.equal(varbits.filter(([id]) => id === 14722).at(-1)?.[1], 52, 'hand-in sends native52');
+
+  varbits.length = 0;
+  runtime.sendQuestVarps({ player: p });
+  assert.equal(varbits.filter(([id]) => id === 14722).at(-1)?.[1], 52, 'login/resend keeps native52');
+});

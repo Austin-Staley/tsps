@@ -10,6 +10,7 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
@@ -170,6 +171,7 @@ function player(level = 99, current = 99) {
     getInventory: () => ({
       getAmount: id => items.get(id) ?? 0,
       getFreeSlots: () => (p.full ? 0 : 28),
+      isFull: () => p.full === true,
       adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
       deleteNumber: (id, amount) => items.set(id, (items.get(id) ?? 0) - amount),
     }),
@@ -1001,6 +1003,39 @@ test('The Final Dawn Eyatlalli spawns at Neypotzli and real Talk-to gives the fr
   for (let step = 0; step < 400 && p.manager.getCurrent() && h.quest.getStage(p) < 39; step++) p.manager.advance();
   assert.equal(h.quest.getStage(p), 39, 'the real transcript gives the fragment and reaches stage39');
   assert.equal(p.items.get(I.KEYSTONE_FRAGMENT), 1);
+});
+
+test('Final Dawn full inventory leaves the fragment handoff retryable, then gives on retry', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  const inv = new Inventory(p);
+  p.getInventory = () => inv;
+  for (let i = 0; i < 28; i++) inv.adds(1000 + i, 1);
+  assert.equal(inv.getFreeSlots(), 0);
+  h.quest.setStage(p, 38);
+
+  h.namedNpcs.get('Eyatlalli')['Talk-to']({ player: p, npcId: 14354 });
+  for (let step = 0; step < 400 && p.manager.getCurrent(); step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 38);
+  assert.equal(inv.getAmount(I.KEYSTONE_FRAGMENT), 0);
+
+  inv.deleteNumber(1000, 1);
+  h.namedNpcs.get('Eyatlalli')['Talk-to']({ player: p, npcId: 14354 });
+  for (let step = 0; step < 400 && p.manager.getCurrent() && h.quest.getStage(p) < 39; step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 39);
+  assert.equal(inv.getAmount(I.KEYSTONE_FRAGMENT), 1);
+});
+
+test('Final Dawn destroyed fragment at first Locate is reissued without losing stage 40', () => {
+  assert.ok(CacheDefinitions.getItem(30961).inventoryActions.includes('Destroy'));
+  const h = harness('TheFinalDawn'), p = player();
+  const inv = new Inventory(p);
+  p.getInventory = () => inv;
+  h.quest.setStage(p, 40);
+
+  h.namedNpcs.get('Eyatlalli')['Talk-to']({ player: p, npcId: 14354 });
+  for (let step = 0; step < 400 && p.manager.getCurrent() && inv.getAmount(I.KEYSTONE_FRAGMENT) === 0; step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 40);
+  assert.equal(inv.getAmount(I.KEYSTONE_FRAGMENT), 1);
 });
 
 test('The Final Dawn Servius Teumo basement report accepts content id 14311', () => {

@@ -566,6 +566,12 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
 
+  /** Keys can legitimately be banked; a banked key is owned and must not be duplicated. */
+  function bankedAmount(player, itemId) {
+    const banks = player.getBanks?.() ?? (player.getBank ? [player.getBank()] : []);
+    return banks.reduce((total, bank) => total + Number(bank?.getAmount?.(itemId) ?? 0), 0);
+  }
+
   function hasOldakMaterials(player) {
     return held(player, LAW_RUNE_ITEM_ID, 2) && held(player, MOLTEN_GLASS_ITEM_ID, 1);
   }
@@ -1322,11 +1328,21 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   function pickpocketPriest(player, npcId) {
     const tribe = PRIEST_TRIBE_BY_ID.get(npcId);
     if (tribe === undefined || !questActive(player) || quest.getStage(player) < STAGE_KEYS) return;
-    if (hasKey(player, tribe)) {
+    const keyId = TRIBE_KEY_IDS[tribe];
+    const ownsKey = held(player, keyId) || bankedAmount(player, keyId) > 0;
+    // The saved mask alone is not ownership: a key can be lost before the crypt. Re-stolen
+    // keys are only credited once the physical key has been given.
+    if (hasKey(player, tribe) && ownsKey) {
       player.sendMessage("You have already stolen this priest's key.");
       return;
     }
-    player.getInventory().adds(TRIBE_KEY_IDS[tribe], 1);
+    if (!ownsKey) {
+      if (player.getInventory().getFreeSlots() < 1) {
+        player.sendMessage("You don't have enough inventory space.");
+        return;
+      }
+      player.getInventory().adds(keyId, 1);
+    }
     setKeysMask(player, keysMask(player) | (1 << tribe));
     if (allKeysHeld(player)) player.sendMessage("You have taken the keys of all six tribes.");
   }

@@ -3797,15 +3797,49 @@ module.exports = function registerTheBloodMoonRises(api) {
     return selected;
   }
 
+  // Only Ivan is proven safe for a Blood Moon post-quest greeting across the
+  // shared pages. Other shared NPCs (notably King Roald) can still need a
+  // fresh start conversation from another quest at stage 0, so they are left
+  // to their canonical index/default selection.
+  const IVAN_POST_QUEST_VARIANT = "post-quest-dialogue-ivan";
+  const IVAN_SHARED_QUEST_KEYS = Object.freeze([
+    "in_search_of_the_myreque", "in_aid_of_the_myreque",
+    "darkness_of_hallowvale", "sins_of_the_father", "a_night_at_the_theatre",
+  ]);
+
+  function questStage(player, key) {
+    const request = { player, key, stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return Number.isInteger(request.stage) ? request.stage : null;
+  }
+
+  function questActive(player, key) {
+    const current = questStage(player, key);
+    if (current === null || current <= 0) return false;
+    const complete = { player, key, complete: false };
+    api.emitCustomEvent("quest:is-complete", complete);
+    return complete.complete !== true;
+  }
+
+  function ivanSharedQuestActive(player) {
+    return IVAN_SHARED_QUEST_KEYS.some((key) => questActive(player, key));
+  }
+
   function selectVariant(event) {
     const player = event?.player;
     if (!player) return null;
     if (quest.isComplete(player)) {
-      if (event.definition?.getName?.() !== "Efaritay Hallow") return null;
-      const efaritayPage = event.pages?.find((entry) => entry.page === TOME_RECLAIM_PAGE);
-      if (!efaritayPage?.variants?.includes(TOME_RECLAIM_VARIANT)) return null;
-      return !hasTome(player) && tomeUses(player) < 6
-        ? { page: TOME_RECLAIM_PAGE, variant: TOME_RECLAIM_VARIANT } : null;
+      const npcName = String(event.definition?.getName?.() ?? "").toLowerCase();
+      if (npcName === "efaritay hallow") {
+        const efaritayPage = event.pages?.find((entry) => entry.page === TOME_RECLAIM_PAGE);
+        if (!efaritayPage?.variants?.includes(TOME_RECLAIM_VARIANT)) return null;
+        return !hasTome(player) && tomeUses(player) < 6
+          ? { page: TOME_RECLAIM_PAGE, variant: TOME_RECLAIM_VARIANT } : null;
+      }
+      if (npcName !== "ivan strom" || ivanSharedQuestActive(player)) return null;
+      const page = event.pages?.find((entry) => entry.page === PAGE);
+      return page?.variants?.includes(IVAN_POST_QUEST_VARIANT)
+        ? { page: PAGE, variant: IVAN_POST_QUEST_VARIANT } : null;
     }
     const page = event.pages?.find((entry) => entry.page === PAGE);
     if (!page) return null;

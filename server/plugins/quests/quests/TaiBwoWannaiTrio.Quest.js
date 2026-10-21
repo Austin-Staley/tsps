@@ -25,7 +25,7 @@
  * Tamayu's hunt, matching Quest Helper.
  */
 module.exports = function registerTaiBwoWannaiTrioQuest(api) {
-  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, Item, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
 
@@ -349,8 +349,9 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
 
   function grantReward(_player) {
     // The 2,000 coins are handed over by Timfraku on completion; registerQuest
-    // adds one coin from rewardItemId, so top it up by 1,999 here.
-    _player.getInventory().adds(ItemIdentifiers.COINS, 1999);
+    // adds one coin from rewardItemId, so top it up by 1,999 here. forceAdd
+    // merges an existing coin stack or drops the overflow at the reward tile.
+    _player.getInventory().forceAdd(_player, new Item(ItemIdentifiers.COINS, 1999));
   }
 
   /** Which transcript variant each speaker plays, by quest stage. */

@@ -128,12 +128,13 @@ function player() {
   const inv = {
     getAmount: id => items.get(id) ?? 0,
     isFull: () => false,
-    getFreeSlots: () => 28,
+    getFreeSlots: () => p.free ?? (p.full ? 0 : 28),
     contains: id => (items.get(id) ?? 0) > 0,
-    adds(id, amount) { items.set(id, (items.get(id) ?? 0) + amount); },
+    adds(id, amount) { items.set(id, (items.get(id) ?? 0) + amount); if (p.free !== undefined) p.free = Math.max(0, p.free - amount); },
     deleteNumber(id, amount) {
       assert.ok((items.get(id) ?? 0) >= amount, `missing item ${id}`);
       items.set(id, items.get(id) - amount);
+      if (p.free !== undefined) p.free += amount;
     },
     get(slot) {
       const entry = [...items.entries()][slot];
@@ -149,7 +150,9 @@ function player() {
   const p = {
     attrs, items, configs, varbits, log, xp, messages: [], prompt: null, text: '', index: nextIndex++,
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value), getInventory: () => inv,
-    getEquipment: () => ({ get: () => p.weapon ? { getId: () => p.weapon } : null }),
+    getEquipment: () => ({ get: () => p.weapon ? { getId: () => p.weapon } : null, getItems: () => p.equippedItems ?? [] }),
+    getBanks: () => p.banks ?? [],
+    getBank: () => p.banks?.[0] ?? { getAmount: () => 0 },
     getPacketSender: () => packet, getDialogueManager: () => p.manager, getUpdateFlag: () => ({ flag: noop }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: hits => { p.damage = (p.damage ?? []).concat(hits); } }) }),
     getSkillManager: () => ({
@@ -1218,4 +1221,92 @@ test('Sins all captured Carl look-backs hide their captured player pose by edge 
     assert.ok(window.facing[0] * dx + window.facing[1] * dy > 0, 'captured hide is in the look-back cone');
     assert.equal(blocked(window.npc, window.player), true, `cache wall/edge hides ${window.player}`);
   }
+});
+
+
+test('Sins disguise chest returns only missing noble pieces with capacity and ownership checks', () => {
+  const { ObjectDefinition, MapObjects, Location } = core;
+  ObjectDefinition.init();
+  assert.ok((ObjectDefinition.forId(37986).getInteractions() || []).includes('Open'), 'cache closed chest has Open');
+  assert.ok((ObjectDefinition.forId(37987).getInteractions() || []).includes('Search'), 'cache open chest has Search');
+  assert.ok(MapObjects.get(37986, new Location(3600, 9617, 0), null), 'hideout closed chest is a real map object');
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 86);
+  assert.ok(h.namedObjects.get('Closed Chest'), 'the hideout chest has a real Open handler');
+  const open = h.namedObjects.get('Closed Chest').Open;
+  const search = h.namedObjects.get('Open Chest').Search;
+  const shut = h.namedObjects.get('Open Chest').Shut;
+  const openEvent = { player: p, objectId: 37986, location: { x: 3600, y: 9617, z: 0 }, handled: false };
+  open(openEvent);
+  assert.equal(openEvent.handled, true);
+  assert.ok(h.objects.some(object => object.getId() === 37987 && object.getOwner() === p), 'opening installs the player open-chest variant');
+
+  p.full = true;
+  search({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(p.items.get(I.VYRE_NOBLE_TOP), undefined, 'full inventory does not lose a spare');
+
+  p.full = false;
+  p.free = 1;
+  search({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(p.items.get(I.VYRE_NOBLE_TOP), 1, 'one free slot gets one piece');
+  assert.equal(p.items.get(I.VYRE_NOBLE_LEGS), undefined);
+  p.free = 28;
+  search({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(p.items.get(I.VYRE_NOBLE_LEGS), 1);
+  assert.equal(p.items.get(I.VYRE_NOBLE_SHOES), 1);
+  search({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(p.items.get(I.VYRE_NOBLE_TOP), 1, 'repeat search never duplicates a held piece');
+
+  p.items.delete(I.VYRE_NOBLE_TOP);
+  p.banks = [{ getAmount: id => id === I.VYRE_NOBLE_TOP ? 1 : 0 }];
+  search({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(p.items.get(I.VYRE_NOBLE_TOP), undefined, 'a banked piece is not duplicated');
+  p.banks = [];
+  p.equippedItems = [{ getId: () => I.VYRE_NOBLE_TOP }];
+  search({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(p.items.get(I.VYRE_NOBLE_TOP), undefined, 'an equipped piece is not duplicated');
+
+  shut({ player: p, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.ok(!h.objects.some(object => object.getId() === 37987 && object.getOwner() === p), 'Shut restores the closed chest');
+
+  const u = player();
+  h.quest.setStage(u, 78);
+  h.namedObjects.get('Closed Chest').Open({ player: u, objectId: 37986, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  h.namedObjects.get('Open Chest').Search({ player: u, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false });
+  assert.equal(u.items.get(I.VYRE_NOBLE_TOP_UNSCENTED_), 1, 'pre-scent stage gets unscented spares');
+  assert.equal(u.items.get(I.VYRE_NOBLE_TOP), undefined);
+});
+
+
+test('Sins disguise chest handlers only claim the exact cache object, tile, plane and stage', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 78);
+  const open = h.namedObjects.get('Closed Chest').Open;
+  const search = h.namedObjects.get('Open Chest').Search;
+  const shut = h.namedObjects.get('Open Chest').Shut;
+  const at = (objectId, x = 3600, y = 9617, z = 0) => ({ player: p, objectId, location: { x, y, z }, handled: false });
+
+  for (const event of [at(37986, 3601, 9617), at(37986, 3600, 9616), at(37986, 3600, 9617, 1), at(37985)]) {
+    assert.equal(open(event), false, 'Open refuses a non-canonical chest target');
+    assert.equal(event.handled, false);
+  }
+  assert.ok(!h.objects.some(object => object.getOwner() === p && object.getId() === 37987), 'no chest overlay from wrong object/location');
+
+  const wrongSearch = at(37987, 3601, 9617);
+  assert.equal(search(wrongSearch), false, 'Search refuses an open chest elsewhere');
+  assert.equal(wrongSearch.handled, false);
+  assert.equal(p.items.get(I.VYRE_NOBLE_TOP_UNSCENTED_), undefined);
+
+  const notOpened = at(37987);
+  assert.equal(search(notOpened), false, 'Search requires the player to have opened the real chest');
+  assert.equal(shut(at(37987, 3600, 9617, 1)), false, 'Shut refuses wrong plane');
+
+  const early = player();
+  h.quest.setStage(early, 72);
+  const earlyOpen = { player: early, objectId: 37986, location: { x: 3600, y: 9617, z: 0 }, handled: false };
+  assert.equal(open(earlyOpen), false, 'Open is inactive before the disguise is made');
+  assert.equal(earlyOpen.handled, false);
+  const earlyShut = { player: early, objectId: 37987, location: { x: 3600, y: 9617, z: 0 }, handled: false };
+  assert.equal(shut(earlyShut), false, 'Shut is inactive before the disguise is made');
+  assert.equal(earlyShut.handled, false);
 });

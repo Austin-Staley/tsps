@@ -1278,3 +1278,64 @@ test('stage-32 Bighead uses the shipped questions instead of the wiki unavailabl
   assert.ok(p.prompt, 'post-relog Bighead still opens options');
   assert.ok(!p.messages.some((text) => /conversation isn't available/.test(text)));
 });
+
+
+test('LOTG lost or full-bag priest keys can be re-earned without a permanent key bit', () => {
+  const h = harness('LandOfTheGoblins');
+  const priest = (id) => ({ getId: () => id, getLocation: () => new core.Location(3727, 4319, 0) });
+  const p = player();
+  h.quest.setStage(p, 34);
+  p.attrs.set('quest.land_of_the_goblins.keys', 1 << 0); // key previously stolen, item lost
+  npcInteractionWith(h, p, priest(N.PRIEST_12), 2, actions(['Talk-to', 'Pickpocket']));
+  assert.equal(p.items.get(I.SARAGORGAK_KEY), 1, 'lost key is pickpocketed again');
+
+  const full = player();
+  h.quest.setStage(full, 34);
+  const base = full.getInventory();
+  full.getInventory = () => ({ ...base, getFreeSlots: () => 0, isFull: () => true });
+  npcInteractionWith(h, full, priest(N.PRIEST_12), 2, actions(['Talk-to', 'Pickpocket']));
+  assert.equal(full.items.get(I.SARAGORGAK_KEY), undefined, 'full bag gives no key');
+  assert.equal(full.attrs.get('quest.land_of_the_goblins.keys') ?? 0, 0, 'full bag does not set the key bit');
+  assert.match(full.messages.at(-1), /inventory space/);
+
+  const banked = player();
+  h.quest.setStage(banked, 34);
+  banked.getBanks = () => [{ getAmount: (id) => (id === I.SARAGORGAK_KEY ? 1 : 0) }];
+  npcInteractionWith(h, banked, priest(N.PRIEST_12), 2, actions(['Talk-to', 'Pickpocket']));
+  assert.equal(banked.items.get(I.SARAGORGAK_KEY), undefined, 'banked key is not duplicated');
+  assert.equal(banked.attrs.get('quest.land_of_the_goblins.keys') & 1, 1, 'bank ownership still credits the mask');
+});
+
+test('POG lost crystal chime seed is recoverable from the golden chest, respecting capacity and bank', () => {
+  const h = harness('PathOfGlouphrie');
+  const p = player();
+  h.quest.setStage(p, 16);
+  p.attrs.set('quest.the_path_of_glouphrie.bits', (1 << 11) | (1 << 24));
+  p.attrs.set('the-path-of-glouphrie:monoliths', JSON.stringify([[2788,4246],[2787,4254],[2789,4253],[2787,4256],[2791,4256]]));
+  openGolden(h, p);
+  assert.equal(p.items.get(I.CRYSTAL_CHIME_SEED), 1, 'lost seed is recoverable from the storeroom chest');
+
+  p.items.clear();
+  const base = p.getInventory();
+  p.getInventory = () => ({ ...base, getFreeSlots: () => 0, isFull: () => true });
+  p.messages.length = 0;
+  openGolden(h, p);
+  assert.equal(p.items.get(I.CRYSTAL_CHIME_SEED), undefined, 'full bag refuses before granting');
+  assert.match(p.messages.at(-1), /inventory space/);
+
+  const banked = player();
+  h.quest.setStage(banked, 16);
+  banked.attrs.set('quest.the_path_of_glouphrie.bits', (1 << 11) | (1 << 24));
+  banked.attrs.set('the-path-of-glouphrie:monoliths', JSON.stringify([[2788,4246],[2787,4254],[2789,4253],[2787,4256],[2791,4256]]));
+  banked.getBanks = () => [{ getAmount: (id) => (id === I.CRYSTAL_CHIME ? 1 : 0) }];
+  openGolden(h, banked);
+  assert.equal(banked.items.get(I.CRYSTAL_CHIME_SEED), undefined, 'banked chime prevents duplicate seed');
+
+  const held = player();
+  h.quest.setStage(held, 16);
+  held.attrs.set('quest.the_path_of_glouphrie.bits', (1 << 11) | (1 << 24));
+  held.attrs.set('the-path-of-glouphrie:monoliths', JSON.stringify([[2788,4246],[2787,4254],[2789,4253],[2787,4256],[2791,4256]]));
+  held.items.set(I.CRYSTAL_CHIME, 1);
+  openGolden(h, held);
+  assert.equal(held.items.get(I.CRYSTAL_CHIME_SEED), undefined, 'held chime prevents duplicate seed');
+});

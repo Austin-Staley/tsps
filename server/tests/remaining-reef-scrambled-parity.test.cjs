@@ -12,6 +12,9 @@ const { RegionManager } = require('../dist/game/collision/RegionManager');
 const runtime = require('../plugins/quests/QuestRuntime');
 const StaticShips = require('../plugins/skills/sailing/StaticShips.Sailing');
 const { World } = require('../dist/game/World');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const { pickVariant } = require('../plugins/npcs/NpcDialogues.plugin');
+const transcripts = require('../data/definitions/npc-dialogues.json');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers, O = core.ObjectIdentifiers;
 let nextIndex = 1;
@@ -619,4 +622,124 @@ test('Red Reef stage-40 Zenith Spencer disembark uses the normal StaticShips ret
       if (ship.boat.ownerPlayerId === p.getIndex()) StaticShips.dispose(ship);
     }
   }
+});
+
+
+/** Plays Theodore through the real transcript runner, including NpcDialogues' null fallback. */
+function theodoreTalk(h, p, stage) {
+  h.quest.setStage(p, stage);
+  const choice = (h.hooks.onNpcDialogueVariant ?? [])
+    .map(fn => fn({ player: p, npcId: N.THEODORE_PAXTON })).find(Boolean);
+  const record = transcripts['The Red Reef'];
+  let variant = choice;
+  if (!variant) {
+    const steps = pickVariant(record);
+    variant = Object.keys(record.variants).find(key => record.variants[key] === steps);
+  }
+  assert.ok(variant, 'Theodore must resolve a variant');
+  p.manager.reset();
+  assert.equal(runtime.startTranscript(h.api, p, N.THEODORE_PAXTON, 'The Red Reef', variant), true);
+  const lines = [];
+  for (let step = 0; step < 40; step++) {
+    const current = p.manager.getCurrent();
+    if (!current) break;
+    if (current instanceof core.NpcDialogue) {
+      lines.push({ speaker: core.NpcDefinition.forId(current.getNpcId())?.getName?.(), text: current.getText() });
+    }
+    p.manager.advance();
+  }
+  return { variant, lines };
+}
+
+test('Scrambled pet egg survives a full inventory and can be retried without duplication', () => {
+  const h = harness('Scrambled'), p = player();
+  h.quest.setStage(p, 30);
+  const inv = new Inventory(p);
+  inv.resetItems();
+  p.getInventory = () => inv;
+  inv.adds(385, 28); // 28 non-stackable sharks fill every slot
+  assert.equal(inv.getFreeSlots(), 0);
+  const talk = h.namedNpcs.get('Humphrey Dumphrey')['Talk-to'];
+  talk({ player: p, npcId: N.HUMPHREY_DUMPHREY });
+  assert.equal(inv.getAmount(I.EGG_4), 0, 'no egg may be swallowed on a full inventory');
+  assert.equal((Number(p.attrs.get('quest.scrambled.bits')) || 0) & 4, 0, 'the received bit stays clear');
+  assert.ok(p.messages.some(text => text.includes("couldn't hold all those items")),
+    'the engine still gives its normal full-inventory feedback');
+  inv.deleteNumber(385, 1);
+  talk({ player: p, npcId: N.HUMPHREY_DUMPHREY });
+  assert.equal(inv.getAmount(I.EGG_4), 1);
+  assert.equal((Number(p.attrs.get('quest.scrambled.bits')) || 0) & 4, 4);
+  talk({ player: p, npcId: N.HUMPHREY_DUMPHREY });
+  assert.equal(inv.getAmount(I.EGG_4), 1, 'retrying after success cannot duplicate the egg');
+});
+
+test("Scrambled keeps interactive King's men through the stage-28 finisher and post-quest", () => {
+  const h = harness('Scrambled'), p = player();
+  h.quest.setStage(p, 28);
+  h.login(p);
+  assert.equal(h.quest.getStage(p), 28, 'login must not auto-complete the quest');
+  const men = () => h.npcs.filter(npc =>
+    [N.NEZKETI, N.KAUAYOTL, N.ACATZIN].includes(npc.id) && !npc.removed);
+  assert.equal(men().length, 3, 'the stage-28 finisher needs a real interactive actor');
+  h.talk(p, N.NEZKETI);
+  for (let step = 0; step < 400 && h.quest.getStage(p) !== 30 && p.manager.getCurrent(); step++) {
+    p.manager.advance();
+  }
+  assert.equal(h.quest.getStage(p), 30);
+  const rewards = p.xp.slice();
+  assert.equal(men().length, 3, 'post-quest King\u2019s men stay available');
+  h.talk(p, N.NEZKETI);
+  for (let step = 0; step < 40 && p.manager.getCurrent(); step++) p.manager.advance();
+  assert.deepEqual(p.xp, rewards, 'post-quest dialogue must not grant rewards again');
+});
+
+test('Red Reef stage-30 Zenith disembark leaves the real static ship', () => {
+  const h = harness('RedReef'), p = player();
+  try {
+    h.quest.setStage(p, 30);
+    const zenith = StaticShips.all().find(ship =>
+      ship.id === 'the_zenith' && ship.boat.ownerPlayerId === p.getIndex());
+    assert.ok(zenith, 'stage 30 owns the real Zenith');
+    p.items.set(I.MEDALLION_OF_THE_DEEP, 1);
+    p.moveTo(new core.Location(2870, 2504, 0));
+    const landing = p.getLocation().clone();
+    assert.equal(StaticShips.board(p, zenith), null);
+    assert.equal(p.getArea()?.boat, zenith.boat);
+    h.talk(p, N.SPENCER_BRENTWOOD);
+    h.continueToMenu(p);
+    h.choose(p, "Actually, I'd like to disembark.");
+    assert.notEqual(p.getArea()?.boat, zenith.boat, 'the choice leaves the Zenith at stage 30');
+    assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()],
+      [landing.getX(), landing.getY()], 'returns to the canonical boarding landing');
+    assert.equal(h.quest.getStage(p), 30, 'disembarking does not advance the quest');
+    assert.deepEqual(p.xp, [], 'no rewards on disembark');
+  } finally {
+    for (const ship of StaticShips.all()) {
+      if (ship.boat.ownerPlayerId === p.getIndex()) StaticShips.dispose(ship);
+    }
+  }
+});
+
+test('Red Reef Theodore uses his exact NPC page before the meeting and after completion', () => {
+  const h = harness('RedReef'), p = player();
+  const pre = 'on-red-rock-talking-to-theodore-paxton-before-talking-to-the-receptionist';
+  const before = theodoreTalk(h, p, 0);
+  assert.equal(before.variant, pre, 'fresh stage 0 must not fall back to Elder Raley');
+  assert.ok(before.lines.some(line => line.speaker === 'Theodore Paxton'
+    && line.text.includes("don't seem to recall inviting you")), JSON.stringify(before.lines));
+  assert.ok(!before.lines.some(line => /Raley/.test(line.speaker ?? '')), 'must not steal Elder Raley');
+
+  for (const stage of [10, 12, 14]) {
+    const active = theodoreTalk(h, p, stage);
+    assert.equal(active.variant, pre, 'pre-meeting window at stage ' + stage);
+    assert.ok(active.lines.some(line => line.speaker === 'Theodore Paxton'), 'Theodore speaks at stage ' + stage);
+  }
+  assert.equal(theodoreTalk(h, p, 16).variant, 'on-red-rock-talking-to-theodore-paxton');
+  assert.equal(theodoreTalk(h, p, 18).variant, 'on-red-rock-talking-to-theodore-paxton-again');
+
+  const xp = p.xp.slice();
+  const done = theodoreTalk(h, p, 42);
+  assert.equal(h.quest.getStage(p), 42, 'completed talk must not change stage');
+  assert.deepEqual(done.lines.map(line => line.speaker), ['Theodore Paxton']);
+  assert.deepEqual(p.xp, xp, 'completed talk must not reward');
 });

@@ -136,6 +136,10 @@ module.exports = function registerDragonSlayerQuest(api) {
   /** Guildmaster follow-up answers; set means the question has not been asked yet. */
   const INSTRUCTION = { melzar: 0, oracle: 1, wormbrain: 2, ship: 3, shield: 4 };
   const SHORTCUT_VARBIT = 3741;
+  const PRINCE_ALI_KEY = "prince_ali_rescue";
+  const PRINCE_STAGE_WIG = 20;
+  const PRINCE_STAGE_SAVED = 100;
+  const PRINCE_WIG_ITEMS = [ItemIdentifiers.WIG, ItemIdentifiers.WIG_2];
   const VOYAGE = "the-dragon-of-crandor-sailing-to-crandor";
   const NED_SCENE_ID = 824, JENKINS_SCENE_ID = 826;
   const FIRE_SMALL = 25156, FIRE_LARGE = 25155, FIREBALL = 1155, FIRE_IMPACT_GRAPHIC = 1154;
@@ -152,8 +156,23 @@ module.exports = function registerDragonSlayerQuest(api) {
   const saved = (player, key) => Number(player.getAttribute(key)) || 0;
   const askedAbout = (player, bit) => (saved(player, INSTRUCTIONS_ATTRIBUTE) & (1 << bit)) === 0;
   const completedQuest = (player, key) => getRegisteredQuests().find(entry => entry.key === key)?.isComplete?.(player) === true;
+  const questStage = (player, key) => {
+    const request = { player, key, stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return Number(request.stage) || 0;
+  };
+  const princeNeedsWig = (player) => {
+    const stage = questStage(player, PRINCE_ALI_KEY);
+    return stage >= PRINCE_STAGE_WIG && stage < PRINCE_STAGE_SAVED
+      && !PRINCE_WIG_ITEMS.some(id => hasItem(player, id));
+  };
   const later = (key, ticks, action) => TaskManager.submit(new CountdownTask(key, ticks, action));
   const offerings = player => saved(player, OFFERINGS_ATTRIBUTE) || (oracleState(player) >= 3 ? 15 : 0);
+  function onNedShip(player) {
+    const loc = player.getLocation();
+    return loc.getZ() === 1 && Math.abs(loc.getX() - 3048) <= 5
+      && (Math.abs(loc.getY() - 3207) <= 5 || Math.abs(loc.getY() - 9639) <= 5);
+  }
   function wireStage(stage, player) {
     if (stage === STAGE_CRANDOR) return saved(player, ELVARG_KILLED_ATTRIBUTE) ? 9 : 8;
     if (stage === STAGE_NED_READY) return 7;
@@ -507,17 +526,16 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
 
     if (NED_NPC_IDS.has(npcId)) {
-      if (stage >= STAGE_COMPLETE) {
-        return { page: NED_PAGE, variant: "standard-dialogue-after-completion-of-dragon-slayer-i" };
-      }
+      // Completed Dragon Slayer no longer owns Ned; Prince Ali or Ned's standard page decides.
+      if (stage >= STAGE_COMPLETE) return null;
+      // An active Prince Ali wig request outranks DS land dialogue. DS keeps only the
+      // on-ship departure window so its voyage cannot be blocked by the other quest.
+      if (princeNeedsWig(player) && !(stage === STAGE_NED_READY && onNedShip(player))) return null;
       if (stage === STAGE_CRANDOR) {
         return { page: PAGE, variant: "the-dragon-of-crandor-talking-to-ned-after-reaching-crandor" };
       }
       if (stage >= STAGE_NED_READY) {
-        const loc = player.getLocation();
-        const onShip =
-          loc.getZ() === 1 && Math.abs(loc.getX() - 3048) <= 5 && (Math.abs(loc.getY() - 3207) <= 5 || Math.abs(loc.getY() - 9639) <= 5);
-        return onShip
+        return onNedShip(player)
           ? { page: PAGE, variant: "the-dragon-of-crandor-talking-to-ned-on-the-lady-lumbridge" }
           : { page: PAGE, variant: "the-dragon-of-crandor-talking-to-ned-after-giving-him-the-crandor-map" };
       }
