@@ -3923,34 +3923,6 @@ export class PluginManager {
           );
         }
       },
-      clearMapTerrainBlockAt: (x, y, plane) => {
-        if (!Number.isInteger(x) || x < 0 || !Number.isInteger(y) || y < 0 ||
-            !Number.isInteger(plane) || plane < 0 || plane > 3) {
-          console.warn(
-            `[plugins] ${pluginName} attempted invalid clearMapTerrainBlockAt ${x},${y},${plane}`
-          );
-          return;
-        }
-        try {
-          const collisionModule = require("../game/collision/RegionManager");
-          const RegionManager = collisionModule.RegionManager;
-          const regionId = RegionManager.regionIdForTile(x, y);
-          const localX = x - ((regionId >> 8) << 6);
-          const localY = y - ((regionId & 0xff) << 6);
-          const result = MapRegionReplacementManager.clearTerrainBlockTile(
-            regionId,
-            plane,
-            localX,
-            localY
-          );
-          applyPluginRegionReplacement(pluginName, regionId, result);
-        } catch (err) {
-          console.error(
-            `[plugins] ${pluginName} failed to clear terrain block at ${x},${y},${plane}`,
-            err
-          );
-        }
-      },
       registerDefinitionSource: (definitionType, source) => {
         try {
           DefinitionLoader.registerSource(definitionType, pluginName, source);

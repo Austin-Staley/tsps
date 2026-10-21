@@ -34,8 +34,8 @@
  *   no words and a completed player replays "after-killing-treus-dayth", the closest
  *   variant in the dump.
  * - The flooded chamber is walked across normally (captured route). Cache 241 clips
- *   the one crossing tile; installFloodedChannelFix clears only that BLOCKED_TILE at
- *   runtime, leaving every other terrain flag and object unchanged.
+ *   the one crossing tile; installFloodedChannelFix clears only that BLOCKED_TILE
+ *   after each region load, leaving every other terrain flag and object unchanged.
  * - Walking the fungus out through the main-entrance stairs reuses the cart-tunnel
  *   crumble line, which mentions crawling.
  * - A few system lines have no wiki transcript and are authored: the unpowered lift,
@@ -57,6 +57,7 @@ module.exports = function registerHauntedMineQuest(api) {
     Sound,
     Sounds,
     ObjectManager,
+    RegionManager,
     TaskManager,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
@@ -149,6 +150,8 @@ module.exports = function registerHauntedMineQuest(api) {
   const CART_END_TILE = { x: 2774, y: 4537 };
   const LIFT_ROOM_TILE = { x: 2807, y: 4492 };
   const LEVEL_6_LIGHT_LEVEL = 0;
+  const FLOODED_CHANNEL_TILE = { x: 2725, y: 4453 };
+  const FLOODED_CHANNEL_REGION = 10821;
 
   // Captured cart tutorial (interface 144) and its cart actors/cameras.
   const CART_CAMERA_START = [[2777, 4511, 400], [2778, 4506, 100]];
@@ -1133,8 +1136,15 @@ module.exports = function registerHauntedMineQuest(api) {
   }
 
   /** Capture 1768 crosses 2725,4453 after the lift; cache 241 clips that one tile. */
-  function installFloodedChannelFix() {
-    api.clearMapTerrainBlockAt(2725, 4453, 0);
+  function installFloodedChannelFix({ regionId } = {}) {
+    if (regionId !== FLOODED_CHANNEL_REGION) return;
+    RegionManager.removeClipping(
+      FLOODED_CHANNEL_TILE.x,
+      FLOODED_CHANNEL_TILE.y,
+      0,
+      RegionManager.BLOCKED_TILE,
+      null
+    );
   }
 
   api.persistAttribute(BITS_ATTRIBUTE);
@@ -1159,7 +1169,7 @@ module.exports = function registerHauntedMineQuest(api) {
     onReward: grantReward,
   });
 
-  api.onServerStartup(installFloodedChannelFix);
+  api.onRegionLoaded(installFloodedChannelFix);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
