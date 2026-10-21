@@ -240,9 +240,14 @@ SpellTeleports.register({
       teleport: (player, destination, type, warning, onArrival, onMiddle) =>
         teleports.push({ destination, type, onArrival, onMiddle }),
     },
-    TeleportType: { TELE_TAB: "TELE_TAB" },
+    TeleportType: { TELE_TAB: "TELE_TAB", TELE_SCROLL: "TELE_SCROLL" },
+    SpellTeleports: require("../dist/game/content/combat/magic/SpellTeleports").SpellTeleports,
+    LunarSpells: { getTeleportDestinations: () => [] },
+    ArceuusSpells: { getTeleportDestinations: () => [] },
   },
+  persistAttribute() {},
   onItemAction: (handler) => { breakTablet = handler; },
+  onPlayerLogin() {},
   emitCustomEvent: (name, request) => houseTablet(request),
   onInterfaceActionClick() {},
 });
@@ -251,6 +256,7 @@ function tabletHolder(count) {
   const items = new Array(count).fill(ItemIdentifiers.VARROCK_TELEPORT);
   return {
     items,
+    getAttribute: () => undefined,
     getInventory: () => ({
       contains: (id) => items.includes(id),
       deleteNumber: (id) => items.splice(items.indexOf(id), 1),
@@ -288,7 +294,7 @@ test("a redirected Rellekka house tablet goes to the portal outside the Fremenni
   assert.equal(teleports[0].type, "TELE_TAB");
 });
 
-test("a Nardah scroll uses its Teleport action and consumes only after teleport starts", () => {
+test("a Nardah scroll uses its Teleport action and is used up on the click", () => {
   teleports.length = 0;
   allowTeleport = true;
   const player = tabletHolder(1);
@@ -301,10 +307,8 @@ test("a Nardah scroll uses its Teleport action and consumes only after teleport 
     [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
     [3401, 2918, 0]
   );
-  assert.equal(teleports[0].type, "TELE_TAB");
-  assert.equal(player.items.length, 1, "scroll is consumed two ticks into the teleport");
-  teleports[0].onMiddle();
-  assert.equal(player.items.length, 0);
+  assert.equal(teleports[0].type, "TELE_SCROLL");
+  assert.equal(player.items.length, 0, "scrolls go on the click (docs/teleport-tablets.md)");
 });
 
 test("a refused tablet (teleblock, deep Wilderness, busy) is not used up", () => {

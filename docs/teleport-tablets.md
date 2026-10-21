@@ -20,7 +20,8 @@ There is no teleport sound of the player's own: a `sound_area` 200 on tick 1 of 
 - `TELE_TAB` plays 4069 (delay 16) on the click with sound 965 (delay 15), then 4071 and spotanim 678 as its middle step, lands with the reset animation and resets again the tick after.
 - `TeleportTypeOptions` carries what only some teleports do: their own sound instead of the spell teleport sound, the `busy` varbit, and the repeated end animation.
 - `TeleportHandler.teleport` takes an `onMiddle` callback; the tablet plugins use it to remove the tablet on tick 2. The usual checks (Wilderness level, teleblock, busy) still run before anything happens, so a refused tablet is never used up.
-- `TeleportTask` runs its steps 0 and 1 both on the click's tick (once when submitted, once in that tick's task pass), so step n falls on tick n - 1. `TELE_TAB`'s start tick is 5 so that it lands on tick 4; other teleport types are unchanged until a capture of them shows their timing.
+- `TeleportTask` runs step 0 when the click is handled and step n on the click's tick + n: `World.process` runs the task pass before it handles packets, so the click's own tick has no task pass left. `TELE_TAB`'s start tick is 4 so that it lands on tick 4, with the absorb (start tick - 2) on tick 2; `NORMAL` (3) and `TELE_SCROLL` (3) land on tick 3 as their captures do. Checked on a running server: Break on tick 12, tablet used up on 14, landing on 16. The tests model this order (the click after tick 0's task pass). Other teleport types are unchanged until a capture of them shows their timing.
+- Before this, the tests modelled a click handled before the task pass, which the real loop never does, so tablets were absorbed and landed a tick late: in the client, a tick of nothing between the throw and the absorb (the throw's delay of 16 cycles plus its 880 ms ends exactly on tick 2 in OSRS).
 - Every teleport type frees the player on the landing tick (movement, untargetable, click delay), as the capture's `busy` = 0 on tick 4 shows; it used to hold them two more ticks. The release comes before the arrival callback, so a plugin can still hold the player there (boarding a boat, entering a house).
 - `server/tests/teleport-tablets.test.cjs` runs a tablet teleport through the real task manager and checks each tick against the table above.
 
@@ -44,6 +45,20 @@ Facts from rsprox captures of teleport scrolls (Spider cave, 20 attempts in 14 r
 | 4 | animation reset again |
 
 `TELE_SCROLL` plays these, with the map_anim sent as a spotanim on the player. The scroll is used up on the click, after the usual teleport checks.
+
+## Standard teleport and jewellery
+
+`TeleportType.NORMAL` (standard spellbook teleports, teleport jewellery, the skull sceptre) follows rsprox captures of Varrock Teleport (rev 235-236) and a necklace of passage rubbed to Wyrmscraig. Tick 0 is the click:
+
+| Tick | Sent |
+| --- | --- |
+| 0 | animation `human_castteleport` (714); spotanim `teleport_casting` (111) at height 92; sound 200; varbit `busy` = 1 (from rev 236); jewellery: "You rub the necklace..." |
+| 3 | the teleport; animation reset; varbit `busy` = 0; jewellery uses its charge here ("<col=7f007f>Your necklace of passage crumbles away.</col>" on the last) |
+| 4 | animation reset again |
+
+111 plays sequence 667 (12 frames, 89 client cycles), whose lead-in comes before the bubble frames, so the bubble follows the arms on its own. `NORMAL` used to play 308 (only those bubble frames) a tick later with a 15-cycle delay, and 715 on landing; neither is in the captures.
+
+Jewellery charge messages are all `7f007f` and spell the count out ("Your ring of dueling has seven uses left.", "has one use left."); the Slayer ring uses digits ("Your Slayer ring has 7 charges left.") and ends with "Your Slayer ring has worn out.". Last charges: "crumbles to dust." for the games necklace, ring of dueling and Digsite Pendant, "crumbles away." for the necklace of passage and burning amulet. The necklace of passage's fourth Rub destination is Wyrmscraig (cache), landing at 2592, 2220 (captured).
 
 ## Not yet done
 
