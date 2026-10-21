@@ -22,7 +22,7 @@ import { GameConstants } from "../../GameConstants";
 import { FastDeque } from "../../../util/FastDeque";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { Wilderness } from "../../content/wilderness/Wilderness";
-import { applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
+import { applyRunEnergyDrainModifiers, applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
 import { PluginManager } from "../../../plugins/PluginManager";
 import type { PluginObjectRouteEvent } from "../../../plugins/PluginTypes";
 import * as fs from "fs";
@@ -692,7 +692,7 @@ export class MovementQueue {
             return;
         }
         if (player.isRunningReturn()) {
-            player.setRunEnergy(player.getRunEnergy() - 1);
+            player.setRunEnergy(player.getRunEnergy() - applyRunEnergyDrainModifiers(player, 1));
             if (player.getRunEnergy() <= 0) {
                 player.setRunEnergy(0);
                 player.setRunning(false);

@@ -312,6 +312,22 @@ test("the Fountain of Rune recharges glories to 6 but not skills necklaces", () 
   assert.ok([ItemIds.AMULET_OF_GLORY_6_, ItemIdentifiers.AMULET_OF_ETERNAL_GLORY].includes(worn.getId()));
 });
 
+test("the Fountain of Rune can turn a trimmed glory into an eternal glory", () => {
+  completeQuests.clear();
+  completeQuests.add("Heroes' Quest");
+  const player = createPlayer();
+  const trimmed = new Item(ItemIds.AMULET_OF_GLORY_T1_, 1);
+  player.inventory.setItem(0, trimmed);
+  const random = Math.random;
+  Math.random = () => 0;
+  try {
+    useOnObject(player, trimmed, ObjectIdentifiers.FOUNTAIN_OF_RUNE);
+  } finally {
+    Math.random = random;
+  }
+  assert.equal(trimmed.getId(), ItemIdentifiers.AMULET_OF_ETERNAL_GLORY);
+});
+
 test("the Legends' Guild totem pole recharges skills necklaces and combat bracelets to 6", () => {
   completeQuests.clear();
   completeQuests.add("Legends' Quest");
