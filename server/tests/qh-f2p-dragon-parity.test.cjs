@@ -532,16 +532,16 @@ test('Dragon Slayer routes Melzar FUNLADDERTOP 2605 into the real basement and k
   };
 
   const leaving = player();
-  leaving.moveTo(new core.Location(2937, 3252, 0));
+  leaving.moveTo(new core.Location(2939, 3252, 0));
   assert.equal(clickExit(leaving, exitDoor).handled, true);
-  assert.deepEqual([leaving.getLocation().getX(), leaving.getLocation().getY()], [2939, 3252],
-    'ground NE room exits east');
+  assert.deepEqual([leaving.getLocation().getX(), leaving.getLocation().getY()], [2937, 3252],
+    'ground NE ladder room exits into the maze');
 
   const groundReturn = player();
-  groundReturn.moveTo(new core.Location(2939, 3252, 0));
+  groundReturn.moveTo(new core.Location(2937, 3252, 0));
   assert.equal(clickExit(groundReturn, exitDoor).handled, false);
-  assert.deepEqual([groundReturn.getLocation().getX(), groundReturn.getLocation().getY()], [2939, 3252],
-    'the east exit corridor cannot re-enter the ground room');
+  assert.deepEqual([groundReturn.getLocation().getX(), groundReturn.getLocation().getY()], [2937, 3252],
+    'the maze cannot re-enter the ground ladder room');
 
   const exits = [
     [2931, 9640, [2932, 9640], [2930, 9640], 'zombie room'],
@@ -569,6 +569,43 @@ test('Dragon Slayer routes Melzar FUNLADDERTOP 2605 into the real basement and k
   assert.equal(clickExit(unrelatedExit, unrelatedDoor).handled, false);
   assert.deepEqual([unrelatedExit.getLocation().getX(), unrelatedExit.getLocation().getY()], [2999, 3000],
     'no generic Exit door handler exists outside the four cache placements');
+});
+
+test('Dragon Slayer leaves the Melzar ladder room through the east exterior door', () => {
+  const h = harness();
+  const door = MapObjects.get(O.DOOR_91, new core.Location(2941, 3248, 0), null);
+  assert.ok(door, 'real exterior Door 2595 at 2941,3248');
+  const click = (p) => {
+    const event = {
+      player: p, object: door, objectId: O.DOOR_91, definition: door.getDefinition(),
+      location: door.getLocation(), clickType: 1, handled: false,
+    };
+    h.clicks.get(O.DOOR_91)(event);
+    return event;
+  };
+
+  // The ladder from the basement chest lands in the north-east room, west of
+  // this door; the Exit doors only lead into the maze, so this is the way out.
+  const leaving = player();
+  leaving.moveTo(new core.Location(2940, 3248, 0));
+  assert.equal(click(leaving).handled, true);
+  assert.deepEqual([leaving.getLocation().getX(), leaving.getLocation().getY(), leaving.getLocation().getZ()],
+    [2942, 3248, 0], 'the ladder room exits to the building east side');
+
+  const entering = player();
+  h.quest.setStage(entering, 2);
+  entering.items.set(I.MAZE_KEY, 1);
+  entering.moveTo(new core.Location(2942, 3248, 0));
+  assert.equal(click(entering).handled, true);
+  assert.deepEqual([entering.getLocation().getX(), entering.getLocation().getY()],
+    [2933, 3248], 'the exterior side with the maze key still enters the maze');
+
+  const locked = player();
+  locked.moveTo(new core.Location(2942, 3248, 0));
+  assert.equal(click(locked).handled, true);
+  assert.deepEqual([locked.getLocation().getX(), locked.getLocation().getY()], [2942, 3248],
+    'the exterior side without the key keeps the door locked');
+  assert.deepEqual(locked.messages, ['The door is locked.']);
 });
 
 test('Dragon Slayer Ned selector defers to Prince Ali wig while preserving DS voyage', () => {
