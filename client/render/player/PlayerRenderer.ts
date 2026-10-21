@@ -596,6 +596,8 @@ export class PlayerRenderer {
             return cached ?? undefined;
         }
         let matrices: Float32Array | null = null;
+        // A frame still streaming in leaves the rest pose: draw it, but don't keep it.
+        let keep = true;
         try {
             const rig = this.rigFor(baseRec.baseModel);
             // The CPU path re-centres the posed model on the base centre; GPU poses assume none.
@@ -608,7 +610,7 @@ export class PlayerRenderer {
                         : undefined;
                 if (!seqType?.isSkeletalSeq?.() && !overlayType?.isSkeletalSeq?.()) {
                     const pose = new LabelPose(rig);
-                    this.applySequenceTransformationsToModel(
+                    keep = this.applySequenceTransformationsToModel(
                         pose,
                         seqType,
                         group.seqId | 0,
@@ -618,13 +620,14 @@ export class PlayerRenderer {
                         (group.overlayFrameIdx ?? -1) | 0,
                         mv,
                         group.interpolation,
-                    );
+                    ) || group.seqId < 0;
                     if (!pose.needsCpu) matrices = pose.finish(0, 0);
                 }
             }
         } catch {
             matrices = null;
         }
+        if (!keep) return matrices ?? undefined;
         this.poseCache.set(batchKey, matrices);
         while (this.poseCache.size > PlayerRenderer.POSE_CACHE_MAX_ENTRIES) {
             this.poseCache.delete(this.poseCache.keys().next().value as string);
