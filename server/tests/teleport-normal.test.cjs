@@ -45,9 +45,11 @@ test('the standard teleport: arms on cast, bubble at T+1, landing on tick 3', (t
     t.after(() => { Sounds.sendSound = sendSound; });
     const { player, ticks, log, nextTick } = recordingPlayer();
 
-    // The click is handled between ticks; its sends go out with tick 0.
+    // World.process runs the task pass before packets, so the click is handled after tick 0's
+    // task pass: its sends go out with tick 0, and the task's next step runs on tick 1.
     TeleportHandler.teleport(player, new Location(3213, 3424, 0), TeleportType.NORMAL, false,
         () => log('arrived'));
+    nextTick();
     for (let tick = 0; tick < 6; tick++) {
         TaskManager.process();
         nextTick();
@@ -63,7 +65,7 @@ test('the standard teleport: arms on cast, bubble at T+1, landing on tick 3', (t
 });
 
 test('NORMAL fires the bubble from its middle step with a 15-cycle delay', () => {
-    assert.equal(TeleportType.NORMAL.getStartTick(), 4, 'arrival step lands on tick 3');
+    assert.equal(TeleportType.NORMAL.getStartTick(), 3, 'arrival step lands on tick 3');
     const bubble = TeleportType.NORMAL.getMiddleGraphic();
     assert.equal(bubble.getId(), 308, 'the teleport bubble');
     assert.equal(bubble.getDelay(), 15, 'client cycles, so ~T+1.5 from the T+1 middle step');
