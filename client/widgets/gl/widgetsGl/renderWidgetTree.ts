@@ -1,5 +1,4 @@
 import { ClientState } from "../../../game/ClientState";
-import { isInventoryOpFaded } from "../../../game/widgets/inventoryOpFade";
 import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
@@ -162,12 +161,11 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
 
     // The widget currently being clicked (Client.clickedWidget) is drawn semi-transparent.
     // Reference: UserComparator5.drawInterface: if (var10 == Client.clickedWidget && !var10.isScrollBar) { var14 = 128; }
-    // Note: `clickedWidget` is a private TS field on OsrsClient but exists at runtime; read via `any`.
+    // Note: `widgetInteraction` is a private TS field on OsrsClient but exists at runtime; read via `any`.
     const osrsClient = (opts.game as any)?.osrsClient as any;
+    const clickedWidget = osrsClient?.widgetInteraction?.clickedWidget;
     const clickedWidgetUid: number | null =
-        typeof osrsClient?.clickedWidget?.uid === "number"
-            ? ((osrsClient.clickedWidget.uid | 0) as number)
-            : null;
+        typeof clickedWidget?.uid === "number" ? ((clickedWidget.uid | 0) as number) : null;
 
     // PERF: Validate all dirty layouts in one pass before rendering
     // This avoids per-widget ensureLayout calls during tree traversal
@@ -3010,9 +3008,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             // Scripts set w.transparency via cc_settrans; cache sets w.opacity (same semantics)
             // Clicked/dragged widget is semi-transparent (var14 = 128), except scrollbars.
             // Reference: UserComparator5.drawInterface: if (!var10.isScrollBar) { var14 = 128; }
-            // An inventory item whose op was just sent stays that way until the server answers.
             let trans = w.transparency ?? w.opacity ?? 0;
-            if ((isDragActive || isClickedWidget || isInventoryOpFaded(w)) && !w.isScrollBar) {
+            if ((isDragActive || isClickedWidget) && !w.isScrollBar) {
                 trans = 128;
             }
             const alpha = (255 - trans) / 255;

@@ -19,7 +19,6 @@ import type { WidgetManager } from "../../widgets/WidgetManager";
 import { isWidgetUseTarget } from "../../widgets/WidgetFlags";
 import { ClientState } from "../ClientState";
 import { createSelectedSpellOnWidgetPacket } from "../selectedSpellPackets";
-import { markInventoryOpFade } from "./inventoryOpFade";
 import type { WidgetActionEvent } from "./widgetActionPayload";
 
 /** bankside: the inventory panel shown beside the open bank. */
@@ -282,7 +281,6 @@ export function handleWidgetActionTargeting(
             `[OsrsClient] Inventory action: ${event.option} on slot=${targetSlot}, itemId=${targetItemId}`,
         );
         sendInventoryUse(targetSlot, targetItemId, quantity, event.option);
-        markInventoryOpFade(deps.getWidgetManager(), event.widget);
         return true;
     }
 
