@@ -39,7 +39,7 @@ function recordingPlayer() {
     return { player, ticks, log, nextTick: () => ticks.push([]) };
 }
 
-test('the standard teleport: arms on cast, bubble at T+1, landing on tick 3', (t) => {
+test('the standard teleport plays out as in the OSRS captures, tick by tick', (t) => {
     const sendSound = Sounds.sendSound;
     Sounds.sendSound = (_player, sound) => log(`sound ${sound.getId()} delay ${sound.getDelay()}`);
     t.after(() => { Sounds.sendSound = sendSound; });
@@ -55,21 +55,23 @@ test('the standard teleport: arms on cast, bubble at T+1, landing on tick 3', (t
         nextTick();
     }
 
-    assert.deepEqual(ticks.slice(0, 4), [
-        ['locked', 'anim 714', 'sound 200 delay 0'],
-        ['spotanim 308'],
+    // Varrock Teleport and necklace of passage captures (docs/teleport-tablets.md).
+    assert.deepEqual(ticks.slice(0, 5), [
+        ['locked', 'anim 714', 'spotanim 111', 'sound 200 delay 0', 'varbit 12393=1'],
         [],
-        ['anim 715', 'teleport 3213,3424', 'free', 'arrived'],
+        [],
+        ['anim 65535', 'varbit 12393=0', 'teleport 3213,3424', 'free', 'arrived'],
+        ['anim 65535'],
     ]);
-    assert.deepEqual(ticks.slice(4).flat(), [], 'nothing after');
+    assert.deepEqual(ticks.slice(5).flat(), [], 'nothing after');
 });
 
-test('NORMAL fires the bubble from its middle step with a 15-cycle delay', () => {
+test('NORMAL casts teleport_casting at height 92 with the arms, and nothing mid-teleport', () => {
     assert.equal(TeleportType.NORMAL.getStartTick(), 3, 'arrival step lands on tick 3');
-    const bubble = TeleportType.NORMAL.getMiddleGraphic();
-    assert.equal(bubble.getId(), 308, 'the teleport bubble');
-    assert.equal(bubble.getDelay(), 15, 'client cycles, so ~T+1.5 from the T+1 middle step');
-    assert.equal(bubble.getHeight(), GraphicHeight.HIGH);
-    assert.equal(TeleportType.NORMAL.getStartGraphic(), null, 'no start graphic');
+    const casting = TeleportType.NORMAL.getStartGraphic();
+    assert.equal(casting.getId(), 111, 'teleport_casting, whose own sequence leads in before the bubble');
+    assert.equal(casting.getDelay(), 0);
+    assert.equal(casting.getHeight(), 92);
+    assert.equal(TeleportType.NORMAL.getMiddleGraphic(), null, 'no middle graphic');
     assert.equal(TeleportType.NORMAL.getEndGraphic(), null, 'no landing burst');
 });

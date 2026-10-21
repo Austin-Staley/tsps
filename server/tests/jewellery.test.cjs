@@ -103,7 +103,7 @@ test("rubbing a glory offers its destinations and uses a charge on arrival", () 
 
   assert.deepEqual(teleports, [{ target: [2918, 3176, 0], wildernessLevel: 30 }]);
   assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY_3_);
-  assert.ok(player.messages.includes("<col=7F00FF>Your amulet has 3 charges left.</col>"));
+  assert.ok(player.messages.includes("<col=7f007f>Your amulet has three charges left.</col>"));
 });
 
 test("a glory's last charge leaves an uncharged amulet that can no longer teleport", () => {
@@ -155,7 +155,7 @@ test("a games necklace crumbles after its last charge", () => {
   pick("Wintertodt Camp");
   assert.deepEqual(teleports[0], { target: [1627, 3941, 0], wildernessLevel: 20 });
   assert.equal(player.inventory.getItems()[3], null);
-  assert.ok(player.messages.includes("<col=7F00FF>Your games necklace crumbles to dust.</col>"));
+  assert.ok(player.messages.includes("<col=7f007f>Your games necklace crumbles to dust.</col>"));
 });
 
 test("equipped jewellery teleports straight from its worn option", () => {
@@ -243,7 +243,7 @@ test("the ring of returning rubs straight to the respawn point", () => {
   inventoryClick(player, ring, "Rub");
   assert.equal(prompts.length, 0);
   assert.equal(teleports.length, 1);
-  assert.ok(player.messages.includes("<col=7F00FF>Your ring of returning has 4 uses left.</col>"));
+  assert.ok(player.messages.includes("<col=7f007f>Your ring of returning has four uses left.</col>"));
 });
 
 test("the ring of wealth's Rub submenu and worn options follow the cache's order", async () => {
@@ -265,7 +265,7 @@ test("the slayer ring's Rub submenu is its actions: Check, Teleport, then Master
   player.inventory.setItem(0, ring);
 
   inventoryClick(player, ring, "Rub", { subOpId: 1 });
-  assert.equal(player.messages.at(-1), "Your slayer ring has 8 charges left.");
+  assert.equal(player.messages.at(-1), "Your Slayer ring has 8 charges left.");
   assert.equal(customEvents.at(-1)[0], "slayer:check", "the Slayer plugin adds the task");
   assert.equal(teleports.length, 0, "Check doesn't teleport");
 

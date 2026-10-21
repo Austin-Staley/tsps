@@ -23,17 +23,23 @@ function delayed(id: number, delay: number, priority: Priority): Animation {
 
 export class TeleportType {
     // Spellbooks
-    // Standard spellbook teleport: arms wide (714, human_castteleport) on cast, the bubble
-    // (308) flashing mid-teleport, 715 (human_castteleport_reverse) on landing 3 ticks after
-    // cast. The anim/graphic/sound ids and the landing tick are as captured for the skull
-    // sceptre's shared standard teleport (docs/stronghold-of-security.md).
-    // The bubble must not fire with the arms: 714 rises first, so a same-tick bubble reads as
-    // coming first (seen in game). Fired from TeleportTask's middle step (T+1) with a 15-cycle
-    // client delay, the flash lands at ~T+1.5, clear of the arms and ahead of departure. The 15
-    // is tuned to that window, not captured.
+    // Standard spellbook teleport, also jewellery and the skull sceptre, as in rsprox captures
+    // (Varrock Teleport, necklace of passage; docs/teleport-tablets.md): human_castteleport (714)
+    // with teleport_casting (111) at height 92 and the teleport sound on the cast, busy until
+    // landing on tick 3 with the animation reset, and the reset again a tick later. 111's own
+    // sequence (667) leads in before the bubble, so the bubble follows the arms by itself.
     // TeleportTask runs step 0 on the click and step n on the click's tick + n (the task pass
     // runs before packets), so start tick 3 lands on tick 3.
-    public static readonly NORMAL = new TeleportType(3, new Animation(714, Priority.HIGH), null, new Animation(715, Priority.HIGH), null, new Graphic(308, 15, GraphicHeight.HIGH), null);
+    public static readonly NORMAL = new TeleportType(
+        3,
+        new Animation(714, Priority.HIGH),
+        null,
+        Animation.DEFAULT_RESET_ANIMATION,
+        new Graphic(111, 0, 92 as GraphicHeight),
+        null,
+        null,
+        { busy: true, repeatEndAnimation: true },
+    );
     public static readonly ANCIENT = new TeleportType(5, new Animation(1979, Priority.HIGH), null, Animation.DEFAULT_RESET_ANIMATION, new Graphic(392, GraphicHeight.LOW, Priority.HIGH), null, null);
     public static readonly LUNAR = new TeleportType(4, new Animation(1816, Priority.HIGH), null, new Animation(715, Priority.HIGH), new Graphic(308, GraphicHeight.LOW, Priority.HIGH), null, null);
     public static readonly ARCEUUS = new TeleportType(4, new Animation(1816, Priority.HIGH), null, new Animation(715, Priority.HIGH), new Graphic(747, GraphicHeight.HIGH, Priority.HIGH), null, null);

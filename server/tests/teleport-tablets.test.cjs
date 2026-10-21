@@ -79,7 +79,7 @@ test('every teleport frees the player on the tick they land, not two ticks later
     const landed = ticks.findIndex((sent) => sent.some((entry) => entry.startsWith('teleport')));
     assert.ok(landed > 0);
     assert.ok(ticks[landed].includes('free'), 'free on the landing tick');
-    assert.deepEqual(ticks.slice(landed + 1).flat(), [], 'and nothing holds them after');
+    assert.deepEqual(ticks.slice(landed + 1).flat(), ['anim 65535'], 'only the repeated reset after (captured), nothing holding them');
 });
 
 test('a teleport scroll plays out as in the OSRS captures, tick by tick', (t) => {

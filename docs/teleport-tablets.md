@@ -46,6 +46,20 @@ Facts from rsprox captures of teleport scrolls (Spider cave, 20 attempts in 14 r
 
 `TELE_SCROLL` plays these, with the map_anim sent as a spotanim on the player. The scroll is used up on the click, after the usual teleport checks.
 
+## Standard teleport and jewellery
+
+`TeleportType.NORMAL` (standard spellbook teleports, teleport jewellery, the skull sceptre) follows rsprox captures of Varrock Teleport (rev 235-236) and a necklace of passage rubbed to Wyrmscraig. Tick 0 is the click:
+
+| Tick | Sent |
+| --- | --- |
+| 0 | animation `human_castteleport` (714); spotanim `teleport_casting` (111) at height 92; sound 200; varbit `busy` = 1 (from rev 236); jewellery: "You rub the necklace..." |
+| 3 | the teleport; animation reset; varbit `busy` = 0; jewellery uses its charge here ("<col=7f007f>Your necklace of passage crumbles away.</col>" on the last) |
+| 4 | animation reset again |
+
+111 plays sequence 667 (12 frames, 89 client cycles), whose lead-in comes before the bubble frames, so the bubble follows the arms on its own. `NORMAL` used to play 308 (only those bubble frames) a tick later with a 15-cycle delay, and 715 on landing; neither is in the captures.
+
+Jewellery charge messages are all `7f007f` and spell the count out ("Your ring of dueling has seven uses left.", "has one use left."); the Slayer ring uses digits ("Your Slayer ring has 7 charges left.") and ends with "Your Slayer ring has worn out.". Last charges: "crumbles to dust." for the games necklace, ring of dueling and Digsite Pendant, "crumbles away." for the necklace of passage and burning amulet. The necklace of passage's fourth Rub destination is Wyrmscraig (cache), landing at 2592, 2220 (captured).
+
 ## Not yet done
 
 - The Ancient, Cemetery, Ice plateau and Wilderness crabs tablets' Configure option (the Wilderness warning).
