@@ -11,6 +11,8 @@ parser or export logic in `../osrsreboxed-db`, then regenerate and import its ou
 Preserve the fix in the dumper with a regression check; repeat generation from the same
 inputs must produce identical content. Resolve generated-file conflicts by regeneration,
 and report any remaining difference. Generated files change only through this process.
+Inspect the original source and fix parser/runtime bugs at their cause; moving a
+repaired output subtree into a dumper override does not satisfy this rule.
 
 ## Worktrees
 

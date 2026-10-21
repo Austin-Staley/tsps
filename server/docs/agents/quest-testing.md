@@ -333,6 +333,13 @@ logic, regenerated and compared with a second dump from the same inputs. Import 
 output, including its related index; disclose any mismatch. See the generated-data rules
 in `AGENTS.md` and `server/AGENTS.md`.
 
+Read the raw Wiki transcript before adding a correction. Follow its nesting, menus,
+conditions and navigation references; repair shared parser or runtime semantics rather
+than copying a repaired JSON branch into an override. Conditions after a choice must
+observe that choice when reached. If a reference is genuinely ambiguous, document a
+reviewed source anchor with stale-input checks and no copied dialogue. Unresolved
+markers elsewhere still need review; a passing main route does not prove every branch.
+
 ## Review the whole quest, then review the fix
 
 Build a compact checklist from Quest Helper's `setupRequirements`, `setupSteps`,

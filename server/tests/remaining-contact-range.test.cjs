@@ -21,10 +21,12 @@ const { NPCOptionPacketListener } = require('../dist/net/packet/impl/NPCOptionPa
 const { NpcDialogue } = require('../dist/game/model/dialogues/entries/impl/NpcDialogue');
 const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
 const runtime = require('../plugins/quests/QuestRuntime');
+const dialoguePlugin = require('../plugins/npcs/NpcDialogues.plugin');
 
 const ROOT = path.resolve(__dirname, '..');
 const BLOCKED = 0x1280120;
 let contactQuest;
+let dialogueApi;
 
 before(async () => {
   await CachePipeline.initialize(ROOT);
@@ -35,6 +37,7 @@ before(async () => {
   new NpcDefinitionLoader().load();
 
   const api = PluginManager.createApi('remaining-contact-range-test');
+  dialogueApi = api;
   require('../plugins/npcs/NpcDialogues.plugin').register(api);
   require('../plugins/quests/quests/Contact.Quest')(api);
   contactQuest = runtime.getRegisteredQuests().find((quest) => quest.key === 'contact');
@@ -97,15 +100,15 @@ test('Contact: real cache keeps Maisa on the west bank across the blocked chasm'
 
   const lastChoice = variant.map((step, index) => ({ step, index })).filter((entry) => entry.step.type === 'choice').at(-1);
   assert.deepEqual(
-    variant.slice(lastChoice.index + 1).filter((step) => step.type === 'condition'),
-    [],
-    'the three quiz guards are no longer eager top-level conditions'
+    variant.slice(lastChoice.index + 1).filter((step) => step.type === 'condition').map((step) => step.id),
+    ['IjxRNT', 'PeJYOi', 'qEP0VV'],
+    'the three shared quiz guards sit after the second question, not inside its options'
   );
   for (const option of lastChoice.step.options) {
     assert.deepEqual(
-      (option.steps ?? []).filter((step) => step.type === 'condition').map((step) => step.id),
-      ['IjxRNT', 'PeJYOi', 'qEP0VV'],
-      `conditions run after the "${option.text}" branch choice`
+      (option.steps ?? []).filter((step) => step.type === 'condition'),
+      [],
+      `the "${option.text}" branch does not copy the shared guards`
     );
   }
 });
@@ -178,6 +181,100 @@ function startMaisaTalk(player) {
   new NPCOptionPacketListener().executeOption(player, npc.getIndex(), 1);
   return npc;
 }
+
+// The Wiki/AutoWiki shape: both questions are answered first, then one shared run
+// of guards decides the outcome from the answers recorded by the choice events.
+const canonicalMaisaQuiz = [
+  { type: 'choice', prompt: 'Where was the Prince kept?', options: [
+    { text: 'Draynor Village.', steps: [{ player: 'Draynor Village.' }] },
+    { text: 'Pollnivneach.', steps: [{ player: 'Pollnivneach.' }] },
+  ] },
+  { type: 'line', speaker: 'Maisa', text: 'Interesting. And who helped you free the Prince?' },
+  { type: 'choice', prompt: 'Who helped you?', options: [
+    { text: 'Leela.', steps: [{ player: 'Leela.' }] },
+    { text: 'Hassan.', steps: [{ player: 'Hassan.' }] },
+  ] },
+  { type: 'condition', text: 'If zero answers are right:', id: 'IjxRNT',
+    steps: [{ npc: "You're obviously an imposter." }, { type: 'end' }] },
+  { type: 'condition', text: 'If one answer is right:', id: 'PeJYOi',
+    steps: [{ npc: "You'll have to do better than that." }, { type: 'end' }] },
+  { type: 'condition', text: 'If both answers are right:', id: 'qEP0VV',
+    steps: [{ npc: 'Fair enough.' }, { type: 'end' }] },
+];
+
+function playCanonicalQuiz(answers) {
+  const player = account(2262, 4320);
+  contactQuest.setStage(player, 50);
+  const npc = maisaNpc();
+  const definition = npc.getCurrentDefinition(player);
+  const npcId = npc.getContentId(player);
+  let chosen = 0;
+  const quizApi = Object.create(dialogueApi);
+  quizApi.emitCustomEvent = (name, payload) => {
+    if (name === 'npc-dialogue:condition' && payload.stepId === 'qEP0VV') chosen++;
+    dialogueApi.emitCustomEvent(name, payload);
+  };
+  try {
+    dialoguePlugin.startDialogue(
+      quizApi,
+      { player, npc, npcId, definition },
+      canonicalMaisaQuiz,
+      {},
+      { player, npc, npcId, definition, pages: [] }
+    );
+    answerQuiz(player, answers);
+    const stage = contactQuest.getStage(player);
+    assert.equal(chosen, stage === 60 ? 1 : 0, 'the chosen-guard event fires once, only for the passing guard');
+    return stage;
+  } finally {
+    World.getNpcs().remove(npc);
+  }
+}
+
+test('Contact: canonical shared guards see the answers from earlier menu choices', () => {
+  assert.equal(playCanonicalQuiz(['Draynor Village.', 'Leela.']), 60, 'both right answers convince Maisa');
+  assert.equal(playCanonicalQuiz(['Pollnivneach.', 'Hassan.']), 50, 'wrong answers do not convince Maisa');
+});
+
+test('NpcDialogues: a condition after an action is judged when reached, not when the queue is built', () => {
+  const player = account();
+  const npc = maisaNpc();
+  const definition = npc.getCurrentDefinition(player);
+  const npcId = npc.getContentId(player);
+  let acted = false;
+  const actionApi = Object.create(dialogueApi);
+  actionApi.emitCustomEvent = (name, payload) => {
+    if (name === 'npc-dialogue:action' && payload.stepId === 'set-flag') acted = true;
+    dialogueApi.emitCustomEvent(name, payload);
+  };
+  const condition = {
+    pluginName: 'lazy-condition-action-test',
+    handler: ({ text }) => (text === 'If acted:' ? acted : text === 'If not acted:' ? !acted : null),
+  };
+  PluginManager.npcDialogueConditionHooks.unshift(condition);
+  const tree = [
+    { type: 'choice', prompt: 'Act?', options: [
+      { text: 'Do it', steps: [{ type: 'message', id: 'set-flag', text: 'You do it.' }] },
+    ] },
+    { type: 'condition', text: 'If acted:', id: 'acted', steps: [{ npc: 'The action was seen.' }, { type: 'end' }] },
+    { type: 'condition', text: 'If not acted:', id: 'not-acted', steps: [{ npc: 'The action was missed.' }, { type: 'end' }] },
+  ];
+  try {
+    dialoguePlugin.startDialogue(
+      actionApi,
+      { player, npc, npcId, definition },
+      tree,
+      {},
+      { player, npc, npcId, definition, pages: [] }
+    );
+    const seen = answerQuiz(player, ['Do it']);
+    assert.ok(seen.includes('The action was seen.'), 'the later guard observed the earlier action');
+    assert.ok(!seen.includes('The action was missed.'));
+  } finally {
+    PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(condition), 1);
+    World.getNpcs().remove(npc);
+  }
+});
 
 test('Contact: a normal Talk-to reaches the real Maisa dialogue across the chasm', () => {
   const player = account(2262, 4320);
