@@ -39,21 +39,51 @@
       "alternate": "Grand Exchange",
       "varbit": "varrock_ge_teleport",
       "tile": [3165, 3477, 0],
-      "diary": { "key": "varrock", "tier": "medium", "name": "Varrock" }
+      "diary": { "key": "varrock", "tier": "medium", "name": "Varrock" },
+      "configure": {
+        "primary": {
+          "change": "Change to Varrock.",
+          "message": "Your default option is now the central Varrock teleport."
+        },
+        "alternate": {
+          "change": "Change to the Grand Exchange.",
+          "message": "Your default option is now the Grand Exchange teleport."
+        }
+      }
     },
     "camelot teleport": {
       "primary": "Camelot",
       "alternate": "Seers' Village",
       "varbit": "seers_camelot_teleport",
       "tile": [2726, 3486, 0],
-      "diary": { "key": "kandarin", "tier": "hard", "name": "Kandarin" }
+      "diary": { "key": "kandarin", "tier": "hard", "name": "Kandarin" },
+      "configure": {
+        "primary": {
+          "change": "Change to Camelot.",
+          "message": "Your default option is now the Camelot teleport."
+        },
+        "alternate": {
+          "change": "Change to Seers' Village.",
+          "message": "Your default option is now the Seers' Village teleport."
+        }
+      }
     },
     "watchtower teleport": {
       "primary": "Watchtower",
       "alternate": "Yanille",
       "varbit": "yanille_teleport_location",
       "tile": [2583, 3095, 0],
-      "diary": { "key": "ardougne", "tier": "hard", "name": "Ardougne" }
+      "diary": { "key": "ardougne", "tier": "hard", "name": "Ardougne" },
+      "configure": {
+        "primary": {
+          "change": "Change to the Watchtower",
+          "message": "Your default option is now the Watchtower teleport."
+        },
+        "alternate": {
+          "change": "Change to Yanille.",
+          "message": "Your default option is now the Yanille teleport."
+        }
+      }
     }
   }
 }

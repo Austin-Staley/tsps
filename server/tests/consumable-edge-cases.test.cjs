@@ -248,6 +248,7 @@ SpellTeleports.register({
   persistAttribute() {},
   onItemAction: (handler) => { breakTablet = handler; },
   onPlayerLogin() {},
+  onSpellCast() {},
   emitCustomEvent: (name, request) => houseTablet(request),
   onInterfaceActionClick() {},
 });

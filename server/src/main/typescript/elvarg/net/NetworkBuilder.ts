@@ -1243,10 +1243,11 @@ export class ClientConnection {
     return -1;
   }
 
-  private emitSpellCast(packet: { widgetId: number; groupId: number; childId: number; itemId?: number }): boolean {
+  private emitSpellCast(packet: { widgetId: number; groupId: number; childId: number; itemId?: number; buttonNum?: number; opId?: number }): boolean {
     const spellName = this.resolveSpellName(packet.widgetId, packet.groupId, packet.childId, packet.itemId);
     return spellName !== undefined && PluginManager.emitSpellCast({
-      player: this.player, spellName, spellWidget: packet.widgetId, spellItemId: packet.itemId ?? -1, handled: false,
+      player: this.player, spellName, spellWidget: packet.widgetId, spellItemId: packet.itemId ?? -1,
+      opId: packet.buttonNum ?? packet.opId ?? 1, handled: false,
     });
   }
 
