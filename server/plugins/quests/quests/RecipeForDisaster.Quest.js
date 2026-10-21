@@ -136,6 +136,8 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   const UNDERWATER_ZONE = { minX: 2938, maxX: 3002, minY: 9470, maxY: 9540, z: 1 };
   const MUDSKIPPER_CAVE = { minX: 2943, maxX: 2957, minY: 9518, maxY: 9535, z: 1 };
   const CRAB_PEN = { minX: 2970, maxX: 2988, minY: 9513, maxY: 9526, z: 1 };
+  /** Shadow of the Storm's Uzer ruins: its Evil Dave is the same cache id 902, not the Edgeville rescue. */
+  const SHADOW_UZER_DAVE_AREA = { minX: 2700, maxX: 2745, minY: 4875, maxY: 4925, levels: [0, 2] };
   const DAVE_SPICES = [
     { color: "red", ids: [ItemIdentifiers.RED_SPICE_4_, ItemIdentifiers.RED_SPICE_3_, ItemIdentifiers.RED_SPICE_2_, ItemIdentifiers.RED_SPICE_1_] },
     { color: "orange", ids: [ItemIdentifiers.ORANGE_SPICE_4_, ItemIdentifiers.ORANGE_SPICE_3_, ItemIdentifiers.ORANGE_SPICE_2_, ItemIdentifiers.ORANGE_SPICE_1_] },
@@ -163,6 +165,12 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     ObjectManager.register(new GameObject(ObjectIdentifiers.PORTAL, location, 10, 0, null), true);
   }
   function hasFlag(player, flag) { return (flags(player) & flag) !== 0; }
+  function atShadowUzerDave(player) {
+    const location = player.getLocation?.();
+    return !!location && SHADOW_UZER_DAVE_AREA.levels.includes(location.getZ()) &&
+      location.getX() >= SHADOW_UZER_DAVE_AREA.minX && location.getX() <= SHADOW_UZER_DAVE_AREA.maxX &&
+      location.getY() >= SHADOW_UZER_DAVE_AREA.minY && location.getY() <= SHADOW_UZER_DAVE_AREA.maxY;
+  }
   function spawnCouncil(player) {
     if (stage(player) < STAGE_OPENING_COMPLETE || quest.isComplete(player)) return;
     ensureCouncilTalkActions();
@@ -361,7 +369,8 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       return { page: "Recipe for Disaster/Freeing Evil Dave", variant: state & 2
         ? "getting-the-recipe-from-doris-talking-to-doris-again" : "talking-to-doris" };
     }
-    if (EVIL_DAVE_IDS.has(npcId) && pages.some((entry) => entry.page === "Recipe for Disaster/Freeing Evil Dave")) {
+    if (EVIL_DAVE_IDS.has(npcId) && !atShadowUzerDave(player) &&
+      pages.some((entry) => entry.page === "Recipe for Disaster/Freeing Evil Dave")) {
       const state = Number(player.getAttribute(DAVE_STATE_ATTRIBUTE)) || 0;
       return { page: "Recipe for Disaster/Freeing Evil Dave", variant: state & 1
         ? "talking-to-evil-dave-talking-to-evil-dave-again-after-getting-him-to-tell-you-what-he-ate"
@@ -402,8 +411,12 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     return null;
   }
 
-  function answerCondition({ npcId, player, stepId, text }) {
+  function answerCondition({ npcId, player, stepId, text, pages }) {
     const value = String(text || "").toLowerCase();
+    const pageNames = (pages ?? []).map(entry => String(entry?.page ?? ""));
+    const ownPage = pageNames.some(page => page.startsWith("Recipe for Disaster"));
+    // The castle Cook's shared menu is the only non-RFD page RFD answers.
+    const ownCondition = ownPage || (COOK_IDS.has(npcId) && pageNames.includes("Cook (Lumbridge)"));
     if (OGRE_BOAT_IDS.has(npcId)) {
       const inventory = player.getInventory();
       const chompies = [ItemIdentifiers.RAW_CHOMPY, ItemIdentifiers.RAW_CHOMPY_2,
@@ -436,13 +449,14 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     // The castle Cook's shared post-Cook's Assistant menu guards the quest link
     // behind the world membership check. Leaving this unanswered falls through
     // to the F2P line on a members world and makes RFD appear unavailable.
-    if (value.includes("free-to-play world")) return false;
-    if (value.includes("members' world")) return true;
-    if (stepId === "2hoQn_" || value.includes("has completed beneath cursed sands")) return false;
-    if (value.includes("does not meet the requirements") || value.includes("doesn't meet the requirements")) {
+    if (ownCondition && value.includes("free-to-play world")) return false;
+    if (ownCondition && value.includes("members' world")) return true;
+    if (stepId === "2hoQn_" || (ownPage && value.includes("has completed beneath cursed sands"))) return false;
+    if (ownCondition && (value.includes("does not meet the requirements") || value.includes("doesn't meet the requirements"))) {
       return !meetsOpeningRequirements(player);
     }
-    if (value.includes("meets the requirements") || (COOK_IDS.has(npcId) && value.includes("has completed cook's assistant"))) {
+    if ((ownCondition && value.includes("meets the requirements")) ||
+      (COOK_IDS.has(npcId) && value.includes("has completed cook's assistant"))) {
       return meetsOpeningRequirements(player);
     }
     const ingredients = [ItemIdentifiers.EYE_OF_NEWT, ItemIdentifiers.GREENMANS_ALE,
@@ -455,13 +469,13 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       mejHA0: !has(player, ItemIdentifiers.GREENMANS_ALE) && ingredients.filter((id) => id !== ItemIdentifiers.GREENMANS_ALE).every((id) => has(player, id)),
       "5Ks1A9": !has(player, ItemIdentifiers.DIRTY_BLAST) && ingredients.filter((id) => id !== ItemIdentifiers.DIRTY_BLAST).every((id) => has(player, id)) };
     if (Object.prototype.hasOwnProperty.call(counts, stepId)) return counts[stepId];
-    if (value.includes("doesn't have a fishbowl")) return !has(player, ItemIdentifiers.EMPTY_FISHBOWL);
-    if (value.includes("has a fishbowl")) return has(player, ItemIdentifiers.EMPTY_FISHBOWL);
-    if (value.includes("lost their diving helmet")) return !hasOrEquipped(player, ItemIdentifiers.FISHBOWL_HELMET, api.core.Equipment.HEAD_SLOT);
-    if (value.includes("lost their diving apparatus")) return !hasOrEquipped(player, ItemIdentifiers.DIVING_APPARATUS, api.core.Equipment.CAPE_SLOT);
-    if (value.includes("all their equipment")) return hasOrEquipped(player, ItemIdentifiers.FISHBOWL_HELMET, api.core.Equipment.HEAD_SLOT)
+    if (ownPage && value.includes("doesn't have a fishbowl")) return !has(player, ItemIdentifiers.EMPTY_FISHBOWL);
+    if (ownPage && value.includes("has a fishbowl")) return has(player, ItemIdentifiers.EMPTY_FISHBOWL);
+    if (ownPage && value.includes("lost their diving helmet")) return !hasOrEquipped(player, ItemIdentifiers.FISHBOWL_HELMET, api.core.Equipment.HEAD_SLOT);
+    if (ownPage && value.includes("lost their diving apparatus")) return !hasOrEquipped(player, ItemIdentifiers.DIVING_APPARATUS, api.core.Equipment.CAPE_SLOT);
+    if (ownPage && value.includes("all their equipment")) return hasOrEquipped(player, ItemIdentifiers.FISHBOWL_HELMET, api.core.Equipment.HEAD_SLOT)
       && hasOrEquipped(player, ItemIdentifiers.DIVING_APPARATUS, api.core.Equipment.CAPE_SLOT);
-    if (value.includes("doesn't have the diving equipment on")) {
+    if (ownPage && value.includes("doesn't have the diving equipment on")) {
       const { Equipment } = api.core;
       return equipmentId(player, Equipment.HEAD_SLOT) !== ItemIdentifiers.FISHBOWL_HELMET
         || equipmentId(player, Equipment.CAPE_SLOT) !== ItemIdentifiers.DIVING_APPARATUS;
@@ -469,8 +483,8 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     if (stepId === "bPnGSr") return !!follower(player) && !followerIsCat(player);
     if (stepId === "V2XqCw") return !!follower(player) && followerIsCat(player);
     if (stepId === "gnpYPb") return hasPetCarried(player);
-    if (value.includes("weighs more than 27kg")) return carriedWeight(player) >= 28_000;
-    if (value.includes("properly equipped")) {
+    if (ownPage && value.includes("weighs more than 27kg")) return carriedWeight(player) >= 28_000;
+    if (ownPage && value.includes("properly equipped")) {
       const { Equipment } = api.core;
       return equipmentId(player, Equipment.HEAD_SLOT) === ItemIdentifiers.FISHBOWL_HELMET
         && equipmentId(player, Equipment.CAPE_SLOT) === ItemIdentifiers.DIVING_APPARATUS
@@ -874,6 +888,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
 
   function handleDaveTalk(event) {
     if (!EVIL_DAVE_IDS.has(event.npcId) || stage(event.player) < STAGE_OPENING_COMPLETE || hasFlag(event.player, 16)) return false;
+    if (atShadowUzerDave(event.player)) return false;
     const option = event.definition?.getActions?.()?.[event.clickType - 1];
     if (option !== "Talk-to") return false;
     event.handled = true;

@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as zlib from "zlib";
 import { CacheMaps } from "../cache/CacheMaps";
+import { CachePipeline } from "../cache/CachePipeline";
 import { Buffer as CollisionBuffer } from "./Buffer";
 import { encodeRegionReplacement } from "../../net/protocol/ClientProtocol";
 
@@ -51,6 +52,112 @@ export class MapRegionReplacementManager {
       throw new Error(`invalid regionId: ${regionId}`);
     }
     return this.register(regionId, terrainData, objectData, source);
+  }
+
+  /**
+   * Clears terrain setting bit 0 (`BLOCKED_TILE`) for one tile, preserving every
+   * other setting bit/op, plane and object byte.
+   */
+  public static clearTerrainBlockTile(
+    regionId: number,
+    plane: number,
+    localX: number,
+    localY: number
+  ): ReplaceMapRegionResult {
+    if (!Number.isInteger(regionId) || regionId < 0 || regionId > 0xffff) {
+      throw new Error(`invalid regionId: ${regionId}`);
+    }
+    if (!Number.isInteger(plane) || plane < 0 || plane > 3) {
+      throw new Error(`invalid plane: ${plane}`);
+    }
+    if (!Number.isInteger(localX) || localX < 0 || localX > 63 ||
+        !Number.isInteger(localY) || localY < 0 || localY > 63) {
+      throw new Error(`invalid local tile: ${localX},${localY}`);
+    }
+    const current = this.replacements.get(regionId);
+    const base = CacheMaps.getRegion(regionId);
+    const terrainData = current?.terrainData ?? base?.terrainData;
+    const objectData = current?.objectData ?? base?.objectData ?? null;
+    if (!terrainData) {
+      throw new Error(`no cache terrain data for region ${regionId}`);
+    }
+    const modified = this.removeTerrainSettingBit0(terrainData, plane, localX, localY);
+    return this.replaceMapRegionData(
+      regionId,
+      modified,
+      objectData,
+      `runtime BLOCKED_TILE clear ${regionId}:${plane}:${localX},${localY}`
+    );
+  }
+
+  private static removeTerrainSettingBit0(
+    data: Uint8Array,
+    plane: number,
+    localX: number,
+    localY: number
+  ): Uint8Array {
+    const wide = CachePipeline.getActive().revision >= 209;
+    const opSize = wide ? 2 : 1;
+    const buffer = Buffer.from(data);
+    const output = Buffer.from(buffer);
+    const removals: Array<[number, number]> = [];
+    let offset = 0;
+    const ensure = (size: number) => {
+      if (offset + size > buffer.length) {
+        throw new Error(`truncated terrain stream at byte ${offset}`);
+      }
+    };
+    for (let z = 0; z < 4; z++) {
+      for (let x = 0; x < 64; x++) {
+        for (let y = 0; y < 64; y++) {
+          const target = z === plane && x === localX && y === localY;
+          for (;;) {
+            ensure(opSize);
+            const start = offset;
+            const opcode = wide ? buffer.readUInt16BE(offset) : buffer.readUInt8(offset);
+            offset += opSize;
+            if (opcode === 0) {
+              break;
+            }
+            if (opcode === 1) {
+              ensure(1);
+              offset += 1;
+              break;
+            }
+            if (opcode <= 49) {
+              const payloadSize = wide ? 2 : 1;
+              ensure(payloadSize);
+              offset += payloadSize;
+            } else if (opcode <= 81) {
+              if (target) {
+                const setting = (opcode - 49) & ~1;
+                if (setting === 0) {
+                  removals.push([start, offset]);
+                } else if (wide) {
+                  output.writeUInt16BE(49 + setting, start);
+                } else {
+                  output[start] = 49 + setting;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    if (buffer.length - offset > 1) {
+      throw new Error(`trailing terrain bytes: ${buffer.length - offset}`);
+    }
+    if (removals.length === 0) {
+      return output;
+    }
+    const chunks: Buffer[] = [];
+    let cursor = 0;
+    for (const [start, end] of removals) {
+      chunks.push(output.subarray(cursor, start));
+      cursor = end;
+    }
+    chunks.push(output.subarray(cursor));
+    return Buffer.concat(chunks);
   }
 
   private static register(

@@ -153,6 +153,7 @@ const WORLD_INTERACTIONS = new Set([
   "world_map_click",
   "npc_option",
   "object_option",
+  "world_entity_option",
   "player_option",
   "ground_item_action",
   "inventory_action",
@@ -423,6 +424,22 @@ export class ClientConnection {
           continue;
         case "npc_option":
           if (this.player) NPC_ACTIONS.executeOption(this.player, packet.index, packet.clickType);
+          continue;
+        case "world_entity_option":
+          if (this.player) {
+            // Forged/foreign/out-of-range world-entity indices never reach plugin handlers.
+            const boat = BoatManager.getBoat(packet.index);
+            const root = BoatManager.rootLocation(this.player);
+            if (boat && BoatManager.canSeeBoat(this.player, boat)
+              && root.isWithinDistance(new Location(boat.tileX, boat.tileY, boat.level), 32)) {
+              PluginManager.emitWorldEntityInteraction({
+                player: this.player,
+                entityIndex: packet.index,
+                clickType: packet.clickType,
+                handled: false,
+              });
+            }
+          }
           continue;
         case "object_option":
           if (this.player) OBJECT_ACTIONS.executeAction(

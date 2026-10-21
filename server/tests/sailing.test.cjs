@@ -793,7 +793,12 @@ function registerPlugin(file) {
 }
 
 test("the sailing plugins register their hooks and load the boat and dock data", () => {
-  assert.deepEqual(Object.keys(registerPlugin("Gangplank.plugin").objects.Gangplank), ["Board", "Disembark"]);
+  const gangplank = registerPlugin("Gangplank.plugin").objects;
+  assert.deepEqual(Object.keys(gangplank.Gangplank), ["Board", "Disembark"]);
+  assert.deepEqual(Object.keys(gangplank["Mooring point"]), ["Board", "Disembark"],
+    "island mooring points share the gangplank handlers");
+  assert.equal(gangplank["Mooring point"].Board, gangplank.Gangplank.Board);
+  assert.equal(gangplank["Mooring point"].Disembark, gangplank.Gangplank.Disembark);
   const helm = registerPlugin("Helm.plugin");
   assert.deepEqual(Object.keys(helm.objects.Helm), ["Navigate", "Stop-navigating", "Escape"]);
   assert.equal(helm.interfaceClicks.length, 1);
@@ -1775,7 +1780,7 @@ test("::boatmats facility spawns a facility's materials", () => {
 // --- Shipwreck salvaging.
 
 const shipwrecks = require("../plugins/skills/sailing/Shipwrecks.Salvaging");
-const { content } = require("../plugins/skills/sailing/SailingContent.Sailing");
+const { content, dockAtGangplank } = require("../plugins/skills/sailing/SailingContent.Sailing");
 const { hookTierOf, successChance, rollLoot, outwardFrom } = require("../plugins/skills/sailing/Salvaging.plugin");
 
 function withRandom(value, run) {
@@ -1960,7 +1965,7 @@ test("logging in unlocks every facility and part schematic", () => {
 test("every port comes from the cache, with its buoy, gangplank, landing and mooring", () => {
   const docks = content().docks;
   const byId = (id) => docks.find((dock) => dock.id === id);
-  assert.equal(docks.length, 60, "table 194's 61 rows, less Last Light (no gangplank in the map)");
+  assert.equal(docks.length, 61, "every row in table 194");
   // Port Sarim as captured: buoy (3048, 3186), gangplank (3051, 3193), landing one west of it.
   const sarim = byId("port_sarim");
   assert.deepEqual([sarim.portId, sarim.level, sarim.buoy, sarim.gangplank, sarim.landing],
@@ -1976,6 +1981,14 @@ test("every port comes from the cache, with its buoy, gangplank, landing and moo
   const redRock = byId("red_rock");
   assert.deepEqual([redRock.portId, redRock.level, redRock.gangplank, redRock.landing],
     [22, 52, { x: 2809, y: 2509, z: 0 }, { x: 2808, y: 2509, z: 0 }]);
+  // Last Light: table 194 row 39 (dbrow 8626), its captured buoy and disembark tile, and a
+  // mooring point like the other islands (the boat sits on the water west of the landing).
+  const lastLight = byId("last_light");
+  assert.deepEqual([lastLight.portId, lastLight.selectionDbrow, lastLight.level, lastLight.mooringPoint,
+    lastLight.buoy, lastLight.gangplank, lastLight.landing],
+    [39, 8626, 52, true, { x: 2845, y: 2334, z: 0 }, { x: 2848, y: 2326, z: 0 }, { x: 2851, y: 2326, z: 0 }]);
+  assert.deepEqual(lastLight.mooring, { fineX: 2843 * 128 + 64, fineY: 2326 * 128 + 64, level: 0, angle: 1024 });
+  assert.deepEqual(dockAtGangplank(lastLight.gangplank), lastLight);
   // Wyrmscraig's two docks: wide gangplanks with the walkway east and the water west.
   assert.deepEqual(["wyrmscraig", "wyrmscraig_cave"].map((id) => [byId(id).portId, byId(id).landing.x - byId(id).gangplank.x]), [[59, 1], [60, 1]]);
 });
@@ -2028,6 +2041,35 @@ test("Dock on a port's buoy docks the boat there; Disembark at any port docks it
     assert.deepEqual([again.fineX, again.fineY, again.angle], [at.fineX, at.fineY, at.angle]);
   } finally {
     if (Sailing.instanceAboard(player)) Sailing.disembark(player, "the_pandemonium");
+    clearTasks();
+  }
+});
+
+test("Last Light docks at Sailing 52 and disembarks on its captured landing", () => {
+  clearTasks();
+  const plugin = registerPlugin("Gangplank.plugin");
+  const lastLight = content().docks.find((dock) => dock.id === "last_light");
+  const player = sailor();
+  const levels = new Map([[Skill.SAILING, 51]]);
+  player.getSkillManager = () => ({ getCurrentLevel: (skill) => levels.get(skill) ?? 1 });
+  Sailing.giveBoat(player, "raft", "the_pandemonium");
+  Sailing.board(player, "the_pandemonium");
+  try {
+    plugin.objects.Buoy.Dock({ player, location: lastLight.buoy });
+    assert.equal(player.messages.at(-1), "You need a Sailing level of at least 52 to dock at Last Light.");
+    levels.set(Skill.SAILING, 52);
+    plugin.objects.Buoy.Dock({ player, location: lastLight.buoy });
+    assert.equal(player.messages.at(-1),
+      "You dock the boat at Last Light. You will return here if you have to abandon your boat for any reason.");
+    assert.equal(player.getSailing().lastDock, "last_light");
+    assert.deepEqual(player.getSailing().returnPoint, lastLight.landing);
+    plugin.objects.Gangplank.Disembark({ player, location: lastLight.gangplank });
+    TaskManager.process();
+    TaskManager.process();
+    assert.equal(player.messages.at(-1), "You disembark at Last Light.");
+    assert.deepEqual(tileOf(player), [2851, 2326, 0]);
+  } finally {
+    if (Sailing.instanceAboard(player)) Sailing.disembark(player, "last_light");
     clearTasks();
   }
 });
