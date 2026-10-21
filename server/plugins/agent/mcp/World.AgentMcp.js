@@ -2,7 +2,7 @@
 module.exports = function registerWorldTools(ctx) {
   const {
     core, tool, z, player, find, send, items, tile, settle, status, sleepTicks, takeMessages, takeClient, area,
-    nearby, nearest, npcClick, inventorySlot, MAX_WAIT_TICKS,
+    nearby, nearest, npcClick, inventorySlot, MAX_WAIT_TICKS, movementBlocked,
   } = ctx;
   const { World, Skill, BoatManager, BOAT_VIEW_DISTANCE } = core;
 
@@ -59,6 +59,7 @@ module.exports = function registerWorldTools(ctx) {
         area: area(p),
         worldEntities: worldEntities(p),
         hitpoints: p.getHitpoints(),
+        movementBlocked: movementBlocked?.(p) === true,
         runEnergy: p.getRunEnergy(),
         ...(varbits.length ? { varbitValues: Object.fromEntries(varbits.map((id) => [id, sender.getVarbit(id)])) } : {}),
         ...(varps.length ? { varpValues: Object.fromEntries(varps.map((id) => [id, sender.getVarp(id)])) } : {}),

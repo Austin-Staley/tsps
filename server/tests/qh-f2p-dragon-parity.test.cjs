@@ -25,10 +25,16 @@ before(async () => {
   RegionManager.loadMapFiles(2836, 9600, true);
   RegionManager.loadMapFiles(2556, 9844, true);
   RegionManager.loadMapFiles(3019, 9850, true);
+  RegionManager.loadMapFiles(2932, 3240, true);
+  RegionManager.loadMapFiles(2932, 9640, true);
 });
 
-function harness(withDoors = false) {
-  const hooks = {}, events = {}, objects = [], ground = [], clicks = new Map(), interactions = new Map();
+function harness(withDoors = false, withLadders = false) {
+  const hooks = {}, events = {}, objects = [], ground = [], clicks = new Map(), interactions = new Map(), tasks = [];
+  const taskManager = {
+    submit(task) { task.setRunning(true); tasks.push(task); },
+    cancelTasks(key) { for (const task of tasks.filter(entry => entry.key === key)) task.stop(); },
+  };
   const objectManager = {
     register: object => objects.push(object),
     deregister: object => { const index = objects.indexOf(object); if (index >= 0) objects.splice(index, 1); },
@@ -37,6 +43,7 @@ function harness(withDoors = false) {
     core,
     getObjectManager: () => objectManager,
     getItemOnGroundManager: () => ({ registerLocation: (...args) => ground.push(args) }),
+    getTaskManager: () => taskManager,
     persistAttribute: () => {},
     onObjectFirstClick: (ids, fn) => [].concat(ids).forEach(id => clicks.set(id, fn)),
     onObjectInteraction: (name, actions) => {
@@ -56,9 +63,20 @@ function harness(withDoors = false) {
   });
   require('../plugins/quests/quests/DragonSlayer.Quest')(api);
   if (withDoors) require('../plugins/objects/Doors.plugin').register(api);
+  if (withLadders) require('../plugins/objects/Ladders.plugin').register(api);
   return {
     hooks, events, objects, ground, clicks, interactions,
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
+    runTasks(cycles = 8) {
+      let active = [...tasks];
+      tasks.length = 0;
+      for (let cycle = 0; cycle < cycles && active.length > 0; cycle++) {
+        for (const task of active) task.tick();
+        active = active.filter(task => task.isRunning());
+      }
+      tasks.push(...active);
+      return active.length;
+    },
     quest: runtime.getRegisteredQuests().at(-1),
   };
 }
@@ -419,4 +437,129 @@ test('Roving Elves claims only its cache-placed tomb ladder; the shared Dwarven 
   const request = { player: minePlayer, object: mine, objectId: 17387, clickType: 1, handled: false };
   h.emit('ladders:climb', request);
   assert.equal(request.handled, false, 'Roving Elves does not claim the mine ladder');
+});
+
+test('Dragon Slayer routes Melzar FUNLADDERTOP 2605 into the real basement and keeps the normal maze exits', () => {
+  const h = harness(false, true);
+  const ladder = MapObjects.get(O.LADDER_21, new core.Location(2932, 3240, 0), null);
+  assert.ok(ladder, 'real Melzar basement-entry ladder 2605 at 2932,3240');
+  assert.equal(ladder.getDefinition().getInteractions()[0], 'Climb-down');
+  assert.equal(RegionManager.blocked({ getX: () => 2932, getY: () => 9640, getZ: () => 0 }, null), false,
+    'real basement landing 2932,9640 is walkable');
+
+  const p = player();
+  p.moveTo(new core.Location(2932, 3241, 0));
+  const descent = {
+    player: p, object: ladder, objectId: O.LADDER_21, definition: ladder.getDefinition(),
+    location: ladder.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-down'](descent);
+  assert.equal(descent.handled, true);
+  assert.equal(h.runTasks(), 0, 'real Ladders climb task completed');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2932, 9640, 0]);
+
+  const fake = new core.GameObject(O.LADDER_21, new core.Location(3000, 3000, 0), 10, 1, null);
+  const unrelated = player();
+  unrelated.moveTo(new core.Location(3000, 3001, 0));
+  const unrelatedEvent = {
+    player: unrelated, object: fake, objectId: O.LADDER_21, definition: fake.getDefinition(),
+    location: fake.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-down'](unrelatedEvent);
+  h.runTasks();
+  assert.deepEqual([unrelated.getLocation().getX(), unrelated.getLocation().getY(), unrelated.getLocation().getZ()], [3000, 3001, 0],
+    'an unrelated 2605 placement is not claimed for the Melzar basement');
+
+  const ascentLadder = MapObjects.get(O.LADDER_216, new core.Location(2939, 9657, 0), null);
+  assert.ok(ascentLadder, 'real basement exit ladder 17385 at 2939,9657');
+  const ascentPlayer = player();
+  ascentPlayer.moveTo(new core.Location(2939, 9656, 0));
+  const expectedAscent = ClimbLinks.destination(ascentLadder, ClimbLinks.UP, ascentPlayer.getLocation(), null, false);
+  assert.ok(expectedAscent);
+  const ascent = {
+    player: ascentPlayer, object: ascentLadder, objectId: O.LADDER_216, definition: ascentLadder.getDefinition(),
+    location: ascentLadder.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-up'](ascent);
+  assert.equal(h.runTasks(), 0);
+  assert.deepEqual([ascentPlayer.getLocation().getX(), ascentPlayer.getLocation().getY(), ascentPlayer.getLocation().getZ()],
+    [expectedAscent.getX(), expectedAscent.getY(), expectedAscent.getZ()]);
+
+  const wrongTurn = MapObjects.get(O.LADDER_215, new core.Location(2924, 3250, 0), null);
+  assert.ok(wrongTurn, 'real wrong-turn ladder 17384 at 2924,3250');
+  const trapped = player();
+  trapped.moveTo(new core.Location(2924, 3251, 0));
+  const expectedDown = ClimbLinks.destination(wrongTurn, ClimbLinks.DOWN, trapped.getLocation(), null, false);
+  assert.ok(expectedDown);
+  const down = {
+    player: trapped, object: wrongTurn, objectId: O.LADDER_215, definition: wrongTurn.getDefinition(),
+    location: wrongTurn.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-down'](down);
+  assert.equal(h.runTasks(), 0);
+  assert.deepEqual([trapped.getLocation().getX(), trapped.getLocation().getY(), trapped.getLocation().getZ()],
+    [expectedDown.getX(), expectedDown.getY(), expectedDown.getZ()]);
+
+  const returnLadder = MapObjects.get(O.LADDER_216, new core.Location(2924, 9650, 0), null);
+  assert.ok(returnLadder, 'real wrong-turn return ladder 17385 at 2924,9650');
+  const expectedReturn = ClimbLinks.destination(returnLadder, ClimbLinks.UP, trapped.getLocation(), null, false);
+  assert.ok(expectedReturn);
+  const back = {
+    player: trapped, object: returnLadder, objectId: O.LADDER_216, definition: returnLadder.getDefinition(),
+    location: returnLadder.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-up'](back);
+  assert.equal(h.runTasks(), 0);
+  assert.deepEqual([trapped.getLocation().getX(), trapped.getLocation().getY(), trapped.getLocation().getZ()],
+    [expectedReturn.getX(), expectedReturn.getY(), expectedReturn.getZ()]);
+
+  const exitDoor = MapObjects.get(O.EXIT_DOOR, new core.Location(2938, 3252, 0), null);
+  assert.ok(exitDoor, 'real ground-floor Exit door 2602 at 2938,3252');
+  const clickExit = (p, door) => {
+    const event = {
+      player: p, object: door, objectId: O.EXIT_DOOR, definition: door.getDefinition(),
+      location: door.getLocation(), handled: false,
+    };
+    h.clicks.get(O.EXIT_DOOR)(event);
+    return event;
+  };
+
+  const leaving = player();
+  leaving.moveTo(new core.Location(2937, 3252, 0));
+  assert.equal(clickExit(leaving, exitDoor).handled, true);
+  assert.deepEqual([leaving.getLocation().getX(), leaving.getLocation().getY()], [2939, 3252],
+    'ground NE room exits east');
+
+  const groundReturn = player();
+  groundReturn.moveTo(new core.Location(2939, 3252, 0));
+  assert.equal(clickExit(groundReturn, exitDoor).handled, false);
+  assert.deepEqual([groundReturn.getLocation().getX(), groundReturn.getLocation().getY()], [2939, 3252],
+    'the east exit corridor cannot re-enter the ground room');
+
+  const exits = [
+    [2931, 9640, [2932, 9640], [2930, 9640], 'zombie room'],
+    [2927, 9649, [2928, 9649], [2926, 9649], 'Melzar room'],
+    [2924, 9654, [2924, 9655], [2923, 9654], 'demon room'],
+  ];
+  for (const [x, y, from, to, label] of exits) {
+    const door = MapObjects.get(O.EXIT_DOOR, new core.Location(x, y, 0), null);
+    assert.ok(door, `real ${label} brown exit door 2602 at ${x},${y}`);
+    const out = player();
+    out.moveTo(new core.Location(from[0], from[1], 0));
+    assert.equal(clickExit(out, door).handled, true, `${label} can leave`);
+    assert.deepEqual([out.getLocation().getX(), out.getLocation().getY()], to, `${label} exits west`);
+
+    const back = player();
+    back.moveTo(new core.Location(to[0], to[1], 0));
+    assert.equal(clickExit(back, door).handled, false, `${label} exit corridor cannot reverse`);
+    assert.deepEqual([back.getLocation().getX(), back.getLocation().getY()], to,
+      `${label} reverse is refused without restarting the maze`);
+  }
+
+  const unrelatedDoor = new core.GameObject(O.EXIT_DOOR, new core.Location(3000, 3000, 0), 0, 0, null);
+  const unrelatedExit = player();
+  unrelatedExit.moveTo(new core.Location(2999, 3000, 0));
+  assert.equal(clickExit(unrelatedExit, unrelatedDoor).handled, false);
+  assert.deepEqual([unrelatedExit.getLocation().getX(), unrelatedExit.getLocation().getY()], [2999, 3000],
+    'no generic Exit door handler exists outside the four cache placements');
 });

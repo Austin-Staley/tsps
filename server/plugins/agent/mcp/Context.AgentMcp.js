@@ -154,8 +154,10 @@ function createContext(core, server) {
     const current = p.getArea?.();
     return current ? { name: current.getName(), plugin: current.pluginName ?? null, private: !!p.getPrivateArea?.() } : null;
   };
+  const movementBlocked = (p) => p.getMovementQueue?.()?.isMovementBlocked?.() === true;
   const status = (p) => ({
-    ...tile(p.getLocation()), hitpoints: p.getHitpoints(), busy: activity(p), open: waitingOn(p),
+    ...tile(p.getLocation()), hitpoints: p.getHitpoints(), movementBlocked: movementBlocked(p),
+    busy: activity(p), open: waitingOn(p),
     area: area(p), messages: takeMessages(p), client: takeClient(p),
   });
   // Polls each tick until the player reaches `target`, opens a dialogue/interface, or has been
@@ -377,7 +379,7 @@ function createContext(core, server) {
     core, z, tool, MAX_WAIT_TICKS,
     player: z.string().describe("Username of an online player"),
     amountSchema: z.union([z.number().int().min(1), z.literal("all")]).default(1),
-    find, send, items, tile, sleepTicks, takeMessages, takeClient, area, status, settle, npcClick, nearby, nearest,
+    find, send, items, tile, sleepTicks, takeMessages, takeClient, area, status, movementBlocked, settle, npcClick, nearby, nearest,
     inventorySlot, carried, byName, clicks, clickEach,
   };
 }

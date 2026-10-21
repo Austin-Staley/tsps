@@ -96,10 +96,25 @@ module.exports = function registerDragonSlayerQuest(api) {
     crandorRope: ObjectIdentifiers.CLIMBING_ROPE_13,
     crandorWall: ObjectIdentifiers.WALL_161,
     crandorShortcut: ObjectIdentifiers.WALL_9,
+    melzarBasementLadder: ObjectIdentifiers.LADDER_21,
+    melzarExitDoor: ObjectIdentifiers.EXIT_DOOR,
   };
+
+  // Cache rev241 2602 "Exit door" placements in Melzar's Maze. Wiki: the ground
+  // north-east room and the basement zombie/Melzar/demon rooms each have a brown
+  // door to the exit. Leaving through an exit door restarts the maze, so these are
+  // one-way only: quest-room side -> exit corridor, never back.
+  const MELZAR_EXIT_DOORS = [
+    { x: 2938, y: 3252, z: 0, exitX: 1 }, // ground NE room -> east exit corridor
+    { x: 2931, y: 9640, z: 0, exitX: -1 }, // zombie room -> west exit corridor
+    { x: 2927, y: 9649, z: 0, exitX: -1 }, // Melzar room -> west exit corridor
+    { x: 2924, y: 9654, z: 0, exitX: -1 }, // demon room -> west exit corridor
+  ];
 
   const TILE = {
     melzarInside: new Location(2933, 3248, 0),
+    melzarBasementLadder: new Location(2932, 3240, 0),
+    melzarBasement: new Location(2932, 9640, 0),
     crandor: new Location(2835, 3235, 0),
     crandorLair: new Location(2833, 9656, 0),
     crandorSurface: new Location(2833, 3256, 0),
@@ -863,13 +878,53 @@ module.exports = function registerDragonSlayerQuest(api) {
   function claimQuestDoor(request) {
     if (request.handled) return;
     const id = request.objectId ?? request.object?.getId?.();
-    if (id !== LOC.crandorShortcut && id !== LOC.magicDoor && id !== LOC.melzarEntrance && !MAZE_DOORS.includes(id)) return;
+    if (id !== LOC.crandorShortcut && id !== LOC.magicDoor && id !== LOC.melzarEntrance
+      && id !== LOC.melzarExitDoor && !MAZE_DOORS.includes(id)) return;
     const option = request.option ?? request.definition?.getInteractions?.()[request.clickType - 1];
     if (option !== "Open") return;
     if (id === LOC.crandorShortcut) return handleCrandorShortcutClick(request);
     if (id === LOC.magicDoor) return handleMagicDoorClick(request);
     if (id === LOC.melzarEntrance) return handleMelzarEntranceClick(request);
+    if (id === LOC.melzarExitDoor) return handleMelzarExitDoorClick(request);
     return handleMazeDoorClick(request);
+  }
+
+  /**
+   * Brown exit doors at the cache placements above. Only the room side may pass
+   * into the exit corridor; the exit side is refused so it cannot re-enter
+   * without the matching maze key (Wiki Dragon Slayer I: use the normal door and
+   * start the maze over).
+   */
+  function handleMelzarExitDoorClick(event) {
+    const at = event.object?.getLocation?.();
+    if (!at) return;
+    const placement = MELZAR_EXIT_DOORS.find(door =>
+      door.x === at.getX() && door.y === at.getY() && door.z === at.getZ());
+    if (!placement) return;
+    const pos = event.player.getLocation();
+    const dx = pos.getX() - placement.x, dy = pos.getY() - placement.y;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return;
+    if (placement.exitX === 1 ? dx >= 0 : dx < 0) return;
+    event.handled = true;
+    const location = plainLocation(event.location ?? at);
+    crossMazeDoor(event.player, event.object, location);
+  }
+
+  /**
+   * FUNLADDERTOP 2605 is a one-way basement entry with no ClimbLinks pair. Keep the
+   * climb animation by handing the real destination to Ladders' climbDown.
+   * Destination is the Melzar basement copy at the same x/y (+6400), inside QH's
+   * zombie-room zone (2931..2933, 9639..9644).
+   */
+  function claimMelzarBasementLadder(request) {
+    if (request.handled || request.objectId !== LOC.melzarBasementLadder) return;
+    const at = request.object?.getLocation?.();
+    if (!at || at.getX() !== TILE.melzarBasementLadder.getX() || at.getY() !== TILE.melzarBasementLadder.getY()
+      || at.getZ() !== TILE.melzarBasementLadder.getZ()) return;
+    const option = request.object?.getDefinition?.().getInteractions?.()[request.clickType - 1];
+    if (option !== "Climb-down") return;
+    request.handled = true;
+    api.emitCustomEvent("ladders:climbDown", { player: request.player, destination: TILE.melzarBasement.clone() });
   }
 
   function handleOracleChestClick(event) {
@@ -1133,9 +1188,11 @@ module.exports = function registerDragonSlayerQuest(api) {
   api.onObjectFirstClick(LOC.shipGangplanks, handleGangplankClick);
   api.onCustomEvent("ladders:climb", claimShipGangplank);
   api.onCustomEvent("ladders:climb", claimCrandorRope);
+  api.onCustomEvent("ladders:climb", claimMelzarBasementLadder);
   api.onCustomEvent("door:toggle", claimQuestDoor);
   api.onObjectFirstClick(LOC.magicDoor, handleMagicDoorClick);
   api.onObjectFirstClick(LOC.melzarEntrance, handleMelzarEntranceClick);
+  api.onObjectFirstClick(LOC.melzarExitDoor, handleMelzarExitDoorClick);
   api.onObjectFirstClick(MAZE_DOORS, handleMazeDoorClick);
   api.onObjectFirstClick(LOC.oracleChest, handleOracleChestClick);
   api.onObjectFirstClick(LOC.melzarChest, handleMelzarChestClick);

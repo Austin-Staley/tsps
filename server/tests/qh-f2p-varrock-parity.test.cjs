@@ -119,3 +119,98 @@ test('Demon Slayer refuses water after Silverlight without consuming the contain
   assert.equal(h.items.get(I.BUCKET) ?? 0, 0);
   assert.match(h.messages.at(-1), /no reason/);
 });
+
+// Real DialogueManager + plugin tasks/scene controls for the Delrith encounter.
+function sceneSetup() {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const hooks = new Map(), custom = new Map(), tasks = [], areas = [], spawned = [], removed = [], prompts = [];
+  const api = new Proxy({
+    core: {
+      ...core,
+      TaskManager: {
+        submit: (task) => { task.setRunning(true); tasks.push(task); },
+        cancelTasks: (key) => tasks.filter((task) => task.key === key).forEach((task) => task.stop()),
+      },
+    },
+    persistAttribute() {},
+    registerArea: (area) => areas.push(area),
+    getItemOnGroundManager: () => ({ registerLocation() {}, getGroundItem: () => null }),
+    onCustomEvent(name, fn) { const list = custom.get(name) ?? []; list.push(fn); custom.set(name, list); },
+    emitCustomEvent(name, event) { for (const fn of custom.get(name) ?? []) fn(event); },
+    onNpcBeforeDeath(fn) { const list = hooks.get('onNpcBeforeDeath') ?? []; list.push(fn); hooks.set('onNpcBeforeDeath', list); },
+    spawnNpc(def) {
+      let area = null, location = new core.Location(def.x, def.y, def.z), hp = 7, transform = -1;
+      const npc = {
+        def, getId: () => def.id, getIndex: () => 1, getLocation: () => location,
+        moveTo: (value) => { location = value; }, getArea: () => area, setArea: (value) => { area = value; },
+        getMovementQueue: () => ({ addSteps: (value) => { location = value; } }), getCombat: () => ({ reset() {} }),
+        getHitpoints: () => hp, setHitpoints: (value) => { hp = value; }, getDefinition: () => core.NpcDefinition.forId(def.id),
+        setNpcTransformationId: (value) => { transform = value; }, getNpcTransformationId: () => transform,
+        getOwner: () => def.owner, isPlayer: () => false, isNpc: () => true, isRegistered: () => true,
+        performAnimation() {}, getAsNpc: () => npc,
+      };
+      spawned.push(npc);
+      return npc;
+    },
+    removeNpc: (npc) => { removed.push(npc); npc.__removed = true; },
+    sendMultiChatboxPrompt: (player, title, ...options) => prompts.push({ player, title, options }),
+  }, { get(target, prop) {
+    if (prop in target) return target[prop];
+    return (...args) => {
+      const fn = args.findLast((arg) => typeof arg === 'function');
+      if (fn) { const list = hooks.get(prop) ?? []; list.push(fn); hooks.set(prop, list); }
+    };
+  } });
+  require('../plugins/quests/quests/DemonSlayer.Quest')(api);
+  const quest = runtime.getRegisteredQuests().findLast((entry) => entry.key === 'demon_slayer');
+  const attributes = new Map(), items = new Map(), varbits = new Map(), messages = [], equipment = [];
+  const movement = { block: false, reset() { return this; }, setBlockMovement(value) { this.block = value; return this; } };
+  const sender = new Proxy({
+    sendVarbit(id, value) { varbits.set(id, value); return sender; },
+    getVarbit(id) { return varbits.get(id) ?? 0; },
+  }, { get: (target, key) => target[key] ?? (() => sender) });
+  let area = null, location = new core.Location(3223, 3377, 0);
+  const player = {
+    attributes, items, varbits, messages, equipment, movement,
+    getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: (id) => items.get(id) ?? 0, isFull: () => false,
+      adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)) }),
+    getBanks: () => [], getEquipment: () => ({ getItems: () => equipment, get: () => null }),
+    getLocation: () => location, moveTo: (value) => { location = value; },
+    getArea: () => area, setArea: (value) => { area = value; }, getPrivateArea: () => area instanceof core.PrivateArea ? area : null,
+    getPacketSender: () => sender, getUsername: () => 'Scene tester', getIndex: () => 1,
+    getSkillManager: () => ({ getCurrentLevel: () => 99, getCombatLevel: () => 99, addExperiences() {} }),
+    getMovementQueue: () => movement, setUntargetable() {}, getCombat: () => ({ reset() {} }),
+    getForceMovement: () => null, setForceMovement() {}, isRunningReturn: () => false, setRunning() {},
+    performAnimation() {}, performGraphic() {}, setNpcTransformationId() {}, getNpcTransformationId: () => -1,
+    isPlayer: () => true, isNpc: () => false, getAsPlayer: () => player, isRegistered: () => true,
+    sendMessage: (message) => messages.push(message), getFrameUpdater: () => ({ clear() {} }),
+  };
+  const manager = new DialogueManager(player);
+  player.getDialogueManager = () => manager;
+  const tick = (count) => { while (count-- > 0) [...tasks].forEach((task) => task.tick()); };
+  return { api, quest, player, movement, varbits, spawned, removed, prompts, areas, manager, tick,
+    call: (name, payload) => { for (const fn of hooks.get(name) ?? []) fn(payload); } };
+}
+
+test('Demon Slayer keeps the summon scene locked, then hands off unlocked at story end', () => {
+  const h = sceneSetup();
+  h.quest.setStage(h.player, 29);
+  h.varbits.set(2569, 0);
+  h.areas[0].process(h.player);
+  assert.equal(h.movement.block, true, 'the summoning cutscene stays locked');
+  assert.match(h.manager.getCurrent()?.getText() ?? '', /^Arise, O mighty Delrith/);
+  h.manager.advance();
+  h.manager.advance();
+  h.tick(13);
+  assert.ok(h.spawned.some((npc) => npc.getId() === core.NpcIdentifiers.DELRITH));
+  h.tick(1);
+  for (let step = 0; step < 8 && h.manager.getCurrent(); step++) h.manager.advance();
+  assert.equal(h.varbits.get(2569), 1, 'the story-end marker is sent');
+  assert.equal(h.movement.block, false, 'story end hands control to the fight');
+  assert.ok(h.removed.length > 0, 'the exit actor is cleaned up after the handoff');
+  const delrith = h.spawned.find((npc) => npc.getId() === core.NpcIdentifiers.DELRITH);
+  h.player.equipment.push({ getId: () => core.ItemIdentifiers.SILVERLIGHT });
+  assert.equal(h.areas[0].canAttack(h.player, delrith), null, 'the real-area attack gate accepts Silverlight after the story');
+});
