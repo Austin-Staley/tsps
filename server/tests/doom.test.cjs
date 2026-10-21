@@ -98,6 +98,7 @@ function fakeNpc(id, x, y) {
 
 // The HUD is the BossHud plugin's, reached through custom events.
 const bossHud = new Map();
+const customEvents = new Map();
 require('../plugins/interface/BossHud.plugin').register({
   core: PluginManager.getCoreApi(),
   onCustomEvent: (name, handler) => bossHud.set(name, handler),
@@ -121,10 +122,18 @@ function fakeApi() {
     onPlayerDeath() {},
     registerCommand() {},
     onInterfaceActionButton: (uid, handler) => { hooks.buttons[uid] = handler; },
+    onCustomEvent: (name, handler) => {
+      const list = customEvents.get(name) ?? [];
+      list.push(handler);
+      customEvents.set(name, list);
+    },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     spawnNpc: ({ id, x, y }) => fakeNpc(id, x, y),
     removeNpc: (npc) => { npc.registered = false; },
-    emitCustomEvent: (name, payload) => bossHud.get(name)?.(payload),
+    emitCustomEvent: (name, payload) => {
+      bossHud.get(name)?.(payload);
+      for (const handler of customEvents.get(name) ?? []) handler(payload);
+    },
   };
 }
 
@@ -227,11 +236,17 @@ before(() => {
   RegionManager.init();
   ObjectDefinition.init();
   const api = fakeApi();
+  const QuestRuntime = require('../plugins/quests/QuestRuntime');
+  QuestRuntime.registerQuest(api, {
+    key: 'the_final_dawn', name: 'The Final Dawn', varpId: 4737, varbitId: 16663,
+    startedValue: 1, completionValue: 68, questPoints: 3,
+  });
   Lobby(api);
   Delve(api);
   Rewards(api);
   Scoreboard(api);
   Records.resetWorld();
+  assert.ok(customEvents.get('quest:is-complete')?.length, 'real QuestRuntime completion handler registered');
 });
 
 function objectsHere(id, tile) {
@@ -249,6 +264,53 @@ function surfacedRun({ attacks = false, random = () => 0.99 } = {}) {
   run.hazards.nextLarvaAt = Infinity;
   return { player, run };
 }
+
+
+function realPacketSender(player) {
+  const { PacketSender } = require('../dist/net/packet/PacketSender');
+  player.getSession = () => ({ sendClientPacket: () => true });
+  const sender = new PacketSender(player);
+  sender.sendSubInterface = () => sender;
+  player.getPacketSender = () => sender;
+  return sender;
+}
+
+test('lobby Pass-through uses durable Final Dawn completion, not the transient packet varbit', () => {
+  const player = fakePlayer();
+  player.setAttribute('quest.the_final_dawn.stage', 68);
+  const sender = realPacketSender(player);
+  assert.equal(typeof sender.getVarbit, 'function');
+  assert.equal(sender.getVarbit(Shared.VARBIT.FINAL_DAWN), 0, 'fresh PacketSender cache is empty');
+  assert.equal(Lobby.passThroughEntrance({ player, option: 'Pass-through' }), true);
+  ticks(2);
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()],
+    [Shared.TILES.LOBBY.x, Shared.TILES.LOBBY.y, Shared.TILES.LOBBY.z]);
+  assert.equal(sender.getVarbit(Shared.VARBIT.FINAL_DAWN), 0, 'gate did not rely on or write the packet varbit');
+  assert.equal(player.getAttribute('quest.the_final_dawn.stage'), 68);
+});
+
+test('lobby denies unfinished Final Dawn even with a stale completed packet varbit', () => {
+  const player = fakePlayer();
+  player.setAttribute('quest.the_final_dawn.stage', 67);
+  const sender = realPacketSender(player);
+  sender.sendVarbit(Shared.VARBIT.FINAL_DAWN, 68);
+  assert.equal(sender.getVarbit(Shared.VARBIT.FINAL_DAWN), 68);
+  const before = [player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()];
+  assert.equal(Lobby.passThroughEntrance({ player, option: 'Pass-through' }), false);
+  ticks(2);
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], before);
+  assert.equal(player.getAttribute('quest.the_final_dawn.stage'), 67);
+  assert.equal(sender.getVarbit(Shared.VARBIT.FINAL_DAWN), 68, 'stale fixture varbit remains unchanged');
+});
+
+test('lobby Inspect falls through even when Final Dawn is complete', () => {
+  const player = fakePlayer();
+  player.setAttribute('quest.the_final_dawn.stage', 68);
+  const before = [player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()];
+  assert.equal(Lobby.passThroughEntrance({ player, option: 'Inspect' }), false);
+  ticks(2);
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], before);
+});
 
 // ------------------------------------------------------------------ data
 
@@ -273,12 +335,13 @@ test('the cache has the Doom, its larvae and locs where the capture put them', (
   assert.equal(CacheDefinitions.getObject(Shared.OBJECT.ENTRANCE_OPEN).actions[0], 'Pass-through');
 });
 
-test('an unfinished Final Dawn login or ruins entry never rewrites the quest stage varbit', () => {
+test('an unfinished Final Dawn login or ruins entry preserves the saved quest stage', () => {
   const p = fakePlayer();
-  p.varbits.set(Shared.VARBIT.FINAL_DAWN, 62);
+  p.setAttribute('quest.the_final_dawn.stage', 62);
   for (const handler of hooks.login) handler({ player: p });
   for (const handler of hooks.zone) handler({ player: p });
-  assert.equal(p.varbits.get(Shared.VARBIT.FINAL_DAWN), 62, 'quest-owned stage stays 62');
+  assert.equal(p.getAttribute('quest.the_final_dawn.stage'), 62);
+  assert.equal(p.varbits.get(Shared.VARBIT.FINAL_DAWN), 62, 'QuestRuntime sends the saved stage only');
   assert.equal(Lobby.openEntrance, undefined, 'no unconditional completion writer remains');
 });
 
@@ -296,7 +359,7 @@ test('the Doom entrance leaves an unfinished quest Inspect to the quest handler'
 
 test('a genuinely completed Final Dawn still opens the boss entrance with Pass-through', () => {
   const p = fakePlayer();
-  p.varbits.set(Shared.VARBIT.FINAL_DAWN, Shared.FINAL_DAWN_COMPLETE);
+  p.setAttribute('quest.the_final_dawn.stage', Shared.FINAL_DAWN_COMPLETE);
   const pass = {
     player: p, objectId: Shared.OBJECT.ENTRANCE_OPEN, clickType: 1, handled: false,
     definition: { getInteractions: () => ['Pass-through'] },

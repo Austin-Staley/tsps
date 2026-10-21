@@ -6,9 +6,9 @@
  * Capture: the entrance (56613, (1310, 9533, 1)) fades out (script 948), puts the player in
  * the lobby at (1311, 9540) and fades back in. Jump-over on the gap (57289, (1310, 9557)) says
  * "You jump the gap..." as the arena loads (DoomRun).
- * Wiki: the Doom needs The Final Dawn. The quest publishes its own stage varbit, so this
- * plugin must never write 16663; 56616 (Pass-through) is only accepted once that published
- * varbit is genuinely at the completed value 68. Unfinished quest clicks (including the
+ * Wiki: the Doom needs The Final Dawn. Its QuestRuntime completion state is the source of
+ * truth; this plugin never writes 16663. 56616 (Pass-through) is accepted only when the real
+ * quest answers quest:is-complete for the_final_dawn. Unfinished quest clicks (including the
  * ruins Inspect) fall through to the quest handler.
  * Guesses: the lobby's exit (56618, Pass-through) putting the player outside the entrance
  * with the same fade.
@@ -22,8 +22,9 @@ const JUMP_ANIM = 12196;
 
 function passThroughEntrance({ player, option }) {
   if (option !== "Pass-through") return false;
-  const stage = player.getPacketSender?.()?.getVarbit?.(Shared.VARBIT.FINAL_DAWN) ?? 0;
-  if (stage < Shared.FINAL_DAWN_COMPLETE) return false;
+  const request = { player, key: "the_final_dawn", complete: false };
+  Shared.api().emitCustomEvent("quest:is-complete", request);
+  if (request.complete !== true) return false;
   Shared.fadeMove(player, () => player.moveTo(Shared.loc(TILES.LOBBY)));
   return true;
 }

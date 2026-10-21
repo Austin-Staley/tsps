@@ -1,7 +1,8 @@
 /**
- * Where a ladder, staircase or trapdoor leads, worked out from the map itself rather than a
- * list of coordinates (issue #119): the object at the other end is found in the cache's map
- * data, and the player lands on a walkable tile from which that object can be used.
+ * Where a ladder, staircase or trapdoor leads, worked out from the map itself (issue #119):
+ * the object at the other end is found in the cache's map data, and the player lands on a
+ * walkable tile from which that object can be used. A few cache arrangements the search
+ * cannot derive are declared in data/climb-links.json and matched first.
  *
  * - The other end has a climb option in the opposite direction (a Climb-up staircase pairs with
  *   a Climb-down one above it; a trapdoor pairs with the ladder below it).
@@ -32,16 +33,17 @@ const UNDERGROUND_OFFSET = 6400;
 const SEARCH_RADIUS = 4;
 const MAX_PLANE = 3;
 
-/**
- * Cache ladders whose two ends are farther apart than the map-wide underground offset. The
- * Wizards' Tower basement ladder (2148 at 3103,9576) climbs to the ground-floor ladder 2147 at
- * 3104,3162; the 6414-tile gap is outside the 6400 offset and the 4-tile search, so link the
- * exact pair instead of moving either object or clearing floor clipping.
- */
-const CANONICAL_ENDS = new Map([
-  ["2148:3103,9576,0", { direction: UP, id: 2147, x: 3104, y: 3162, z: 0 }],
-  ["2147:3104,3162,0", { direction: DOWN, id: 2148, x: 3103, y: 9576, z: 0 }],
-]);
+function loadDeclaredLinks() {
+  const data = require("./data/climb-links.json");
+  const links = new Map();
+  for (const { up, down } of data.pairs) {
+    links.set(`${up.id}:${up.x},${up.y},${up.z}`, { direction: UP, id: down.id, x: down.x, y: down.y, z: down.z });
+    links.set(`${down.id}:${down.x},${down.y},${down.z}`, { direction: DOWN, id: up.id, x: up.x, y: up.y, z: up.z });
+  }
+  return links;
+}
+
+const DECLARED_LINKS = loadDeclaredLinks();
 
 function options(id) {
   return (ObjectDefinition.forId(id)?.getInteractions?.() ?? []).filter(Boolean).map((option) => option.toLowerCase());
@@ -123,11 +125,11 @@ function inertSameColumnSegment(object, z) {
  */
 function otherEnd(object, direction) {
   const from = object.getLocation();
-  const canonical = CANONICAL_ENDS.get(`${object.getId()}:${from.getX()},${from.getY()},${from.getZ()}`);
-  if (canonical) {
-    if (canonical.direction !== direction) return null;
-    return objectsAround(canonical.x, canonical.y, canonical.z, 0)
-      .find((candidate) => candidate.getId() === canonical.id) ?? null;
+  const declared = DECLARED_LINKS.get(`${object.getId()}:${from.getX()},${from.getY()},${from.getZ()}`);
+  if (declared) {
+    if (declared.direction !== direction) return null;
+    return objectsAround(declared.x, declared.y, declared.z, 0)
+      .find((candidate) => candidate.getId() === declared.id) ?? null;
   }
   const area = footprint(object);
   const nearest = (candidates, x, y) => candidates

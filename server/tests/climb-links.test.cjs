@@ -64,6 +64,13 @@ test('Top-floor and Bottom-floor go all the way (Lumbridge castle staircases)', 
     assert.deepEqual(lands(mapObject(3205, 3208, 2, 56231), ClimbLinks.DOWN, new Location(3206, 3208, 2), true), [3206, 3208, 0], 'Bottom-floor');
 });
 
+test('declared Wizards Tower pair links both ways from plugin data', () => {
+    const up = mapObject(3103, 9576, 0, 2148);
+    const down = mapObject(3104, 3162, 0, 2147);
+    assert.deepEqual(lands(up, ClimbLinks.UP, new Location(3104, 9576, 0)), [3105, 3162, 0]);
+    assert.deepEqual(lands(down, ClimbLinks.DOWN, new Location(3105, 3162, 0)), [3104, 9576, 0]);
+});
+
 test('a multi-storey ladder skips only an inert same-name middle segment (Goblin Village crate ladder)', () => {
     const bottom = mapObject(2954, 3497, 0, 16450);
     const middle = mapObject(2954, 3497, 1, 16557);

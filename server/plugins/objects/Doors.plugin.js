@@ -35,6 +35,17 @@ const DOOR_NAMES = new Set([
 // generated enum follows the cache, so ids stay right when it changes. Only locs the cache
 // leaves nameless have no property; those stay numeric, marked "nameless". The tables need
 // api.core, so register() builds them.
+/**
+ * Cache-nameless open door leaves. The generated ObjectIdentifiers has no property
+ * for these; each is the actionless, same-model leaf of a named closed door.
+ */
+const NAMELESS_DOOR_LEAF_IDS = Object.freeze({
+  DOOR_47_OPEN: 2001, // closed O.DOOR_47 (2000); same models, cache-derived
+  DOOR_48_OPEN: 2003, // closed O.DOOR_48 (2002); same models, cache-derived
+  LARGE_DOOR_100_OPEN: 39252, // Sins of the Father Arboretum; capture 1637
+  LARGE_DOOR_101_OPEN: 39254,
+});
+
 let SELF_OPENING_DOOR_IDS, SINGLE_DOOR_OPEN_IDS, COMPOSITE_DOOR_OPENINGS, WOODEN_GATES, WOODEN_GATE_BY_ID;
 let DOUBLE_DOOR_ID_FAMILIES, DOUBLE_DOOR_FAMILY_IDS_BY_ID, DORGESH_CITY_DOOR_IDS;
 let SPECIAL_DOUBLE_DOOR_PAIRS, SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID;
@@ -93,8 +104,11 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.STOREROOM_DOOR, O.STOREROOM_DOOR + 1],
     // Slepe church crypt gate: its open form 39513 has the same model but no action.
     [O.GATE_210, O.GATE_211],
-    [O.DOOR_47, 2001],
-    [O.DOOR_48, 2003],
+    // Active cache dump (osrs-241 2026-10-20): 2000/2002 "Door" have Open and
+    // models 634/635/574/575/576; 2001/2003 are nameless, actionless, same-model
+    // open leaves. They are not placed in the cache map. Cache-derived, no capture.
+    [O.DOOR_47, NAMELESS_DOOR_LEAF_IDS.DOOR_47_OPEN],
+    [O.DOOR_48, NAMELESS_DOOR_LEAF_IDS.DOOR_48_OPEN],
     // Barbarian Village Longhall: both leaves open four ids later (11620->11624,
     // 11621->11625); 11622/11623 are unused actionless locs.
     [O.LONGHALL_DOOR, O.LONGHALL_DOOR_3],
@@ -173,9 +187,11 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.LARGE_DOOR_24, O.LARGE_DOOR_25, O.LARGE_DOOR_26, O.LARGE_DOOR_27]),
     Object.freeze([O.LARGE_DOOR_28, O.LARGE_DOOR_29, O.LARGE_DOOR_30, O.LARGE_DOOR_31]),
     Object.freeze([O.GATE_40, O.GATE_41, O.GATE_29, O.GATE_30]),
-    // Sins of the Father Arboretum: closed leaves 39251/39253 swing east into
-    // the nameless 39252/39254 leaves on the adjacent tiles (capture 1637).
-    Object.freeze([O.LARGE_DOOR_100, O.LARGE_DOOR_101, 39252, 39254]),
+    // Sins of the Father Arboretum: closed 39251/39253 "Large door" (Open, model
+    // 40489) swing east into the nameless/actionless 39252/39254 leaves on the
+    // adjacent tiles (capture 1637; matching cache pair).
+    Object.freeze([O.LARGE_DOOR_100, O.LARGE_DOOR_101,
+      NAMELESS_DOOR_LEAF_IDS.LARGE_DOOR_100_OPEN, NAMELESS_DOOR_LEAF_IDS.LARGE_DOOR_101_OPEN]),
     // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
     Object.freeze([O.GATE_92, O.GATE_93, O.GATE_29, O.GATE_30]),
     // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
