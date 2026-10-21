@@ -2170,6 +2170,7 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      applyPrayerDrainModifiers: require(`${combat}/EquipmentEffects`).applyPrayerDrainModifiers,
       CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
@@ -4078,8 +4079,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerRunEnergyRestoreModifier(
           modifier
         ),
+      registerRunEnergyDrainModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerRunEnergyDrainModifier(
+          modifier
+        ),
+      registerSpecialEnergyRestoreModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
+          modifier
+        ),
+      registerPrayerDrainModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

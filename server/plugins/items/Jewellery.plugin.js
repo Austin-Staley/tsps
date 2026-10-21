@@ -328,6 +328,7 @@ function rechargeAtFountain(event) {
 
 module.exports = {
   name: "Jewellery",
+  members: true,
   register(api) {
     pluginApi = api;
     BonusManager = api.getBonusManager();

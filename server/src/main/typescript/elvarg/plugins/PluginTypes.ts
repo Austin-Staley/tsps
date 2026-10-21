@@ -1216,8 +1216,20 @@ export interface PluginApi {
   registerRunEnergyRestoreModifier(
     modifier: (entity: any, delayMs: number) => number
   ): void;
+  /** Run energy spent per movement step; return 0 to skip the drain. */
+  registerRunEnergyDrainModifier(
+    modifier: (entity: any, amount: number) => number
+  ): void;
+  /** Ticks between special-attack restores; a rate-doubling effect halves this. */
+  registerSpecialEnergyRestoreModifier(
+    modifier: (entity: any, delayTicks: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
+  ): void;
+  /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
+  registerPrayerDrainModifier(
+    modifier: (entity: any, amount: number, context: any) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1265,6 +1277,7 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
   CombatEquipment: any;
   CanAttackResponse: any;
   CombatType: any;

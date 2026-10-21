@@ -1,5 +1,6 @@
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { CombatFactory } = require("../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
+const { applyPrayerDrainModifiers } = require("../../src/main/typescript/elvarg/game/content/combat/EquipmentEffects");
 const { CombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/CombatMethod");
 const { CombatType } = require("../../src/main/typescript/elvarg/game/content/combat/CombatType");
 const { Graphic } = require("../../src/main/typescript/elvarg/game/model/Graphic");
@@ -154,14 +155,11 @@ class KalphiteQueenCombat extends CombatMethod {
       return;
     }
     const player = target.getAsPlayer();
-    if (player.getEquipment().getItems().some((item) => item?.getId?.() === ItemIdentifiers.SPECTRAL_SPIRIT_SHIELD)
-      && Misc.randomInclusive(0, 1) === 0) {
-      return;
-    }
+    const drain = applyPrayerDrainModifiers(player, 1, { attacker: hit.getAttacker?.() });
     const skills = player.getSkillManager();
     const prayer = skills.getCurrentLevel?.(Skill.PRAYER);
-    if (Number.isFinite(prayer) && prayer > 0) {
-      skills.setCurrentLevels(Skill.PRAYER, prayer - 1);
+    if (Number.isFinite(prayer) && prayer > 0 && drain > 0) {
+      skills.setCurrentLevels(Skill.PRAYER, prayer - drain);
     }
   }
 }
