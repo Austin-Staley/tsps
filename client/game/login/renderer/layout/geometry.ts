@@ -3,6 +3,35 @@ import type { LoginRendererHost, RenderContext } from "../host";
 
 export function getTitleBackgroundLayout(host: LoginRendererHost) {
 
+        const art = host.titleBackgroundImage;
+        if (art && host.titleBackgroundFromCache) {
+            // The cache's title art: centred on the scene and drawn whole, growing past the scene's
+            // scale (up to TITLE_ART_MAX_GROWTH times) while the viewport still fits it, so large
+            // screens are not mostly black. Where even the scene's scale doesn't fit it whole, its
+            // classic 765x503 part (centred, at the top) lies under the scene, as in the classic client.
+            const sceneScale = host.contentScale > 0 ? host.contentScale : 1;
+            const centerX = host.contentOriginX + (host.SCENE_WIDTH * sceneScale) / 2;
+            const centerY = host.contentOriginY + (host.SCENE_HEIGHT * sceneScale) / 2;
+            const fit = Math.min(
+                (2 * Math.min(centerX - host.containerX, host.containerX + host.containerWidth - centerX)) / art.width,
+                (2 * Math.min(centerY, host.containerHeight - centerY)) / art.height,
+            );
+            if (fit < sceneScale) {
+                const sceneX = (art.width - host.SCENE_WIDTH) / 2;
+                return {
+                    drawX: host.contentOriginX - sceneX * sceneScale,
+                    drawY: host.contentOriginY,
+                    drawW: art.width * sceneScale,
+                    drawH: art.height * sceneScale,
+                    scale: sceneScale,
+                };
+            }
+            const scale = Math.min(sceneScale * LOGIN_LAYOUT.TITLE_ART_MAX_GROWTH, fit);
+            const drawW = art.width * scale;
+            const drawH = art.height * scale;
+            return { drawX: centerX - drawW / 2, drawY: centerY - drawH / 2, drawW, drawH, scale };
+        }
+        // The bundled widescreen image covers the viewport.
         const targetW = Math.max(1, host.containerWidth);
         const targetH = Math.max(1, host.containerHeight);
         const img = host.titleBackgroundImage;
@@ -23,15 +52,15 @@ export function getTitleBackgroundLayout(host: LoginRendererHost) {
 
 export function getLogicalFirePositions(host: LoginRendererHost) {
 
-        // Classic 765-scene fire edges mapped into the 1089-wide title art:
-        //   cropX = (1089 - 765) / 2 = 162
-        //   left  = 162 + (-22) = 140
-        //   right = 162 + (765 - 128 + 22) = 821
-        // Track those art-space X values through the cover-fit background transform.
+        // Classic 765-scene fire edges (-22 and 765 - 128 + 22) in the title art, whose middle
+        // 765 columns (from the top) are the scene: (1089 - 765) / 2 = 162 in for the cache's
+        // titlewide art and the bundled image, none for title.jpg. Track those art-space values
+        // through the background's transform.
         const bg = getTitleBackgroundLayout(host);
-        const artW = LOGIN_LAYOUT.TITLE_BG_WIDTH;
-        const leftSrcX = LOGIN_LAYOUT.TITLE_BG_CROP_X - 22;
-        const rightSrcX = LOGIN_LAYOUT.TITLE_BG_CROP_X + host.SCENE_WIDTH - 128 + 22;
+        const artW = host.titleBackgroundImage?.width || LOGIN_LAYOUT.TITLE_BG_WIDTH;
+        const cropX = Math.max(0, Math.floor((artW - host.SCENE_WIDTH) / 2));
+        const leftSrcX = cropX - 22;
+        const rightSrcX = cropX + host.SCENE_WIDTH - 128 + 22;
         // Scale fire sprites with the background so bowl size matches the art.
         const fireScale = bg.drawW / artW;
         return {
