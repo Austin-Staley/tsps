@@ -30,6 +30,11 @@ function toOsrsKeyCode(domKeyCode: number): number {
     return -1;
 }
 
+/** Finger travel per camera zoom notch while pinching (CSS px). */
+const PINCH_PX_PER_WHEEL_NOTCH = 20;
+/** A mouse wheel notch's deltaY (pixel mode). */
+const WHEEL_NOTCH_DELTA = 100;
+
 /**
  * Forced-landscape portrait mode (useSafariLandscapeLock) rotates the root 90deg clockwise.
  * getBoundingClientRect then returns swapped (rotated) dimensions.
@@ -235,6 +240,8 @@ export class InputManager {
     private pinchCenterY: number = 0;
     /** Accumulated pinch zoom delta (positive = zoom in, negative = zoom out) */
     pinchZoomDelta: number = 0;
+    /** Finger travel (CSS px, + = pinch in) not yet turned into wheel notches. */
+    private pinchNotchRemainder: number = 0;
 
     // === Touch scroll state (for mobile lists) ===
     /** Previous touch Y position for scroll velocity calculation */
@@ -941,6 +948,7 @@ export class InputManager {
             const distance = this.getTouchDistance(event.touches[0], event.touches[1]);
             this.pinchStartDistance = distance;
             this.lastPinchDistance = distance;
+            this.pinchNotchRemainder = 0;
             const [cx, cy] = this.getTouchCenter(event.touches[0], event.touches[1]);
             this.pinchCenterX = cx;
             this.pinchCenterY = cy;
@@ -977,8 +985,15 @@ export class InputManager {
             const distance = this.getTouchDistance(event.touches[0], event.touches[1]);
             const delta = distance - this.lastPinchDistance;
             // Pinch-in (delta < 0) → positive wheelDeltaY (zoom out), matching wheel-down.
-            // Scale ~2 so a modest pinch feels similar to a few wheel notches.
-            this.wheelDeltaY += -delta * 2;
+            // The zoom scripts take one fixed notch per frame whatever the delta, so a raw
+            // per-move delta zoomed a notch every frame of any pinch. Send whole notches by
+            // finger travel instead, keeping the remainder.
+            this.pinchNotchRemainder += -delta;
+            while (Math.abs(this.pinchNotchRemainder) >= PINCH_PX_PER_WHEEL_NOTCH) {
+                const sign = Math.sign(this.pinchNotchRemainder);
+                this.wheelDeltaY += sign * WHEEL_NOTCH_DELTA;
+                this.pinchNotchRemainder -= sign * PINCH_PX_PER_WHEEL_NOTCH;
+            }
             this.lastPinchDistance = distance;
             const [cx, cy] = this.getTouchCenter(event.touches[0], event.touches[1]);
             this.pinchCenterX = cx;

@@ -283,6 +283,16 @@ export class NetworkBuilder {
 
 export class ClientConnection {
   private static readonly pendingNames = new Set<string>();
+  /**
+   * A logged-in connection that sends nothing for this long is dead: the client pings every 5 s
+   * while the server talks. A phone that sleeps or changes network never closes its socket (a
+   * tunnel keeps the server's end open too), and its player stayed in the world, so logging back
+   * in failed with "already logged in".
+   */
+  private static readonly IDLE_TIMEOUT_MS = 30_000;
+  private static readonly IDLE_CHECK_MS = 5_000;
+  private lastFrameAt = Date.now();
+  private readonly idleCheck: ReturnType<typeof setInterval>;
   private pending?: PendingLogin;
   private reservedName?: string;
   private player?: Player;
@@ -298,6 +308,7 @@ export class ClientConnection {
   constructor(private readonly channel: BinaryChannel) {
     channel.onData((frame) => {
       if (this.closed) return;
+      this.lastFrameAt = Date.now();
       if (frame.length > MAX_GAME_MESSAGE_BYTES || this.queuedInputFrames >= NetworkConstants.PACKET_QUEUE_LIMIT) {
         console.warn("[network] client input limit exceeded", { bytes: frame.length, queued: this.queuedInputFrames });
         this.cleanup("input_limit");
@@ -316,6 +327,14 @@ export class ClientConnection {
       this.cleanup("socket_error");
     });
     channel.onClose(() => this.cleanup("socket_close"));
+    this.idleCheck = setInterval(() => {
+      if (!this.player || Date.now() - this.lastFrameAt < ClientConnection.IDLE_TIMEOUT_MS) return;
+      this.cleanup("idle_timeout");
+      try {
+        channel.close(1001, "idle timeout");
+      } catch {}
+    }, ClientConnection.IDLE_CHECK_MS);
+    this.idleCheck.unref?.();
     this.send(encodeWelcome(GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE, Date.now()));
   }
 
@@ -1381,6 +1400,7 @@ export class ClientConnection {
   private cleanup(source: string): void {
     if (this.closed) return;
     this.closed = true;
+    clearInterval(this.idleCheck);
     this.releasePendingName();
     if (!this.player) return;
     // The disconnect hooks fire when the player leaves the world, which a player in
