@@ -161,12 +161,11 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
 
     // The widget currently being clicked (Client.clickedWidget) is drawn semi-transparent.
     // Reference: UserComparator5.drawInterface: if (var10 == Client.clickedWidget && !var10.isScrollBar) { var14 = 128; }
-    // Note: `clickedWidget` is a private TS field on OsrsClient but exists at runtime; read via `any`.
+    // Note: `widgetInteraction` is a private TS field on OsrsClient but exists at runtime; read via `any`.
     const osrsClient = (opts.game as any)?.osrsClient as any;
+    const clickedWidget = osrsClient?.widgetInteraction?.clickedWidget;
     const clickedWidgetUid: number | null =
-        typeof osrsClient?.clickedWidget?.uid === "number"
-            ? ((osrsClient.clickedWidget.uid | 0) as number)
-            : null;
+        typeof clickedWidget?.uid === "number" ? ((clickedWidget.uid | 0) as number) : null;
 
     // PERF: Validate all dirty layouts in one pass before rendering
     // This avoids per-widget ensureLayout calls during tree traversal
