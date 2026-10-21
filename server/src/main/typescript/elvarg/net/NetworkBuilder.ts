@@ -42,7 +42,7 @@ import {
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
-  WORLD_MAP_ORB_WIDGET_IDS,
+  isWorldMapOrbWidget,
 } from "./protocol/WorldMapProtocol";
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
@@ -283,6 +283,18 @@ export class NetworkBuilder {
 
 export class ClientConnection {
   private static readonly pendingNames = new Set<string>();
+  /**
+   * A logged-in connection that sends nothing for this long is dead: the client pings every 5 s
+   * while the server talks. A phone that sleeps or changes network never closes its socket (a
+   * tunnel keeps the server's end open too), and its player stayed in the world, so logging back
+   * in failed with "already logged in".
+   */
+  private static readonly IDLE_TIMEOUT_MS = 30_000;
+  private static readonly IDLE_CHECK_MS = 5_000;
+  private lastFrameAt = Date.now();
+  /** Set by the first ping: a client from before the keepalive is never timed out. */
+  private sendsKeepalive = false;
+  private idleCheck?: ReturnType<typeof setInterval>;
   private pending?: PendingLogin;
   private reservedName?: string;
   private player?: Player;
@@ -298,6 +310,7 @@ export class ClientConnection {
   constructor(private readonly channel: BinaryChannel) {
     channel.onData((frame) => {
       if (this.closed) return;
+      this.lastFrameAt = Date.now();
       if (frame.length > MAX_GAME_MESSAGE_BYTES || this.queuedInputFrames >= NetworkConstants.PACKET_QUEUE_LIMIT) {
         console.warn("[network] client input limit exceeded", { bytes: frame.length, queued: this.queuedInputFrames });
         this.cleanup("input_limit");
@@ -651,7 +664,7 @@ export class ClientConnection {
             // option's statement) must not take the same click as its option.
             const openDialogue = this.player.getDialogueManager().getCurrent();
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
-            if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
+            if (isWorldMapOrbWidget(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
               this.player.getPacketSender().toggleWorldMap();
             } else if (actionPacket.widgetId === WORLD_MAP_CLOSE_WIDGET_ID) {
               this.player.getPacketSender().closeWorldMap();
@@ -974,8 +987,10 @@ export class ClientConnection {
           continue;
         case "raw":
           continue;
-        case "hello":
         case "ping":
+          this.sendsKeepalive = true;
+          continue;
+        case "hello":
           continue;
         case "login":
           await this.login(packet.username, packet.password, packet.revision, packet.flags);
@@ -1152,6 +1167,7 @@ export class ClientConnection {
       return;
     }
     this.player = player;
+    this.startIdleCheck();
     CONNECTIONS.set(player, this);
     this.releasePendingName();
     // Back aboard a boat they logged out on at sea.
@@ -1378,9 +1394,23 @@ export class ClientConnection {
     this.pending = undefined;
   }
 
+  /** Drops the logged-in connection once a client that pings goes quiet (IDLE_TIMEOUT_MS). */
+  private startIdleCheck(): void {
+    if (this.closed) return;
+    this.idleCheck = setInterval(() => {
+      if (!this.sendsKeepalive || Date.now() - this.lastFrameAt < ClientConnection.IDLE_TIMEOUT_MS) return;
+      this.cleanup("idle_timeout");
+      try {
+        this.channel.close(1001, "idle timeout");
+      } catch {}
+    }, ClientConnection.IDLE_CHECK_MS);
+    this.idleCheck.unref?.();
+  }
+
   private cleanup(source: string): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.idleCheck) clearInterval(this.idleCheck);
     this.releasePendingName();
     if (!this.player) return;
     // The disconnect hooks fire when the player leaves the world, which a player in
