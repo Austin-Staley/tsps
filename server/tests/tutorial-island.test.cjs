@@ -456,6 +456,17 @@ test("skipping the island as an Ironman opens the setup with every mode, then en
   // Learning the Ropes completes at 671 on the same varp: it must not leave it there.
   assert.equal(closedSent.varps.get(PROGRESS_VARP), STEP.COMPLETED, "the tutorial varp ends at 1000");
 
+  // Logging out with the setup open (no close event) leaves the skip pending: the next login
+  // finishes it rather than leaving the player mid-island.
+  const { player: dropped } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
+  Leave.finishSkip(dropped, true);
+  ticks(2);
+  assert.equal(dropped.getAttribute(Leave.SKIP_PENDING_ATTRIBUTE), true);
+  Leave.onLogin({ player: dropped, isNewAccount: false });
+  ticks(2);
+  assert.equal(progress(dropped), STEP.COMPLETED, "the next login finishes the skip");
+  assert.equal(dropped.getAttribute(Leave.SKIP_PENDING_ATTRIBUTE), null);
+
   const { player: declined } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
   Leave.finishSkip(declined, false);
   ticks(2);

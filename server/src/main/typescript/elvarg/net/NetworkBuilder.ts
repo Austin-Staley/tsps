@@ -42,7 +42,7 @@ import {
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
-  WORLD_MAP_ORB_WIDGET_IDS,
+  isWorldMapOrbWidget,
 } from "./protocol/WorldMapProtocol";
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
@@ -292,7 +292,9 @@ export class ClientConnection {
   private static readonly IDLE_TIMEOUT_MS = 30_000;
   private static readonly IDLE_CHECK_MS = 5_000;
   private lastFrameAt = Date.now();
-  private readonly idleCheck: ReturnType<typeof setInterval>;
+  /** Set by the first ping: a client from before the keepalive is never timed out. */
+  private sendsKeepalive = false;
+  private idleCheck?: ReturnType<typeof setInterval>;
   private pending?: PendingLogin;
   private reservedName?: string;
   private player?: Player;
@@ -327,14 +329,6 @@ export class ClientConnection {
       this.cleanup("socket_error");
     });
     channel.onClose(() => this.cleanup("socket_close"));
-    this.idleCheck = setInterval(() => {
-      if (!this.player || Date.now() - this.lastFrameAt < ClientConnection.IDLE_TIMEOUT_MS) return;
-      this.cleanup("idle_timeout");
-      try {
-        channel.close(1001, "idle timeout");
-      } catch {}
-    }, ClientConnection.IDLE_CHECK_MS);
-    this.idleCheck.unref?.();
     this.send(encodeWelcome(GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE, Date.now()));
   }
 
@@ -670,7 +664,7 @@ export class ClientConnection {
             // option's statement) must not take the same click as its option.
             const openDialogue = this.player.getDialogueManager().getCurrent();
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
-            if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
+            if (isWorldMapOrbWidget(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
               this.player.getPacketSender().toggleWorldMap();
             } else if (actionPacket.widgetId === WORLD_MAP_CLOSE_WIDGET_ID) {
               this.player.getPacketSender().closeWorldMap();
@@ -993,8 +987,10 @@ export class ClientConnection {
           continue;
         case "raw":
           continue;
-        case "hello":
         case "ping":
+          this.sendsKeepalive = true;
+          continue;
+        case "hello":
           continue;
         case "login":
           await this.login(packet.username, packet.password, packet.revision, packet.flags);
@@ -1171,6 +1167,7 @@ export class ClientConnection {
       return;
     }
     this.player = player;
+    this.startIdleCheck();
     CONNECTIONS.set(player, this);
     this.releasePendingName();
     // Back aboard a boat they logged out on at sea.
@@ -1397,10 +1394,23 @@ export class ClientConnection {
     this.pending = undefined;
   }
 
+  /** Drops the logged-in connection once a client that pings goes quiet (IDLE_TIMEOUT_MS). */
+  private startIdleCheck(): void {
+    if (this.closed) return;
+    this.idleCheck = setInterval(() => {
+      if (!this.sendsKeepalive || Date.now() - this.lastFrameAt < ClientConnection.IDLE_TIMEOUT_MS) return;
+      this.cleanup("idle_timeout");
+      try {
+        this.channel.close(1001, "idle timeout");
+      } catch {}
+    }, ClientConnection.IDLE_CHECK_MS);
+    this.idleCheck.unref?.();
+  }
+
   private cleanup(source: string): void {
     if (this.closed) return;
     this.closed = true;
-    clearInterval(this.idleCheck);
+    if (this.idleCheck) clearInterval(this.idleCheck);
     this.releasePendingName();
     if (!this.player) return;
     // The disconnect hooks fire when the player leaves the world, which a player in

@@ -18,8 +18,8 @@ const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cach
 
 const ROOT_INTERFACE = 161;
 const MAIN_MODAL_UID = (ROOT_INTERFACE << 16) | 16;
-/** orbs:xp_drops, and orbs_osm:xp_drops on mobile. */
-const XPDROPS_ORB_UIDS = [(160 << 16) | 6, (897 << 16) | 2];
+/** The XP drops orb, on the desktop orbs and the mobile toplevel's (gameval names). */
+const XPDROPS_ORB_COMPONENTS = ["orbs:xp_drops", "orbs_osm:xp_drops"];
 const XPDROPS_OVERLAY_UID = (ROOT_INTERFACE << 16) | 9; // toplevel_osrs_stretch:xp_drops
 const XPDROPS_INTERFACE_ID = 122;
 const XPDROPS_SETUP_INTERFACE_ID = 137;
@@ -487,6 +487,11 @@ function clickXpDrops({ player, opId, action }) {
   return true;
 }
 
+/** Packed ids of the XP drops orbs; a component this cache lacks is left out. */
+function xpDropsOrbIds(api) {
+  return XPDROPS_ORB_COMPONENTS.map((name) => api.core.CacheDefinitions.getComponentId(name)).filter(Number.isInteger);
+}
+
 module.exports = {
   name: "Settings",
   applyDefaultKeybindings,
@@ -497,7 +502,7 @@ module.exports = {
   register(api) {
     api.persistAttribute(XPDROPS_ENABLED_ATTRIBUTE);
     api.onPlayerLogin(syncXpDrops);
-    for (const uid of XPDROPS_ORB_UIDS) api.onInterfaceActionButton(uid, clickXpDrops);
+    api.onInterfaceActionButton(xpDropsOrbIds(api), clickXpDrops);
     for (const tab of TAB_VARBIT_MAP) {
       api.persistAttribute(keybindAttribute(tab.varbit), tab.defaultKey);
     }

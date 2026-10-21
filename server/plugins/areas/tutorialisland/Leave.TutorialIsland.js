@@ -57,8 +57,15 @@ function giveStarterKit(player) {
   if (coins < 25) bank.adds(Items.COINS, 25 - coins);
 }
 
+/**
+ * Set while a skip waits on the Ironman setup. A player who logs out (or drops) with the setup
+ * open, whose skip would otherwise be lost mid-island, finishes it on the next login.
+ */
+const SKIP_PENDING_ATTRIBUTE = "tutorial-island:skip-pending";
+
 /** Ends the tutorial where the player stands (or at the world's spawn when that isn't Lumbridge). */
 function complete(player) {
+  player.setAttribute(SKIP_PENDING_ATTRIBUTE, null);
   clearItems(player);
   giveStarterKit(player);
   const spawn = core.GameConstants.DEFAULT_LOCATION;
@@ -82,6 +89,11 @@ function onLogin(event) {
   } else if (!T.isActive(player)) {
     // Done with the island (or from before it existed): the quest list reads the varp.
     player.getPacketSender().sendConfig(T.data.varps.progress, STEP.COMPLETED);
+  } else if (player.getAttribute(SKIP_PENDING_ATTRIBUTE) === true) {
+    // Left with the Ironman setup open: the skip was chosen, so finish it, once the gameframe is up.
+    T.later(1, () => {
+      if (T.isActive(player)) complete(player);
+    });
   }
 }
 
@@ -158,6 +170,7 @@ function finishSkip(player, ironman) {
     complete(player);
     return;
   }
+  player.setAttribute(SKIP_PENDING_ATTRIBUTE, true);
   T.later(1, () => {
     const request = { player, upgrades: true, handled: false, onClosed: () => completeAfterChatbox(player) };
     pluginApi.emitCustomEvent("ironman:open-setup", request);
@@ -217,6 +230,7 @@ module.exports = function attach(api) {
   api.persistAttribute(T.PROGRESS_ATTRIBUTE);
   api.persistAttribute(T.LEGACY_STAGE_ATTRIBUTE);
   api.persistAttribute(T.EXPERIENCE_ATTRIBUTE);
+  api.persistAttribute(SKIP_PENDING_ATTRIBUTE);
   const { experience, experienceOptions } = T.data.interfaces;
   api.onInterfaceActionButton((experience << 16) | experienceOptions, onExperience);
   api.onCustomEvent("interface:closed", onInterfaceClosed);
@@ -228,4 +242,4 @@ module.exports = function attach(api) {
   api.onPlayerProcess(onProcess);
 };
 
-Object.assign(module.exports, { complete, skipTutorial, finishSkip });
+Object.assign(module.exports, { complete, skipTutorial, finishSkip, onLogin, SKIP_PENDING_ATTRIBUTE });
