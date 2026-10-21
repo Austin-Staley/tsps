@@ -14,11 +14,16 @@ mandatory routes, exact reward deltas once, repeat checks, relog, offline persis
 post-quest behaviour and applicable canonical recovery. Target quest-state/item injection
 and transport/scene bypasses do not count.
 
-Implementation uses parallel free DeepSeek V4.1 Flash sessions via OpenCode in one
+Implementation uses parallel DeepSeek V4.1 Flash 1017 sessions via OpenCode in one
 worktree, with one owner per quest/test file. The integration owner reviews changes,
 handles shared files and generated-source fixes, freezes batches, tests and reloads.
 Generated JSON is never hand-edited or repaired through copied output overrides.
 The PR stays draft until all required checks are complete. Unverified cases stay explicit.
+
+The initial free endpoint exhausted its quota before any quest was accepted. The user
+authorized the paid `deepseek/deepseek-flash` endpoint, whose OpenCode metadata identifies
+it as **DeepSeek V4.1 Flash 1017**. Existing session histories and partial changes are
+retained for continuation and review.
 
 Initial baseline: server build passed; 4,238 tests, 4,232 passed, six existing failures,
 zero skipped. The failure names are: bot activity tier allocation; deployed bot-site
