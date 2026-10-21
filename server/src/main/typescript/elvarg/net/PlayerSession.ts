@@ -99,8 +99,20 @@ export class PlayerSession {
   // treated as newly-added and never gets that forced send. Track it explicitly instead.
   private pendingInitialLocalAppearance = true;
 
+  /** Set by the client connection: acts on the packets received since the player's last turn. */
+  private turnPacketProcessor?: () => void;
+
   constructor(channel: SessionChannel) {
     this.channel = channel;
+  }
+
+  public setTurnPacketProcessor(processor: () => void): void {
+    this.turnPacketProcessor = processor;
+  }
+
+  /** Runs at the start of the player's turn: client input comes first, as in live OSRS. */
+  public processPackets(): void {
+    this.turnPacketProcessor?.();
   }
 
   public write(_builder: PacketBuilder) {
