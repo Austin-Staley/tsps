@@ -200,9 +200,10 @@ test('12WBZW reaches the quest handler through real NpcDialogues with event.npc'
   assert.deepEqual(attacks, [p]);
 });
 
-function realDispatchPlayer(shieldStage, ds2Stage) {
+function realDispatchPlayer(shieldStage, ds2Stage, heroesStage) {
   const attributes = new Map([['quest.shield_of_arrav.stage', shieldStage]]);
   if (ds2Stage !== undefined) attributes.set('quest.dragon_slayer_ii.stage', ds2Stage);
+  if (heroesStage !== undefined) attributes.set('quest.heroes_quest.stage', heroesStage);
   const items = new Map();
   const state = { texts: [], packets: [], chain: null, sends: 0 };
   let packet;
@@ -251,12 +252,30 @@ function realDispatchPlayer(shieldStage, ds2Stage) {
   return { player: p, texts: () => state.texts, packets: () => state.packets, chain: () => state.chain };
 }
 
-function dispatchReldo(player) {
-  const definition = core.NpcDefinition.forId(core.NpcIdentifiers.RELDO);
-  const npc = { getId: () => core.NpcIdentifiers.RELDO, getCurrentDefinition: () => definition,
+function dispatchNpc(player, npcId) {
+  const definition = core.NpcDefinition.forId(npcId);
+  const npc = { getId: () => npcId, getCurrentDefinition: () => definition,
     getLocation: () => new core.Location(3209, 3495, 0), getIndex: () => 101 };
-  const event = { player, npc, npcId: core.NpcIdentifiers.RELDO, clickType: 1, handled: false };
+  const event = { player, npc, npcId, clickType: 1, handled: false };
   return { handled: PluginManager.emitNpcInteraction(event), event };
+}
+
+function dispatchReldo(player) {
+  return dispatchNpc(player, core.NpcIdentifiers.RELDO);
+}
+
+function ensureRealPlugins() {
+  if (global.__arravRealPlugins) return;
+  // Quest files export their register(api) function; Quests.plugin uses this same API.
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(PluginManager.createApi('DragonSlayerII'));
+  // Production order: Heroes registers before Shield of Arrav.
+  require('../plugins/quests/quests/HeroesQuest.Quest')(PluginManager.createApi('HeroesQuest'));
+  require('../plugins/quests/quests/ShieldOfArrav.Quest')(PluginManager.createApi('ShieldOfArrav'));
+  PluginManager.registerPluginCandidate({
+    pluginPath: 'NpcDialogues.plugin.js', pluginName: 'NpcDialogues',
+    plugin: require('../plugins/npcs/NpcDialogues.plugin'), dependsOn: [],
+  });
+  global.__arravRealPlugins = true;
 }
 
 function dispatchText(dispatch) {
@@ -267,16 +286,7 @@ function dispatchText(dispatch) {
 }
 
 test('real PluginManager named dispatch defers inactive DS2 Reldo and keeps active DS2', () => {
-  if (!global.__arravRealPlugins) {
-    // Quest files export their register(api) function; Quests.plugin uses this same API.
-    require('../plugins/quests/quests/DragonSlayerII.Quest')(PluginManager.createApi('DragonSlayerII'));
-    require('../plugins/quests/quests/ShieldOfArrav.Quest')(PluginManager.createApi('ShieldOfArrav'));
-    PluginManager.registerPluginCandidate({
-      pluginPath: 'NpcDialogues.plugin.js', pluginName: 'NpcDialogues',
-      plugin: require('../plugins/npcs/NpcDialogues.plugin'), dependsOn: [],
-    });
-    global.__arravRealPlugins = true;
-  }
+  ensureRealPlugins();
 
   const inactive = realDispatchPlayer(0, 0);
   assert.equal(dispatchReldo(inactive.player).handled, true);
@@ -296,5 +306,67 @@ test('real PluginManager named dispatch defers inactive DS2 Reldo and keeps acti
     const text = dispatchText(deferred);
     assert.match(text, /Hello, stranger\./, `${label} DS2 must let Shield handle Reldo`);
     assert.doesNotMatch(text, /Ask about Tristan\./);
+  }
+});
+
+test('shared gang NPCs keep Shield introductions before the book and preserve active Heroes', () => {
+  ensureRealPlugins();
+  const KATRINE = core.NpcIdentifiers.KATRINE;
+  const STRAVEN = core.NpcIdentifiers.STRAVEN;
+
+  for (const [stage, hasBook] of [[0, false], [1, false], [1, true], [2, false], [3, false]]) {
+    for (const [npcId, name] of [[KATRINE, 'Katrine'], [STRAVEN, 'Straven']]) {
+      const h = realDispatchPlayer(stage);
+      if (hasBook) h.player.items.set(core.ItemIdentifiers.BOOK, 1);
+      const dispatch = dispatchNpc(h.player, npcId);
+      assert.equal(dispatch.handled, true, `${name} at Shield stage ${stage} must start a dialogue`);
+      const text = dispatchText(h);
+      assert.doesNotMatch(text, /Welcome to the Heroes' Guild/,
+        `${name} at Shield stage ${stage} must not fall back to Achietties`);
+      if (npcId === KATRINE) {
+        assert.match(text, /It's a private business\. Can I help you at all\?/);
+        assert.match(text, /I've heard you're the Black Arm Gang\./);
+      } else {
+        assert.match(text, /What's through that door\?/);
+        assert.match(text, /I know who you are!/);
+      }
+      assert.equal(h.player.attributes.get('quest.shield_of_arrav.stage'), stage,
+        `${name} must not silently advance the Shield stage`);
+    }
+  }
+
+  // The early acceptance choice must not claim the task while READ_BOOK still guards it.
+  const earlyKatrine = realDispatchPlayer(1);
+  dispatchNpc(earlyKatrine.player, KATRINE);
+  PluginManager.emitCustomEvent('npc-dialogue:choice', {
+    player: earlyKatrine.player, npcId: KATRINE, option: 'Okay, no problem.',
+  });
+  assert.equal(earlyKatrine.player.attributes.get('quest.shield_of_arrav.stage'), 1);
+  assert.equal(earlyKatrine.player.attributes.get('shield-of-arrav:black-arm-task'), undefined);
+
+  const earlyStraven = realDispatchPlayer(1);
+  dispatchNpc(earlyStraven.player, STRAVEN);
+  PluginManager.emitCustomEvent('npc-dialogue:choice', {
+    player: earlyStraven.player, npcId: STRAVEN, option: "I'd like to offer you my services.",
+  });
+  assert.equal(earlyStraven.player.attributes.get('quest.shield_of_arrav.stage'), 1);
+  assert.equal(earlyStraven.player.attributes.get('shield-of-arrav:phoenix-task'), undefined);
+
+  // Production order: Heroes' Quest answers first for its active stages.
+  for (const [npcId, expected, forbidden] of [
+    [STRAVEN, /Took me YEARS to get that rank\./, /What's through that door\?/],
+    [KATRINE, /Is there any way I can get the rank of master thief\?/, /It's a private business\./],
+  ]) {
+    const h = realDispatchPlayer(1, undefined, 1);
+    const dispatch = dispatchNpc(h.player, npcId);
+    assert.equal(dispatch.handled, true);
+    const text = dispatchText(h);
+    assert.match(text, expected, 'active Heroes variant must win');
+    assert.doesNotMatch(text, forbidden, 'Shield must not hijack active Heroes');
+    assert.doesNotMatch(text, /Welcome to the Heroes' Guild/);
+    assert.equal(h.player.attributes.get('quest.shield_of_arrav.stage'), 1, 'Shield stage unchanged');
+    assert.equal(h.player.attributes.get('quest.heroes_quest.stage'), 1, 'Heroes stage unchanged');
+    assert.equal(h.player.attributes.get('shield-of-arrav:black-arm-task'), undefined);
+    assert.equal(h.player.attributes.get('shield-of-arrav:phoenix-task'), undefined);
   }
 });

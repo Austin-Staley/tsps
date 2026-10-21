@@ -324,6 +324,8 @@ module.exports = function registerShieldOfArravQuest(api) {
       return null;
     }
 
+    // Early gang conversations still need their own page; a null choice falls
+    // back to the unrelated Heroes' Guild transcript.
     if (npcId === KATRINE_NPC_ID) {
       if (joinedGang(player)) {
         if (isPhoenix(player)) return { page: PAGE, variant: "phoenix-gang-talking-to-katrine-after-joining-the-phoenix-gang" };
@@ -331,10 +333,9 @@ module.exports = function registerShieldOfArravQuest(api) {
           ? "post-quest-talking-to-katrine-as-a-member-of-the-black-arm-gang"
           : "black-arm-gang-talking-to-katrine-after-joining-the-black-arm-gang" };
       }
-      if (stage >= STAGE_READ_BOOK) return { page: PAGE, variant: blackArmTask(player)
+      return { page: PAGE, variant: blackArmTask(player)
         ? "black-arm-gang-talking-to-katrine-again-after-accepting-her-task"
         : "black-arm-gang-talking-to-katrine" };
-      return null;
     }
 
     if (npcId === STRAVEN_NPC_ID) {
@@ -344,10 +345,9 @@ module.exports = function registerShieldOfArravQuest(api) {
           ? hasItem(player, KEY_ID) ? "post-quest-talking-to-straven-as-a-member-of-the-phoenix-gang" : "post-quest-if-you-lost-the-weapon-store-key"
           : hasItem(player, KEY_ID) ? "phoenix-gang-talking-to-straven-after-joining-the-phoenix-gang" : "phoenix-gang-talking-to-straven-after-losing-the-weapon-store-key" };
       }
-      if (stage >= STAGE_READ_BOOK) return { page: PAGE, variant: phoenixTask(player)
+      return { page: PAGE, variant: phoenixTask(player)
         ? "phoenix-gang-talking-to-straven-or-opening-the-door-after-accepting-his-task"
         : "phoenix-gang-talking-to-straven-or-attempting-to-open-the-door" };
-      return null;
     }
 
     if (WEAPONSMASTER_NPC_IDS.has(npcId)) {
