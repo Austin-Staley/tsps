@@ -341,14 +341,27 @@ function rollQuantity(entry) {
   return min + randomInt(max - min + 1);
 }
 
-/** Independent `weight / out_of` chance. */
-function hits(entry, doubleChance = false) {
+/** Independent `weight / out_of` chance, `multiplier` times as likely. */
+function hits(entry, multiplier = 1) {
   const outOf = Number(entry.out_of);
   if (!Number.isInteger(outOf) || outOf <= 0) {
     return false;
   }
   const weight = Number.isInteger(entry.weight) ? entry.weight : 1;
-  return randomInt(outOf) < Math.min(outOf, weight * (doubleChance ? 2 : 1));
+  return Math.random() * outOf < Math.min(outOf, weight * multiplier);
+}
+
+/**
+ * How many times as likely a tertiary drop is for this kill: an imbued ring of wealth doubles
+ * clue scrolls in the Wilderness, and plugins answer npc-drops:tertiary-chance
+ * { player, npc, npcId, entry, multiplier } by multiplying `multiplier` (Mortimer's clue tasks).
+ */
+function tertiaryMultiplier(entry, player, npc) {
+  const wildernessClue = /^clue scroll \((?!beginner\))/i.test(entry.name || "") &&
+    isWearingImbuedRingOfWealth(player) && Wilderness.isInLocation(npc?.getLocation?.());
+  const request = { player, npc, npcId: npc?.getId?.(), entry, multiplier: wildernessClue ? 2 : 1 };
+  pluginApi?.emitCustomEvent("npc-drops:tertiary-chance", request);
+  return request.multiplier;
 }
 
 function rollSharedTable(name, player, depth = 0) {
@@ -498,9 +511,7 @@ function rollTable(table, player, npc) {
       continue;
     }
     if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
-    const wildernessClue = /^clue scroll \((?!beginner\))/i.test(entry.name || "") &&
-      isWearingImbuedRingOfWealth(player) && Wilderness.isInLocation(npc?.getLocation?.());
-    if (hits(entry, wildernessClue)) {
+    if (hits(entry, tertiaryMultiplier(entry, player, npc))) {
       drops.push(...resolveEntry(entry, player));
     }
   }

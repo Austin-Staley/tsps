@@ -12,6 +12,8 @@ Corrections that need logic (Zulrah's two rolls, the Mad Angel's supply batch, S
 
 Loot that depends on where or what the NPC was rather than its table is added by other plugins on `npc-drops:add` { player, npc, npcId, drops }, emitted straight after the roll and before `npc-drops:roll` (so the Collection Log and Ironman rules see it): the Catacombs of Kourend's totem pieces and shards, and Skotizo's totem table ([skotizo.md](skotizo.md)).
 
+A tertiary drop's chance can be raised per kill on `npc-drops:tertiary-chance` { player, npc, npcId, entry, multiplier }, emitted before each tertiary roll: a listener multiplies `multiplier` (an imbued ring of wealth starts it at 2 for clue scrolls in the Wilderness; Mortimer's clue tasks raise it, [slayer.md](slayer.md)).
+
 ## Regenerating
 
 The two generated files come from the OSRS Wiki's drop tables, through osrsreboxed-db:

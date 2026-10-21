@@ -27,6 +27,8 @@ const PERSISTED_VARPS = [
   "slayer_rewards_blocked_diary_2", "slayer_stored_varp", "slayer_modifiers",
   "slayer_mortimer_tasks_completed", "slayer_misc", "slayer_misc_perm", "slayer_misc_perm_2",
   "slayer_misc_perm_3",
+  // Mortimer's offered tasks 1-3 (slayer_choose_task_*) share it with a Leagues relic's bits.
+  "slayer_league_relic_culling_spree",
 ];
 
 /** Slayer varbits on varps that aren't Slayer's own (millcheck_multi): saved one by one. */
