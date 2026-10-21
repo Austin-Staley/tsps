@@ -713,9 +713,9 @@ test("Mortimer's Slayer XP and clue modifiers", () => {
   setVarbit(player, "slayer_modifier_id", Data.MODIFIER.CLUES);
   setVarbit(player, "slayer_modifier_value", 100);
   const chance = (name, npc) => {
-    const request = { player, npc, entry: { name }, multiplier: 1 };
+    const request = { player, npc, rules: [] };
     for (const fn of handlers.events.get("npc-drops:tertiary-chance")) fn(request);
-    return request.multiplier;
+    return request.rules.filter((rule) => rule.pattern.test(name)).reduce((total, rule) => total * rule.multiplier, 1);
   };
   assert.equal(chance("Clue scroll (hard)", npcNamed("Bloodveld")), 2);
   assert.equal(chance("Long bone", npcNamed("Bloodveld")), 1, "only clue scrolls");

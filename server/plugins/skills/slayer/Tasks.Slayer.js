@@ -437,10 +437,13 @@ function hasUnlockEvent(request) {
   }
 }
 
+const CLUE_SCROLL = /^clue scroll/i;
+
 /** "npc-drops:tertiary-chance": Mortimer's clue modifier makes clue scrolls more likely on task. */
 function clueChance(request) {
-  if (!request?.player || !request.npc || !/^clue scroll/i.test(request.entry?.name ?? "")) return;
-  request.multiplier *= killBoost(request.player, request.npc, MODIFIER.CLUES);
+  if (!request?.player || !request.npc || !Array.isArray(request.rules)) return;
+  const boost = killBoost(request.player, request.npc, MODIFIER.CLUES);
+  if (boost > 1) request.rules.push({ pattern: CLUE_SCROLL, multiplier: boost });
 }
 
 /** "slayer:grant-points" { player, points }: a quest or reward adding points. */

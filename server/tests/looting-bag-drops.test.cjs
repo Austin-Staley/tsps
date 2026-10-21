@@ -75,6 +75,6 @@ test("npc-drops:tertiary-chance multiplies a tertiary's chance (Mortimer's clue 
   };
   // 1/256: a roll of 1.5/256 misses, and hits at twice the chance.
   assert.equal(hardClue(1.5 / 256), false);
-  listeners.push((request) => { if (/^clue scroll/i.test(request.entry.name)) request.multiplier *= 2; });
+  listeners.push((request) => request.rules.push({ pattern: /^clue scroll/i, multiplier: 2 }));
   assert.equal(hardClue(1.5 / 256), true);
 });

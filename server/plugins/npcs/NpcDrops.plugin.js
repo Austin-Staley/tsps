@@ -351,17 +351,29 @@ function hits(entry, multiplier = 1) {
   return Math.random() * outOf < Math.min(outOf, weight * multiplier);
 }
 
+const WILDERNESS_CLUE = /^clue scroll \((?!beginner\))/i;
+
 /**
- * How many times as likely a tertiary drop is for this kill: an imbued ring of wealth doubles
+ * What makes tertiary drops likelier for this kill, asked once per kill: rules
+ * { pattern, multiplier } matched against each entry's name. An imbued ring of wealth doubles
  * clue scrolls in the Wilderness, and plugins answer npc-drops:tertiary-chance
- * { player, npc, npcId, entry, multiplier } by multiplying `multiplier` (Mortimer's clue tasks).
+ * { player, npc, npcId, rules } by pushing their own (Mortimer's clue tasks).
  */
-function tertiaryMultiplier(entry, player, npc) {
-  const wildernessClue = /^clue scroll \((?!beginner\))/i.test(entry.name || "") &&
-    isWearingImbuedRingOfWealth(player) && Wilderness.isInLocation(npc?.getLocation?.());
-  const request = { player, npc, npcId: npc?.getId?.(), entry, multiplier: wildernessClue ? 2 : 1 };
-  pluginApi?.emitCustomEvent("npc-drops:tertiary-chance", request);
-  return request.multiplier;
+function tertiaryRules(player, npc) {
+  const rules = [];
+  if (isWearingImbuedRingOfWealth(player) && Wilderness.isInLocation(npc?.getLocation?.())) {
+    rules.push({ pattern: WILDERNESS_CLUE, multiplier: 2 });
+  }
+  pluginApi?.emitCustomEvent("npc-drops:tertiary-chance", { player, npc, npcId: npc?.getId?.(), rules });
+  return rules;
+}
+
+function tertiaryMultiplier(entry, rules) {
+  let multiplier = 1;
+  for (const rule of rules) {
+    if (rule.pattern.test(entry.name || "")) multiplier *= rule.multiplier;
+  }
+  return multiplier;
 }
 
 function rollSharedTable(name, player, depth = 0) {
@@ -500,6 +512,7 @@ function rollTable(table, player, npc) {
     drops.push(...rollOnce(table, entries, player, roll === 0));
   }
 
+  const rules = table.tertiary?.length ? tertiaryRules(player, npc) : [];
   for (const entry of table.tertiary || []) {
     // A tertiary at 1/1 is a conditional drop, not a guaranteed one: the wiki writes
     // "Always" for things that always drop *given* a condition (an active clue step, a quest,
@@ -511,7 +524,7 @@ function rollTable(table, player, npc) {
       continue;
     }
     if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
-    if (hits(entry, tertiaryMultiplier(entry, player, npc))) {
+    if (hits(entry, tertiaryMultiplier(entry, rules))) {
       drops.push(...resolveEntry(entry, player));
     }
   }
