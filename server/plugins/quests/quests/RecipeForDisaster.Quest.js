@@ -18,6 +18,9 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   const DAVE_RECIPE_ATTRIBUTE = "recipe-for-disaster:evil-dave-recipe";
   const DAVE_STEW_ATTRIBUTE = "recipe-for-disaster:evil-dave-stew";
   const SKRACH_STATE_ATTRIBUTE = "recipe-for-disaster:skrach-state";
+  const SKRACH_SPIT_ROAST_OBJECT = ObjectIdentifiers.OGRE_SPIT_ROAST_4; // 3375
+  const SKRACH_SPIT_ROAST_TILE = { x: 2632, y: 2985, z: 0 };
+  const SKRACH_SPIT_ROAST_BY_PLAYER = new WeakMap();
   const AWOWOGEI_STATE_ATTRIBUTE = "recipe-for-disaster:awowogei-state";
   const AMIK_STATE_ATTRIBUTE = "recipe-for-disaster:amik-state";
   const TCHIKI_COURSE_SWUNG = 256;
@@ -188,6 +191,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   function completed(player, flag) {
     if (hasFlag(player, flag)) return false;
     setFlag(player, flag);
+    syncSkrachSpitRoast(player);
     awardPoint(player);
     spawnCouncil(player);
     return true;
@@ -203,6 +207,29 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   }
   function skrachState(player) { return Number(player.getAttribute(SKRACH_STATE_ATTRIBUTE)) || 0; }
   function setSkrachBit(player, bit) { player.setAttribute(SKRACH_STATE_ATTRIBUTE, skrachState(player) | bit); }
+  /** The Feldip chompy-grounds spit-roast is missing from the map; show it to this player while Skrach can be rescued. */
+  function syncSkrachSpitRoast(player) {
+    const { GameObject, Location, ObjectManager } = api.core;
+    const existing = SKRACH_SPIT_ROAST_BY_PLAYER.get(player);
+    if (stage(player) < STAGE_OPENING_COMPLETE || hasFlag(player, 32)) {
+      if (!existing) return;
+      ObjectManager.deregister(existing, true);
+      SKRACH_SPIT_ROAST_BY_PLAYER.delete(player);
+      return;
+    }
+    if (existing) return;
+    const object = new GameObject(SKRACH_SPIT_ROAST_OBJECT,
+      new Location(SKRACH_SPIT_ROAST_TILE.x, SKRACH_SPIT_ROAST_TILE.y, SKRACH_SPIT_ROAST_TILE.z), 10, 0, null)
+      .setOwner(player);
+    ObjectManager.register(object, true);
+    SKRACH_SPIT_ROAST_BY_PLAYER.set(player, object);
+  }
+  function clearSkrachSpitRoast(player) {
+    const object = SKRACH_SPIT_ROAST_BY_PLAYER.get(player);
+    if (!object) return;
+    api.core.ObjectManager.deregister(object, true);
+    SKRACH_SPIT_ROAST_BY_PLAYER.delete(player);
+  }
   function completedQuest(player, key) {
     return require("../QuestRuntime").getRegisteredQuests()
       .find((entry) => entry.key === key)?.isComplete(player) === true;
@@ -2493,6 +2520,14 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       "getting-the-recipe-cooling-the-rock-cake-by-killing-an-icefiend");
   }
 
+  function handleStageChanged({ player, key }) {
+    if (key === QUEST) syncSkrachSpitRoast(player);
+  }
+
+  function handleLogout({ player }) {
+    if (player) clearSkrachSpitRoast(player);
+  }
+
   function buildJournal(player) {
     if (quest.isComplete(player)) return ["I freed the Lumbridge council and defeated the Culinaromancer.", "", "<col=ff0000>QUEST COMPLETE!</col>"];
     if (stage(player) >= STAGE_OPENING_COMPLETE) {
@@ -2504,6 +2539,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
 
   function syncQuestState({ player }) {
     ensureOgreBoatTalkActions();
+    syncSkrachSpitRoast(player);
     if (stage(player) === 0) player.getPacketSender().sendVarbit(VARBIT_RFD, 7);
     player.getPacketSender().sendVarbit(VARBIT_OGRE_BOAT,
       (skrachState(player) & 1) || hasFlag(player, 32) ? 1 : 0);
@@ -2622,7 +2658,9 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   api.onItemAction("Balloon toad", { Drop: handleSkrachDrop, Release: handleSkrachDrop });
   api.onItemDropPolicy(handleSkrachDrop);
   api.onObjectInteraction("Portal", { Use: enterPortal, Enter: enterPortal, "Enter portal": enterPortal, "Pass-through": enterPortal });
+  api.onCustomEvent("quest:stage-changed", handleStageChanged);
   api.onPlayerLogin(syncQuestState);
+  api.onPlayerLogout(handleLogout);
   api.onCustomEvent("player:bootstrap-complete", syncQuestState);
   api.onNpcInteraction(handleCouncilInteraction);
   installPirateRockPiles();
