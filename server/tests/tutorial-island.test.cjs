@@ -446,13 +446,15 @@ test("skipping the island as an Ironman opens the setup with every mode, then en
   ticks(2);
   assert.equal(progress(player), STEP.COMPLETED, "the tutorial ends once the chatbox is free");
 
-  const { player: closed } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
+  const { player: closed, sent: closedSent } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
   Leave.finishSkip(closed, true);
   ticks(2);
   PluginManager.emitCustomEvent("interface:closed", { player: closed, interfaceId: IRONMAN_SETUP });
   ticks(2);
   assert.equal(progress(closed), STEP.COMPLETED, "closing the setup without a choice still ends the skip");
   assert.equal(closed.getAttribute("ironman:mode") ?? "none", "none");
+  // Learning the Ropes completes at 671 on the same varp: it must not leave it there.
+  assert.equal(closedSent.varps.get(PROGRESS_VARP), STEP.COMPLETED, "the tutorial varp ends at 1000");
 
   const { player: declined } = tutorialPlayer(STEP.GIELINOR_TALK, 3094, 3104);
   Leave.finishSkip(declined, false);
