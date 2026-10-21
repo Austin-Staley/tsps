@@ -33,8 +33,9 @@
  *   the key back) is not in npc-dialogues.json, so pickpocketing gives the key with
  *   no words and a completed player replays "after-killing-treus-dayth", the closest
  *   variant in the dump.
- * - The flooded chamber is walked across normally (captured route); its tiles are
- *   walkable in the cache, so no wade teleport is needed.
+ * - The flooded chamber is walked across normally (captured route). Cache 241 clips
+ *   the one crossing tile; installFloodedChannelFix clears only that BLOCKED_TILE at
+ *   runtime, leaving every other terrain flag and object unchanged.
  * - Walking the fungus out through the main-entrance stairs reuses the cart-tunnel
  *   crumble line, which mentions crawling.
  * - A few system lines have no wiki transcript and are authored: the unpowered lift,
@@ -1125,6 +1126,11 @@ module.exports = function registerHauntedMineQuest(api) {
     player.getSkillManager().addExperiences(Skill.STRENGTH, 22000);
   }
 
+  /** Capture 1768 crosses 2725,4453 after the lift; cache 241 clips that one tile. */
+  function installFloodedChannelFix() {
+    api.clearMapTerrainBlockAt(2725, 4453, 0);
+  }
+
   api.persistAttribute(BITS_ATTRIBUTE);
   api.persistAttribute(LEVERS_ATTRIBUTE, 0);
   api.persistAttribute(SCHEMA_ATTRIBUTE, 0);
@@ -1147,6 +1153,7 @@ module.exports = function registerHauntedMineQuest(api) {
     onReward: grantReward,
   });
 
+  api.onServerStartup(installFloodedChannelFix);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);

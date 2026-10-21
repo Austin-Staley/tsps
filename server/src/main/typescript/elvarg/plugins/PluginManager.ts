@@ -170,6 +170,56 @@ const COMMAND_PERMISSION_RIGHTS: Record<string, number> = {
   DEVELOPER: PlayerRights.DEVELOPER.getId(),
 };
 
+function applyPluginRegionReplacement(
+  pluginName: string,
+  regionId: number,
+  result: { source: string; terrainBytes: number; objectBytes: number; objectCount: number }
+): void {
+  let clippingReloaded = false;
+  try {
+    const collisionModule = require("../game/collision/RegionManager");
+    clippingReloaded =
+      collisionModule?.RegionManager?.reloadRegion?.(regionId) === true;
+  } catch (reloadErr) {
+    console.error(
+      `[plugins] ${pluginName} failed to reload clipping for region ${regionId}`,
+      reloadErr
+    );
+  }
+
+  let streamedPlayers = 0;
+  try {
+    const worldModule = require("../game/World");
+    const World = worldModule?.World;
+    if (World?.getPlayers && World?.isPlayerSessionConnected) {
+      const players = World.getPlayers();
+      players?.forEach?.((player: any) => {
+        if (!player || !World.isPlayerSessionConnected(player)) {
+          return;
+        }
+        if (MapRegionReplacementManager.sendReplacementToPlayer(player, regionId)) {
+          streamedPlayers++;
+        }
+      });
+    }
+  } catch (streamErr) {
+    console.error(
+      `[plugins] ${pluginName} failed to stream region replacement ${regionId}`,
+      streamErr
+    );
+  }
+
+  console.info(`[plugins] ${pluginName} replaced map region`, {
+    regionId,
+    source: result.source,
+    terrainBytes: result.terrainBytes,
+    objectBytes: result.objectBytes,
+    objectCount: result.objectCount,
+    clippingReloaded,
+    streamedPlayers,
+  });
+}
+
 export class PluginManager {
   private static readonly PERF_EVENT_SAMPLE_LIMIT = 128;
   private static readonly MAX_PLUGIN_DEPTH = 2;
@@ -3865,53 +3915,38 @@ export class PluginManager {
             regionId,
             source as string | [string, string]
           );
-
-          let clippingReloaded = false;
-          try {
-            const collisionModule = require("../game/collision/RegionManager");
-            clippingReloaded =
-              collisionModule?.RegionManager?.reloadRegion?.(regionId) === true;
-          } catch (reloadErr) {
-            console.error(
-              `[plugins] ${pluginName} failed to reload clipping for region ${regionId}`,
-              reloadErr
-            );
-          }
-
-          let streamedPlayers = 0;
-          try {
-            const worldModule = require("../game/World");
-            const World = worldModule?.World;
-            if (World?.getPlayers && World?.isPlayerSessionConnected) {
-              const players = World.getPlayers();
-              players?.forEach?.((player: any) => {
-                if (!player || !World.isPlayerSessionConnected(player)) {
-                  return;
-                }
-                if (MapRegionReplacementManager.sendReplacementToPlayer(player, regionId)) {
-                  streamedPlayers++;
-                }
-              });
-            }
-          } catch (streamErr) {
-            console.error(
-              `[plugins] ${pluginName} failed to stream region replacement ${regionId}`,
-              streamErr
-            );
-          }
-
-          console.info(`[plugins] ${pluginName} replaced map region`, {
-            regionId,
-            source: result.source,
-            terrainBytes: result.terrainBytes,
-            objectBytes: result.objectBytes,
-            objectCount: result.objectCount,
-            clippingReloaded,
-            streamedPlayers,
-          });
+          applyPluginRegionReplacement(pluginName, regionId, result);
         } catch (err) {
           console.error(
             `[plugins] ${pluginName} failed to replace map region ${regionId}`,
+            err
+          );
+        }
+      },
+      clearMapTerrainBlockAt: (x, y, plane) => {
+        if (!Number.isInteger(x) || x < 0 || !Number.isInteger(y) || y < 0 ||
+            !Number.isInteger(plane) || plane < 0 || plane > 3) {
+          console.warn(
+            `[plugins] ${pluginName} attempted invalid clearMapTerrainBlockAt ${x},${y},${plane}`
+          );
+          return;
+        }
+        try {
+          const collisionModule = require("../game/collision/RegionManager");
+          const RegionManager = collisionModule.RegionManager;
+          const regionId = RegionManager.regionIdForTile(x, y);
+          const localX = x - ((regionId >> 8) << 6);
+          const localY = y - ((regionId & 0xff) << 6);
+          const result = MapRegionReplacementManager.clearTerrainBlockTile(
+            regionId,
+            plane,
+            localX,
+            localY
+          );
+          applyPluginRegionReplacement(pluginName, regionId, result);
+        } catch (err) {
+          console.error(
+            `[plugins] ${pluginName} failed to clear terrain block at ${x},${y},${plane}`,
             err
           );
         }

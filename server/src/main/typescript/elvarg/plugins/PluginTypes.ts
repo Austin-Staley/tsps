@@ -1096,6 +1096,8 @@ export interface PluginApi {
     regionId: number,
     source: string | [string, string]
   ): void;
+  /** Clear the cache BLOCKED_TILE terrain setting at one world tile at runtime. */
+  clearMapTerrainBlockAt(x: number, y: number, plane: number): void;
   registerDefinitionSource(
     definitionType: string,
     source: DefinitionSource
