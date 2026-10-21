@@ -251,9 +251,12 @@ or rereading raw streams. A done report is evidence to review, not permission to
 - Keep the OS process PID, execution-tool session id and OpenCode `ses_...` id distinct.
   A detached launcher must survive its parent shell (for example,
   `subprocess.Popen(..., start_new_session=True)` with separate output/error files).
-- Check provider retry status when work stops. A live process sleeping on a quota error
-  is not implementation progress. Preserve its context; before changing endpoints, abort
-  its old turn and confirm the actor has exited, then continue the same OpenCode session.
+- Check provider retry status and pending permission/question requests when work stops.
+  A live process may be waiting for a report-directory permission rather than the model.
+  Verify the requested action and its assigned paths before replying. Preserve context;
+  before changing endpoints, abort the server turn through the session API, confirm the
+  session is idle and its client exited, then continue the same OpenCode session. Killing
+  an attached CLI alone does not prove the server turn stopped.
 - Reviews can run alongside other quests' implementations. Repair a quest only after its
   own source/review actor stops; unrelated quests do not need to wait. Freeze reviewed
   files and record the exact revision loaded by the static server for native proof.

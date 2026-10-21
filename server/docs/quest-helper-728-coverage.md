@@ -30,6 +30,17 @@ zero skipped. The failure names are: bot activity tier allocation; deployed bot-
 configuration; hint-arrow and packet-sender QuickPrayers import-cycle failures;
 Mortimer static Wyrmscraig spawn expectation; Tumeken's shadow walk animation.
 
+Shared foundation: actors now expose their known eight-way heading across idle ticks,
+explicit facing and moving interaction targets. This supports Animal Magnetism's
+north-facing magnet step without quest-specific core logic. The build and four focused
+tests pass; the tests fail against the original compiled implementation. This is source
+evidence, and no native quest completion is claimed. A separate six-quest source-check
+batch passed 36 focused tests; independent route review remains in progress.
+
+His Faithful Servants and Museum Kudos are supporting work discovered through mandatory
+Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the
+128 issue quests and tutorial below.
+
 ## Quest status
 
 “Pending” means no accepted evidence yet. Source review does not imply native completion.
