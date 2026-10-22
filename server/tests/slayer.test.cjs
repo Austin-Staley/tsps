@@ -655,6 +655,7 @@ test("picking a task sets it with its modifier, as live does", () => {
   setVarbit(player, "slayer_choose_task_2", taskId("Aberrant Spectres"));
   setVarbit(player, "slayer_choose_task_2_modifier_id", Data.MODIFIER.QUANTITY);
   setVarbit(player, "slayer_choose_task_2_modifier_value", 75);
+  setVarbit(player, "slayer_choose_task_2_modifier_negative", 0);
   const before = emitted.length;
   Choice.pick({ player, action: 10 });
   const task = Tasks.current(player);
