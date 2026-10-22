@@ -45,6 +45,12 @@ the tracked outputs match them. The TSPS import copies the minified dialogue exp
 exactly; its NPC index is unchanged. Consumer compatibility and overhead playback are
 separate checks in progress, so this does not certify any quest route.
 
+The shared overhead runtime has now passed root review and 48 focused dialogue tests,
+including real task/manager scheduling, actor lookup and cancellation, imported overhead
+speech and ordinary chatheads. Its generic two-tick cadence is not capture-proven OSRS
+timing. Frozen natural playthroughs may run alongside read-only peer reviews; their
+evidence remains provisional until the review passes for the same revision.
+
 His Faithful Servants and Museum Kudos are supporting work discovered through mandatory
 Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the
 128 issue quests and tutorial below.

@@ -807,22 +807,70 @@ test('an action that starts a new conversation does not resume the old transcrip
 });
 
 
-test('the Lassar vision uses the player head for copies speaking under the player placeholder', () => {
+test('the Lassar vision overhead copies speak through the player actor on the task cadence', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { ActionDialogue } = require('../dist/game/model/dialogues/entries/impl/ActionDialogue');
   const { PlayerDialogue } = require('../dist/game/model/dialogues/entries/impl/PlayerDialogue');
-  let chain;
-  const player = { getUsername: () => 'Test', getDialogueManager: () => ({
-    reset() {}, startDialogues(builder) { chain = builder; },
-  }) };
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const chats = [];
+  const sent = [];
+  const sender = new Proxy({}, {
+    get: (_target, key) => (...args) => { sent.push([key, ...args]); return sender; },
+  });
+  const player = {
+    getUsername: () => 'Test',
+    getAppearance: () => ({ isMale: () => true }),
+    isRegistered: () => true,
+    forceChat(text) { chats.push(text); },
+    getPacketSender: () => sender,
+    getDialogueManager() { return this.manager; },
+  };
+  player.manager = new DialogueManager(player);
   const cloneLine = data['Desert Treasure II - The Fallen Empire'].variants[
     'the-whisperer-inspecting-the-totem-in-the-cistern'].find(step => step.type === 'line' && step.speaker === '[player name]');
-  assert.ok(cloneLine);
-  startDialogue({ emitCustomEvent() {} }, {
+  assert.equal(cloneLine.presentation, 'overhead');
+  try {
+    startDialogue({ core: PluginManager.getCoreApi(), emitCustomEvent() {} }, {
+      player, npcId: 12232, definition: { getId: () => 12232, getName: () => 'Ketla' },
+    }, [cloneLine]);
+    assert.deepEqual(chats, [cloneLine.text], 'the current player is the real overhead actor');
+    assert.ok(!(player.manager.getCurrent() instanceof PlayerDialogue));
+    assert.ok(player.manager.getCurrent() instanceof ActionDialogue, 'the overhead action owns the dialogue during the cadence');
+    assert.ok(sent.every(([key]) => key !== 'sendChatboxInterface'), 'an overhead line does not open a chatbox');
+    TaskManager.process();
+    TaskManager.process();
+    assert.equal(player.manager.getCurrent(), undefined, 'the empty continuation closes and resets the dialogue');
+  } finally {
+    TaskManager.cancelTasks(player);
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+  }
+});
+
+test('ordinary typed player-placeholder lines still use the player chathead', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { PlayerDialogue } = require('../dist/game/model/dialogues/entries/impl/PlayerDialogue');
+  const sender = new Proxy({}, { get: () => (..._args) => sender });
+  const player = {
+    getUsername: () => 'Test',
+    getAppearance: () => ({ isMale: () => true }),
+    isRegistered: () => true,
+    getPacketSender: () => sender,
+    getDialogueManager() { return this.manager; },
+  };
+  player.manager = new DialogueManager(player);
+  const line = data['Desert Treasure II - The Fallen Empire'].variants[
+    'the-whisperer-inspecting-the-totem-in-the-cistern'].find((step) =>
+      step.type === 'line' && step.speaker === '[player name]' && step.presentation !== 'overhead');
+  assert.ok(line, 'the variant still has ordinary typed player lines');
+  startDialogue({ core: PluginManager.getCoreApi(), emitCustomEvent() {} }, {
     player, npcId: 12232, definition: { getId: () => 12232, getName: () => 'Ketla' },
-  }, [cloneLine]);
-  const spoken = [...chain.getDialogues().values()].filter(entry => entry.getText);
-  assert.equal(spoken.length, 1);
-  assert.ok(spoken[0] instanceof PlayerDialogue, 'the copy does not borrow Ketla’s head');
-  assert.equal(spoken[0].getText(), cloneLine.text);
+  }, [line]);
+  const spoken = player.manager.getCurrent();
+  assert.ok(spoken instanceof PlayerDialogue);
+  assert.equal(spoken.getText().replace(/\s+/g, ' '), line.text.replace(/\s+/g, ' '));
 });
 
 test('a plain quest message box waits for continue before resuming the transcript', () => {

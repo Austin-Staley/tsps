@@ -318,6 +318,10 @@ or rereading raw streams. A done report is evidence to review, not permission to
 - Reviews can run alongside other quests' implementations. Repair a quest only after its
   own source/review actor stops; unrelated quests do not need to wait. Freeze reviewed
   files and record the exact revision loaded by the static server for native proof.
+- A frozen playthrough may run alongside a read-only review of the same revision. Label
+  its evidence provisional until that review passes; never claim a pending review passed.
+  Keep its source frozen until the player logs out. Any subsequent fix needs a new loaded
+  revision and explicit validation of the affected route before accepting completion.
 
 ## Combat and dangerous steps
 
