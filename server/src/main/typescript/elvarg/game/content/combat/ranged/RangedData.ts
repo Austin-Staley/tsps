@@ -200,9 +200,9 @@ export class Ammunition {
     public static readonly BLACK_CHINCHOMPA = new Ammunition(ItemIdentifiers.BLACK_CHINCHOMPA, null, 1272, 0) // BLACK_CHINCHOMPA_GRENADE
     // Salamander fuel (Wiki): the tar's ranged strength is the ranged-mode max-hit basis.
     public static readonly GUAM_TAR = new Ammunition(ItemIdentifiers.GUAM_TAR, null, 33, 16)
-    public static readonly MARRENTILL_TAR = new Ammunition(ItemIdentifiers.MARRENTILL_TAR, null, 33, 20)
-    public static readonly TARROMIN_TAR = new Ammunition(ItemIdentifiers.TARROMIN_TAR, null, 33, 26)
-    public static readonly HARRALANDER_TAR = new Ammunition(ItemIdentifiers.HARRALANDER_TAR, null, 33, 31)
+    public static readonly MARRENTILL_TAR = new Ammunition(ItemIdentifiers.MARRENTILL_TAR, null, 33, 22)
+    public static readonly TARROMIN_TAR = new Ammunition(ItemIdentifiers.TARROMIN_TAR, null, 33, 31)
+    public static readonly HARRALANDER_TAR = new Ammunition(ItemIdentifiers.HARRALANDER_TAR, null, 33, 49)
     public static readonly IRIT_TAR = new Ammunition(ItemIdentifiers.IRIT_TAR, null, 33, 36)
     public static readonly TONALZTICS_OF_RALOS = new Ammunition(ItemIdentifiers.TONALZTICS_OF_RALOS, null, 2729, 0) // PROJANIM_GLAIVE_01_REGULAR
 

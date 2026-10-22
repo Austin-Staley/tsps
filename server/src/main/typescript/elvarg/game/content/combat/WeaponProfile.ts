@@ -365,6 +365,8 @@ export class WeaponProfiles {
         // chinchompas have their own seq (human_chinchompa_attack_pvn).
         this.register({ itemIds: [ItemIdentifiers.CHINCHOMPA_2, ItemIdentifiers.RED_CHINCHOMPA_2], ...chinchompa });
         this.register({ itemIds: [ItemIdentifiers.BLACK_CHINCHOMPA], ...chinchompa, attackAnimation: 7618 });
+        // Salamanders (Wiki): every style, flare included, reaches 1 tile; speed comes from the SALAMANDER interface.
+        this.add(WeaponInterfaces.SALAMANDER, { attackDistance: 1 });
         // Wiki: Blisterwood stakes have 6-tile range (8 on Longrange); the cache
         // capture records their NPC attack animation and projectile.
         this.register({
