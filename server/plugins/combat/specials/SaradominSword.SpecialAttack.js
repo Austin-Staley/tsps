@@ -1,8 +1,9 @@
 // TODO: ported from xrsps-typescript; untested.
 module.exports = function registerSaradominSwordSpecialAttack(api) {
-  const { Animation, CombatSpecial, Graphic, HitDamage, HitMask, ItemIdentifiers, MeleeCombatMethod, Misc, Priority, Sounds, Task, TaskManager } = api.core;
+  const { Animation, CombatSpecial, Graphic, HitDamage, HitMask, ItemIdentifiers, MeleeCombatMethod, Misc, Priority, PrayerHandler, Sounds, Task, TaskManager } = api.core;
 
   const DRAIN = 100;
+  // Misc.getRandom(n) is inclusive (0..n), so the 1-16 range rolls getRandom(max - min).
   const SLASH_DEFENCE_BONUS_INDEX = 1;
   const LIGHTNING_MINIMUM_DAMAGE = 1;
   const LIGHTNING_MAXIMUM_DAMAGE = 16;
@@ -29,8 +30,10 @@ module.exports = function registerSaradominSwordSpecialAttack(api) {
       // melee strike. The upstream evaluator queues a real magic attack; our
       // core has no deferred-attack hook, so a delayed hitsplat stands in.
       // TODO: route the lightning through the real magic attack pipeline.
-      const lightningDamage = LIGHTNING_MINIMUM_DAMAGE
-        + Misc.getRandom(LIGHTNING_MAXIMUM_DAMAGE - LIGHTNING_MINIMUM_DAMAGE + 1);
+      // Wiki: the lightning always splashes against a player using Protect from Magic.
+      const splashed = target.isPlayer() && PrayerHandler.isActivated(target.getAsPlayer(), PrayerHandler.PROTECT_FROM_MAGIC);
+      const lightningDamage = splashed ? 0 : LIGHTNING_MINIMUM_DAMAGE
+        + Misc.getRandom(LIGHTNING_MAXIMUM_DAMAGE - LIGHTNING_MINIMUM_DAMAGE);
       TaskManager.submit(new (class extends Task {
         constructor() {
           super(1);
@@ -41,7 +44,7 @@ module.exports = function registerSaradominSwordSpecialAttack(api) {
             this.stop();
             return;
           }
-          target.getCombat().getHitQueue().addPendingDamage([new HitDamage(lightningDamage, HitMask.RED).setSource(hit.getAttacker())]);
+          target.getCombat().getHitQueue().addPendingDamage([new HitDamage(lightningDamage, splashed ? HitMask.BLUE : HitMask.RED).setSource(hit.getAttacker())]);
           this.stop();
         }
       })());
