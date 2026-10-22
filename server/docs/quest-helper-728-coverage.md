@@ -187,7 +187,7 @@ branch remains blocked at its source.
 | Family Crest | `FamilyCrest` | Pending | Pending | Pending |
 | The Feud | `TheFeud` | Pending | Pending | Pending |
 | Fight Arena | `FightArena` | Pending | Pending | Pending |
-| Fishing Contest | `FishingContest` | Pending | Pending | Pending |
+| Fishing Contest | `FishingContest` | Pass/trophy recovery, Morris pass ownership, scoped pass gates and post-quest dialogue | 12 scoped tests pass; current-hash peer review clean | Natural stage 1–5 completion across epoch 3–5; QP and Fishing XP awarded once, relog persisted, post-quest tunnel accessible. Lost-item recovery, full-bag cases, interrupted dialogue and visual Quest Helper remain unchecked |
 | Forgettable Tale... | `ForgettableTale` | Pending | Pending | Pending |
 | The Forsaken Tower | `ForsakenTower` | Pending | Pending | Pending |
 | The Fremennik Isles | `TheFremennikIsles` | Pending | Pending | Pending |

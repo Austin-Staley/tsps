@@ -10,6 +10,7 @@ const { test, after } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 
@@ -33,15 +34,22 @@ const GATE_OPEN_IDS = new Set([49, 50]);
 const HEMENSTER_GATE_IDS = new Set([GATE_HINGE, GATE]);
 const VINE = 58;
 
-function setup({ withDoors = false } = {}) {
+function setup({ withDoors = false, withTranscript = false, promptChoice = null } = {}) {
   const realCore = PluginManager.getCoreApi();
   class FakeCountdownTask {
     constructor(_player, _ticks, callback) { this.callback = callback; }
   }
   const TaskManager = { submit(task) { if (typeof task.callback === 'function') task.callback(); }, cancelTasks() {} };
   const questCore = { ...realCore, TaskManager, CountdownTask: FakeCountdownTask };
+  if (withTranscript) {
+    questCore.NpcDefinition = {
+      forId: (id) => ({ getId: () => id, getName: () => (id === 4069 ? 'Bonzo' : undefined) }),
+    };
+  }
   const doorWorld = new Map();
   const doorOps = [];
+  let dialogueManager = { isActive: () => false, getCurrent: () => null, reset() {} };
+  let transcriptCleanup = () => {};
   if (withDoors) {
     questCore.CacheDefinitions = {
       // Keep the startup catalog scan empty; the wooden gate table is static.
@@ -96,6 +104,16 @@ function setup({ withDoors = false } = {}) {
     },
     emitCustomEvent(name, event) {
       for (const handler of custom.get(name) ?? []) handler(event);
+    },
+    sendMultiChatboxPrompt(_player, _prompt, ...pairs) {
+      for (let index = 0; index < pairs.length; index += 2) {
+        const callback = pairs[index + 1];
+        if (typeof callback !== 'function') continue;
+        if (promptChoice && !promptChoice.test(String(pairs[index] ?? ''))) continue;
+        callback();
+        return true;
+      }
+      return false;
     },
   }, { get(target, key) { return key in target ? target[key] : () => {}; } });
 
@@ -159,7 +177,7 @@ function setup({ withDoors = false } = {}) {
     getEquipment: () => ({ contains: () => false }),
     getPacketSender: () => sender,
     getSkillManager: () => skills,
-    getDialogueManager: () => ({ isActive: () => false, getCurrent: () => null, reset() {} }),
+    getDialogueManager: () => dialogueManager,
     getLocation: () => location,
     getPrivateArea: () => null,
     getUsername: () => 'qh728-q041',
@@ -169,6 +187,18 @@ function setup({ withDoors = false } = {}) {
     performAnimation() {},
     sendMessage: (message) => messages.push(message),
   };
+
+  if (withTranscript) {
+    dialogueManager = new DialogueManager(player);
+    const hooks = conditions.map((handler) => ({ pluginName: 'qh728-q041', handler }));
+    PluginManager.npcDialogueConditionHooks.push(...hooks);
+    transcriptCleanup = () => {
+      for (const hook of hooks) {
+        const index = PluginManager.npcDialogueConditionHooks.indexOf(hook);
+        if (index !== -1) PluginManager.npcDialogueConditionHooks.splice(index, 1);
+      }
+    };
+  }
 
   const variant = (npcId) => variants.map((handler) => handler({ player, npcId })).find(Boolean) ?? null;
   const condition = (npcId, text) => {
@@ -256,10 +286,15 @@ function setup({ withDoors = false } = {}) {
     return event;
   };
 
+  const drive = (limit = 200) => {
+    while (limit-- > 0 && dialogueManager.isActive()) dialogueManager.advance();
+  };
+  const cleanup = () => transcriptCleanup();
+
   return {
-    quest, player, attributes, items, messages, configs, varbits, xp, transcripts,
+    quest, player, api, attributes, items, messages, configs, varbits, xp, transcripts,
     variant, condition, action, hook, line, choice, npcInteraction, object, itemOnObject, route, login, emit,
-    clickGate, placeGate, doorOps,
+    clickGate, placeGate, doorOps, drive, cleanup,
     stage: () => quest.getStage(player),
     setStage: (value) => attributes.set('quest.fishing_contest.stage', value),
     setFull(value) { full = value; },
@@ -463,6 +498,59 @@ test('Fishing Contest early and competing interactions stay on their branches', 
   assert.equal(h.variant(N.SINISTER_STRANGER_2).variant, 'speaking-to-the-other-contestants-sinister-stranger');
 });
 
+
+function transcriptSetup(promptChoice) {
+  const saved = runtime.startTranscript;
+  runtime.startTranscript = originalStartTranscript;
+  try {
+    return setup({ withTranscript: true, promptChoice });
+  } finally {
+    runtime.startTranscript = saved;
+  }
+}
+
+test('Fishing Contest reaches the imported wait message through the real transcript with carp only', () => {
+  const h = transcriptSetup(/big fish/i);
+  const N = core.NpcIdentifiers;
+  const I = core.ItemIdentifiers;
+  try {
+    h.setStage(S.COMPETING);
+    h.items.set(I.RAW_GIANT_CARP, 1);
+
+    h.npcInteraction('Bonzo', N.BONZO);
+    h.drive();
+
+    assert.ok(h.messages.includes('You wait'), 'the real condition runner passes the carp branch and reaches 3xCeSp');
+    assert.equal(h.stage(), S.WON, 'the winning hand-over after the wait completes the contest');
+    assert.equal(h.items.get(I.RAW_GIANT_CARP), undefined, 'the winning carp is handed over');
+    assert.equal(h.items.get(I.FISHING_TROPHY), 1);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('Fishing Contest real transcript takes regular fish first when both fish are held', () => {
+  const h = transcriptSetup(/big fish/i);
+  const N = core.NpcIdentifiers;
+  const I = core.ItemIdentifiers;
+  try {
+    h.setStage(S.COMPETING);
+    h.items.set(I.RAW_GIANT_CARP, 1);
+    h.items.set(I.RAW_SARDINE, 1);
+
+    h.npcInteraction('Bonzo', N.BONZO);
+    h.drive();
+
+    assert.equal(h.messages.includes('You wait'), false, 'H12Vw3 regular fish is chosen before O3plju carp');
+    assert.equal(h.messages.includes('You hand over your catch.'), true, 'the regular fish is handed over');
+    assert.equal(h.stage(), S.COMPETING, 'a regular fish does not win');
+    assert.equal(h.items.get(I.FISHING_TROPHY), undefined);
+    assert.equal(h.items.get(I.RAW_SARDINE), undefined);
+    assert.equal(h.items.get(I.RAW_GIANT_CARP), 1, 'the carp is not consumed on the losing branch');
+  } finally {
+    h.cleanup();
+  }
+});
 
 test('Fishing Contest only shows Morris the pass when the player owns one', () => {
   const h = setup();
