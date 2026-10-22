@@ -150,7 +150,7 @@ branch remains blocked at its source.
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
 | The Ascent of Arceuus | `AscentOfArceuus` | Sins scope, memoir, ordered trail and Karuulm route reviewed by root; fresh peer pending | 8 quest and 9 shared focused tests pass | Prior opening incomplete; edited route pending |
-| At First Light | `AtFirstLight` | Mandatory route, hammer tools, report recovery, Fox cleanup and leaf guards reviewed; canonical ground spawns added | 9 focused tests pass; spawn JSON/uniqueness/cache placements checked | Stage 12, exact rewards once and relog observed; provisional due remaining pickup/history/recovery checks |
+| At First Light | `AtFirstLight` | Mandatory route, hammer tools, report recovery, Fox cleanup and leaf guards reviewed; canonical ground spawns added | 9 focused tests pass; spawn JSON/uniqueness/cache placements checked | Stage 12, rewards once and relog observed; a separate south-side hammer pickup/relog contract was accepted, while the latest peer review found three interruption/recovery defects still needing source repair |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
 | Biohazard | `Biohazard` | Recovery and canonical receipts corrected; premature Guidor advancement returned to owner | Scoped source evidence; correction pending | Incomplete at stage 1; logged out |
@@ -220,7 +220,7 @@ branch remains blocked at its source.
 | Making History | `MakingHistory` | Pending | Pending | Pending |
 | Meat and Greet | `MeatAndGreet` | Pending | Pending | Pending |
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
-| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Current revision naturally completed/repeated/persisted with exact rewards; live full-bag/interruption recovery pending |
+| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Natural completion, full-bag floor-drop timing, interrupted/relogged completion and exact once-only rewards were accepted in the offline native run; Quest Helper overlay and uncaptured dialogue cadence remain unchecked |
 | Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
 | Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
