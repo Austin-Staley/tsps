@@ -28,6 +28,7 @@ const runtime = require("../quests/QuestRuntime");
 
 const KUDOS_ATTRIBUTE = "museum:kudos";
 const STATE_ATTRIBUTE = "museum:state";
+const VARBIT_VM_KUDOS = 3637; // cache gameval vm_kudos: varp 1010, bits 0-10
 const KUDOS_EVENT = "museum:get-kudos";
 const KUDOS_CHANGED_EVENT = "museum:kudos-changed";
 
@@ -270,9 +271,15 @@ function updateDig(player, key, itemId) {
   writeState(player, { ...state, dig: { ...dig, [key]: [...new Set([...current, itemId])] } });
 }
 
+function sendKudosVarbit(player) {
+  const value = Math.max(0, Math.min(2047, Math.floor(kudosOf(player))));
+  player.getPacketSender().sendVarbit(VARBIT_VM_KUDOS, value);
+}
+
 function awardKudos(player, amount, source) {
   const next = kudosOf(player) + amount;
   player.setAttribute(KUDOS_ATTRIBUTE, next);
+  sendKudosVarbit(player);
   api.emitCustomEvent(KUDOS_CHANGED_EVENT, { player, kudos: next, amount, source });
   return next;
 }
@@ -622,6 +629,11 @@ function answerGetKudos(request) {
 
 function handleLogin({ player }) {
   syncDisplayVarbits(player);
+  sendKudosVarbit(player);
+}
+
+function handleBootstrap({ player }) {
+  sendKudosVarbit(player);
 }
 
 module.exports = {
@@ -645,5 +657,6 @@ module.exports = {
     pluginApi.onItemOnNpc(showArtefact);
     pluginApi.onItemAction("Antique lamp", { Rub: rubLamp });
     pluginApi.onPlayerLogin(handleLogin);
+    pluginApi.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   },
 };

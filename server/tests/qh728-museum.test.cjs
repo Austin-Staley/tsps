@@ -165,12 +165,31 @@ function makePlayer(attributes = {}, items = {}, equipped = []) {
     setLevel(name, level) { levels.set(name, level); },
     getExperience(name) { return experience.get(name) ?? 0; },
   };
+  const varps = new Map(), configs = [];
   const sender = new Proxy({
-    sendVarbit(id, value) { varbits.push([id, value]); return sender; },
+    sendVarbit(id, value) {
+      varbits.push([id, value]);
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      const width = endBit - startBit + 1;
+      const mask = ((1 << width) - 1) << startBit;
+      const current = varps.get(baseVar) ?? 0;
+      varps.set(baseVar, (current & ~mask) | ((value << startBit) & mask));
+      return sender;
+    },
+    sendConfig(id, value) { configs.push([id, value]); varps.set(id, value); return sender; },
+    getVarp(id) { return varps.get(id) ?? 0; },
+    getVarbit(id) {
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      return ((varps.get(baseVar) ?? 0) >> startBit) & ((1 << (endBit - startBit + 1)) - 1);
+    },
     sendInterfaceRemoval() { return sender; },
     isChatboxInterface() { return true; },
   }, { get(target, key) { return key in target ? target[key] : () => sender; } });
   player.manager = new DialogueManager(player);
+  player.getVarbit = (id) => sender.getVarbit(id);
+  player.getVarp = (id) => sender.getVarp(id);
+  player.setVarp = (id, value) => { varps.set(id, value); return player; };
+  player.configs = configs;
   return player;
 }
 
@@ -272,6 +291,11 @@ function getKudos(world, player) {
   return request.kudos;
 }
 
+function replay(world, player) {
+  for (const handler of world.login) handler({ player });
+  world.api.emitCustomEvent("player:bootstrap-complete", { player });
+}
+
 function talkToMinas(world, player, choice = "I have some information") {
   world.anyNpc["Talk-to"]({
     player, npc: { getId: () => N.HISTORIAN_MINAS }, npcId: N.HISTORIAN_MINAS,
@@ -355,7 +379,7 @@ test("Museum: real cache actions, transcript assessment, display cases and Minas
   itemOnObject(world, player, I.OLD_SYMBOL, DISPLAY_EMPTY, 3262, 3448);
   assert.equal(player.inventory.getAmount(I.OLD_SYMBOL), 0);
   assert.equal(getKudos(world, player), 10);
-  assert.deepEqual(player.varbits.at(-1), [VARBIT.oldSymbol, 1]);
+  assert.equal(player.getVarbit(VARBIT.oldSymbol), 1);
 
   // Real NPC/transcript assessment for the next artefact: the item-on-NPC
   // handler starts Barnabus Hurma's standard dialogue item branch and the real
@@ -378,7 +402,7 @@ test("Museum: real cache actions, transcript assessment, display cases and Minas
     play(player);
     itemOnObject(world, player, itemId, objectId, x, y);
     assert.equal(player.inventory.getAmount(itemId), 0);
-    assert.deepEqual(player.varbits.at(-1), [varbit, 1]);
+    assert.equal(player.getVarbit(varbit), 1);
   }
   assert.equal(getKudos(world, player), 50);
 
@@ -576,4 +600,44 @@ test("Museum: placing a unique artefact removes its duplicates from inventory an
   assert.equal(player.inventory.getAmount(I.OLD_SYMBOL), 0);
   assert.equal(player.getBanks()[0].getAmount(I.OLD_SYMBOL), 0);
   assert.equal(getKudos(world, player), 10);
+});
+
+test("Museum: VM_KUDOS wire mirrors persisted Kudos at 0/99/100 and preserves sibling bits", () => {
+  const vm = CacheDefinitions.getVarbit(3637);
+  assert.equal(vm.baseVar, 1010);
+  assert.equal(vm.startBit, 0);
+  assert.equal(vm.endBit, 10);
+
+  const world = makeApi();
+  const siblingBits = (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16);
+  for (const value of [0, 99, 100]) {
+    const player = makePlayer({ [KUDOS]: value }, {}, []);
+    player.setVarp(1010, siblingBits);
+    replay(world, player);
+    assert.equal(player.getVarbit(3637), value, `replay ${value}`);
+    assert.equal(player.getVarp(1010) & siblingBits, siblingBits, `sibling bits ${value}`);
+    assert.equal(player.configs.some(([id]) => id === 1010), false, "must not write the whole varp");
+    assert.equal(getKudos(world, player), value, `event ${value}`);
+  }
+
+  // Award from 0 through the registered display handler.
+  const displayWorld = makeApi(questFixtures());
+  const display = makePlayer({}, { [I.OLD_SYMBOL]: 1 }, []);
+  display.setVarp(1010, siblingBits);
+  itemOnObject(displayWorld, display, I.OLD_SYMBOL, DISPLAY_EMPTY, 3262, 3448);
+  assert.equal(getKudos(displayWorld, display), 10);
+  assert.equal(display.getVarbit(3637), 10);
+  assert.equal(display.getVarp(1010) & siblingBits, siblingBits);
+
+  // Award to 99 and 100 through the registered Minas transcript handler.
+  for (const [start, expected] of [[94, 99], [95, 100]]) {
+    const minasWorld = makeApi(new Set(["the_dig_site", "demon_slayer"]));
+    const minasPlayer = makePlayer({ [KUDOS]: start }, {}, []);
+    minasPlayer.setVarp(1010, siblingBits);
+    talkToMinas(minasWorld, minasPlayer);
+    assert.equal(getKudos(minasWorld, minasPlayer), expected);
+    assert.equal(minasPlayer.getVarbit(3637), expected);
+    assert.equal(minasPlayer.getVarp(1010) & siblingBits, siblingBits);
+    assert.equal(minasPlayer.configs.some(([id]) => id === 1010), false);
+  }
 });

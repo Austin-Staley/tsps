@@ -121,11 +121,12 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 128 issue quests and tutorial below.
 
 Museum support now has a reviewed 100-Kudos source route through five Dig Site displays
-and ten Historian Minas reports. Five focused tests cover real cached transcripts, once-only
+and ten Historian Minas reports. Six focused tests cover real cached transcripts, once-only
 Kudos/lamps, capacity retry, saved attributes, fixed find probabilities and duplicate artefact
-removal. Bone Voyage's owner is integrating the synchronous `museum:get-kudos` contract.
-The native `VM_KUDOS` mirror and login replay are being checked separately, since Quest
-Helper reads that state. Natural Museum testing remains pending. The quiz, fossils, pendant teaching and other
+removal. The persisted count now mirrors to `VM_KUDOS` (varbit 3637) on awards, login and
+bootstrap, preserving sibling bits in varp 1010. Tests cover the 99/100 prerequisite boundary
+and replay at 0/99/100. Bone Voyage's owner is integrating the synchronous `museum:get-kudos`
+contract. Natural Museum testing remains pending. The quiz, fossils, pendant teaching and other
 Museum activities remain outside this bounded route; a missing Hazeel report transcript
 branch remains blocked at its source.
 
