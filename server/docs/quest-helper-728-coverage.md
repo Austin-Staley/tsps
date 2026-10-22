@@ -209,7 +209,7 @@ branch remains blocked at its source.
 | Icthlarin's Little Helper | `IcthlarinsLittleHelper` | Pending | Pending | Pending |
 | In Aid of the Myreque | `InAidOfTheMyreque` | Pending | Pending | Pending |
 | In Search of the Myreque | `InSearchOfTheMyreque` | Pending | Pending | Pending |
-| Jungle Potion | `JunglePotion` | Pending | Pending | Pending |
+| Jungle Potion | `JunglePotion` | Bounded natural stage 9→12 route, including lost-herb re-search; no full-quest completion claim | QP, quest Herb XP and cleaning XP, repeat/relog and save snapshot verified | Epoch 8 continuation accepted; final offline. Full route/recovery and Quest Helper overlay remain unchecked |
 | King's Ransom | `KingsRansom` | Pending | Pending | Pending |
 | A Kingdom Divided | `AKingdomDivided` | Pending | Pending | Pending |
 | Legends' Quest | `LegendsQuest` | Pending | Pending | Pending |
