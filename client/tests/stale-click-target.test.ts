@@ -86,3 +86,21 @@ function deletedDynamicWidgetsLoseTheirTargets(): void {
 
 deletedDynamicWidgetsLoseTheirTargets();
 console.log("Stale click targets are dropped");
+
+/** A registered target or metadata without a cache entry still goes with its widget. */
+function cleanupWithoutCacheEntry(): void {
+    const ui = new UIInputBridge();
+    const clicks = ui.getClicks();
+    const uid = (162 << 16) | 0x8001;
+    const canvas: any = {
+        __input: ui,
+        __clickTargetCache: new Map(),
+        __clickMetaMap: new Map([[uid, {}]]),
+    };
+    clicks.register({ id: `widget:${uid}`, rect: { x: 0, y: 0, w: 10, h: 10 }, persist: true, widgetUid: uid });
+    cleanupWidgetClickTarget(canvas, uid);
+    assert.equal(clicks.getTargetCount(), 0);
+    assert.equal(canvas.__clickMetaMap.size, 0);
+}
+
+cleanupWithoutCacheEntry();

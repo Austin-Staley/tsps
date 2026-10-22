@@ -293,6 +293,9 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
         ) {
             if (mouseX === -1 || mouseY === -1) {
                 host.clearInteractHighlightHoverTarget();
+            } else {
+                // Nothing was built during the cooldown: run again as soon as it ends.
+                lastPassInputs.delete(host);
             }
             return;
         }
