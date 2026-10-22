@@ -1,13 +1,12 @@
-module.exports = function registerDragon2hSwordSpecialAttack(api) {
-  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod } = api.core;
+function dragon2hSwordSpecial({ Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod }) {
 
   const DRAIN = 60;
   const SPECIAL_ANIMATION = new Animation(3157);
   const SPECIAL_VFX = new Graphic(559);
-  const POWERSTAB_TARGETING = { pattern: "surrounding", width: 1, maxTargets: 14, requiresMultiCombat: true };
+  const POWERSTAB_TARGETING = { pattern: "surrounding", width: 1, maxTargets: 14, maxPlayerTargets: 3, requiresMultiCombat: true };
 
-  // Powerstab also hits every NPC within one tile of the player (up to 14 in total) in
-  // multi-combat. PvP's three-player sweep is not handled: the resolver only selects NPCs.
+  // Powerstab also hits everything within one tile of the player in multi-combat: up to 14
+  // targets, and no more than three players (wiki: Dragon 2h sword).
   class Dragon2hSwordCombatMethod extends MeleeCombatMethod {
     start(character, target) {
       CombatSpecial.drain(character, DRAIN);
@@ -17,7 +16,7 @@ module.exports = function registerDragon2hSwordSpecialAttack(api) {
     }
   }
 
-  api.registerCombatSpecial({
+  return {
     id: "dragon_2h_sword",
     itemIds: [ItemIdentifiers.DRAGON_2H_SWORD],
     drainAmount: DRAIN,
@@ -25,5 +24,9 @@ module.exports = function registerDragon2hSwordSpecialAttack(api) {
     accuracyMultiplier: 1,
     traits: { hitCount: 1, targeting: POWERSTAB_TARGETING },
     combatMethod: new Dragon2hSwordCombatMethod(),
-  });
+  };
+}
+
+module.exports = function registerDragon2hSwordSpecialAttack(api) {
+  api.registerCombatSpecial(dragon2hSwordSpecial(api.core));
 };

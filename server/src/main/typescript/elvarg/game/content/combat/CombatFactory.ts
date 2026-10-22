@@ -628,14 +628,15 @@ export class CombatFactory {
     }
 
     /**
-     * Ancient spells evaluate possible splash victims outside the main attack start flow.
-     * Keep those secondary-target checks centralized here so magic doesn't duplicate policy checks.
+     * Area attacks evaluate secondary targets outside the main attack start flow.
+     * Keep their permission checks centralized without consuming resources again.
      */
     public static canAttackSecondaryTarget(
         attacker: Mobile,
         primaryTarget: Mobile,
         candidate: Mobile,
-        spellRadius: number
+        /** Max distance from the primary target; omit when the caller already shaped the area. */
+        spellRadius?: number
     ): boolean {
         if (!candidate || candidate === attacker || candidate === primaryTarget) {
             return false;
@@ -653,7 +654,7 @@ export class CombatFactory {
         if (candidate.getHitpoints() <= 0) {
             return false;
         }
-        if (!candidate.getLocation().isWithinDistance(primaryTarget.getLocation(), spellRadius)) {
+        if (spellRadius !== undefined && !candidate.getLocation().isWithinDistance(primaryTarget.getLocation(), spellRadius)) {
             return false;
         }
         if (!AreaManager.inMulti(candidate)) {
@@ -662,7 +663,10 @@ export class CombatFactory {
         if (candidate.isNpc() && !candidate.getAsNpc().getCurrentDefinition().isAttackable()) {
             return false;
         }
-        if (candidate.isPlayer() && CombatFactory.canAttackByPolicy(attacker, candidate) !== CanAttackResponse.CAN_ATTACK) {
+        if (candidate.isNpc() && candidate.getTimers().has(TimerKey.ATTACK_IMMUNITY)) {
+            return false;
+        }
+        if (CombatFactory.canAttackByPolicy(attacker, candidate) !== CanAttackResponse.CAN_ATTACK) {
             return false;
         }
         return true;

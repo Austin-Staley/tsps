@@ -26,6 +26,8 @@ export interface SpecialAttackTargeting {
     /** Total target cap, including the primary target. */
     readonly maxTargets: number;
     readonly requiresMultiCombat?: boolean;
+    /** Cap on players struck, including a player primary target. Absent: players are never swept. */
+    readonly maxPlayerTargets?: number;
     /** Replaces area targeting when the primary NPC footprint meets the size. */
     readonly largeTargetExtraHit?: {
         readonly minimumSize: number;

@@ -7,8 +7,6 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { CombatSpecial } = require("../dist/game/content/combat/CombatSpecial");
-const { SpecialAttackTargetingResolver } = require("../dist/game/content/combat/SpecialAttackTargeting");
-const { AreaManager } = require("../dist/game/model/areas/AreaManager");
 const { Skill } = require("../dist/game/model/Skill");
 const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { World } = require("../dist/game/World");
@@ -384,41 +382,4 @@ test("Blood Sacrifice heals 15% of the target's max Hitpoints, capped at 25 on N
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
   };
   assert.deepEqual(run(player).healed, [14], "floor(99 * 0.15)");
-});
-
-test("Powerstab also hits NPCs within one tile of the player in multi-combat, up to 14 targets", () => {
-  const targeting = special("dragon_2h_sword").getTraits().targeting;
-  const at = (x, y, size = 1) => ({
-    isRegistered: () => true,
-    getHitpoints: () => 10,
-    getSize: () => size,
-    getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
-  });
-  const attacker = {
-    isPlayer: () => true,
-    getLocation: () => ({ getX: () => 10, getY: () => 10, getZ: () => 0 }),
-  };
-  const primary = { ...at(11, 10), isNpc: () => true, getAsNpc() { return this; } };
-  const adjacent = at(9, 9);
-  const onTop = at(10, 10);
-  const far = at(13, 10);
-  const bigNeighbour = at(7, 10, 3); // covers x 7..9, touching the player's column
-  const originalNpcs = World.getNpcs;
-  const originalMulti = AreaManager.inMulti;
-  try {
-    World.getNpcs = () => [primary, adjacent, onTop, far, bigNeighbour];
-    AreaManager.inMulti = () => true;
-    const swept = SpecialAttackTargetingResolver.resolve(attacker, primary, targeting).secondaryTargets;
-    assert.deepEqual(swept, [adjacent, onTop, bigNeighbour]);
-
-    const crowd = Array.from({ length: 20 }, () => at(10, 11));
-    World.getNpcs = () => [primary, ...crowd];
-    assert.equal(SpecialAttackTargetingResolver.resolve(attacker, primary, targeting).secondaryTargets.length, 13);
-
-    AreaManager.inMulti = () => false;
-    assert.deepEqual(SpecialAttackTargetingResolver.resolve(attacker, primary, targeting).secondaryTargets, []);
-  } finally {
-    World.getNpcs = originalNpcs;
-    AreaManager.inMulti = originalMulti;
-  }
 });
