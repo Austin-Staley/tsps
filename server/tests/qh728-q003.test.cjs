@@ -7,6 +7,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
@@ -50,10 +51,11 @@ function setup(options = {}) {
     variants: [], conditions: [], objects: [], itemOnItem: [], customs: new Map(), login: [], deaths: [], anyNpc: null,
   };
   const spawned = [], removed = [];
+  const persisted = new Set();
 
   const api = new Proxy({
     core,
-    persistAttribute() {},
+    persistAttribute(name) { persisted.add(name); },
     onNpcDialogueVariant(fn) { hooks.variants.push(fn); },
     onNpcDialogueCondition(fn) { hooks.conditions.push(fn); },
     onAnyNpcInteraction(actions) { hooks.anyNpc = actions; },
@@ -68,6 +70,9 @@ function setup(options = {}) {
       }
       if (name === 'quest:get-stage' && event?.key === 'a_kingdom_divided') {
         event.stage = Number(player.getAttribute('quest.a_kingdom_divided.stage')) || 0;
+      }
+      if (name === 'quest:is-complete' && event?.key === 'a_kingdom_divided') {
+        event.complete = (Number(player.getAttribute('quest.a_kingdom_divided.stage')) || 0) >= 150;
       }
       for (const fn of hooks.customs.get(name) ?? []) fn(event);
     },
@@ -87,7 +92,12 @@ function setup(options = {}) {
     onZoneEnter() {},
     onPlayerLogin(fn) { hooks.login.push(fn); },
     onPlayerLogout() {},
-    sendMultiChatboxPrompt() {},
+    sendMultiChatboxPrompt(player, title, ...pairs) {
+      const options = [];
+      for (let index = 0; index < pairs.length; index += 2) options.push({ text: pairs[index], pick: pairs[index + 1] });
+      prompts.push({ title, options });
+      return true;
+    },
   }, { get(target, key) { return target[key] ?? (() => {}); } });
 
   require('../plugins/quests/quests/AscentOfArceuus.Quest')(api);
@@ -99,6 +109,8 @@ function setup(options = {}) {
   const messages = [];
   const inventory = new Map();
   const bank = new Map();
+  const dropped = [];
+  const prompts = [];
   const xp = [];
   let location = new core.Location(0, 0, 0);
   const sender = new Proxy({
@@ -115,11 +127,14 @@ function setup(options = {}) {
     getInventory: () => ({
       getAmount: (id) => inventory.get(id) ?? 0,
       contains: (id) => (inventory.get(id) ?? 0) > 0,
-      isFull: () => false,
-      getFreeSlots: () => 28,
-      adds(id, amount = 1) { inventory.set(id, (inventory.get(id) ?? 0) + amount); },
+      isFull: () => options.fullBag === true,
+      getFreeSlots: () => (options.fullBag ? 0 : 28),
+      adds(id, amount = 1) {
+        if (options.fullBag) return;
+        inventory.set(id, (inventory.get(id) ?? 0) + amount);
+      },
       deleteNumber(id, amount = 1) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)); },
-      forceAdd(item) { inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + 1); },
+      forceAdd(player, item) { dropped.push(item.getId()); },
     }),
     getBank: () => ({ getAmount: (id) => bank.get(id) ?? 0 }),
     getBanks: () => [player.getBank()],
@@ -139,6 +154,7 @@ function setup(options = {}) {
     getMovementQueue: () => ({ isMovementBlocked: () => false, setBlockMovement() { return this; }, reset() { return this; } }),
     getFrameUpdater: () => ({ clear() {} }),
     getAppearance: () => ({ isMale: () => true }),
+    getUsername: () => 'Tester',
   };
   player.getDialogueManager = () => player.manager;
   player.manager = new DialogueManager(player);
@@ -175,12 +191,25 @@ function setup(options = {}) {
     return text();
   });
   return {
-    api, core, quest, hooks, attrs, varbits, messages, inventory, bank, xp, player, spawned, removed,
+    api, core, quest, hooks, attrs, varbits, messages, inventory, bank, dropped, prompts, xp, player, spawned, removed, persisted,
+    ascentVariant: hooks.variants[0],
     emit, talk, text,
     advance() { player.manager.advance(); return text(); },
     resetDialogue() { player.manager.reset(); },
     setLocation(x, y, z = 0) { location = new core.Location(x, y, z); },
+    setFullBag(value) { options.fullBag = value; },
   };
+}
+
+function exposeOwnedPageDrops(h) {
+  const world = h.core.World;
+  const original = world.getItems;
+  world.getItems = () => h.dropped.map(id => ({
+    getOwner: () => h.player.getUsername(),
+    getItem: () => new h.core.Item(id, 1),
+    isPendingRemoval: () => false,
+  }));
+  return () => { world.getItems = original; };
 }
 
 function registerAkd(h) {
@@ -414,7 +443,7 @@ test('Ascent of Arceuus: page 21770 used on memoirs 21760/21761 records varbit 7
   assert.equal(noted.varbits.get(7917), 1);
 });
 
-test('Ascent of Arceuus: Lord Trobin replaces a lost page once, before it enters the memoir', () => {
+test('Ascent of Arceuus: Lord Trobin replaces a lost page while the player does not own it', () => {
   const h = setup();
   h.quest.setStage(h.player, 14);
   h.inventory.set(MEMOIRS, 1);
@@ -489,4 +518,134 @@ test('Ascent of Arceuus: real Karuulm elevator dispatch reaches the Tasakaal and
   assert.equal(reenter.handled, true);
   runTicks(down.tick);
   assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY(), h.player.getLocation().getZ()], down.to);
+});
+
+test('Ascent of Arceuus: the cache Mori transforms own pre- and post-quest dialogue', () => {
+  const h = setup();
+  const vars = stage => ({ getVarbit: id => id === 7856 ? stage : 0, getVarp: () => 0 });
+  const preQuest = CacheDefinitions.resolveNpc(7208, vars(5));
+  const postQuest = CacheDefinitions.resolveNpc(7375, vars(14));
+  assert.equal(preQuest?.id, 8501, 'pond spawn 7208 transforms to pre-quest Mori through stage 5');
+  assert.equal(CacheDefinitions.resolveNpc(7208, vars(14)), undefined, 'the pre-quest parent disappears at completion');
+  assert.equal(postQuest?.id, 8502, 'placed parent 7375 transforms to post-quest Mori at stage 14');
+  const placedPostQuest = require('../data/definitions/npc-spawns.json').find(spawn => spawn.id === 7375);
+  assert.deepEqual([placedPostQuest.x, placedPostQuest.y], [1706, 3799]);
+
+  h.quest.setStage(h.player, 5);
+  for (const login of h.hooks.login) login({ player: h.player });
+  assert.equal(h.spawned.filter((npc) => [8501, 8502].includes(npc.def.id)).length, 0,
+    'the quest does not create a duplicate Mori');
+
+  h.quest.setStage(h.player, 14);
+  for (const login of h.hooks.login) login({ player: h.player });
+  assert.equal(h.spawned.filter((npc) => [8501, 8502].includes(npc.def.id)).length, 0,
+    'post-quest dialogue uses the canonical transformed spawn');
+  assert.equal(h.ascentVariant({ npcId: postQuest.id, player: h.player }), 'standard-dialogue-after-the-ascent-of-arceuus');
+
+  const akd = registerAkd(h);
+  akd.setStage(h.player, 150);
+  assert.equal(h.ascentVariant({ npcId: postQuest.id, player: h.player }), 'standard-dialogue-after-a-kingdom-divided');
+});
+
+test('Ascent of Arceuus: clicking the tower door runs the Tower Mage entry prompt', () => {
+  const h = setup();
+  const click = h.hooks.objects.at(-1);
+  const clickDoor = () => click({
+    player: h.player, objectId: 33570, clickType: 1, location: { x: 1596, y: 3820, z: 0 },
+  });
+
+  h.quest.setStage(h.player, 2);
+  clickDoor();
+  assert.ok(h.messages.includes('The Tower of Magic is off limits.'), 'the tower is closed before Mori sends the player');
+  assert.equal(h.text(), null, 'no dialogue starts before stage 3');
+
+  h.resetDialogue();
+  h.quest.setStage(h.player, 3);
+  clickDoor();
+  assert.equal(h.text(), 'I need to speak to Lord Arceuus.', 'the door opens the Tower Mage prompt');
+  for (let step = 0; step < 8 && h.prompts.length === 0; step++) h.advance();
+  const prompt = h.prompts.at(-1);
+  assert.ok(prompt, 'the Tower Mage asks for confirmation');
+  const yes = prompt.options.find((option) => option.text === 'Yes.');
+  assert.ok(yes, 'the prompt offers Yes.');
+  yes.pick();
+  assert.equal(h.quest.getStage(h.player), 4, '"Yes." enters the tower');
+
+  h.resetDialogue();
+  h.quest.setStage(h.player, 4);
+  h.setLocation(1596, 3821, 0);
+  clickDoor();
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [1596, 3819], 'inside the quest the door is passed');
+});
+
+test('Ascent of Arceuus: Kaal-Xil-Dar plays the A Kingdom Divided line once that quest is done', () => {
+  const h = setup();
+  const akd = registerAkd(h);
+  h.quest.setStage(h.player, 14);
+  const kaal = h.core.NpcIdentifiers.KAAL_XIL_DAR;
+
+  assert.equal(h.ascentVariant({ npcId: kaal, player: h.player }), 'after-the-ascent-of-arceuus');
+  akd.setStage(h.player, 150);
+  assert.equal(h.ascentVariant({ npcId: kaal, player: h.player }), 'after-a-kingdom-divided');
+});
+
+test('Ascent of Arceuus: a full bag still yields the replacement page', () => {
+  const h = setup({ fullBag: true });
+  h.quest.setStage(h.player, 14);
+  h.inventory.set(MEMOIRS, 1);
+  h.varbits.set(7917, 0);
+
+  assert.equal(h.talk(8505), 'Good day friend.');
+  assert.match(h.advance() ?? '', /Thank you for helping our people/);
+  assert.deepEqual(h.dropped, [PAGE], 'the page is dropped at the player instead of being lost');
+  assert.equal(h.inventory.get(PAGE) ?? 0, 0, 'no false success in the bag');
+});
+
+test('Ascent of Arceuus: full-bag page drops suppress duplicates until expiry, then recovery is repeatable', () => {
+  const h = setup({ fullBag: true });
+  const restoreGroundItems = exposeOwnedPageDrops(h);
+  try {
+  h.quest.setStage(h.player, 14);
+  h.inventory.set(MEMOIRS, 1);
+  h.varbits.set(7917, 0);
+
+  assert.equal(h.talk(8505), 'Good day friend.');
+  assert.match(h.advance() ?? '', /Thank you for helping our people/);
+  assert.deepEqual(h.dropped, [PAGE], 'the page is dropped at the player instead of being lost');
+  assert.equal(h.inventory.get(PAGE) ?? 0, 0, 'no false success in the bag');
+
+  for (const login of h.hooks.login) login({ player: h.player });
+  h.resetDialogue();
+  assert.equal(h.talk(8505), 'Good day friend.');
+  h.advance();
+  assert.deepEqual(h.dropped, [PAGE], 'a still-owned ground page blocks a duplicate after relog');
+  assert.equal(h.inventory.get(PAGE) ?? 0, 0);
+
+  h.dropped.length = 0; // the real ground item has expired or was otherwise lost
+  h.setFullBag(false);
+  h.resetDialogue();
+  assert.equal(h.talk(8505), 'Good day friend.');
+  h.advance();
+  assert.equal(h.inventory.get(PAGE), 1, 'the canonical recovery is available again after genuine loss');
+  } finally {
+    restoreGroundItems();
+  }
+});
+
+test('Ascent of Arceuus: a lost page can be reclaimed after relog, but not after memoir insertion', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 14);
+  h.inventory.set(MEMOIRS, 1);
+  h.varbits.set(7917, 0);
+
+  assert.equal(h.talk(8505), 'Good day friend.');
+  assert.match(h.advance() ?? '', /Thank you for helping our people/);
+  assert.equal(h.inventory.get(PAGE), 1, 'the ordinary recovery puts the page in the bag');
+
+  h.inventory.delete(PAGE);
+  for (const login of h.hooks.login) login({ player: h.player });
+  h.resetDialogue();
+  assert.equal(h.talk(8505), 'Good day friend.');
+  h.advance();
+  assert.equal(h.inventory.get(PAGE), 1, 'the canonical recovery becomes available after losing the page');
 });

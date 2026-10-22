@@ -29,7 +29,8 @@
  *     33593/33595 Inspect from value 12; device location in varbit 7865)
  *  13 device smashed, Asteros waiting to thank me, Lord Trobin talkable
  *     (entranced Lord Trobin NPC 8624 disappears at 13)
- *  14 complete (Mori's post-quest id 8502 first appears at 14)
+ *  14 complete (Mori's post-quest id 8502 first appears at 14; the world
+ *     Mori 7208 stops resolving from stage 6)
  * Other cache evidence: the pond object 34601 at 1700,3742 shows Dead Body
  * (0), Thana (1-5) and the Bright crystal (6+), matching stage 6.
  *
@@ -54,7 +55,12 @@
  *    a relog resumes rather than resets.
  *  - the tower doors (33570/33572) are unhandled by Doors.plugin (their open
  *    variants have no actions), so this plugin passes the player through them
- *    once inside the quest (stage >= 4) and refuses entry before that.
+ *    once inside the quest (stage >= 4). Before that, the door click starts the
+ *    Tower Mage's entry prompt once Mori has sent the player there (stage 3);
+ *    earlier stages are refused.
+ *  - the world Mori (7208) resolves to her named variant 8501 only while the
+ *    stage varbit is 0-5; the separate world spawn 7375 transforms to post-quest
+ *    Mori 8502 at stage 14.
  *  - Lord Trobin is only owner-spawned at stage >= 13 (his talkable id 8505);
  *    the entranced id 8504 seen during the quest is the canonical world NPC.
  *    Andrews and Asteros use their canonical world transforms (11152/10889).
@@ -113,14 +119,14 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   const HAS_REQUIREMENTS_CONDITION_ID = "1lc8lO";
   // Action/message step ids.
   const ENTER_TOWER_ACTION_ID = "l8anSu";
+  const ENTER_TOWER_VARIANT = "a-death-entering-the-tower-of-magic";
   const DEVICE_SMASH_MESSAGE_ID = "mMumh3";
   const COMPLETE_ACTION_ID = "vkpouM";
   const NON_QUEST_ACTION_ID = "3FLk-6";
 
-  const MORI_NPC_IDS = new Set([
-    NpcIdentifiers.MORI, // 8501, at the pond before stage 6
-    NpcIdentifiers.MORI_2, // 8502
-  ]);
+  const MORI_PRE_QUEST_NPC_ID = NpcIdentifiers.MORI; // 8501, from world parent 7208
+  const MORI_POST_QUEST_NPC_ID = NpcIdentifiers.MORI_2; // 8502, from world parent 7375
+  const MORI_NPC_IDS = new Set([MORI_PRE_QUEST_NPC_ID, MORI_POST_QUEST_NPC_ID]);
   const ANDREWS_NPC_IDS = new Set([
     NpcIdentifiers.COUNCILLOR_ANDREWS, // 10926
     NpcIdentifiers.COUNCILLOR_ANDREWS_2, // 11152
@@ -157,6 +163,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
 
   const TROBIN_NPC_ID = NpcIdentifiers.LORD_TROBIN_ARCEUUS_2;
   const KAAL_XIL_DAR_NPC_ID = NpcIdentifiers.KAAL_XIL_DAR;
+  const TOWER_MAGE_NPC_ID = NpcIdentifiers.TOWER_MAGE; // 7052, guards the tower doors
 
   const COINS_ITEM_ID = ItemIdentifiers.COINS; // 995
   const DARK_DISPOSITION_ITEM_ID = ItemIdentifiers.A_DARK_DISPOSITION; // 21770
@@ -252,15 +259,32 @@ module.exports = function registerAscentOfArceuusQuest(api) {
     return player.getInventory().getAmount(itemId) > 0 || bankHasItem(player, itemId);
   }
 
+  /** Grants an item the way QuestRuntime does: a full bag drops it, never loses it. */
+  function grantItem(player, itemId, amount = 1) {
+    const inventory = player.getInventory();
+    if (inventory.isFull()) inventory.forceAdd(player, new api.core.Item(itemId, amount));
+    else inventory.adds(itemId, amount);
+  }
+
   function pageAddedToMemoir(player) {
     return Number(player.getAttribute(MEMOIR_PAGE_ATTRIBUTE)) === 1 ||
       (player.getPacketSender().getVarbit(MEMOIR_ARC_TELEPORT_VARBIT) ?? 0) !== 0;
+  }
+
+  function pageAwaitingPickup(player) {
+    const username = player.getUsername();
+    return api.core.World.getItems().some((groundItem) =>
+      !groundItem.isPendingRemoval() &&
+      groundItem.getOwner() === username &&
+      groundItem.getItem().getId() === DARK_DISPOSITION_ITEM_ID
+    );
   }
 
   /** The canonical lost-page branch applies only before the page is added to the memoir. */
   function lostPagePending(player) {
     return quest.getStage(player) >= STAGE_COMPLETE &&
       !ownsItem(player, DARK_DISPOSITION_ITEM_ID) &&
+      !pageAwaitingPickup(player) &&
       ownsItem(player, MEMOIRS_ITEM_ID) &&
       !pageAddedToMemoir(player);
   }
@@ -357,6 +381,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   function syncNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
+    // The placed 7375 parent becomes canonical post-quest Mori 8502 at stage 14.
     if (stage >= STAGE_DEVICE_DESTROYED) {
       ensureTracked(player, "trobin", { id: TROBIN_NPC_ID, ...TROBIN_TILE, z: 1, wanderRadius: 0 });
     } else {
@@ -388,7 +413,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   }
 
   function selectTowerMageVariant(stage) {
-    if (stage === STAGE_MORI_RETURNED) return "a-death-entering-the-tower-of-magic";
+    if (stage === STAGE_MORI_RETURNED) return ENTER_TOWER_VARIANT;
     if (stage === STAGE_TOWER) return "a-death-entering-the-tower-of-magic-ghost-busting";
     if (stage === STAGE_SOULS_CLEARED) return "a-death-entering-the-tower-of-magic-post-ghost-bust";
     if (stage >= STAGE_ASTEROS) return "after-the-ascent-of-arceuus";
@@ -427,7 +452,13 @@ module.exports = function registerAscentOfArceuusQuest(api) {
         return "the-tasakaal-returning-to-the-tasakaal-after-freeing-the-trapped-soul-talking-to-the-tasakaal-again";
       }
       if (stage >= STAGE_COMPLETE) {
-        if (npcId === KAAL_XIL_DAR_NPC_ID) return "after-the-ascent-of-arceuus";
+        if (npcId === KAAL_XIL_DAR_NPC_ID) {
+          // A Kingdom Divided has its own post-quest line for Kaal-Xil-Dar and
+          // owns him only in its 122-137 window, so the Ascent yields it there.
+          return questComplete(player, AKD_KEY)
+            ? "after-a-kingdom-divided"
+            : "after-the-ascent-of-arceuus";
+        }
         return "the-tasakaal-returning-to-the-tasakaal-after-freeing-the-trapped-soul-talking-to-the-tasakaal-again";
       }
       return null;
@@ -478,7 +509,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
       return;
     }
     if (LORD_TROBIN_NPC_IDS.has(npcId) && text === LOST_PAGE_GIFT_LINE && lostPagePending(player)) {
-      player.getInventory().adds(DARK_DISPOSITION_ITEM_ID, 1);
+      grantItem(player, DARK_DISPOSITION_ITEM_ID);
       return;
     }
     if (!TASAKAAL_NPC_IDS.has(npcId)) return;
@@ -616,11 +647,19 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   function passDoor(event) {
     const { player } = event;
     event.handled = true;
-    if (quest.getStage(player) < STAGE_TOWER) {
-      player.sendMessage("The Tower of Magic is off limits.");
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_TOWER) {
+      stepThrough(player, event.location);
       return;
     }
-    stepThrough(player, event.location);
+    if (stage === STAGE_MORI_RETURNED) {
+      // The Tower Mage guards the door; clicking it starts their entry prompt.
+      api.emitCustomEvent("npc-dialogue:start", {
+        player, npcId: TOWER_MAGE_NPC_ID, variant: ENTER_TOWER_VARIANT,
+      });
+      return;
+    }
+    player.sendMessage("The Tower of Magic is off limits.");
   }
 
   function handleObjectInteraction(event) {
