@@ -56,7 +56,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | Biohazard | `Biohazard` | Pending | Pending | Pending |
 | Bone Voyage | `BoneVoyage` | Pending | Pending | Pending |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
-| Client of Kourend | `ClientOfKourend` | Pending | Pending | Pending |
+| Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |
 | Clock Tower | `ClockTower` | Pending | Pending | Pending |
 | Cold War | `ColdWar` | Pending | Pending | Pending |
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |
