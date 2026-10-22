@@ -179,6 +179,27 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     f.square.delete();
 });
 
+test("WebGPU partial loc rebuilds replace animation bounds and keep them while frames advance", () => {
+    const f = fixture([range(0, 6, 0)], []);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 1);
+    const replacement = range(24, 12, 80);
+    f.square.refreshPartial({ ...f.data, locOnly: true,
+        loc: { ...f.data.loc, drawRanges: [replacement] } } as any, {} as any, 1);
+    f.square.locsAnimated = [{ anim: { frames: [range(48, 6, 80)] }, update() {}, drawFrame: () => 0,
+        getDrawRangeIndex: (alpha: boolean, _interact: boolean, lod: boolean) => alpha || lod ? -1 : 0 } as any];
+    f.square.updateAnimatedLocs({} as any, 10);
+    assert.deepEqual(replacement.bounds, [80, -1, 0, 88, 1, 8]);
+    f.draws.length = 0;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 0, "the replacement no longer inherits the old visible bounds");
+    f.context.tileX = 80;
+    f.context.camera = { intersectsBox: () => true } as unknown as Frustum;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.deepEqual(f.draws.map(d => [d.first, d.count]), [[12, 6]], "the new pose renders when its bounds are in view");
+    f.square.delete();
+});
+
 
 test("WebGPU wall previews give each placement its own uniform slot", () => {
     const f = fixture([range(0, 6, 0)], []);

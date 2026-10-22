@@ -233,3 +233,59 @@ draws.length = 0;
 backend.draw(drawCall, chunks, [0, 2]);
 assert.deepEqual(draws, [{ id: 0, range: [0, 6, 1] }, { id: 2, range: [48, 6, 1] }], "Culling must never draw an excluded gap or change model IDs");
 console.log("Scenery distance checks passed: 128 → 80 terrain triangles, joined chunk/mixed-detail edges, exact open meshes, exclusive LODs and light-volume culling");
+
+// Animated commands start empty, but every baked pose must contribute to their culling bounds.
+const animatedBoundsBuffer = new SceneBuffer({} as any, new Map(), 32);
+const bakedFrame = (points: number[][]) => {
+    const offset = animatedBoundsBuffer.indexByteOffset();
+    for (const [x, y, z] of points) animatedBoundsBuffer.indices.push(
+        animatedBoundsBuffer.vertexBuf.addVertex(x, y, z, 100, 255, 0, 0, -1, false));
+    return newDrawRange(offset, points.length);
+};
+const emptyFrame = newDrawRange(0, 0);
+const bakedFrames = {
+    frames: [emptyFrame, bakedFrame([[-128, -64, 0], [256, 320, 64], [0, 0, -128]]),
+        bakedFrame([[-384, -192, 128], [128, 640, 384], [0, 0, 0]])],
+    framesAlpha: [bakedFrame([[-512, -320, -384], [640, 960, 512], [0, 0, 0]]), emptyFrame, emptyFrame],
+    frameStarts: [0, 2],
+};
+const contourScene = new Scene(4, 1, 1);
+for (const column of contourScene.tileHeights[2]) column.fill(-320);
+contourScene.tileHeights[2][0][0] = 192;
+animatedBoundsBuffer.setHeightBounds(contourScene);
+const placements = [
+    { sceneX: 8 * 128 + 64, sceneZ: 16 * 128 + 64, heightOffset: -275, level: 2, contourGround: 1 },
+    { sceneX: 90 * 128, sceneZ: -40 * 128, heightOffset: 67, level: 0, contourGround: 2 },
+].map(placement => ({ ...placement, lowDetail: false, interactId: 1,
+    entity: { seqId: 1, seqRandomStart: false, rotation: 0 } }));
+for (const placement of placements) animatedBoundsBuffer.addLocAnimated({ anim: bakedFrames, locs: [] }, placement);
+for (const commands of [animatedBoundsBuffer.drawCommands, animatedBoundsBuffer.drawCommandsAlpha,
+    animatedBoundsBuffer.drawCommandsLod, animatedBoundsBuffer.drawCommandsLodAlpha,
+    animatedBoundsBuffer.drawCommandsInteract, animatedBoundsBuffer.drawCommandsInteractAlpha,
+    animatedBoundsBuffer.drawCommandsInteractLod, animatedBoundsBuffer.drawCommandsInteractLodAlpha]) {
+    for (const command of commands) {
+        const draw = animatedBoundsBuffer.createDrawRange(command);
+        assert.ok(draw.bounds, "empty initial commands still retain the full animation bounds");
+        const placement = command.instances[0];
+        for (const frame of [...bakedFrames.frames, ...bakedFrames.framesAlpha]) {
+            for (let i = frame[0] / 4; i < frame[0] / 4 + frame[1]; i++) {
+                const offset = animatedBoundsBuffer.indices[i] * 12, view = animatedBoundsBuffer.vertexBuf.view;
+                for (const height of placement.contourGround === 1 ? [-320, 192] : [0]) {
+                    const point = [((view.getUint32(offset, true) >>> 17) - 16384 + placement.sceneX) / 128,
+                        (16384 - (view.getUint32(offset + 4, true) & 32767) - Math.round(placement.heightOffset / 8) * 8 + height) / 128,
+                        ((view.getUint32(offset + 8, true) >>> 17) - 16384 + placement.sceneZ) / 128];
+                    point.forEach((value, axis) => assert.ok(value >= draw.bounds[axis] && value <= draw.bounds[axis + 3],
+                        "all opaque/alpha/intermediate poses and contour heights stay inside the instance bounds"));
+                }
+            }
+        }
+    }
+}
+for (const frames of [[emptyFrame], [bakedFrames.frames[1], undefined], [newDrawRange(1e9, 3)]]) {
+    const conservative = new SceneBuffer({} as any, new Map(), 1);
+    conservative.vertexBuf = animatedBoundsBuffer.vertexBuf;
+    conservative.indices = animatedBoundsBuffer.indices;
+    conservative.addLocAnimated({ anim: { frames, framesAlpha: undefined }, locs: [] }, placements[0]);
+    assert.equal(conservative.createDrawRange(conservative.drawCommands[0]).bounds, undefined,
+        "empty, missing or unavailable geometry keeps the unbounded fallback");
+}
