@@ -110,7 +110,6 @@ export class MapManager<T extends MapSquare> {
     private activeSceneBaseY: number = -1;
     private activeExpandedMapLoading: number = 0;
     private gridTransitionPending: boolean = false;
-    private transitionRenderMapIds: number[] = [];
 
     visibleMapCount: number = 0;
     visibleMaps: T[] = [];
@@ -478,10 +477,24 @@ export class MapManager<T extends MapSquare> {
         this.activeGridMaxMapY = -1;
     }
 
-    private isTargetGridReady(): boolean {
+    isSceneReady(frameCount: number): boolean {
+        if (ClientState.inInstance) {
+            // Applying an instance clears the normal grid before installing its composed scene.
+            if (this.gridMapCount > 0 || this.activeGridMapCount > 0) return false;
+            for (const [mapId, map] of this.mapSquares) {
+                if (!this.worldEntityMapIds.has(mapId) && map.canRender(frameCount)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return this.gridRevision > 0 && !this.gridTransitionPending && this.isTargetGridReady(frameCount);
+    }
+
+    private isTargetGridReady(frameCount: number): boolean {
         for (let i = 0; i < this.gridMapCount; i++) {
             const mapId = this.gridMapIds[i];
-            if (this.mapSquares.has(mapId) || this.invalidMapIds.has(mapId)) {
+            if (this.invalidMapIds.has(mapId) || this.mapSquares.get(mapId)?.canRender(frameCount)) {
                 continue;
             }
             return false;
@@ -513,25 +526,12 @@ export class MapManager<T extends MapSquare> {
     }
 
     private collectRenderGridMapIds(posX: number, posZ: number): number[] {
-        this.transitionRenderMapIds.length = 0;
-        for (let i = 0; i < this.activeGridMapCount; i++) {
-            this.transitionRenderMapIds.push(this.activeGridMapIds[i]);
-        }
-        if (this.gridTransitionPending) {
-            for (let i = 0; i < this.gridMapCount; i++) {
-                const mapId = this.gridMapIds[i];
-                if (!this.activeGridMapIdSet.has(mapId)) {
-                    this.transitionRenderMapIds.push(mapId);
-                }
-            }
-        }
-
-        this.transitionRenderMapIds.sort(
+        this.activeGridMapIds.sort(
             (a, b) =>
                 getMapDistanceSq(posX, posZ, a >> 8, a & 0xff) -
                 getMapDistanceSq(posX, posZ, b >> 8, b & 0xff),
         );
-        return this.transitionRenderMapIds;
+        return this.activeGridMapIds;
     }
 
     update(
@@ -730,24 +730,8 @@ export class MapManager<T extends MapSquare> {
                 }
             }
 
-            // Check if the new grid overlaps the current active grid.
-            let hasOverlap = false;
-            for (let i = 0; i < this.gridMapCount; i++) {
-                if (this.activeGridMapIdSet.has(this.gridMapIds[i])) {
-                    hasOverlap = true;
-                    break;
-                }
-            }
-
-            if (hasOverlap) {
-                // Walking / same-region: keep old grid visible until all new maps are ready.
-                this.gridTransitionPending = true;
-            } else {
-                // Cross-region teleport: commit new grid immediately so maps
-                // render progressively as they arrive from workers.
-                this.gridTransitionPending = true;
-                this.commitTargetGridAsActive();
-            }
+            // Publish the whole scene together, including initial loads and teleports.
+            this.gridTransitionPending = true;
         }
 
         // Ensure all maps in the target streaming grid are queued.
@@ -762,7 +746,7 @@ export class MapManager<T extends MapSquare> {
             }
         }
 
-        if (this.gridTransitionPending && this.isTargetGridReady()) {
+        if (this.gridTransitionPending && this.isTargetGridReady(frameCount)) {
             this.commitTargetGridAsActive();
         }
 

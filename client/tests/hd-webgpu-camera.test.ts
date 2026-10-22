@@ -25,6 +25,7 @@ test("shortestYawDelta takes the short way across the 0/2048 seam", () => {
 for (const backend of ["WebGL", "WebGPU"]) {
     test(`${backend} finishes login during a scripted camera without moving the shot`, () => {
         let terrainReady = false;
+        let sceneReady = false;
         let completions = 0;
         const tracker = new LoadingTracker();
         tracker.setRequirements([LoadingRequirement.MAP_DATA_LOADED]);
@@ -47,9 +48,13 @@ for (const backend of ["WebGL", "WebGPU"]) {
                 clientPlugins: { handleCameraFollow: () => assert.fail("cutscene must retain camera control") },
             },
             playerPosUni: new Float32Array(2),
+            stats: { frameCount: 1 },
             getControlledPlayerEcsIndex: () => 0,
             getControlledPlayerWorldViewId: () => -1,
-            mapManager: { getMapForWorldTile: () => terrainReady ? map : undefined },
+            mapManager: {
+                getMapForWorldTile: () => terrainReady ? map : undefined,
+                isSceneReady: () => sceneReady,
+            },
         } as any;
         const frame = (time: number) => backend === "WebGPU"
             ? updateFollowCamera(renderer, time, 16)
@@ -60,10 +65,15 @@ for (const backend of ["WebGL", "WebGPU"]) {
         assert.equal(completions, 0, "missing terrain must keep the loading overlay");
         terrainReady = true;
         frame(10);
-        frame(10.9);
-        assert.equal(completions, 0, "preserve the normal map fade-in interval");
-        frame(11);
         frame(12);
+        assert.equal(completions, 0, "player terrain alone must not dismiss loading");
+        sceneReady = true;
+        terrainReady = false;
+        frame(13);
+        assert.equal(completions, 0, "a complete scene still needs the player's ground");
+        terrainReady = true;
+        frame(14);
+        frame(15);
         assert.equal(completions, 1, "map readiness must not wait for a camera-reset packet");
         assert.equal(renderer.osrsClient.followPlayerCamera, false);
         assert.deepEqual([...camera.pos, camera.getYaw(), camera.getScenePitchAngle()], before);
