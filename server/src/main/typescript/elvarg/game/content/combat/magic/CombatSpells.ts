@@ -1023,7 +1023,7 @@ export class CombatSpells {
             return 19;
         },
         startGraphic() {
-            return new Graphic(327, 6553600);
+            return null; // None live; 327 is the Slayer salt sprinkle.
         },
         baseExperience() {
             return 30;
@@ -1724,7 +1724,7 @@ export class CombatSpells {
                 }*/
         },
         endGraphic() {
-            return new Graphic(107);
+            return new Graphic(80, GraphicHeight.HIGH); // Live, a Stun that lands shows stunned; 107 is Weaken's impact.
         },
         startGraphic() {
             return new Graphic(173, 6553600);
@@ -1748,7 +1748,8 @@ export class CombatSpells {
             return new Animation(1819);
         },
         castProjectile: function (cast, castOn) {
-            return Projectile.createProjectile(cast, castOn, 344, 0, 20, 43, 31);
+            // Live, Tele Block travels as teleport_reverse; 344 is the ballista special.
+            return Projectile.createProjectile(cast, castOn, 1299, 0, 20, 43, 31);
         },
         spellEffect: function (cast, castOn) {
             if (castOn.isPlayer()) {
