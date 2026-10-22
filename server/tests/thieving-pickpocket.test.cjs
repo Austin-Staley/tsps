@@ -20,7 +20,11 @@ const combat = {
     inCombat: () => false,
     stunTicks: (_player, ticks, _force, options) => log.push(`stun ${ticks} ticks, graphic ${options?.graphic?.id}/${options?.graphic?.height}, message ${options?.message}`),
 };
+const { PluginManager } = require("../dist/plugins/PluginManager");
 Thieving.register({
+    core: PluginManager.getCoreApi(),
+    onCustomEvent: () => {},
+    onNpcsInteraction: (names, actions) => names.forEach((name) => Object.keys(actions).forEach((action) => interactions.push([name, action]))),
     getTaskManager: () => ({ submit: (task) => { task.setRunning(true); submitted.push(task); } }),
     getCombatFactory: () => combat,
     onNpcInteraction: (name, actions) => interactions.push([name, Object.keys(actions)[0]]),
@@ -312,10 +316,10 @@ test('gloves of silence wear out after 62 failed pickpockets', () => {
 test('NPC ids pick between targets that share a name; anything else falls through', (t) => {
     const { targetFor } = Pickpocket._test;
     assert.equal(targetFor('Bandit', 695).key, 'desert_bandit');
-    assert.equal(targetFor('Bandit', 735), null, 'a Pollnivneach bandit is left to blackjacking');
+    assert.equal(targetFor('Bandit', 735).key, 'pollnivnian_bearded_bandit');
     const result = attempt(t, { name: 'Bandit', npcId: 735 });
-    assert.equal(result.result, false);
-    assert.notEqual(result.handled, true);
+    assert.equal(result.handled, true);
+    assert.ok(result.click.some((line) => line.includes('level of at least 45')));
 });
 
 test('loot: Master Farmer herb seeds follow Farming level; the workman pays coins after The Dig Site', () => {
