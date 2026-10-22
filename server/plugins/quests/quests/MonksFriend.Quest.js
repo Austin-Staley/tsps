@@ -287,16 +287,28 @@ module.exports = function registerMonksFriendQuest(api) {
     if (stage >= STAGE_RETURNED_BLANKET) {
       return "child-s-blanket-talking-to-a-monk-after-retrieving-the-blanket";
     }
-    // Stage 10 has no quest-specific monk line in the imported pages; the named
-    // default standard dialogue is the source-backed fallback.
-    return null;
+    // The quest's own monk line while the blanket is still missing. The generic
+    // "Monk" page would offer the healing menu, but monks at the Ardougne
+    // Monastery do not heal, so the quest line is the correct one here.
+    return { page: "Monk's Friend", variant: "getting-started-monk-overhead" };
   }
 
+  /**
+   * The wood leg has two sibling conditions ("has logs", "has a plank"). The
+   * shared runner plays the first true branch and then keeps the remaining
+   * siblings as a tail, so a player carrying both would hand over a log *and*
+   * a plank. Logs are the canonical hand-over, so the plank branch is answered
+   * false while logs are held and once the cart is repaired.
+   */
   function answerCondition({ player, npcId, text }) {
     if (npcId !== BROTHER_OMAD_NPC_ID && npcId !== BROTHER_CEDRIC_NPC_ID) return null;
     const value = String(text).toLowerCase();
     if (value.includes("has logs")) return hasItem(player, LOGS_ITEM_ID);
-    if (value.includes("has a plank")) return hasItem(player, PLANK_ITEM_ID);
+    if (value.includes("has a plank")) {
+      if (hasItem(player, LOGS_ITEM_ID)) return false;
+      if (quest.getStage(player) >= STAGE_FIXED_CART) return false;
+      return hasItem(player, PLANK_ITEM_ID);
+    }
     return null;
   }
 
@@ -359,7 +371,8 @@ module.exports = function registerMonksFriendQuest(api) {
     }
     if (npcId === BROTHER_CEDRIC_NPC_ID && (stepId === LOGS_MESSAGE_ID || stepId === PLANK_MESSAGE_ID)) {
       const itemId = stepId === LOGS_MESSAGE_ID ? LOGS_ITEM_ID : PLANK_ITEM_ID;
-      if (!hasItem(player, itemId)) {
+      // One hand-over repairs the cart: a repaired cart never takes more wood.
+      if (stage >= STAGE_FIXED_CART || !hasItem(player, itemId)) {
         event.handled = true;
         return;
       }

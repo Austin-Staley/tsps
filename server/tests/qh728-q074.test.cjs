@@ -8,6 +8,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 require(root + '/dist/Server').Server.installProductionPathResolver();
 const core = require(root + '/dist/plugins/PluginManager').PluginManager.getCoreApi();
+const PluginManager = require(root + '/dist/plugins/PluginManager').PluginManager;
 const { CachePipeline } = require(root + '/dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require(root + '/dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { DialogueManager } = require(root + '/dist/game/model/dialogues/DialogueManager');
@@ -208,6 +209,83 @@ function transcriptHarness() {
   return { api, custom, variants, conditions, tasks, quest };
 }
 
+/**
+ * The shared transcript runner resolves conditions through the real
+ * PluginManager, so the quest's condition hook has to live there too. The
+ * returned cleanup removes it again.
+ */
+function woodHarness() {
+  const custom = new Map();
+  const variants = [];
+  const conditions = [];
+  const tasks = [];
+  const actions = [];
+  const taskManager = {
+    submit(task) { task.setRunning(true); tasks.push(task); },
+    cancelTasks() {},
+  };
+  const api = new Proxy({
+    core: {
+      ...core,
+      TaskManager: taskManager,
+      CountdownTask,
+      MultiChatboxPrompt: { getPending: (p) => p.prompt ?? null },
+    },
+    persistAttribute: noop,
+    onNpcDialogueVariant: (handler) => variants.push(handler),
+    onNpcDialogueCondition: (handler) => {
+      conditions.push(handler);
+      PluginManager.npcDialogueConditionHooks.push({ pluginName: 'qh728-q074', handler });
+    },
+    onCustomEvent(key, handler) {
+      const handlers = custom.get(key) ?? [];
+      handlers.push(handler);
+      custom.set(key, handlers);
+    },
+    emitCustomEvent(key, event) {
+      if (key === 'npc-dialogue:action') actions.push(event.stepId);
+      for (const handler of custom.get(key) ?? []) handler(event);
+    },
+    sendMultiChatboxPrompt(p, title, ...pairs) {
+      p.prompt = { title, options: pairs.filter((_, index) => index % 2 === 0), pairs };
+      return true;
+    },
+    registerArea: noop,
+    getObjectManager: () => ({ register: noop, deregister: noop }),
+  }, { get: (target, key) => (key in target ? target[key] : noop) });
+  require(root + '/plugins/quests/quests/MonksFriend.Quest')(api);
+  const quest = runtime.getRegisteredQuests().findLast((entry) => entry.key === 'monks_friend');
+  const cleanup = () => {
+    PluginManager.npcDialogueConditionHooks =
+      PluginManager.npcDialogueConditionHooks.filter((hook) => hook.pluginName !== 'qh728-q074');
+  };
+  return { api, custom, variants, conditions, tasks, actions, quest, cleanup };
+}
+
+/** Plays the real registered wood transcript and reports what it consumed. */
+function playWood(held) {
+  const wood = woodHarness();
+  try {
+    const p = runnerPlayer();
+    for (const [id, amount] of held) p.items.set(id, amount);
+    wood.quest.setStage(p, 60);
+    assert.equal(runtime.startTranscript(
+      wood.api, p, N.BROTHER_CEDRIC, "Monk's Friend",
+      'brother-cedric-talking-to-brother-cedric-while-holding-some-wood',
+      null, null), true);
+    playTranscript(p, wood.tasks);
+    return {
+      actions: wood.actions,
+      repairs: p.messages.filter((message) => message.includes('repair the cart')).length,
+      logs: p.items.get(I.LOGS) ?? 0,
+      plank: p.items.get(I.PLANK) ?? 0,
+      stage: wood.quest.getStage(p),
+    };
+  } finally {
+    wood.cleanup();
+  }
+}
+
 function runnerPlayer() {
   const attrs = new Map();
   const items = new Map();
@@ -353,7 +431,9 @@ test('every variant the selector returns is reachable from the indexed transcrip
   assert.ok(pagesFor(N.MONK_13).includes('Monk') && pagesFor(N.MONK_13).includes("Monk's Friend"));
   assert.ok(dialogues['Brother Cedric'].variants['after-monk-s-friend'], 'post-quest Cedric page carries the thank-you');
   assert.ok(dialogues['Brother Omad'].variants['standard-dialogue-post-quest'], 'the permanent Omad post-quest page exists');
-  assert.equal(dialogues['Monk'].default, 'standard-dialogue', 'the monk fallback for stage 10 is sourced');
+  assert.equal(dialogues['Monk'].default, 'standard-dialogue', 'the generic monk page is still the source-backed default');
+  assert.ok(dialogues["Monk's Friend"].variants['getting-started-monk-overhead'],
+    'the quest monk line for stage 10 exists');
   assert.ok(dialogues['Monk'].variants['ardougne-monastery-before-monk-s-friend']);
   assert.ok(dialogues['Monk'].variants['ardougne-monastery-after-monk-s-friend']);
   assert.ok(dialogues["Monk's Friend"].variants['child-s-blanket-talking-to-a-monk-after-retrieving-the-blanket']);
@@ -515,6 +595,29 @@ test('the wood leg accepts a plank and refuses either item when it is missing', 
   assert.equal(plank.handled, true);
   assert.equal(h.quest.getStage(p), 70, 'a plank repairs the cart just as logs do');
   assert.equal(p.items.get(I.PLANK), undefined, 'the plank is consumed');
+});
+
+test('the wood leg hands over one item only: logs are preferred and a plank is never spent', () => {
+  // The real transcript runner keeps the remaining sibling conditions as a tail
+  // after the chosen branch, so a player carrying both must not pay twice.
+  const both = playWood([[I.LOGS, 2], [I.PLANK, 1]]);
+  assert.deepEqual(both.actions, ['nd6lda'], 'only the logs branch runs');
+  assert.equal(both.repairs, 1, 'the repair message is printed once');
+  assert.equal(both.logs, 1, 'one log is consumed');
+  assert.equal(both.plank, 1, 'the plank is not spent');
+  assert.equal(both.stage, 70, 'the cart is repaired');
+
+  const lastLog = playWood([[I.LOGS, 1], [I.PLANK, 1]]);
+  assert.deepEqual(lastLog.actions, ['nd6lda'], 'the last log still wins over the plank');
+  assert.equal(lastLog.repairs, 1);
+  assert.equal(lastLog.logs, 0);
+  assert.equal(lastLog.plank, 1, 'the plank survives the hand-over');
+
+  const plankOnly = playWood([[I.PLANK, 1]]);
+  assert.deepEqual(plankOnly.actions, ['Gil6fA'], 'a plank on its own still repairs the cart');
+  assert.equal(plankOnly.repairs, 1);
+  assert.equal(plankOnly.plank, 0, 'the plank is consumed');
+  assert.equal(plankOnly.stage, 70);
 });
 
 test('the stone circle spawns the canonical ladder and scopes both ladder clicks', () => {
@@ -732,7 +835,8 @@ test('Ardougne monk 4246 follows the sourced pre/blanket/party/post variants', (
   assert.deepEqual(variant(h, N.MONK_13), { page: 'Monk', variant: 'ardougne-monastery-before-monk-s-friend' });
 
   h.quest.setStage(p, 10);
-  assert.equal(variant(h, N.MONK_13), null, 'stage 10 has no quest-specific monk line; the named default applies');
+  assert.deepEqual(variant(h, N.MONK_13), { page: "Monk's Friend", variant: 'getting-started-monk-overhead' },
+    'stage 10 uses the quest monk line, not the generic monk page with its healing menu');
 
   h.quest.setStage(p, 20);
   assert.equal(variant(h, N.MONK_13), 'child-s-blanket-talking-to-a-monk-after-retrieving-the-blanket');
