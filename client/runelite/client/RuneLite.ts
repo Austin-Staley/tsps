@@ -22,7 +22,7 @@ import { runLegacyConfigMigrations } from "../impl/LegacyConfigMigration";
 /**
  * Boots the RuneLite-shaped plugin runtime around an OsrsClient: singletons,
  * injector bindings, engine event emitters, legacy config migration and the
- * core plugin list. OsrsClient calls `RuneLite.start(this)` once.
+ * core plugin list. OsrsClient calls `RuneLite.start(this, loadPlugins)` once.
  */
 export class RuneLite {
     static instance?: RuneLite;
@@ -35,16 +35,19 @@ export class RuneLite {
     /** Lays out movable overlays and lets the player Alt-drag them. */
     readonly overlayRenderer: OverlayRenderer;
 
-    private constructor(private readonly client: OsrsClient) {
+    private constructor(
+        private readonly client: OsrsClient,
+        private readonly loadPlugins: boolean,
+    ) {
         this.configManager = new ConfigManager(this.eventBus);
         this.pluginManager = new PluginManager(this.eventBus, this.configManager);
         this.clientToolbar = this.pluginManager.getInjector().get(ClientToolbar);
         this.overlayRenderer = new OverlayRenderer(client, this.configManager);
     }
 
-    static start(client: OsrsClient): RuneLite {
+    static start(client: OsrsClient, loadPlugins = true): RuneLite {
         if (RuneLite.instance) return RuneLite.instance;
-        const instance = new RuneLite(client);
+        const instance = new RuneLite(client, loadPlugins);
         RuneLite.instance = instance;
         instance.load();
         return instance;
@@ -85,6 +88,8 @@ export class RuneLite {
             window.addEventListener("blur", () => this.eventBus.post(new FocusChanged(false)));
         }
 
+        // Edit mode: no plugins, so nothing for the overlay renderer to lay out either.
+        if (!this.loadPlugins) return;
         runLegacyConfigMigrations(LEGACY_CONFIG_MIGRATIONS, this.configManager);
         this.pluginManager.loadCorePlugins(CORE_PLUGINS);
 

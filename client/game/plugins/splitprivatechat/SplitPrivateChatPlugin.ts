@@ -1,4 +1,7 @@
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
+import { createElement, lazy, type ReactNode } from "react";
+import type { OsrsClient } from "../../OsrsClient";
 import type { ChatMessageEvent } from "../../../network/serverConnection/types/messages";
 import { sanitizeText } from "../../../widgets/menu/utils";
 
@@ -17,6 +20,10 @@ export interface SplitPrivateChatState {
 }
 
 type SplitPrivateChatListener = () => void;
+
+const SplitPrivateChatOverlay = lazy(() =>
+    import("./SplitPrivateChatOverlay").then((m) => ({ default: m.SplitPrivateChatOverlay })),
+);
 
 function isPrivateMessage(message: ChatMessageEvent): boolean {
     return (
@@ -40,7 +47,20 @@ export class SplitPrivateChatPlugin extends Plugin {
         configKey: "splitprivatechatplugin",
     };
 
+    private readonly client = inject<OsrsClient>(CLIENT_TOKEN);
     private readonly listeners = new Set<SplitPrivateChatListener>();
+
+    onChatMessage(message: ChatMessageEvent): void {
+        if (this.client.varManager?.getVarp(SPLIT_PRIVATE_CHAT_VARP) === 1) this.addMessage(message);
+    }
+
+    onSessionReset(): void {
+        this.clear();
+    }
+
+    renderHud(osrsClient: OsrsClient): ReactNode {
+        return createElement(SplitPrivateChatOverlay, { osrsClient, plugin: this });
+    }
     private state: SplitPrivateChatState = { messages: [] };
 
     subscribe(listener: SplitPrivateChatListener): () => void {
