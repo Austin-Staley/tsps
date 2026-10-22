@@ -61,9 +61,11 @@ source-review findings, including Elena's recovery of items belonging to the Che
 No natural completion has been accepted yet.
 
 Monk's Friend completed naturally, paid its rewards once and persisted through logout and
-relogin. Its run remains incomplete because normal runes arrive after the party instead
-of before it, and the Monk's named dialogue branches are unreachable. Its original owner
-is correcting those findings. Clock Tower acquired the red cog naturally but stopped at
+relogin. That run exposed late normal-rune payment and unreachable named Monk variants.
+The corrected source now passes independent root review and 11 focused tests, including
+normal payment before the party, a full-bag drop after all twelve overhead lines, once-only
+settlement before completion observers, and named Monk dialogue selection. Fresh validation
+of those fixes remains pending. Clock Tower acquired the red cog naturally but stopped at
 a cellar-door crossing. Real-cache door replay passes 51 focused tests and did not establish
 a geometry defect; the driver must wait for opening before crossing in the same script.
 Its saved stage and cog persisted through relog, but completion is unproven.
@@ -183,7 +185,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | Making History | `MakingHistory` | Pending | Pending | Pending |
 | Meat and Greet | `MeatAndGreet` | Pending | Pending | Pending |
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
-| Monk's Friend | `MonksFriend` | Rune timing and named Monk variants need correction | Old revision's source tests did not catch native timing defect | Incomplete: natural completion/repeat/relog proven, two parity defects remain |
+| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Old revision completed/repeated/persisted; corrected reward and dialogue route pending |
 | Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
 | Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
