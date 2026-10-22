@@ -12,6 +12,7 @@ import { Mobile } from "../../../../entity/impl/Mobile";
 import { Player } from "../../../../entity/impl/player/Player";
 import { GraphicHeight } from "../../../../model/GraphicHeight";
 import { MagicSpellbook } from "../../../../model/MagicSpellbook";
+import { Skill } from "../../../../model/Skill";
 
 
 export class MagicCombatMethod extends CombatMethod {
@@ -199,6 +200,12 @@ export class MagicCombatMethod extends CombatMethod {
                 );
             }
             spell.startCast(character, target);
+            // OSRS pays a spell's base XP once per cast, hit or splash and however many targets it
+            // hits; rewardExp adds the per-damage XP. Powered staves' built-in spells have none.
+            const baseExperience = spell.baseExperience();
+            if (baseExperience > 0 && !character.isNpc()) {
+                character.getAsPlayer().getSkillManager().addExperience(Skill.MAGIC, baseExperience, true);
+            }
         }
     }
 

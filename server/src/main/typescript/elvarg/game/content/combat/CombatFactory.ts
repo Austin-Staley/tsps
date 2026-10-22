@@ -906,24 +906,15 @@ export class CombatFactory {
         // Some NPCs give less (the Gemstone Crab 87.5%: 3.5 per damage).
         const target = hit.getTarget?.();
         const OSRS_DAMAGE_XP = 4 * (target?.isNpc?.() ? target.getAsNpc().getCombatXpMultiplier?.() ?? 1 : 1);
-        // Add magic exp, even if total damage is 0.
-        // Since spells have a base exp reward
+        // A spell's base XP is paid once per cast by MagicCombatMethod.start (a splash
+        // gets only that), so each target's hit adds just its per-damage Magic XP.
         if (hit.getCombatType() === CombatType.MAGIC) {
             // The hit is queued before MagicCombatMethod.finished() moves the
             // active cast into previousCast, so the first cast of a session
             // must read castSpell or it would award no Magic XP at all.
             if ((player.getCombat().getCastSpell() ?? player.getCombat().getPreviousCast()) != null) {
-                if (hit.isAccurate()) {
-                    if (!defensiveMagicSplit) {
-                        player.getSkillManager().addExperience(
-                            Skill.MAGIC,
-                            (hitDamage * OSRS_DAMAGE_XP) / 2/* + player.getCombat().getPreviousCast().baseExperience() */,
-                            true
-                        );
-                    }
-                } else {
-                    // Splash should only give 52 exp..
-                    player.getSkillManager().addExperience(Skill.MAGIC, 52, false);
+                if (hit.isAccurate() && !defensiveMagicSplit) {
+                    player.getSkillManager().addExperience(Skill.MAGIC, (hitDamage * OSRS_DAMAGE_XP) / 2, true);
                 }
             }
         }

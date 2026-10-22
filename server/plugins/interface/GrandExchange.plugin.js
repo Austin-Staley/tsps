@@ -23,6 +23,8 @@ const PRICE_LONG = 5753;
 const SELECTED_ITEM = 1151;
 // ge_offers:setup_desc, the examine text under the item name; the server sets it.
 const SETUP_DESC = uid(27);
+// ge_offers:details_desc, the same text on an existing offer's details screen.
+const DETAILS_DESC = uid(16);
 // Cache script 5733 reads pending client requests here, not accepted offers.
 // Keep them separate from the stockmarket opcode data.
 const OFFER_ITEMS = [3204, 3206, 3208, 3210, 3212, 3214, 3216, 3218];
@@ -167,7 +169,11 @@ function refresh(player, offer) {
     .sendVarbit(QUANTITY, offer.quantity)
     .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? price(offer.itemId) : 1)
     .sendVarbit(SELECTED_SLOT, offer.slot + 1)
-    .sendString(offer.itemId > 0 ? ItemDefinition.forId(offer.itemId).getExamine() ?? "" : "", SETUP_DESC);
+    .sendString(examine(offer.itemId), SETUP_DESC);
+}
+
+function examine(itemId) {
+  return itemId > 0 ? ItemDefinition.forId(itemId).getExamine() ?? "" : "";
 }
 
 function home(player) {
@@ -199,7 +205,8 @@ function showCompleted(player, slot) {
   player.getPacketSender()
     .sendConfig(SELECTED_ITEM, -1)
     .sendVarbit(SELECTED_SLOT, 0)
-    .sendVarbit(SELECTED_SLOT, slot + 1);
+    .sendVarbit(SELECTED_SLOT, slot + 1)
+    .sendString(examine(completedOffers(player)[slot].itemId), DETAILS_DESC);
 }
 
 function chooseItem(player, offer) {
@@ -283,6 +290,7 @@ function confirm(player, offer) {
   sender.sendInterfaceScript(786, [], { [SELECTED_ITEM]: -1, ...marketVarps(offer.slot, finished) },
       { [SELECTED_SLOT]: offer.slot + 1 },
       { [COLLECTIONS[offer.slot]]: collection(finished) })
+    .sendString(examine(offer.itemId), DETAILS_DESC)
     .sendMessage("Offer placed. It will complete in five seconds.");
   scheduleCompletion(player, finished);
 
