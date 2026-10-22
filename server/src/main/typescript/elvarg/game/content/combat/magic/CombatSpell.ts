@@ -11,8 +11,39 @@ import { PendingHit } from "../hit/PendingHit";
 
 
 export abstract class CombatSpell extends Spell {
+  /**
+   * Standard spells' cast animations and their `_staff` twins (cache gamevals, e.g.
+   * human_castentangle 710 / human_castentangle_staff 1161). Each pair shares its frames, but
+   * the plain one empties both hands, so a player wielding a staff casts with the twin and keeps
+   * the staff drawn (LostCity's player_magic: the spell's staffanim when the weapon is a staff).
+   */
+  public static readonly STAFF_CAST_ANIMATIONS: ReadonlyMap<number, number> = new Map([
+    [710, 1161], // human_castentangle: Bind, Snare, Entangle
+    [711, 1162], // human_caststrike: strikes, bolts, blasts
+    [716, 1163], // human_castconfuse
+    [717, 1164], // human_castweaken
+    [718, 1165], // human_castcurse: Curse, Vulnerability
+    [724, 1166], // human_castcrumbleundead
+    [727, 1167], // human_castwave
+    [728, 1168], // human_castenfeeble
+    [729, 1169], // human_caststun
+    [1819, 1820], // human_casting_tele_block
+  ]);
+
   protected usesSharedCastDelay(): boolean {
     return true;
+  }
+
+  /** The cast animation as `cast` plays it: its `_staff` twin when a player wields a staff. */
+  public castAnimationFor(cast: Mobile): Animation | undefined {
+    const animation = this.castAnimation();
+    const staffId = animation ? CombatSpell.STAFF_CAST_ANIMATIONS.get(animation.getId()) : undefined;
+    if (staffId === undefined || !cast.isPlayer() || !cast.getAsPlayer().getEquipment().hasStaffEquipped()) {
+      return animation;
+    }
+    const staff = new Animation(staffId, animation.getDelay());
+    staff.priority = animation.getPriority();
+    return staff;
   }
 
   /**
@@ -28,7 +59,7 @@ export abstract class CombatSpell extends Spell {
     let castAnimation = -1;
 
     const npc = cast.isNpc() ? (cast as NPC) : null;
-    const castAnim = this.castAnimation();
+    const castAnim = this.castAnimationFor(cast);
     if (castAnim !== null && castAnim !== undefined && castAnimation == -1) {
       cast.performAnimation(castAnim);
     } else {
