@@ -55,8 +55,13 @@
  *  - the tower doors (33570/33572) are unhandled by Doors.plugin (their open
  *    variants have no actions), so this plugin passes the player through them
  *    once inside the quest (stage >= 4) and refuses entry before that.
- *  - Lord Trobin is only spawned at stage >= 13 (his talkable id 8505); the
- *    entranced id 8504 seen during the quest is not reproduced.
+ *  - Lord Trobin is only owner-spawned at stage >= 13 (his talkable id 8505);
+ *    the entranced id 8504 seen during the quest is the canonical world NPC.
+ *    Andrews and Asteros use their canonical world transforms (11152/10889).
+ *  - Mount Karuulm travel uses the shared 34359 elevator and 34514 cave-exit
+ *    loc-teleport rows; the plugin itself does not move the player there.
+ *  - a lost A Dark Disposition page is replaced by Lord Trobin's canonical
+ *    lost-page branch only before varbit 7917 records it in the memoir.
  *  - the "ghost busting" overhead shouts are not played; a Tower Mage talked
  *    to during the fight says the one-line ghost-busting variant instead.
  */
@@ -73,6 +78,10 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   const PAGE = "The Ascent of Arceuus";
   const START_HOOK = "quest:the-ascent-of-arceuus:start";
   const CLIENT_OF_KOUREND_KEY = "client_of_kourend";
+  const AKD_KEY = "a_kingdom_divided";
+  // A Kingdom Divided's Lord Arceuus favour window owns the shared Tasakaal.
+  const AKD_STAGE_MEETING = 122;
+  const AKD_STAGE_ACCORD = 138;
 
   // Varp 2071 "arcquest_main" (scripts/lookup-gameval.ts varbit arcquest).
   const VARP_ARCEUUS_QUESTS = 2071;
@@ -146,14 +155,20 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   ]);
   const TRAPPED_SOUL_NPC_ID = NpcIdentifiers.TRAPPED_SOUL; // 8514
 
-  const MORI_NPC_ID = NpcIdentifiers.MORI;
-  const ANDREWS_NPC_ID = NpcIdentifiers.COUNCILLOR_ANDREWS;
-  const ASTEROS_NPC_ID = NpcIdentifiers.ASTEROS_ARCEUUS;
   const TROBIN_NPC_ID = NpcIdentifiers.LORD_TROBIN_ARCEUUS_2;
   const KAAL_XIL_DAR_NPC_ID = NpcIdentifiers.KAAL_XIL_DAR;
 
   const COINS_ITEM_ID = ItemIdentifiers.COINS; // 995
   const DARK_DISPOSITION_ITEM_ID = ItemIdentifiers.A_DARK_DISPOSITION; // 21770
+  const MEMOIRS_ITEM_IDS = new Set([
+    ItemIdentifiers.KHAREDSTS_MEMOIRS, // 21760
+    ItemIdentifiers.KHAREDSTS_MEMOIRS_2, // 21761
+  ]);
+  const MEMOIRS_ITEM_ID = ItemIdentifiers.KHAREDSTS_MEMOIRS; // 21760
+  const MEMOIR_ARC_TELEPORT_VARBIT = 7917; // kourend_diary_arc_teleport
+  const MEMOIR_PAGE_ATTRIBUTE = "quest.the_ascent_of_arceuus.memoir-page";
+  const LOST_PAGE_VARIANT = "if-the-player-lost-the-memoir-page-before-using-it-on-the-memoir";
+  const LOST_PAGE_GIFT_LINE = "Thank you for helping our people. Please accept these gifts, they are the least you deserve.";
 
   // Tower doors (Door 33570/33572 at 1596,3819-3820): no open variant, so the
   // shared Doors plugin leaves them alone.
@@ -165,13 +180,18 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   // Quest multi-locs (cache parents, not named by ObjectIdentifiers; the click
   // carries the parent id while event.definition is the varbit-resolved child).
   const GRAVE_MULTILOC = 34602; // -> 33579 closed / 33578 Inspect (stage 8-11)
-  const TRAIL_MULTILOC_IDS = new Set([
-    34621, // -> Tree stump 33584/33583, Inspect from stage 9
-    34622, // -> Bush 33586/33585
-    34623, // -> Plant 33588/33587
-    34624, // -> Plant 33590/33589
-    34625, // -> Plant 33592/33591
-  ]);
+  const TRAIL_MULTILOC_IDS = new Set([34621, 34622, 34623, 34624, 34625]);
+  // Cache gameval ids 34621 stump, 34622 bush, 34623 plant, 34624 plant2,
+  // 34625 final plant. These are the QH inspectTrack1..6 route tiles, using the
+  // 2x2 objects' cache origins (QH markers sit inside their footprints).
+  const TRAIL_STOPS = [
+    { id: 34622, x: 1335, y: 3743 }, // QH track 1 bush
+    { id: 34623, x: 1317, y: 3750 }, // QH track 2 plant
+    { id: 34623, x: 1305, y: 3750 }, // QH track 3 plant
+    { id: 34621, x: 1287, y: 3750 }, // QH track 4 tree stump (marker 1288,3751)
+    { id: 34624, x: 1285, y: 3737 }, // QH track 5 plant2 (marker 1286,3738)
+    { id: 34625, x: 1281, y: 3725 }, // QH track 6 final plant (marker 1282,3726)
+  ];
   const ROCKS_MULTILOC_IDS = new Set([
     34626, // -> Rocks 33594/33593, Inspect from stage 12
     34627, // -> Rocks 33596/33595
@@ -179,9 +199,6 @@ module.exports = function registerAscentOfArceuusQuest(api) {
 
   const TOWER_ZONE = { minX: 1568, maxX: 1600, minY: 3804, maxY: 3840, levels: [0, 1] };
   const TOWER_INTERIOR = { x: 1589, y: 3819 };
-  const MORI_TILE = { x: 1700, y: 3744 };
-  const ANDREWS_TILE = { x: 1621, y: 3674 };
-  const ASTEROS_TILE = { x: 1579, y: 3819 };
   const TROBIN_TILE = { x: 1577, y: 3821 };
   const TRAPPED_SOUL_TILE = { x: 1281, y: 3724 };
   const SOUL_SPAWNS = [
@@ -206,10 +223,46 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   let quest;
   const trackedNpcs = new Map();
 
-  function clientOfKourendComplete(player) {
-    const request = { player, key: CLIENT_OF_KOUREND_KEY, complete: false };
+  function questComplete(player, key) {
+    const request = { player, key, complete: null };
     api.emitCustomEvent("quest:is-complete", request);
     return request.complete === true;
+  }
+
+  function clientOfKourendComplete(player) {
+    return questComplete(player, CLIENT_OF_KOUREND_KEY);
+  }
+
+  function questStage(player, key) {
+    const request = { player, key, stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    if (Number.isFinite(request.stage)) return request.stage | 0;
+    return Number(player.getAttribute(`quest.${key}.stage`)) || 0;
+  }
+
+  function bankHasItem(player, itemId) {
+    if (typeof player.getBanks === "function") {
+      const banks = player.getBanks() ?? [];
+      if (banks.some((bank) => bank?.getAmount?.(itemId) > 0)) return true;
+    }
+    return (player.getBank?.()?.getAmount?.(itemId) ?? 0) > 0;
+  }
+
+  function ownsItem(player, itemId) {
+    return player.getInventory().getAmount(itemId) > 0 || bankHasItem(player, itemId);
+  }
+
+  function pageAddedToMemoir(player) {
+    return Number(player.getAttribute(MEMOIR_PAGE_ATTRIBUTE)) === 1 ||
+      (player.getPacketSender().getVarbit(MEMOIR_ARC_TELEPORT_VARBIT) ?? 0) !== 0;
+  }
+
+  /** The canonical lost-page branch applies only before the page is added to the memoir. */
+  function lostPagePending(player) {
+    return quest.getStage(player) >= STAGE_COMPLETE &&
+      !ownsItem(player, DARK_DISPOSITION_ITEM_ID) &&
+      ownsItem(player, MEMOIRS_ITEM_ID) &&
+      !pageAddedToMemoir(player);
   }
 
   function meetsRequirements(player) {
@@ -237,10 +290,18 @@ module.exports = function registerAscentOfArceuusQuest(api) {
     }
   }
 
+  function trailVarbitCount(player) {
+    if (quest.isComplete(player) || quest.getStage(player) < STAGE_TRACKING) return 0;
+    return Math.min(TRAIL_VARBITS.length, trailProgress(player) + 1);
+  }
+
   function syncVarbits(player) {
-    setTrailVarbits(player, quest.isComplete(player) ? 0 : trailProgress(player));
+    setTrailVarbits(player, trailVarbitCount(player));
     if (quest.getStage(player) >= STAGE_DEVICE) {
       player.getPacketSender().sendVarbit(VARBIT_DEVICE_LOCATION, deviceLocation(player));
+    }
+    if (Number(player.getAttribute(MEMOIR_PAGE_ATTRIBUTE)) === 1) {
+      player.getPacketSender().sendVarbit(MEMOIR_ARC_TELEPORT_VARBIT, 1);
     }
   }
 
@@ -296,21 +357,6 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   function syncNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
-    if (stage <= STAGE_SOULS_CLEARED) {
-      ensureTracked(player, "mori", { id: MORI_NPC_ID, ...MORI_TILE, z: 0, wanderRadius: 0 });
-    } else {
-      removeTracked(player, "mori");
-    }
-    if (stage >= STAGE_STARTED && stage <= STAGE_ANDREWS) {
-      ensureTracked(player, "andrews", { id: ANDREWS_NPC_ID, ...ANDREWS_TILE, z: 1, wanderRadius: 0 });
-    } else {
-      removeTracked(player, "andrews");
-    }
-    if (stage >= STAGE_SOULS_CLEARED) {
-      ensureTracked(player, "asteros", { id: ASTEROS_NPC_ID, ...ASTEROS_TILE, z: 1, wanderRadius: 0 });
-    } else {
-      removeTracked(player, "asteros");
-    }
     if (stage >= STAGE_DEVICE_DESTROYED) {
       ensureTracked(player, "trobin", { id: TROBIN_NPC_ID, ...TROBIN_TILE, z: 1, wanderRadius: 0 });
     } else {
@@ -329,10 +375,15 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   // Dialogue variants and conditions
   // ==========================================================================
 
-  function selectMoriVariant(stage) {
+  function selectMoriVariant(stage, player) {
     if (stage <= 0) return "a-death-talking-to-mori";
     if (stage === STAGE_STARTED) return "a-death-talking-to-mori-talking-to-mori-again";
     if (stage === STAGE_ANDREWS) return "a-death-returning-to-mori";
+    if (stage >= STAGE_COMPLETE) {
+      return questComplete(player, AKD_KEY)
+        ? "standard-dialogue-after-a-kingdom-divided"
+        : "standard-dialogue-after-the-ascent-of-arceuus";
+    }
     return "a-death-returning-to-mori-talking-to-mori-again";
   }
 
@@ -346,7 +397,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
 
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
-    if (MORI_NPC_IDS.has(npcId)) return selectMoriVariant(stage);
+    if (MORI_NPC_IDS.has(npcId)) return selectMoriVariant(stage, player);
     if (ANDREWS_NPC_IDS.has(npcId)) {
       if (stage === STAGE_STARTED) return "a-death-talking-to-councillor-andrews";
       if (stage === STAGE_ANDREWS) return "a-death-talking-to-councillor-andrews-talking-to-councillor-andrews-again";
@@ -362,8 +413,11 @@ module.exports = function registerAscentOfArceuusQuest(api) {
       return null;
     }
     if (TASAKAAL_NPC_IDS.has(npcId)) {
-      if (stage === STAGE_ASTEROS) return "the-tasakaal-first-encounter";
-      if (stage >= STAGE_TASAKAAL && stage <= STAGE_SOUL_FOUND) {
+      // A Kingdom Divided's meeting-to-accord window owns the shared Tasakaal.
+      const akdStage = questStage(player, AKD_KEY);
+      if (stage >= STAGE_DEVICE && akdStage >= AKD_STAGE_MEETING && akdStage < AKD_STAGE_ACCORD) return null;
+      if (stage === STAGE_ASTEROS || stage === STAGE_TASAKAAL) return "the-tasakaal-first-encounter";
+      if (stage > STAGE_TASAKAAL && stage <= STAGE_SOUL_FOUND) {
         return "the-tasakaal-first-encounter-talking-to-the-tasakaal-again";
       }
       if (stage === STAGE_SOUL_FREED) {
@@ -379,7 +433,9 @@ module.exports = function registerAscentOfArceuusQuest(api) {
       return null;
     }
     if (LORD_TROBIN_NPC_IDS.has(npcId)) {
-      return stage === STAGE_DEVICE_DESTROYED ? "finishing-up-talking-to-lord-arceuus" : null;
+      if (stage === STAGE_DEVICE_DESTROYED) return "finishing-up-talking-to-lord-arceuus";
+      if (lostPagePending(player)) return LOST_PAGE_VARIANT;
+      return null;
     }
     return null;
   }
@@ -419,6 +475,10 @@ module.exports = function registerAscentOfArceuusQuest(api) {
         text === "Thank you friend. You'll find Mount Karuulm on the other side of Lovakengj. Please hurry.") {
       quest.setStage(player, STAGE_ASTEROS);
       syncNpcs(player);
+      return;
+    }
+    if (LORD_TROBIN_NPC_IDS.has(npcId) && text === LOST_PAGE_GIFT_LINE && lostPagePending(player)) {
+      player.getInventory().adds(DARK_DISPOSITION_ITEM_ID, 1);
       return;
     }
     if (!TASAKAAL_NPC_IDS.has(npcId)) return;
@@ -501,7 +561,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
     event.handled = true;
     if (quest.getStage(player) !== STAGE_GRAVE) return;
     player.setAttribute(TRAIL_ATTRIBUTE, 0);
-    setTrailVarbits(player, 0);
+    setTrailVarbits(player, 1); // the grave itself reveals the first footprints
     quest.setStage(player, STAGE_TRACKING);
     player.sendMessage("You inspect the grave and find tracks leading away.");
   }
@@ -512,9 +572,13 @@ module.exports = function registerAscentOfArceuusQuest(api) {
     if (quest.getStage(player) !== STAGE_TRACKING) return;
     const progress = trailProgress(player);
     if (progress >= TRAIL_STEPS) return;
+    const expected = TRAIL_STOPS[progress];
+    const location = event.location;
+    if (!expected || event.objectId !== expected.id ||
+        location.x !== expected.x || location.y !== expected.y) return;
     const next = progress + 1;
     player.setAttribute(TRAIL_ATTRIBUTE, next);
-    setTrailVarbits(player, next);
+    setTrailVarbits(player, Math.min(TRAIL_VARBITS.length, next + 1));
     if (next < TRAIL_STEPS) {
       player.sendMessage("You search around and spot more tracks.");
       return;
@@ -522,6 +586,18 @@ module.exports = function registerAscentOfArceuusQuest(api) {
     quest.setStage(player, STAGE_SOUL_FOUND);
     syncNpcs(player);
     player.sendMessage("A trapped soul that was lurking in the plants jumps out and attacks you!");
+  }
+
+  function usePageOnMemoirs(event) {
+    const { player, usedItemId, usedWithItemId } = event;
+    const pair = new Set([usedItemId, usedWithItemId]);
+    if (!pair.has(DARK_DISPOSITION_ITEM_ID) || ![usedItemId, usedWithItemId].some((id) => MEMOIRS_ITEM_IDS.has(id))) return;
+    if (pageAddedToMemoir(player)) return;
+    event.handled = true;
+    player.getInventory().deleteNumber(DARK_DISPOSITION_ITEM_ID, 1);
+    player.setAttribute(MEMOIR_PAGE_ATTRIBUTE, 1);
+    player.getPacketSender().sendVarbit(MEMOIR_ARC_TELEPORT_VARBIT, 1);
+    player.sendMessage("You add an entry to Kharedst's Memoirs.");
   }
 
   function inspectRocks(event) {
@@ -700,6 +776,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   api.persistAttribute(TRAIL_ATTRIBUTE);
   api.persistAttribute(SOULS_ATTRIBUTE);
   api.persistAttribute(DEVICE_ATTRIBUTE);
+  api.persistAttribute(MEMOIR_PAGE_ATTRIBUTE);
 
   quest = registerQuest(api, {
     key: "the_ascent_of_arceuus",
@@ -732,6 +809,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onItemOnItem(usePageOnMemoirs);
   api.onNpcDeath(handleNpcDeath);
   api.onZoneEnter(TOWER_ZONE, handleZoneEnter);
   api.onPlayerLogin(handleLogin);

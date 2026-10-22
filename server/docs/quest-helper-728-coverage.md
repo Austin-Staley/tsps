@@ -66,8 +66,10 @@ Ascent stopped at its opening: an unscoped Sins of the Father condition handler 
 Mori's requirements check. The reviewed fix answers only Sins' nine canonical condition
 IDs, leaving foreign conditions to their own quests. Nine focused tests pass, including
 real registration-order dispatch and existing Sins actions. Ascent's memoir-page and
-ordered-tracking corrections pass eight focused tests; independent review and a new
-natural run remain pending. Biohazard stopped at stage 1 and logged out. Its owner has
+ordered-tracking corrections pass root review and eight focused tests. These include
+the actual Karuulm elevator/return dispatch; landing tiles and timing are inferred
+from the helper/cache, without captures. Current-revision peer review, full-bag checks
+and a new natural run remain pending. Biohazard stopped at stage 1 and logged out. Its owner has
 corrected Elena/Chemist recovery and canonical receipt rendering; a further review
 found Guidor advanced before the player requested his analysis. That transition is
 being moved to the actual revelation dialogue. No whole quest is certified yet.
@@ -135,7 +137,7 @@ branch remains blocked at its source.
 | --- | --- | --- | --- | --- |
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
-| The Ascent of Arceuus | `AscentOfArceuus` | Shared Sins condition fix reviewed; memoir and ordered trail corrections await peer review | 8 quest and 9 shared focused tests pass | Incomplete opening; logged out |
+| The Ascent of Arceuus | `AscentOfArceuus` | Sins scope, memoir, ordered trail and Karuulm route reviewed by root; fresh peer pending | 8 quest and 9 shared focused tests pass | Prior opening incomplete; edited route pending |
 | At First Light | `AtFirstLight` | Mandatory route, hammer tools, report recovery, Fox cleanup and leaf guards reviewed; canonical ground spawns added | 9 focused tests pass; spawn JSON/uniqueness/cache placements checked | Stage 12, exact rewards once and relog observed; provisional due remaining pickup/history/recovery checks |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
