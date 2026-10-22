@@ -332,7 +332,7 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
             manualFogDepth: host.fogDepth, hd: host.osrsClient.clientPlugins.hdEnabled() }).fogEnd : 0;
         // Fog is centred on the shader's player position. Free-camera culling
         // can use a different origin; pad conservatively rather than opening holes.
-        if (map && host.osrsClient.clientPlugins.hdEnabled()) distance += Math.max(
+        if (map) distance += Math.max(
             Math.abs(point!.x - host.playerPosUni[0]), Math.abs(point!.y - host.playerPosUni[1]));
         const lodDistance = map ? host.getFrameLodThresholdTiles() : 0;
         const baseX = map?.getRenderBaseTileX() ?? 0, baseZ = map?.getRenderBaseTileY() ?? 0;
@@ -428,9 +428,12 @@ export function isMapWithinRenderDistance(host: WebGLOsrsRendererHost,
         // See getMapTileDistanceFromPoint: boat decks are always in range.
         if (host.mapManager.worldEntityMapIds.has(map.id)) return true;
         const zoneDistance = host.getMapZoneDistanceFromPoint(map, tileX, tileY);
+        // The map guard must cover the same player-centred view as per-range culling.
+        const cameraOffset = Math.max(Math.abs(tileX - host.playerPosUni[0]),
+            Math.abs(tileY - host.playerPosUni[1]));
         const renderDistanceZones = Math.max(
             0,
-            Math.ceil((renderDistanceTiles + renderDistancePadTiles) / 8),
+            Math.ceil((renderDistanceTiles + renderDistancePadTiles + cameraOffset) / 8),
         );
         return zoneDistance <= renderDistanceZones;
     

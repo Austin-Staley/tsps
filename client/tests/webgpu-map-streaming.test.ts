@@ -46,7 +46,7 @@ test("WebGPU streams the server scene around the player across camera orbits and
         }
         assert.equal(maps.getGridRevision(), revision, "camera movement must not rebase the scene");
         assert.equal(queued.length, initial, "camera movement must not queue new regions");
-        assert.deepEqual(maps.getGridTileBounds(), { minX: 3040, maxX: 3144, minY: 3464, maxY: 3568 });
+        assert.deepEqual(maps.getGridTileBounds(), { minX: 3024, maxX: 3160, minY: 3448, maxY: 3584 });
 
         ClientState.baseX += 64;
         updateWebGPUMapStreaming(renderer, 65);
@@ -65,6 +65,46 @@ test("WebGPU streams the server scene around the player across camera orbits and
         assert.equal(maps.currentMapY, 51);
     } finally {
         [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+    }
+});
+
+test("non-HD streaming covers the full visible footprint before the server rebases", () => {
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+    const previousLowEnd = MapManager.lowEnd;
+    try {
+        ClientState.inInstance = false;
+        MapManager.lowEnd = false;
+        for (const distance of [25, 90]) {
+            for (let phase = 0; phase < 64; phase += 8) {
+                ClientState.baseX = 3200 + phase;
+                ClientState.baseY = 3200 + phase;
+                for (const localX of [16, 87]) for (const localY of [16, 87]) {
+                    const x = ClientState.baseX + localX, y = ClientState.baseY + localY;
+                    const maps = new MapManager<any>(4, () => {});
+                    const renderer = {
+                        mapManager: maps, playerPosUni: new Float32Array([x, y]),
+                        osrsClient: {
+                            mapRadius: 1, renderDistance: distance, expandedMapLoading: 0,
+                            isLoggedIn: () => true, scenePreviewEnabled: false,
+                            camera: { getPosX: () => x - 25, getPosZ: () => y },
+                            playerEcs: { getIndexForServerId: () => 0, getWorldViewId: () => -1 },
+                            controlledPlayerServerId: 1,
+                            clientPlugins: { gpuSettings: () => ({ drawDistance: distance }), hdEnabled: () => false },
+                        },
+                    } as any;
+                    updateWebGPUMapStreaming(renderer, 0);
+                    for (let mx = Math.floor((x - distance) / 64); mx <= Math.floor((x + distance) / 64); mx++) {
+                        for (let my = Math.floor((y - distance) / 64); my <= Math.floor((y + distance) / 64); my++) {
+                            assert.equal(maps.isMapInTargetGrid(mx, my), true,
+                                `draw${distance}, base phase${phase}, local${localX},${localY}: visible map${mx},${my} must load before it enters view`);
+                        }
+                    }
+                }
+            }
+        }
+    } finally {
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+        MapManager.lowEnd = previousLowEnd;
     }
 });
 

@@ -42,12 +42,20 @@ export class MapManager<T extends MapSquare> {
     // OSRS top-level scene window is 104x104 tiles, rebased by server packets.
     static readonly SCENE_STREAM_SIZE_TILES = 104;
     static readonly SCENE_STREAM_HALF_TILES = MapManager.SCENE_STREAM_SIZE_TILES >> 1;
-    // OSRS preferences use 0..5 levels; HD scenery can request a wider static window.
+    // OSRS preferences use 0..5 levels; distant scenery can request a wider static window.
     static readonly SCENE_EXPANDED_STEP_TILES = 8;
     static readonly SCENE_MAX_EXPANDED_LEVEL = 20;
     // Scene base rebases when local player exits [16, 88) in the 104x104 window.
     static readonly SCENE_REBASE_MIN_LOCAL_TILE = 16;
     static readonly SCENE_REBASE_MAX_LOCAL_TILE = 88;
+
+    static getSceneryPadding(renderDistance: number): number {
+        // At a rebase edge only 16 tiles remain; load the rest of the view outside the scene.
+        return Math.ceil(
+            Math.max(0, renderDistance - MapManager.SCENE_REBASE_MIN_LOCAL_TILE) /
+                MapManager.SCENE_EXPANDED_STEP_TILES,
+        );
+    }
 
     /** Low-end devices only build squares within render distance + margin (tests flip this). */
     static lowEnd: boolean = isLowEndDevice;

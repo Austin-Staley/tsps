@@ -5,6 +5,7 @@
  */
 import { clamp } from "../../common/utils/MathUtil";
 import { ClientState } from "../../game/ClientState";
+import { MapManager } from "../../game/MapManager";
 import { isIos, isLowEndDevice, isMobileMode, isTouchDevice } from "../../common/utils/DeviceUtil";
 import { computeRoofPlaneLimit } from "../../game/roof/RoofVisibility";
 import { resolveBridgePromotedPlane } from "../../game/scene/PlaneResolver";
@@ -29,7 +30,7 @@ export function updateWebGPUMapStreaming(renderer: WebGPURenderer, frameCount: n
     const preview = !client.isLoggedIn() && client.scenePreviewEnabled;
     const streamAroundPlayer = preview || getControlledPlayerWorldViewId(renderer) >= 0;
     const distance = resolveWebGPURenderDistance(renderer);
-    const padding = client.clientPlugins.hdEnabled() ? Math.ceil(Math.max(0, distance - 16) / 8) : 0;
+    const padding = MapManager.getSceneryPadding(distance);
     renderer.mapManager.update(
         preview ? client.camera.getPosX() : renderer.playerPosUni[0],
         preview ? client.camera.getPosZ() : renderer.playerPosUni[1],

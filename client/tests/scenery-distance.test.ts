@@ -12,6 +12,33 @@ import { resolveFogRange } from "../render/RenderDistancePolicy";
 
 (globalThis as any).self = globalThis;
 const { SceneBuffer } = require("../render/buffer/SceneBuffer");
+const { drawWithRoofPlaneFilter, getMapZoneDistanceFromPoint, isMapWithinRenderDistance } = require("../render/render/draw2");
+
+// Fog follows the player while the camera orbits behind them, including without HD.
+const edgeRange = newDrawRange(0, 6);
+edgeRange.chunk = [0, 0]; edgeRange.bounds = [0, -1, 0, 8, 1, 8];
+const edgeMap = { id: 256, mapX: 1, mapY: 0,
+    getRenderBaseTileX: () => 64, getRenderBaseTileY: () => 0 };
+let cameraX = 0, edgeDraws = 0;
+const edgeHost: any = {
+    playerPosUni: [49, 0],
+    mapManager: { worldEntityMapIds: new Set() },
+    getRenderCullTile: () => ({ x: cameraX, y: 0 }),
+    getFrameRenderDistanceTiles: () => 25, getFrameLodThresholdTiles: () => 100,
+    getMapZoneDistanceFromPoint: (map: any, x: number, y: number) => getMapZoneDistanceFromPoint(edgeHost, map, x, y),
+    autoFogDepth: true, autoFogDepthFactor: 0.85, fogDepth: 24,
+    osrsClient: { clientPlugins: { hdEnabled: () => false }, camera: { frustum: { intersectsBox: () => true } } },
+    frameRoofTotalRangeCount: 0, frameRoofFilteredRangeCount: 0, roofFilteredDrawIndices: [],
+    draw: () => edgeDraws++,
+};
+for (const x of [0, 28, 70]) {
+    cameraX = x;
+    assert.equal(isMapWithinRenderDistance(edgeHost, edgeMap, cameraX, 0, 25, 0), true,
+        "a whole-map guard must retain scenery inside the player's fog boundary during camera rotation");
+    drawWithRoofPlaneFilter(edgeHost, {}, [edgeRange], undefined, 3, edgeMap);
+}
+assert.equal(edgeDraws, 3, "non-HD terrain inside player visibility must survive every camera orbit");
+
 const hdFog = resolveFogRange({ renderDistance: 160, autoFogDepth: true,
     autoFogDepthFactor: 0.85, manualFogDepth: 24, hd: true });
 assert.deepEqual(hdFog, { fogEnd: 120, fogDepth: 24 }, "Long views need stronger haze and an obscured outer margin");
