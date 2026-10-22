@@ -110,10 +110,22 @@ module.exports = function registerClientOfKourendQuest(api) {
   ]);
   const NARRATOR_NPC_ID = PISCARILIUS_VEOS_NPC_ID; // the orb/quill narration chathead
   const PISCARILIUS_LANDING = new Location(1825, 3691, 0);
+  const PORT_SARIM_LANDING = new Location(3054, 3245, 0);
+  const LANDS_END_LANDING = new Location(1504, 3401, 0);
   const ZEAH_VISITED_VARBIT = 4897; // zeah_playerhasvisited, set by the boat ride
   const VEOS_SAIL_ACTION_ID = "WXJllC";
-  const PORT_PISCARILIUS_TRAVEL_OPTION = "I'd like to travel to Port Piscarilius, please.";
-  const VEOS_VOYAGE_LINE = /^As you wish, I hope you don't get seasick, it is a\s+long voyage\.$/;
+  const PORT_SARIM_DESTINATIONS = new Map([
+    ["I'd like to travel to Port Piscarilius, please.", PISCARILIUS_LANDING],
+    ["I'd like to travel to Land's End, please.", LANDS_END_LANDING],
+  ]);
+  const PISCARILIUS_DESTINATIONS = new Map([
+    ["Travel to Port Sarim.", PORT_SARIM_LANDING],
+    ["Travel to Land's End.", LANDS_END_LANDING],
+  ]);
+  const VEOS_DEPARTURE_LINES = new Set([
+    "As you wish.",
+    "As you wish, I hope you don't get seasick, it is a long voyage.",
+  ]);
   const POST_QUEST_VARIANT = "standard-dialogue-at-port-piscarilius";
 
   // The five house bits: who owns them, which varbit, and the transcript ids.
@@ -217,7 +229,9 @@ module.exports = function registerClientOfKourendQuest(api) {
 
   let quest;
   const lampPending = new WeakMap();
-  const travelPending = new WeakSet();
+  const travelPending = new WeakMap();
+  const memoirsPending = new WeakSet();
+  const MEMOIRS_LINE = "I do have some things for you. Enjoy!";
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const banked = (player, itemId) =>
@@ -379,6 +393,9 @@ module.exports = function registerClientOfKourendQuest(api) {
 
   /** Which transcript variant each quest NPC plays, by stage. */
   function selectVariant({ npcId, player }) {
+    // A new Talk-to starts a fresh transcript. A prior accepted travel choice may
+    // have been cancelled before its departure line, so discard that destination.
+    if (isPiscariliusVeos(npcId) || PORT_SARIM_VEOS_NPC_IDS.has(npcId)) travelPending.delete(player);
     const house = HOUSE_BY_NPC.get(npcId);
     if (house) {
       return questActive(player) ? house.variant : null;
@@ -457,25 +474,46 @@ module.exports = function registerClientOfKourendQuest(api) {
   }
 
   function rememberSailChoice({ npcId, player, option }) {
-    if (!PORT_SARIM_VEOS_NPC_IDS.has(npcId)) return;
+    if (!PORT_SARIM_VEOS_NPC_IDS.has(npcId) && !isPiscariliusVeos(npcId)) return;
     travelPending.delete(player);
-    if (option === PORT_PISCARILIUS_TRAVEL_OPTION) travelPending.add(player);
+    const destination = (isPiscariliusVeos(npcId)
+      ? PISCARILIUS_DESTINATIONS
+      : PORT_SARIM_DESTINATIONS).get(option);
+    if (destination) travelPending.set(player, { npcId, destination });
   }
 
   function finishSailLine(event) {
     const { npcId, player, text } = event;
-    if (!PORT_SARIM_VEOS_NPC_IDS.has(npcId) || !travelPending.has(player)) return;
-    if (!VEOS_VOYAGE_LINE.test(text ?? "")) return;
-    travelPending.delete(player);
-    event.after = () => landAtPiscarilius(player);
+    const pending = travelPending.get(player);
+    if (!pending || pending.npcId !== npcId || !VEOS_DEPARTURE_LINES.has(text ?? "")) return;
+    event.after = () => {
+      travelPending.delete(player);
+      player.moveTo(new Location(
+        pending.destination.getX(), pending.destination.getY(), pending.destination.getZ(),
+      ));
+      if (pending.destination === PISCARILIUS_LANDING) {
+        player.getPacketSender().sendVarbit(ZEAH_VISITED_VARBIT, 1);
+      }
+    };
   }
 
   /** The post-quest lost-memoirs line has no item step in the dump. */
   function handleConditionChosen(event) {
     const { npcId, player, stepId } = event;
-    if (!isPiscariliusVeos(npcId) || stepId !== MISSING_MEMOIRS_CONDITION_ID) return;
+    if (!isPiscariliusVeos(npcId)) return;
+    if (stepId !== MISSING_MEMOIRS_CONDITION_ID) return;
+    memoirsPending.delete(player);
     if (ownsItem(player, KHAREDSTS_MEMOIRS_ITEM_ID)) return;
-    give(player, KHAREDSTS_MEMOIRS_ITEM_ID);
+    if (!give(player, KHAREDSTS_MEMOIRS_ITEM_ID)) memoirsPending.add(player);
+  }
+
+  /** A full bag must not play the "Enjoy!" receipt when no memoir was added. */
+  function handleMemoirsLine(event) {
+    const { npcId, player, text } = event;
+    if (!isPiscariliusVeos(npcId) || !memoirsPending.has(player) || text !== MEMOIRS_LINE) return;
+    memoirsPending.delete(player);
+    event.skip = true;
+    player.sendMessage("You need a free inventory space.");
   }
 
   /**
@@ -624,6 +662,10 @@ module.exports = function registerClientOfKourendQuest(api) {
     refreshQuestList(player);
   }
 
+  function handleLogout({ player }) {
+    travelPending.delete(player);
+  }
+
   api.persistAttribute(HOUSES_ATTRIBUTE);
 
   quest = registerQuest(api, {
@@ -657,8 +699,10 @@ module.exports = function registerClientOfKourendQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleConditionChosen);
   api.onCustomEvent("npc-dialogue:choice", rememberSailChoice);
   api.onCustomEvent("npc-dialogue:line", finishSailLine);
+  api.onCustomEvent("npc-dialogue:line", handleMemoirsLine);
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction("Mysterious orb", { Activate: activateOrb });
   api.onItemAction("Antique lamp", { Rub: rubLamp });
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
 };

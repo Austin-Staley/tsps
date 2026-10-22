@@ -345,8 +345,20 @@ test('Client of Kourend post-quest Piscarilius Veos returns lost memoirs exactly
   h.items.set(I.KHAREDSTS_MEMOIRS, 0);
   assert.equal(h.condition(N.VEOS_5, 'K8j5Z5'), false);
   assert.equal(h.condition(N.VEOS_5, 'drsnpy'), true);
+
+  h.setFull(true);
+  h.conditionChosen(N.VEOS_5, 'drsnpy');
+  assert.equal(h.items.get(I.KHAREDSTS_MEMOIRS) ?? 0, 0, 'full bag adds no memoir');
+  const refused = h.line(N.VEOS_5, 'I do have some things for you. Enjoy!');
+  assert.equal(refused.skip, true, 'the false receipt line is skipped');
+  assert.ok(h.messages.includes('You need a free inventory space.'));
+  assert.equal(h.condition(N.VEOS_5, 'drsnpy'), true, 'the missing condition remains retryable');
+
+  h.setFull(false);
   h.conditionChosen(N.VEOS_5, 'drsnpy');
   assert.equal(h.items.get(I.KHAREDSTS_MEMOIRS), 1);
+  const receipt = h.line(N.VEOS_5, 'I do have some things for you. Enjoy!');
+  assert.equal(receipt.skip, undefined, 'the canonical line plays after a successful retry');
   assert.equal(h.condition(N.VEOS_5, 'K8j5Z5'), true);
   assert.equal(h.condition(N.VEOS_5, 'drsnpy'), false);
 
@@ -374,15 +386,55 @@ test('Client of Kourend leaves Port Sarim Veos to X Marks and sails to Piscarili
   h.setLocation(3054, 3245);
   h.choice(N.VEOS_4, "I'd like to travel to Port Piscarilius, please.");
   const voyage = h.line(N.VEOS_4, "As you wish, I hope you don't get seasick, it is a long voyage.");
-  assert.equal(typeof voyage.after, 'function', 'the post-X-Marks boat line completes the handoff');
+  assert.equal(typeof voyage.after, 'function', 'the post-X-Marks departure line completes the handoff');
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [3054, 3245],
+    'the destination is not applied before the departure line completes');
   voyage.after();
   assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY(), h.player.getLocation().getZ()],
     [1825, 3691, 0]);
 
-  h.choice(N.VEOS_4, "I'd like to travel to Port Piscarilius, please.");
   h.choice(N.VEOS_4, "I'd like to travel to Land's End, please.");
   const landEnd = h.line(N.VEOS_4, "As you wish, I hope you don't get seasick, it is a long voyage.");
-  assert.equal(landEnd.after, undefined, 'a later Land\'s End choice clears the Piscarilius handoff');
+  assert.equal(typeof landEnd.after, 'function');
+  landEnd.after();
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY(), h.player.getLocation().getZ()],
+    [1504, 3401, 0], 'the accepted Port Sarim choice reaches the canonical Land\'s End landing');
+
+  h.choice(N.VEOS_4, "I'd like to travel to Port Piscarilius, please.");
+  h.variant(N.VEOS_4); // reopening Talk-to after cancelling the dialogue resets its choice context
+  h.choice(N.VEOS_4, "Actually I'd like to stay here.");
+  const reopenedStay = h.line(N.VEOS_4, 'As you wish.');
+  assert.equal(reopenedStay.after, undefined, 'reopening and taking a non-travel path discards stale travel');
+
+  h.choice(N.VEOS_4, "I'd like to travel to Port Piscarilius, please.");
+  h.choice(N.VEOS_4, "I'd like to travel to Land's End, please.");
+  h.choice(N.VEOS_4, "Actually I'd like to stay here.");
+  const stay = h.line(N.VEOS_4, 'As you wish.');
+  assert.equal(stay.after, undefined, 'a cancelled destination choice does not travel');
+});
+
+test('post-quest Piscarilius Veos travel reaches Port Sarim and Land\'s End after the departure line', () => {
+  const h = setup();
+  const N = core.NpcIdentifiers;
+  h.completeQuest('x_marks_the_spot');
+  const origin = [1825, 3691, 0];
+  h.setLocation(...origin);
+
+  h.choice(N.VEOS_5, 'Travel to Port Sarim.');
+  const portSarim = h.line(N.VEOS_5, "As you wish, I hope you don't get seasick, it is a long voyage.");
+  assert.equal(typeof portSarim.after, 'function');
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY(), h.player.getLocation().getZ()], origin);
+  portSarim.after();
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY(), h.player.getLocation().getZ()],
+    [3054, 3245, 0]);
+
+  h.setLocation(...origin);
+  h.choice(N.VEOS_5, "Travel to Land's End.");
+  const landEnd = h.line(N.VEOS_5, 'As you wish.');
+  assert.equal(typeof landEnd.after, 'function', 'the referenced transcript branch keeps its canonical short line');
+  landEnd.after();
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY(), h.player.getLocation().getZ()],
+    [1504, 3401, 0]);
 });
 
 test('Client of Kourend start-scroll handover with a full backpack is recoverable', () => {
@@ -436,6 +488,7 @@ test('Client of Kourend wire stages survive setStage and the real login resend',
     assert.equal(h.varbits.get(5619), wire, `durable stage ${durable} sends wire ${wire}`);
     assert.equal(h.quest.getStage(h.player), durable, 'the durable stage is not rewritten');
   }
+  assert.ok(h.varbits.get(5619) >= 7, 'cache table 0 column 19 completion floor is 7');
 
   h.quest.setStage(h.player, 3);
   h.varbits.clear();
@@ -474,6 +527,11 @@ test('Client of Kourend antique lamp rub spends one lamp for 500 XP', () => {
   assert.match(request.onConfirm(skill, 'Attack'), /500 Attack XP/);
   assert.equal(h.getXp(), 500);
   assert.equal(h.items.get(I.ANTIQUE_LAMP_17), 1, 'one lamp is consumed');
+
+  h.itemAction('Antique lamp', 'Rub', { itemId: I.ANTIQUE_LAMP_17, item: lamp, slot: 3 });
+  assert.match(h.xpreward.at(-1).onConfirm(skill, 'Attack'), /500 Attack XP/);
+  assert.equal(h.getXp(), 1000);
+  assert.equal(h.items.get(I.ANTIQUE_LAMP_17) ?? 0, 0, 'both lamps are consumed');
 });
 
 after(() => {
