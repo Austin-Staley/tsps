@@ -14,8 +14,10 @@ const noop = () => {};
 before(async () => {
   const { CachePipeline } = require(root + '/dist/game/cache/CachePipeline');
   const { NpcDefinitionLoader } = require(root + '/dist/game/definition/loader/impl/NpcDefinitionLoader');
+  const { RegionManager } = require(root + '/dist/game/collision/RegionManager');
   await CachePipeline.initialize(root);
   new NpcDefinitionLoader().load();
+  RegionManager.init();
 });
 
 function player(items = [], attrs = [], levels = {}) {
@@ -186,6 +188,40 @@ const PAGE = 'Big Chompy Bird Hunting';
 // Revision 241: spawned parent 1470 resolves to content id 14793 (NpcIdentifiers.RANTZ).
 const RANTZ = core.NpcIdentifiers.RANTZ;
 
+test('real cave entrance Enter lands on the cache mouth tile and reaches the chest', () => {
+  const { RegionManager } = require(root + '/dist/game/collision/RegionManager');
+  const { MapObjects } = require(root + '/dist/game/entity/impl/object/MapObjects');
+  const O = core.ObjectIdentifiers;
+  if (!global.__q006RealCave) {
+    require(root + '/plugins/quests/quests/BigChompyBirdHunting.Quest')(
+      PluginManager.createApi('BigChompyQ006Cave'));
+    global.__q006RealCave = true;
+  }
+  const quest = runtime.getRegisteredQuests().findLast(entry => entry.key === 'big_chompy_bird_hunting');
+  const p = player();
+  quest.setStage(p, 15);
+
+  RegionManager.loadMapFiles(2629, 2998);
+  const entrance = MapObjects.get(O.CAVE_ENTRANCE_18, new core.Location(2629, 2998, 0), null);
+  assert.ok(entrance, 'cache loc 3379 is placed at 2629,2998');
+  assert.equal(entrance.getDefinition().getActions()[0], 'Enter');
+  assert.equal(entrance.getDefinition().getSizeX(), 3);
+  assert.equal(entrance.getDefinition().getSizeY(), 2);
+
+  const event = { player: p, object: entrance, objectId: entrance.getId(), clickType: 1, option: 'Enter', handled: false };
+  assert.equal(PluginManager.emitObjectInteraction(event), true, 'the registered Enter action claims the cave entrance');
+  assert.deepEqual(p.moves.at(-1), [2635, 9397, 0], 'lands on the walkable cave-mouth tile');
+  assert.equal(RegionManager.blocked(new core.Location(2635, 9397, 0), null), false, 'landing tile is walkable');
+  assert.equal(RegionManager.blocked(new core.Location(2630, 9398, 0), null), true, 'the old +6400 landing is blocked');
+
+  assert.equal(RegionManager.canMove(2635, 9397, 2636, 9397, 0, 1, 1, null), true);
+  assert.equal(RegionManager.canMove(2636, 9397, 2637, 9397, 0, 1, 1, null), true,
+    'the chest approach 2637,9397 is reachable from the landing');
+  const chest = MapObjects.get(O.LOCKED_OGRE_CHEST, new core.Location(2637, 9398, 0), null);
+  assert.ok(chest, 'cache loc 3377 is placed at 2637,9398');
+  assert.ok(chest.getDefinition().getActions().includes('Unlock'), 'the chest Unlock action is present');
+});
+
 test('fresh stage 0 accepts the start on the resolved Rantz content id 14793', () => {
   const { api, hooks, quest } = questHarness();
   const p = dialoguePlayer();
@@ -268,7 +304,7 @@ test('stage 0 to completion: cave, bellows, toads, bow, chompy, ingredients and 
     const enter = { player: p, objectId: O.CAVE_ENTRANCE_18, clickType: 1, option: 'Enter', handled: false };
     hooks.onObjectInteraction[0](enter);
     assert.equal(enter.handled, true);
-    assert.deepEqual(p.moves.at(-1), [2630, 9398, 0], 'entered Rantz cave');
+    assert.deepEqual(p.moves.at(-1), [2635, 9397, 0], 'entered Rantz cave on a walkable mouth tile');
 
     const chest = { player: p, objectId: O.LOCKED_OGRE_CHEST, clickType: 1, option: 'Unlock', handled: false };
     hooks.onObjectInteraction[0](chest);

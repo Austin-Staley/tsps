@@ -118,7 +118,11 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
     { label: "expert ogre dragon archer", kills: 3000, item: 2994 },
     { label: "expert dragon archer", kills: 4000, item: 2995 },
   ].sort((a, b) => b.label.length - a.label.length);
-  const CAVE_INSIDE = { x: 2630, y: 9398, z: 0 };
+  // Cache loc 3379 is the 3x2 "Cave entrance" at (2629,2998) with Enter. Its +6400
+  // interior footprint (2629-2631,9398-9399) is blocked terrain (clip 0x220100), so the
+  // mouth's westmost walkable tile is (2635,9397); the chest's south approach
+  // (2637,9397) is reachable from there. q006 native landed at the blocked 2630,9398.
+  const CAVE_INSIDE = { x: 2635, y: 9397, z: 0 };
   const CAVE_SURFACE = { x: 2647, y: 2977, z: 0 };
   const TOAD_CLEARING = { x: 2635, y: 2966, z: 0 };
   const SPIT_ROAST_TILE = { x: 2630, y: 2990, z: 0 };
