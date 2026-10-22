@@ -329,27 +329,29 @@ test("four missed dragon claws rolls deal 0 or a 2-damage split, never anything 
 
 function lightningHit({ accurate, splashed = false }) {
   const queued = [];
-  const submitted = [];
-  const realSubmit = TaskManager.submit;
-  TaskManager.submit = (task) => submitted.push(task);
+  const realQueue = CombatFactory.addPendingHit;
+  CombatFactory.addPendingHit = (hit) => queued.push(hit);
   const target = {
     graphics: 0,
     isPlayer: () => splashed,
     isNpc: () => !splashed,
     getAsPlayer() { return this; },
     performGraphic() { this.graphics++; },
-    isRegistered: () => true,
     getHitpoints: () => 50,
-    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (damages) => queued.push(...damages) }) }),
   };
-  const hit = { getTarget: () => target, isAccurate: () => accurate, getAttacker: () => ({}) };
+  const attacker = { isPlayer: () => false, isNpc: () => true };
+  const hit = { getTarget: () => target, isAccurate: () => accurate, getAttacker: () => attacker };
   try {
     special("saradomin_sword").getCombatMethod().handleAfterHitEffects(hit);
-    for (const task of submitted) task.execute();
   } finally {
-    TaskManager.submit = realSubmit;
+    CombatFactory.addPendingHit = realQueue;
   }
-  return { target, queued, submitted };
+  for (const hit of queued) {
+    assert.equal(hit.getCombatType(), CombatType.MAGIC);
+    assert.equal(hit.getDelay(), 1);
+    assert.equal(hit.rewardsExperience(), false, "lightning pays its own Magic XP after immunity hooks");
+  }
+  return { target, queued: queued.flatMap((hit) => hit.getHits()), submitted: queued };
 }
 
 test("Saradomin's lightning only follows a landed melee hit and rolls 1-16", () => {

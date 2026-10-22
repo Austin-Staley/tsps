@@ -22,6 +22,8 @@ type PendingHitConfig = {
     rollAccuracy?: boolean;
     /** False for damage that pays its own XP (or none), skipping the usual combat XP. */
     experience?: boolean;
+    /** A pre-rolled damage value, still passing through damage hooks and the HP cap. */
+    damage?: number;
 };
 
 export class PendingHit {
@@ -76,7 +78,7 @@ export class PendingHit {
             }
         }
 
-        this.hits = this.prepareHits(resolvedHitAmount, resolvedRollAccuracy);
+        this.hits = this.prepareHits(resolvedHitAmount, resolvedRollAccuracy, typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined);
         this.delay = Math.max(0, resolvedDelay);
         this.handleAfterHitEffects = resolvedHandleAfterHitEffects;
     }
@@ -149,7 +151,7 @@ export class PendingHit {
         return this.hitDelays;
     }
 
-    private prepareHits(hitAmount: number, rollAccuracy: boolean): HitDamage[] {
+    private prepareHits(hitAmount: number, rollAccuracy: boolean, fixedDamage?: number): HitDamage[] {
         // Check the hit amounts.
         if (hitAmount > 4) {
             throw new Error(
@@ -203,7 +205,7 @@ export class PendingHit {
             const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
             this.accurate = resolved.accurate;
             const damage: HitDamage = this.accurate
-                ? ServerPerf.measurePhase(
+                ? fixedDamage !== undefined ? new HitDamage(Math.max(0, Math.floor(fixedDamage)), HitMask.RED) : ServerPerf.measurePhase(
                     "combat.process.method_hits.damage",
                     () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer, resolved.bounds)
                 )

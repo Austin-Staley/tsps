@@ -57,6 +57,7 @@ Scythe.register({
         DamageFormulas: { calculateMaxMeleeHit: () => maxHit },
     },
     registerCombatMethodResolver: (r) => { resolver = r; },
+    onServerStartup: (handler) => handler(),
     onItemAction: () => {},
     onItemOnItem: () => {},
 });
