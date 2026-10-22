@@ -255,6 +255,8 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
+import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
+import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
 import { CombatOptionsController } from "./combat/CombatOptionsController";
 import { HitsplatFlushController } from "./combat/HitsplatFlushController";
 import { ClientScriptLoader } from "./cs2/ClientScriptLoader";
@@ -453,6 +455,10 @@ const SCRIPT_CHATBOX_SEARCH = 750;
 const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
 
 // Use shared OSRS rotation scale
+
+/** The account type (an Ironman mode), and the enum of its chat icon tags ("<img=N>"). */
+const ACCOUNT_TYPE_VARBIT = 1777;
+const ACCOUNT_TYPE_ICON_ENUM = 1894;
 
 /** logout:world_switcher (182:3). */
 const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
@@ -1036,6 +1042,20 @@ export class OsrsClient {
     /** Server NPC id -> synthetic render type id for its model customisation (enrage legs). */
     private readonly npcModelOverrides = new Map<number, number>();
 
+    /** The icon the cache's chat scripts show for the account type (varbit 1777), or -1. */
+    private getAccountTypeChatIcon(): number {
+        try {
+            const accountType = this.varManager.getVarbit(ACCOUNT_TYPE_VARBIT) | 0;
+            const enumType = this.loaderFactory?.getEnumTypeLoader()?.load(ACCOUNT_TYPE_ICON_ENUM);
+            const index = enumType?.keys?.indexOf(accountType) ?? -1;
+            const tag = index >= 0 ? enumType?.stringValues?.[index] : undefined;
+            const match = /^<img=(\d+)>$/i.exec(tag ?? "");
+            return match ? Number(match[1]) : -1;
+        } catch {
+            return -1;
+        }
+    }
+
     private resolveChatPlayerNameForScript(_scriptId: number): string {
         let baseName = this.localPlayerName ?? "";
         const handshakeName = baseName;
@@ -1055,8 +1075,12 @@ export class OsrsClient {
                 }
             }
         } catch {}
+        // The chatbox name line (script 223) puts the account type's icon (enum 1894 by varbit
+        // 1777, an Ironman's helmet) before chat_playername itself: leave that one out here, or
+        // it showed twice once the login sent it as a chat icon.
+        const accountTypeIcon = this.getAccountTypeChatIcon();
         const iconPrefix = this.localChatNameIcons
-            .filter((icon) => Number.isFinite(icon) && (icon | 0) >= 0)
+            .filter((icon) => Number.isFinite(icon) && (icon | 0) >= 0 && (icon | 0) !== accountTypeIcon)
             .map((icon) => `<img=${icon | 0}>`)
             .join("");
         const textPrefix = this.localChatNamePrefix || "";
@@ -2248,6 +2272,22 @@ export class OsrsClient {
             this.mobileChatKeyboard.show(hint, keyboardType);
         };
         this.cs2Vm.context.hideMobileKeyboard = () => this.mobileChatKeyboard.hide();
+        // That script runs in the frame loop, after the tap, where iOS will not open the
+        // keyboard: focus it from the touch itself when the tapped widget's script would.
+        const keyboardButtons = new KeyboardButtonProbe((id) => this.cs2Vm.context.loadScript(id));
+        this.inputManager.onCanvasTouchStart = (x, y) => {
+            const widgetManager = this.widgetManager;
+            if (!this.isLoggedIn() || !widgetManager) return;
+            const hits = collectInputWidgetsAtPoint(widgetManager, x, y);
+            for (let i = hits.length - 1; i >= 0; i--) {
+                const widget = hits[i];
+                if (widgetManager.isEffectivelyHidden((widget?.uid ?? 0) | 0)) continue;
+                if (keyboardButtons.widgetShowsKeyboard(widget)) {
+                    this.mobileChatKeyboard.show();
+                    return;
+                }
+            }
+        };
 
         // Wire up the deferred callbacks - triggers queued var changes after script execution
         this.cs2Vm.onVarpChange = (varpId) => {
@@ -5906,7 +5946,7 @@ export class OsrsClient {
             }
 
             case "forget_remembered_login": {
-                // "Switch account" on the remembered-account screen: the server drops the token too.
+                // "Sign out" on the remembered-account screen: the server drops the token too.
                 const remembered = this.loginState.getRememberedLogin();
                 if (remembered) {
                     forgetRememberedLogin(remembered.username, remembered.token);

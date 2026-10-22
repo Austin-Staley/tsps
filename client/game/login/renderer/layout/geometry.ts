@@ -196,7 +196,8 @@ function getUpscaleContext(width: number, height: number): OffscreenCanvasRender
 
 /**
  * Draws classic 765x503 content into the scaled content band. When Stretched Mode
- * enlarges it without integer scaling, the content is drawn "sharp bilinear": nearest-neighbour up to the next whole multiple of
+ * enlarges it without integer scaling, or a phone fits it at a fractional scale, the
+ * content is drawn "sharp bilinear": nearest-neighbour up to the next whole multiple of
  * the device scale in a buffer, then filtered down once to the exact size. Edges stay
  * crisp without the uneven blocks of fractional nearest-neighbour or the blur and
  * per-sprite fringes of filtering every sprite on its own.
@@ -206,7 +207,7 @@ export function withContentTransform(host: LoginRendererHost, ctx: RenderContext
         const deviceScale = host.contentScale * (host.renderScale > 0 ? host.renderScale : 1);
         const factor = Math.ceil(deviceScale - 0.01);
         const buffer =
-            host.contentSmoothing && factor > 1
+            host.contentSmoothing && Math.abs(deviceScale - factor) > 0.01
                 ? getUpscaleContext(host.SCENE_WIDTH * factor, host.SCENE_HEIGHT * factor)
                 : undefined;
 
@@ -246,14 +247,16 @@ export const LOGIN_FORM_BUTTON_Y = 321;
 
 /**
  * Remembered-account screen, laid out like live's launcher login (measured from a live
- * screenshot): "Welcome to ...", then the large "Play Now" button with the account name in it. "Switch account" below it is ours (the
- * launcher logs out on live) and sits where "Can't login? Click here." does on the form.
+ * screenshot): "Welcome to ...", then the large "Play Now" button with the account name in it,
+ * and below it a "Sign out" button, as live's mobile client has (its "Switch character" has no
+ * counterpart here). Sign out forgets the remembered login, on the server too.
  */
 export const REMEMBERED_TITLE_Y = 207;
 /** Centre of titlebutton_large; "Play Now" sits 13 above it, the name's baseline 18 below. */
 export const REMEMBERED_PLAY_Y = 262;
-export const REMEMBERED_LOG_OUT_TEXT = "Switch account";
-export const REMEMBERED_LOG_OUT_Y = 357;
+export const REMEMBERED_SIGN_OUT_TEXT = "Sign out";
+/** Centre of the Sign out button (titlebutton), where the screens' single "Back" buttons sit. */
+export const REMEMBERED_SIGN_OUT_Y = 326;
 
 /** The large Play Now button's bounds around its centre (titlebutton_large is 218x68). */
 export function getRememberedPlayBounds(host: LoginRendererHost) {
