@@ -58,9 +58,11 @@ rewards once and retained them after relogging. Its two jerboa catches separatel
 awarded 274 Hunter XP; repairing the bed awarded 10 Crafting XP. Missing ground tools
 were bought from ordinary shops, and an optional upstairs detour needed a teleport
 recovery. The missing needle and hammer spawns now match the pinned helper and Wiki
-tiles in hand-maintained world data; this file is not a dumper export. Ground pickup,
-remaining post-quest history and recovery branches still need validation, so the run
-remains provisional. Respawn uses the Wiki's 100-tick value without a new capture.
+tiles in hand-maintained world data; this file is not a dumper export. The fresh follow-up
+confirmed a settled needle pickup and persistence after relog. The hammer remained on
+the ground after two adjacent approaches; the generic pickup path is under investigation.
+Post-quest history did not duplicate rewards. Remaining recovery checks keep the run
+provisional. Respawn uses the Wiki's 100-tick value without a new capture.
 
 Ascent stopped at its opening: an unscoped Sins of the Father condition handler overrode
 Mori's requirements check. The reviewed fix answers only Sins' nine canonical condition
@@ -70,19 +72,29 @@ ordered-tracking corrections pass root review and eight focused tests. These inc
 the actual Karuulm elevator/return dispatch; landing tiles and timing are inferred
 from the helper/cache, without captures. Current-revision peer review, full-bag checks
 and a new natural run remain pending. Biohazard stopped at stage 1 and logged out. Its owner has
-corrected Elena/Chemist recovery and canonical receipt rendering; a further review
-found Guidor advanced before the player requested his analysis. That transition is
-being moved to the actual revelation dialogue. No whole quest is certified yet.
+corrected Elena/Chemist recovery, canonical receipts and Guidor's transition at the actual
+revelation dialogue. A further root regression found a courier who disposed of the wrong
+vial could not accept a replacement; that recovery repair is in progress. Bone Voyage
+also needs a guard preventing the onboard Junior Navigator from completing the quest
+before arrival. No whole quest is certified yet.
 
 Monk's Friend completed naturally, paid its rewards once and persisted through logout and
 relogin. That run exposed late normal-rune payment and unreachable named Monk variants.
 The corrected source now passes independent root review and 11 focused tests, including
 normal payment before the party, a full-bag drop after all twelve overhead lines, once-only
-settlement before completion observers, and named Monk dialogue selection. Fresh validation
-of those fixes remains pending. Clock Tower acquired the red cog naturally but stopped at
-a cellar-door crossing. Real-cache door replay passes 51 focused tests and did not establish
-a geometry defect; the driver must wait for opening before crossing in the same script.
-Its saved stage and cog persisted through relog, but completion is unproven.
+settlement before completion observers, and named Monk dialogue selection. A fresh
+current-revision run completed naturally: eight law runes arrived before the party at
+stage 70; twelve overhead lines then completed stage 80, awarding one quest point and
+2,000 Woodcutting XP. Repeat dialogue and relog preserved exact rewards without
+duplication, and final logout was confirmed. Full-bag delivery and interruption after
+the item box remain untested live; a reported wait beyond twenty minutes lacks an
+independent timestamp. Whole-quest certification remains provisional.
+
+Clock Tower crossed the cellar door naturally, placed the red cog, obtained a bucket of
+water from the actual well and placed a second cog upstairs, reaching varp 10 = 3.
+Real-cache door replay passes 51 focused tests and did not establish a geometry defect;
+the driver must wait for opening before crossing in the same script. Completion is
+unproven.
 
 Clock Tower's reviewed source checkpoint fixes cog handling, lever transforms, the shared
 world-lever condition, the scoped poison trough, the white-cog ladder's surface exit and
@@ -100,15 +112,14 @@ The final four focused suites pass 99 tests, including real transcript-runner ch
 Hazelmere's lamp handover and the Khazard barman's once-only bribe. This checks compatibility
 with the import; it does not certify those six complete quest routes.
 
-Companion dumper commit `75d42c9589` also discovers the official miniquest transcript
-category and adds the full His Faithful Servants page. All 124 dialogue tests pass, and two
-fresh exports match for 3,292 generated files; existing dialogue records are unchanged by
-that addition. Its TSPS import is pending the current native batch finishing.
-
-The His Faithful Servants source still needs generic parsing fixes for inline anchors
-before NPC speech and a navigation footer. Skipping unavailable nodes in the quest
-consumer was rejected because it removed actual dialogue. The canonical dumper owns the
-repair; its new export is not yet imported into the running server.
+Companion dumper commit `bae28c17eb` discovers official miniquest transcripts, adds the
+full His Faithful Servants page, preserves explicit inline anchors, removes only verified
+navigation footers, orders terminal quest-complete actions correctly and parses quoted
+speaker labels. All 143 dialogue tests pass independently; two complete fresh exports
+match for 3,292 generated files. The new export is not imported while the native batch
+uses the previous frozen data. Generic NPC identity extraction and Icthlarin's malformed
+source structure remain under review. Consumers must use corrected canonical nodes;
+skipping real dialogue or copying missing lines into quest code is not accepted.
 
 Big Chompy Bird Hunting has a reviewed source checkpoint for the hunting route, item
 capacity and recovery, scoped dialogue conditions, and cancellation of the first hunt
@@ -209,7 +220,7 @@ branch remains blocked at its source.
 | Making History | `MakingHistory` | Pending | Pending | Pending |
 | Meat and Greet | `MeatAndGreet` | Pending | Pending | Pending |
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
-| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Old revision completed/repeated/persisted; corrected reward and dialogue route pending |
+| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Current revision naturally completed/repeated/persisted with exact rewards; live full-bag/interruption recovery pending |
 | Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
 | Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
