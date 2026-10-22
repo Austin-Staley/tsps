@@ -297,6 +297,12 @@ or rereading raw streams. A done report is evidence to review, not permission to
 - Keep the OS process PID, execution-tool session id and OpenCode `ses_...` id distinct.
   A detached launcher must survive its parent shell (for example,
   `subprocess.Popen(..., start_new_session=True)` with separate output/error files).
+- Bound focused tests with a timeout that terminates their whole process group, waits for
+  exit and verifies no child remains. Killing only `node --test` can orphan its test-file
+  process. If throughput drops, inspect CPU use, elapsed time, command and working directory
+  before starting more workers; stop only confirmed leftovers from your own test run and
+  diagnose the hang before repeating it. An old hung child is not evidence that the current
+  file still hangs, so check the existing result and revision first.
 - Check provider retry status and pending permission/question requests when work stops.
   A live process may be waiting for a report-directory permission rather than the model.
   Verify the requested action and its assigned paths before replying. Preserve context;
