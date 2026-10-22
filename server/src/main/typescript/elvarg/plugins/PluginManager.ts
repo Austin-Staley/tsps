@@ -246,7 +246,6 @@ export class PluginManager {
   private static pathBlockedHooks: PluginHook<PluginPathBlockedEvent>[] = [];
   private static objectRouteHooks: PluginHook<PluginObjectRouteEvent>[] = [];
   private static walkRouteHooks: PluginHook<PluginWalkRouteEvent>[] = [];
-  private static forcedWalkRouteHooks: PluginHook<PluginWalkRouteEvent>[] = [];
   private static npcRouteHooks: PluginHook<PluginNpcRouteEvent>[] = [];
   private static objectInteractionHooks: ObjectInteractionHook[] = [];
   private static objectHooksById = new Map<string, ObjectInteractionHook[]>();
@@ -1016,16 +1015,6 @@ export class PluginManager {
         return;
       }
     }
-  }
-
-  /** A walk click refused because the player is mid forced move or being placed after one. */
-  public static emitForcedWalkRoute(event: PluginWalkRouteEvent): boolean {
-    if (!event?.player || !event.destination) return false;
-    for (const hook of PluginManager.forcedWalkRouteHooks) {
-      PluginManager.executeHook(hook, event, "forced_walk_route", "forced_walk_route");
-      if (event.handled) return true;
-    }
-    return false;
   }
 
   public static emitWalkRoute(event: PluginWalkRouteEvent): boolean {
@@ -2927,11 +2916,6 @@ export class PluginManager {
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {
           PluginManager.walkRouteHooks.push({ pluginName, handler });
-        }
-      },
-      onForcedWalkRoute: (handler) => {
-        if (typeof handler === "function") {
-          PluginManager.forcedWalkRouteHooks.push({ pluginName, handler });
         }
       },
       onNpcRoute: (handler) => {

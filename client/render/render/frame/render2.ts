@@ -169,7 +169,7 @@ import { type MinimapIcon, SdMapData } from "../../loader/SdMapData";
 import { SdMapDataLoader } from "../../loader/SdMapDataLoader";
 import { SdMapLoaderInput } from "../../loader/SdMapLoaderInput";
 import { isDoorLocType } from "../../loc/SceneLocs";
-import { sunkenRangeIndices } from "../../loc/SunkenLocs";
+import { hasSunkenLocs, sunkenRangeIndices } from "../../loc/SunkenLocs";
 import {
     DynamicNpcAnimLoader,
     DynamicNpcFrameGeometry,
@@ -405,7 +405,7 @@ function renderSunkenLocs(host: WebGLOsrsRendererHost): void {
         const draws: { drawCall: DrawCall; drawRanges: DrawRange[]; indices: number[]; punchOnly: boolean }[] = [];
         for (let i = 0; i < count; i++) {
             const map = maps[i];
-            if (!map.locsAnimated.length || host.mapManager.worldEntityMapIds.has(map.id)) continue;
+            if (!hasSunkenLocs(map.locsAnimated) || host.mapManager.worldEntityMapIds.has(map.id)) continue;
             if (host.getMapTileDistanceFromPoint(map, cullTile.x, cullTile.y) > lodThresholdTiles) continue;
             if (!host.isMapWithinRenderDistance(map, cullTile.x, cullTile.y, renderDistanceTiles, 0)) continue;
             for (const alpha of [false, true]) {

@@ -213,6 +213,8 @@ const STONES = new Set();
 
 class OcellusRoom extends Raid.Room {
   onBuild() {
+    /** Censer charges waiting for their hit, by player: the room's, so they end with it. */
+    this.censerCharges = new Map();
     this.figure = this.spawn(named("npc", "tfa_ocellus_intro"), LAYOUT.figure, { scripted: true, face: Shared.core().Direction.NORTH.getId() });
     this.censers = LAYOUT.censers.map((censer) => ({ ...censer, object: this.placeObject(named("loc", censer.loc), { x: censer.x, y: censer.y, z: 1 }), used: false }));
     this.phase = 0;
@@ -1445,6 +1447,11 @@ class OcellusRoom extends Raid.Room {
     Shared.forceMove(player, tile, STONE_JUMP, named("seq", "human_steppingstonejump"));
   }
 
+  /** A walk click mid hop, from the raid's area: the next hop at once. */
+  forcedWalk(player, destination) {
+    return this.routeFromStone(player, destination);
+  }
+
   /** A walk click from a stone hops to the next tile of its path towards it. */
   routeFromStone(player, destination) {
     if (this.phase < 3) return false;
@@ -1650,7 +1657,7 @@ class OcellusRoom extends Raid.Room {
         member.setSpecialPercentage?.(Math.min(100, (member.getSpecialPercentage?.() ?? 0) + 50));
         Shared.core().CombatSpecial?.updateBar?.(member);
       } else {
-        member.__tfaCenser = censer.effect;
+        this.censerCharges.set(member, censer.effect);
       }
     }
     return true;
@@ -1805,13 +1812,13 @@ function walkRoute(event) {
 /** A censer's charge makes the next hit of its style on Ocellus land at its maximum. */
 function censerHit(event) {
   const player = event.attacker;
-  const style = player?.__tfaCenser;
-  if (!style) return;
+  if (!player?.isPlayer?.()) return;
   const room = roomOf(player);
-  if (!room || event.target !== room.boss) return;
+  const style = room?.censerCharges.get(player);
+  if (!style || event.target !== room.boss) return;
   const { CombatType } = Shared.core();
   if (event.combatType !== (style === "melee" ? CombatType.MELEE : CombatType.RANGED)) return;
-  player.__tfaCenser = null;
+  room.censerCharges.delete(player);
   event.forceAccurate = true;
   event.forceMaxHit = true;
 }
@@ -1834,7 +1841,6 @@ module.exports = function registerOcellus(api) {
   api.onObjectInteraction("Gap", { Jump: jumpStone });
   api.onObjectRoute(routeStone);
   api.onWalkRoute(walkRoute);
-  api.onForcedWalkRoute(walkRoute);
   api.onCombatHitRoll(censerHit);
   api.onNpcInteraction("<col=00ffff>The Blade</col>", { Travel: travel, Commune: travel });
 };

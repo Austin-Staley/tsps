@@ -100,13 +100,21 @@ class VaultRoom extends Raid.Room {
 
   /** Leaving with loot still unclaimed sends it to the bank (estimate). */
   leave(player) {
-    const loot = this.loot.get(player.getUsername());
-    if (loot) {
-      this.loot.delete(player.getUsername());
-      give(player, loot.items, true);
-      player.sendMessage("Your unclaimed rewards from the Archive have been sent to your bank.");
-    }
+    this.bankUnclaimed(player);
     this.raid.leaveFinished(player);
+  }
+
+  /** Logging out (or dropping) in the vault banks their unclaimed loot before the save. */
+  onPlayerLogout(player) {
+    this.bankUnclaimed(player);
+  }
+
+  bankUnclaimed(player) {
+    const loot = this.loot.get(player.getUsername());
+    if (!loot) return;
+    this.loot.delete(player.getUsername());
+    give(player, loot.items, true);
+    player.sendMessage("Your unclaimed rewards from the Archive have been sent to your bank.");
   }
 }
 

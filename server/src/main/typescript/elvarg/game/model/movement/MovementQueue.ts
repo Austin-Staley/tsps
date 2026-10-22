@@ -354,11 +354,8 @@ export class MovementQueue {
             // straight away (Ezekiel's dodges), where a normal walk has to wait.
             if ((this.player.getForceMovement() != null || this.character.isNeedsPlacement())
                 && !this.isMovementBlocked()
-                && require("../../../plugins/PluginManager").PluginManager.emitForcedWalkRoute({
-                    player: this.player,
-                    destination: { x: destination.getX(), y: destination.getY(), z: destination.getZ() },
-                    handled: false,
-                })) {
+                && this.player.getArea?.()?.handleForcedWalk?.(this.player,
+                    { x: destination.getX(), y: destination.getY(), z: destination.getZ() })) {
                 return;
             }
             mobility.sendMessage(this.player);
@@ -635,8 +632,9 @@ export class MovementQueue {
 
     /**
      * Diagonal first, then east/west, then north/south, for any size: OSRS's larger NPCs step
-     * diagonally too when their whole footprint can (captured: the 3x3 Ocellus walks a diagonal
-     * a tile a tick), and only square the corner when the diagonal is blocked.
+     * diagonally too when their whole footprint can (captured: Ocellus and Ezekiel at 3x3, Bork
+     * at 4x4, Dreadnoth at 5x5, 260 diagonal steps), and only square the corner when the
+     * diagonal is blocked.
      */
     private validatedStep(source: Location, destination: Location): Location | null {
         const signX = Math.sign(destination.getX() - source.getX());

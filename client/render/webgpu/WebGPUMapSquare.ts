@@ -6,7 +6,7 @@ import { Scene } from "../../rs/scene/Scene";
 import type { DrawRange } from "../DrawRange";
 import { sceneryRangeVisible } from "../SceneryVisibility";
 import { LocAnimated } from "../loc/LocAnimated";
-import { SUNKEN_LOC_IDS, sunkenRangeIndices } from "../loc/SunkenLocs";
+import { hasSunkenLocs, sunkenRangeIndices } from "../loc/SunkenLocs";
 import type { SeqFrameLoader } from "../../rs/model/seq/SeqFrameLoader";
 import type { SeqTypeLoader } from "../../rs/config/seqtype/SeqTypeLoader";
 import type { SdMapData } from "../loader/SdMapData";
@@ -979,7 +979,7 @@ export class WebGPUMapSquare implements MapSquare {
 
     /** Whether any of its locs is drawn below the floor (SunkenLocs). */
     hasSunkenLocs(): boolean {
-        return !this.worldEntity && this.locsAnimated.some((loc) => SUNKEN_LOC_IDS.has(loc.id));
+        return !this.worldEntity && hasSunkenLocs(this.locsAnimated);
     }
 
     /**

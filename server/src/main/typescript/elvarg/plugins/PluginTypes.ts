@@ -851,8 +851,6 @@ export interface PluginApi {
   onPlayerPathBlocked(handler: (event: PluginPlayerPathBlockedEvent) => void): void;
   onObjectRoute(handler: (event: PluginObjectRouteEvent) => void): void;
   onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
-  /** A walk click the engine would refuse because the player is mid forced move (or being placed after one); set `handled` to take it, e.g. to chain a roll. */
-  onForcedWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
   onObjectInteraction(

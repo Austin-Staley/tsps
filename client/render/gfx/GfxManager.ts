@@ -38,11 +38,13 @@ export interface GfxInstance {
      */
     chained?: boolean;
     graceUntilMs?: number;
+    /** Tile and graphic of a tile graphic, the key it chains by. */
+    chainKey?: string;
 }
 
 /** How long a chained tile graphic outlives its end waiting for the next (ms). */
 const CHAIN_GRACE_MS = 150;
-/** A tile graphic sent within this of the last one on its tile continues it (ms). */
+/** The same graphic sent within this of the last one on its tile continues it (ms). */
 const CHAIN_WINDOW_MS = 800;
 
 /**
@@ -59,8 +61,10 @@ export class GfxManager {
     // Reusable buffers (avoid per-call allocation)
     private worldInstancesBuffer: GfxInstance[] = [];
     private worldInstancesWithSlotBuffer: Array<{ inst: GfxInstance; slot: number }> = [];
-    /** When a tile graphic was last sent on each tile, to tell a repeated one. */
+    /** When each graphic was last sent on each tile (chain key), to tell a repeated one. */
     private lastTileSpawnMs: Map<string, number> = new Map();
+    /** The chained tile graphic outliving its end on each chain key, until the next one comes. */
+    private graceByChainKey: Map<string, number> = new Map();
     constructor(private renderer: WebGLOsrsRenderer) {}
 
     private addInstance(id: number, instance: GfxInstance): void {
@@ -80,6 +84,9 @@ export class GfxManager {
         const instance = this.instances.get(id);
         if (!instance) return;
         this.instances.delete(id);
+        if (instance.chainKey !== undefined && this.graceByChainKey.get(instance.chainKey) === id) {
+            this.graceByChainKey.delete(instance.chainKey);
+        }
         for (const kind of ["player", "npc"] as const) {
             const serverId = kind === "player" ? instance.attachPlayerServerId : instance.attachNpcServerId;
             if (serverId === undefined) continue;
@@ -137,6 +144,7 @@ export class GfxManager {
             if (!inst.loop && typeof inst.endTimeMs === "number" && nowMs >= (inst.endTimeMs | 0)) {
                 if (inst.chained && inst.graceUntilMs === undefined) {
                     inst.graceUntilMs = nowMs + CHAIN_GRACE_MS;
+                    if (inst.chainKey !== undefined) this.graceByChainKey.set(inst.chainKey, id);
                     continue;
                 }
                 if (inst.graceUntilMs !== undefined && nowMs < inst.graceUntilMs) continue;
@@ -280,18 +288,17 @@ export class GfxManager {
     ): number {
         const id = this.nextId++;
         const level = tile.level ?? 0;
-        const tileKey = `${tile.x | 0},${tile.y | 0},${level}`;
+        const chainKey = `${tile.x | 0},${tile.y | 0},${level},${spotId}`;
         const nowMs = (performance?.now?.() as number) || Date.now();
-        const last = this.lastTileSpawnMs.get(tileKey);
+        const last = this.lastTileSpawnMs.get(chainKey);
         const chained = last !== undefined && nowMs - last <= CHAIN_WINDOW_MS;
-        this.lastTileSpawnMs.set(tileKey, nowMs);
+        this.lastTileSpawnMs.set(chainKey, nowMs);
         if (this.lastTileSpawnMs.size > 4096) {
             for (const [key, at] of this.lastTileSpawnMs) if (nowMs - at > CHAIN_WINDOW_MS) this.lastTileSpawnMs.delete(key);
         }
         // The one it continues stops waiting now this one is here.
-        for (const [otherId, other] of this.instances) {
-            if (other.graceUntilMs !== undefined && other.world && `${other.world.tileX},${other.world.tileY},${other.world.level}` === tileKey) this.removeInstance(otherId);
-        }
+        const waiting = this.graceByChainKey.get(chainKey);
+        if (waiting !== undefined) this.removeInstance(waiting);
         let durationMs: number | undefined = undefined;
         try {
             const cache = (this.renderer as any).gfxRenderer?.getCache?.();
@@ -316,6 +323,7 @@ export class GfxManager {
             durationMs,
             endTimeMs: undefined,
             chained,
+            chainKey,
             world: {
                 tileX: tile.x | 0,
                 tileY: tile.y | 0,

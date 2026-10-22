@@ -101,6 +101,11 @@ function areaClass() {
       this.raid.processOnce();
     }
 
+    /** A walk click mid roll or hop: the room may chain another (Ezekiel's rolls, Ocellus' stones). */
+    handleForcedWalk(player, destination) {
+      return this.raid.room?.forcedWalk?.(player, destination) === true;
+    }
+
     canTeleport(player) {
       Shared.mesbox(player, "You can't teleport out of the Archive.");
       return false;
@@ -1075,6 +1080,8 @@ class Raid {
 
   /** A logout in a challenge counts as a death (estimate, as the Theatre of Blood); else it's safe. */
   onLogout(player) {
+    // Before the save that follows: the room settles what the player is owed (the vault's loot).
+    this.room?.onPlayerLogout?.(player);
     const member = this.member(player);
     const fight = !!this.room?.isStarted() && member.fighting && !member.dead;
     this.away.set(player.getUsername(), { fight: fight || member.dead });

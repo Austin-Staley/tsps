@@ -33,7 +33,14 @@ function carriesAnything(player) {
   return has(player.getInventory()) || has(player.getEquipment());
 }
 
+/** Whether a player can start spectating: in the lobby, and not in a raid or watching one. */
+function canSpectate(player) {
+  return Shared.inLobby(player.getLocation()) && !Raid.raidOf(player) && !Raid.watchedBy(player);
+}
+
+/** After the prompt or menu choice, so the board's checks are made again (they may have moved). */
 function watch(player, raid) {
+  if (!canSpectate(player)) return;
   if (carriesAnything(player)) {
     Shared.mesbox(player, TEXT.ITEMS);
     return;
@@ -78,7 +85,7 @@ function recent(player) {
 
 function spectateBoard({ player }) {
   if (!Shared.inLobby(player.getLocation())) return false;
-  if (Raid.raidOf(player) || Raid.watchedBy(player)) return true;
+  if (!canSpectate(player)) return true;
   Shared.options(player, "Select an option", "Spectate a specific party.", () => specific(player), "Spectate a recent party.", () => recent(player), "Cancel.", () => {});
   return true;
 }

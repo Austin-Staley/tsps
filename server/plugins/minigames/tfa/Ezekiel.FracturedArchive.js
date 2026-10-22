@@ -311,10 +311,15 @@ class EzekielRoom extends Raid.Room {
     return true;
   }
 
+  /** A walk click mid roll, from the raid's area: the next roll at once. */
+  forcedWalk(player, destination) {
+    return this.routeRoll(player, destination);
+  }
+
   /**
-   * A walk click while a dodge is due rolls at once, before it becomes a step (user: no delay
-   * between rolls): in the finale's 3x3 from the barrage's start to its last impact, or out of a
-   * sword's lane in the two ticks before it flies. Returns whether the click was taken.
+   * A walk click while a dodge is due rolls at once, before it becomes a step (no delay between
+   * rolls): in the finale's 3x3 from the barrage's start to its last impact, or out of a sword's
+   * lane in the two ticks before it flies. Returns whether the click was taken.
    */
   routeRoll(player, destination) {
     if (!this.isStarted() || this.dead || !this.fighters().includes(player)) return false;
@@ -608,7 +613,6 @@ module.exports = function registerEzekiel(api) {
   Raid.registerRoom("EZEKIEL", EzekielRoom);
   api.onWalkRoute(walkRoute);
   // A click mid-roll chains the next roll at once (user: no delay between them).
-  api.onForcedWalkRoute(walkRoute);
 };
 
 Object.assign(module.exports, { EzekielRoom, LAYOUT, HITPOINTS, TIME, DAMAGE });
