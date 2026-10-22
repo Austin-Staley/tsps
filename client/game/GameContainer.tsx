@@ -1,4 +1,4 @@
-import { Fragment, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { RenderStatsOverlay } from "../components/RenderStatsOverlay";
 import { OsrsLoadingBar } from "../components/OsrsLoadingBar";
@@ -367,9 +367,7 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
 
                         {!hideUi && (
                             <Suspense fallback={null}>
-                                {osrsClient.clientPlugins.renderHud(osrsClient).map((hud, i) => (
-                                    <Fragment key={i}>{hud}</Fragment>
-                                ))}
+                                {osrsClient.clientPlugins.renderHud(osrsClient)}
                             </Suspense>
                         )}
 

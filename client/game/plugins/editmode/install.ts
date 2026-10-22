@@ -597,6 +597,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
     const mapIconSprites = new Map<number, HTMLCanvasElement>();
     const mapIconLocs = new WeakMap<MinimapIcon, { locId: number; rotation?: number } | null>();
     // Edit mode loads no RuneLite plugins, so the editor supplies its own outlines.
+    // Never removed: the editor installs once, for the page's life, and edit mode loads no
+    // Interact Highlight plugin for this to override.
     client.clientPlugins.add({ interactHighlightConfig: () => EDITOR_INTERACT_HIGHLIGHT });
     let terrainPreviewSignature = "";
 

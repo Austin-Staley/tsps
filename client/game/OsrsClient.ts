@@ -3100,7 +3100,6 @@ export class OsrsClient {
         // Subscribe to chat messages to add to history and mark chatCycle for transmit
         try {
             this.unsubscribeChatMessages = subscribeChatMessages((msg) => {
-                this.clientPlugins.onChatMessage(msg);
                 // Add message to chat history for CS2 scripts to query
                 const isTradeRequest = msg.chatType === ChatMessageType.TRADE_REQUEST;
                 if (isTradeRequest && msg.from && msg.playerId !== undefined) {
@@ -6127,7 +6126,6 @@ export class OsrsClient {
                 this.playerMovementSync?.updateInteractionRotations?.();
             } catch {}
             try {
-                this.clientPlugins.onClientCycle();
                 this.continuousMovement?.tick();
                 this.playerEcs.updateClient(1);
             } catch {}
@@ -8311,7 +8309,6 @@ export class OsrsClient {
             } catch (err) {
                 console.warn("[OsrsClient] ChatHistory clear error:", err);
             }
-            this.clientPlugins.onSessionReset();
             // Live sets walk again before every logout; a dropped connection doesn't get that far.
             interactionModes.clear();
 

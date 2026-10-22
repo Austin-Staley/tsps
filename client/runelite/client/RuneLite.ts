@@ -1,6 +1,6 @@
 import { subscribePluginMessages } from "../../network/serverConnection/domain/pluginMessages";
 import { PluginMessage } from "@runelite/api/events/PluginMessage";
-import { GameStateChanged } from "@runelite/api/events";
+import { ChatMessage, GameStateChanged } from "@runelite/api/events";
 import { ClientTick } from "@runelite/api/events/ClientTick";
 import { CommandExecuted } from "@runelite/api/events/CommandExecuted";
 import { FocusChanged } from "@runelite/api/events/FocusChanged";
@@ -9,6 +9,7 @@ import { PostClientTick } from "@runelite/api/events/PostClientTick";
 import { BeforeRender } from "@runelite/api/events/BeforeRender";
 import type { OsrsClient } from "../../game/OsrsClient";
 import { subscribeTick } from "../../network/serverConnection/timing";
+import { subscribeChatMessages } from "../../network/serverConnection/subscriptions/ui";
 import { ConfigManager } from "./config/ConfigManager";
 import { EventBus } from "./eventbus/EventBus";
 import { PluginManager } from "./plugins/PluginManager";
@@ -79,6 +80,9 @@ export class RuneLite {
         });
 
         subscribePluginMessages(({ channel, data }) => this.eventBus.post(new PluginMessage(channel, data)));
+        subscribeChatMessages((msg) => this.eventBus.post(
+            new ChatMessage(msg.chatType ?? 0, msg.from ?? "", msg.text, msg.prefix ?? null),
+        ));
 
         // state.tickListeners fire after the tick's packets are applied.
         subscribeTick(() => this.eventBus.post(new GameTick()));

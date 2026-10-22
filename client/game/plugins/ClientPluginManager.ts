@@ -17,11 +17,10 @@ import type {
     WebGPUSceneExtension,
     WebGPUSceneExtensionContext,
 } from "../../render/webgpu/sceneExtension";
-import type { ReactNode } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 import type { OsrsClient } from "../OsrsClient";
 import type { ClientGroundItemStack, GroundItemOverlayEntry } from "../data/ground/GroundItemStore";
 import type { LoginStretch } from "../login/renderer/types";
-import type { ChatMessageEvent } from "../../network/serverConnection/types/messages";
 import type { WebGLOsrsRendererHost } from "../../render/render/hostInterface";
 import type { OverheadTextEntry } from "../../ui/devoverlay/Overlay";
 import type { GpuSettings } from "./gpu/GpuPlugin";
@@ -252,12 +251,6 @@ export interface ClientPlugin {
         maxEntries: number,
         playerDefaultHeightTiles: number | undefined,
     ): void;
-    /** A chat message arrived from the server. */
-    onChatMessage?(message: ChatMessageEvent): void;
-    /** The session ended and the client went back to the login screen. */
-    onSessionReset?(): void;
-    /** Once per 20ms client cycle, before local movement is applied. */
-    onClientCycle?(): void;
     /** Mounted widgets are about to be laid out. */
     updateWidgetLayout?(): void;
     /** DOM drawn over the game canvas. */
@@ -266,9 +259,18 @@ export interface ClientPlugin {
 
 export class ClientPluginManager {
     private readonly plugins: ClientPlugin[] = [];
+    // Per-frame and per-actor hooks walk only the plugins that implement them.
+    private readonly implementers = new Map<keyof ClientPlugin, ClientPlugin[]>();
 
     add(plugin: ClientPlugin): void {
         this.plugins.push(plugin);
+        this.implementers.clear();
+    }
+
+    private implementing(hook: keyof ClientPlugin): ClientPlugin[] {
+        let plugins = this.implementers.get(hook);
+        if (!plugins) this.implementers.set(hook, (plugins = this.plugins.filter((plugin) => plugin[hook] !== undefined)));
+        return plugins;
     }
 
     playerHeadIcons(serverId: number): IndexedSprite[] {
@@ -413,39 +415,44 @@ export class ClientPluginManager {
     }
 
     gpuSettings(): GpuSettings | undefined {
-        for (const plugin of this.plugins) {
-            const settings = plugin.gpuSettings?.();
+        for (const plugin of this.implementing("gpuSettings")) {
+            const settings = plugin.gpuSettings!();
             if (settings) return settings;
         }
         return undefined;
     }
 
     hdEnabled(): boolean {
-        return this.plugins.some((plugin) => plugin.hdEnabled?.() === true);
+        for (const plugin of this.implementing("hdEnabled")) if (plugin.hdEnabled!()) return true;
+        return false;
     }
 
     objectSettings(): { smoothLocAnimations: boolean; smoothLocAnimationSteps: number } | undefined {
-        for (const plugin of this.plugins) {
-            const settings = plugin.objectSettings?.();
+        for (const plugin of this.implementing("objectSettings")) {
+            const settings = plugin.objectSettings!();
             if (settings) return settings;
         }
         return undefined;
     }
 
     smoothsPlayer(seqId: number): boolean {
-        return this.plugins.some((plugin) => plugin.smoothsPlayer?.(seqId) === true);
+        for (const plugin of this.implementing("smoothsPlayer")) if (plugin.smoothsPlayer!(seqId)) return true;
+        return false;
     }
 
     smoothsNpcs(): boolean {
-        return this.plugins.some((plugin) => plugin.smoothsNpcs?.() === true);
+        for (const plugin of this.implementing("smoothsNpcs")) if (plugin.smoothsNpcs!()) return true;
+        return false;
     }
 
     smoothsNpc(npcTypeId: number, seqId: number, action: boolean): boolean {
-        return this.plugins.some((plugin) => plugin.smoothsNpc?.(npcTypeId, seqId, action) === true);
+        for (const plugin of this.implementing("smoothsNpc")) if (plugin.smoothsNpc!(npcTypeId, seqId, action)) return true;
+        return false;
     }
 
     smoothsGraphics(): boolean {
-        return this.plugins.some((plugin) => plugin.smoothsGraphics?.() === true);
+        for (const plugin of this.implementing("smoothsGraphics")) if (plugin.smoothsGraphics!()) return true;
+        return false;
     }
 
     fixedStretch(bufW: number, bufH: number, minScale: number): FixedStretch | null {
@@ -467,7 +474,7 @@ export class ClientPluginManager {
 
     sceneResolutionScale(): number {
         let scale = 1;
-        for (const plugin of this.plugins) scale = Math.min(scale, plugin.sceneResolutionScale?.() ?? 1);
+        for (const plugin of this.implementing("sceneResolutionScale")) scale = Math.min(scale, plugin.sceneResolutionScale!());
         return scale;
     }
 
@@ -534,24 +541,18 @@ export class ClientPluginManager {
         }
     }
 
-    onChatMessage(message: ChatMessageEvent): void {
-        for (const plugin of this.plugins) plugin.onChatMessage?.(message);
-    }
-
-    onSessionReset(): void {
-        for (const plugin of this.plugins) plugin.onSessionReset?.();
-    }
-
-    onClientCycle(): void {
-        for (const plugin of this.plugins) plugin.onClientCycle?.();
-    }
-
     updateWidgetLayout(): void {
         for (const plugin of this.plugins) plugin.updateWidgetLayout?.();
     }
 
     renderHud(client: OsrsClient): ReactNode[] {
-        return this.plugins.map((plugin) => plugin.renderHud?.(client));
+        const huds: ReactNode[] = [];
+        this.plugins.forEach((plugin, i) => {
+            const hud = plugin.renderHud?.(client);
+            // The plugin list only grows, so its index is a stable key.
+            if (hud) huds.push(createElement(Fragment, { key: i }, hud));
+        });
+        return huds;
     }
 
 }

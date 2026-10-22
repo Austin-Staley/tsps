@@ -27,4 +27,8 @@ assert.equal(clientPlugins.interactHighlightConfig(), undefined);
 assert.deepEqual(clientPlugins.groundItemOverlayEntries(3200, 3200, 0), []);
 assert.deepEqual(clientPlugins.renderHud(client), []);
 
+// Hooks cache their implementers; adding a plugin later must still be seen.
+clientPlugins.add({ hdEnabled: () => true });
+assert.equal(clientPlugins.hdEnabled(), true);
+
 console.log("edit mode loads no plugins");
