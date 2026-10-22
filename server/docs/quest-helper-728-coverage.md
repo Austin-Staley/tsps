@@ -37,6 +37,14 @@ tests pass; the tests fail against the original compiled implementation. This is
 evidence, and no native quest completion is claimed. A separate six-quest source-check
 batch passed 36 focused tests; independent route review remains in progress.
 
+Canonical dialogue regeneration comes from
+[osrsreboxed-db PR #9](https://github.com/RSPSApp/osrsreboxed-db/pull/9), commit
+`abadb2f4a5`. All 121 dialogue regressions pass. Two fresh offline exports with real
+corrections and bindings produced identical sets and bytes for 3,291 generated files;
+the tracked outputs match them. The TSPS import copies the minified dialogue export
+exactly; its NPC index is unchanged. Consumer compatibility and overhead playback are
+separate checks in progress, so this does not certify any quest route.
+
 His Faithful Servants and Museum Kudos are supporting work discovered through mandatory
 Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the
 128 issue quests and tutorial below.
