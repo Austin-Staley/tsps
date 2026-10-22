@@ -5,26 +5,32 @@
  * - Kodai wand: 15% chance to negate the rune cost of an offensive spell
  *   (https://oldschool.runescape.wiki/w/Kodai_wand).
  */
-const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
-const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
+let core;
 
 const STAFF_OF_THE_DEAD_CHANCE = 1 / 8;
 const KODAI_WAND_CHANCE = 0.15;
 const STAFF_OF_THE_DEAD_MESSAGE = "Your Staff of the dead negated your runes for this cast.";
 
 const SAVING_WEAPONS = new Map([
-  [ItemIdentifiers.STAFF_OF_THE_DEAD, [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
-  [ItemIdentifiers.STAFF_OF_LIGHT, [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
-  [ItemIdentifiers.STAFF_OF_BALANCE, [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
-  [ItemIdentifiers.TOXIC_STAFF_OF_THE_DEAD, [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
-  [ItemIdentifiers.KODAI_WAND, [KODAI_WAND_CHANCE, null]],
-  [ItemIdentifiers.KODAI_WAND_3, [KODAI_WAND_CHANCE, null]],
+  ["STAFF_OF_THE_DEAD", [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
+  ["STAFF_OF_LIGHT", [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
+  ["STAFF_OF_BALANCE", [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
+  ["TOXIC_STAFF_OF_THE_DEAD", [STAFF_OF_THE_DEAD_CHANCE, STAFF_OF_THE_DEAD_MESSAGE]],
+  ["KODAI_WAND", [KODAI_WAND_CHANCE, null]],
+  ["KODAI_WAND_3", [KODAI_WAND_CHANCE, null]],
 ]);
+
+function savingFor(weaponId) {
+  for (const [name, saving] of SAVING_WEAPONS) {
+    if (core.ItemIdentifiers[name] === weaponId) return saving;
+  }
+  return null;
+}
 
 /** `magic:rune-saving` { player, offensive } -> `saved` (and a chat `message`) when the weapon negates the cost. */
 function saveRunes(event) {
-  const weaponId = event.player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.();
-  const saving = SAVING_WEAPONS.get(weaponId);
+  const weaponId = event.player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId?.();
+  const saving = savingFor(weaponId);
   if (event.offensive && saving && Math.random() < saving[0]) {
     event.saved = true;
     event.message = saving[1];
@@ -35,6 +41,7 @@ module.exports = {
   name: "SpellRuneSaving",
   members: true,
   register(api) {
+    core = api.core;
     api.onCustomEvent("magic:rune-saving", saveRunes);
   },
 };

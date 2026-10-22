@@ -17,12 +17,12 @@ const FUSE_ACCURACY = {
 const FUSE_BY_CHILD_ID = { 0: "SHORT", 1: "MEDIUM", 3: "LONG" };
 
 let core;
-let chinchompaIds;
+const CHINCHOMPAS = ["CHINCHOMPA_2", "RED_CHINCHOMPA_2", "BLACK_CHINCHOMPA"];
 let method;
 
 function wieldedChinchompa(player) {
   const weapon = player?.getEquipment?.()?.get?.(core.Equipment.WEAPON_SLOT);
-  return weapon && chinchompaIds.has(weapon.getId()) ? weapon : null;
+  return weapon && CHINCHOMPAS.some((name) => core.ItemIdentifiers[name] === weapon.getId()) ? weapon : null;
 }
 
 function nearbyMobiles(player) {
@@ -110,7 +110,6 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
-    chinchompaIds = new Set([core.ItemIdentifiers.CHINCHOMPA_2, core.ItemIdentifiers.RED_CHINCHOMPA_2, core.ItemIdentifiers.BLACK_CHINCHOMPA]);
     api.registerCombatMethodResolver({ resolve: resolveChinchompa });
     api.registerRangedCombatModifier({ modifyMaxHit: () => null, modifyAttackRoll: fuseAccuracy });
     api.registerRangedAmmoHandler({ checkAmmo: () => null, decrementAmmo: consumeChinchompa });

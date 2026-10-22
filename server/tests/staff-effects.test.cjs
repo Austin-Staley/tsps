@@ -40,6 +40,7 @@ const api = new Proxy(
   {
     core: PluginManager.getCoreApi(),
     registerCombatSpecial: (definition) => CombatSpecial.register(definition),
+    getBonusManager: () => require("../dist/game/model/equipment/BonusManager").BonusManager,
     registerIncomingDamageModifier: (modifier) => incomingModifiers.push(modifier),
     onCustomEvent: (name, handler) => listeners.set(name, [...(listeners.get(name) ?? []), handler]),
   },

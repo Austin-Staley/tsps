@@ -30,7 +30,11 @@ const items = JSON.parse(
 
 before(() => {
   // Only the specials registry matters here; other hooks the specials register are no-ops.
-  const api = { core: PluginManager.getCoreApi(), registerCombatSpecial: CombatSpecial.register };
+  const api = {
+    core: PluginManager.getCoreApi(),
+    registerCombatSpecial: CombatSpecial.register,
+    getBonusManager: () => require("../dist/game/model/equipment/BonusManager").BonusManager,
+  };
   require("../plugins/combat/SpecialAttacks.plugin").register(
     new Proxy(api, { get: (target, key) => (key in target ? target[key] : () => {}) }),
   );

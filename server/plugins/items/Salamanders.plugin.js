@@ -18,8 +18,7 @@ const BLAZE_ATTACK_RANGE = 1;
 const BLAZE_SPELL_LEVEL = 1; // the wield requirement (Attack/Ranged/Magic) is the real gate
 
 let core = null;
-let blazeBonusById = new Map();
-let tarIds = new Set();
+const TARS = ["GUAM_TAR", "MARRENTILL_TAR", "TARROMIN_TAR", "HARRALANDER_TAR"];
 let BlazeCombatMethod = null;
 const blazeSpells = new WeakMap();
 
@@ -28,7 +27,8 @@ function weaponOf(player) {
 }
 
 function hiddenBonus(player) {
-  return blazeBonusById.get(Number(weaponOf(player)?.getId?.() ?? -1));
+  const id = Number(weaponOf(player)?.getId?.() ?? -1);
+  return Object.entries(BLAZE_MAGIC_BONUS_BY_ITEM).find(([name]) => core.ItemIdentifiers[name] === id)?.[1];
 }
 
 /** Wiki: Hitmax = floor(0.5 + Magic * (64 + Bonus) / 640), Magic being the visible level. */
@@ -117,7 +117,7 @@ function decrementAmmo(player, _position, amount) {
   if (hiddenBonus(player) === undefined) return false;
   const slot = core.Equipment.AMMUNITION_SLOT;
   const tar = player.getEquipment().get(slot);
-  if (!tarIds.has(Number(tar?.getId?.() ?? -1))) return false;
+  if (!TARS.some((name) => core.ItemIdentifiers[name] === Number(tar?.getId?.() ?? -1))) return false;
   tar.decrementAmountBy(Math.min(tar.getAmount(), amount * TAR_PER_FLARE));
   if (tar.getAmount() <= 0) {
     player.sendMessage("You have run out of ammunition!");
@@ -133,9 +133,6 @@ module.exports = {
   _test: { blazeBaseMaxHit, resolveSalamander, decrementAmmo, blazeSpell, BLAZE_MAGIC_BONUS_BY_ITEM },
   register(api) {
     core = api.core;
-    const I = core.ItemIdentifiers;
-    blazeBonusById = new Map(Object.entries(BLAZE_MAGIC_BONUS_BY_ITEM).map(([name, bonus]) => [I[name], bonus]));
-    tarIds = new Set([I.GUAM_TAR, I.MARRENTILL_TAR, I.TARROMIN_TAR, I.HARRALANDER_TAR]);
     api.registerCombatMethodResolver({ resolve: resolveSalamander });
     api.registerRangedAmmoHandler({ checkAmmo, decrementAmmo });
   },

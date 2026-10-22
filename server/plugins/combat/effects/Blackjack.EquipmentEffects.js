@@ -5,8 +5,9 @@
  * offensive/defensive (o)/(d) variants share their base tier, and a zero hit never stuns.
  * The thieving knock-out (Lure/Knock-out) is a separate interaction, not a combat effect.
  */
-const { CombatType } = require("../../../src/main/typescript/elvarg/game/content/combat/CombatType");
 const { asPlayer, weaponName } = require("./GearChecks.EquipmentEffects");
+
+let core;
 
 const STUN_TICKS = [
   ["oak blackjack", 1],
@@ -25,11 +26,12 @@ function stunOpponent({ attacker, target, hit }) {
   const player = asPlayer(attacker);
   const ticks = player ? stunTicks(player) : 0;
   const damage = hit.getTotalDamage?.() ?? 0;
-  if (!ticks || damage <= 0 || hit.getCombatType?.() !== CombatType.MELEE) return;
+  if (!ticks || damage <= 0 || hit.getCombatType?.() !== core.CombatType.MELEE) return;
   if (randomInt(damage) > randomInt(target.getHitpoints())) target.getCombat().delayAttack(ticks);
 }
 
 module.exports = function registerBlackjackEffects(api) {
+  core = api.core;
   api.onCombatHitResolved(stunOpponent);
 };
 

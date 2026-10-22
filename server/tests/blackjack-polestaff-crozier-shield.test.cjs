@@ -23,7 +23,8 @@ const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
-const { _test: { stunOpponent, stunTicks } } = require("../plugins/combat/effects/Blackjack.EquipmentEffects");
+const registerBlackjackEffects = require("../plugins/combat/effects/Blackjack.EquipmentEffects");
+const { _test: { stunOpponent, stunTicks } } = registerBlackjackEffects;
 
 const BLACKJACKS = {
   1: [ItemIdentifiers.OAK_BLACKJACK, ItemIdentifiers.OAK_BLACKJACK_O_, ItemIdentifiers.OAK_BLACKJACK_D_],
@@ -39,6 +40,7 @@ const MJOLNIRS = [ItemIdentifiers.GUTHIX_MJOLNIR, ItemIdentifiers.SARADOMIN_MJOL
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   require("../plugins/items/ItemDefinitionLoader.plugin").register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+  registerBlackjackEffects({ core: { CombatType }, onCombatHitResolved() {} });
 });
 
 function item(id) {
