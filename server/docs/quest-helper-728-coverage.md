@@ -51,12 +51,22 @@ speech and ordinary chatheads. Its generic two-tick cadence is not capture-prove
 timing. Frozen natural playthroughs may run alongside read-only peer reviews; their
 evidence remains provisional until the review passes for the same revision.
 
-Three frozen natural playthroughs are running: At First Light, Clock Tower and Monk's
-Friend. At First Light's mandatory route, recovery and current dialogue bindings have
-passed independent source review at the loaded revision; its nine focused tests pass.
-No natural completion has been accepted yet. Monk's Friend's natural run reproduced a
-reward timing defect: ordinary law runes arrive after the party instead of at the earlier
-handover box. Its source remains frozen while persistence and post-quest checks finish.
+Five quests have reached the native playthrough phase. At First Light, The Ascent of
+Arceuus and Biohazard are running on frozen loaded revisions. At First Light's nine
+focused tests and independent source review pass. The other two reviews run alongside
+provisional playthroughs on the same hashes. No natural completion has been accepted yet.
+
+Monk's Friend completed naturally, paid its rewards once and persisted through logout and
+relogin. Its run remains incomplete because normal runes arrive after the party instead
+of before it, and the Monk's named dialogue branches are unreachable. Its original owner
+is correcting those findings. Clock Tower acquired the red cog naturally but stopped at
+a cellar-door crossing; generic door geometry is under investigation. Its saved stage and
+cog persisted through relog, but completion is unproven.
+
+Death on the Isle has a reviewed source checkpoint for captured uniform and party-tray
+IDs, the accusation-intro bit, evidence hand-in artwork and recovery after evidence loss.
+Eight focused dispatch tests pass. This is separate from a full quest parity review and
+natural completion, which remain pending.
 
 The six affected consumers outside this issue's quest list now use the regenerated node
 types and IDs, preserving their message text and removing obsolete fixture-only aliases.
@@ -81,20 +91,20 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | --- | --- | --- | --- | --- |
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
-| The Ascent of Arceuus | `AscentOfArceuus` | Pending | Pending | Pending |
+| The Ascent of Arceuus | `AscentOfArceuus` | Focused review in progress on frozen loaded source | Scoped source evidence; review pending | Provisional playthrough in progress |
 | At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed | 9 focused tests pass | In progress on frozen reviewed revision |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Pending | Pending | Pending |
-| Biohazard | `Biohazard` | Pending | Pending | Pending |
+| Biohazard | `Biohazard` | Focused review in progress on frozen loaded source | Scoped source evidence; review pending | Provisional playthrough in progress |
 | Bone Voyage | `BoneVoyage` | Pending | Pending | Pending |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
 | Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |
-| Clock Tower | `ClockTower` | Pending | Pending | Pending |
+| Clock Tower | `ClockTower` | Review in progress; cellar-door geometry under investigation | Scoped source evidence | Incomplete at door crossing after red-cog pickup |
 | Cold War | `ColdWar` | Pending | Pending | Pending |
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
 | Darkness of Hallowvale | `DarknessOfHallowvale` | Pending | Pending | Pending |
-| Death on the Isle | `DeathOnTheIsle` | Pending | Pending | Pending |
+| Death on the Isle | `DeathOnTheIsle` | Captured item IDs, accusation bit and evidence recovery checkpoint reviewed; full parity review pending | 8 focused dispatch tests pass | Pending |
 | Death Plateau | `DeathPlateau` | Pending | Pending | Pending |
 | Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Pending | Pending | Pending |
 | The Depths of Despair | `DepthsOfDespair` | Pending | Pending | Pending |
@@ -152,7 +162,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | Making History | `MakingHistory` | Pending | Pending | Pending |
 | Meat and Greet | `MeatAndGreet` | Pending | Pending | Pending |
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
-| Monk's Friend | `MonksFriend` | Pending | Pending | Pending |
+| Monk's Friend | `MonksFriend` | Rune timing and named Monk variants need correction | Old revision's source tests did not catch native timing defect | Incomplete: natural completion/repeat/relog proven, two parity defects remain |
 | Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
 | Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |

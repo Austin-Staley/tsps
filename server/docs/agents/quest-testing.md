@@ -331,7 +331,10 @@ or rereading raw streams. A done report is evidence to review, not permission to
   Verify the requested action and its assigned paths before replying. Preserve context;
   before changing endpoints, abort the server turn through the session API, confirm the
   session is idle and its client exited, then continue the same OpenCode session. Killing
-  an attached CLI alone does not prove the server turn stopped.
+  an attached CLI alone does not prove the server turn stopped. Final handoff also
+  requires no pending permission/question for that session. A stopped client or an old
+  final message can coexist with a blocked tool request. Confirm ordinary logout and
+  account absence before releasing the source hold; assign one actor to final cleanup.
 - Reviews can run alongside other quests' implementations. Repair a quest only after its
   own source/review actor stops; unrelated quests do not need to wait. Freeze reviewed
   files and record the exact revision loaded by the static server for native proof.

@@ -74,8 +74,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   ]);
   const HEAD_BUTLER_IDS = new Set([HEAD_BUTLER]);
 
-  // Cache items: the wardrobe gives the villa uniform pieces (29914/29915), the
-  // head butler's spares are 29916/29918 (gameval doti_butleruniform*).
+  // Cache items: the wardrobe gives the stolen uniform (29916/29918, capture
+  // 1695); entering the villa wears its own pieces (29914/29915).
   const UNIFORM_TOP_VILLA = ItemIdentifiers.BUTLERS_UNIFORM; // 29914
   const UNIFORM_BOTTOM_VILLA = ItemIdentifiers.BUTLERS_UNIFORM_2; // 29915
   const UNIFORM_TOP = ItemIdentifiers.BUTLERS_UNIFORM_3; // 29916
@@ -83,7 +83,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   const UNIFORM_TOPS = new Set([UNIFORM_TOP_VILLA, UNIFORM_TOP]);
   const UNIFORM_BOTTOMS = new Set([UNIFORM_BOTTOM_VILLA, UNIFORM_BOTTOM]);
   const UNIFORM_ITEMS = new Set([...UNIFORM_TOPS, ...UNIFORM_BOTTOMS]);
-  const TRAY = ItemIdentifiers.BUTLERS_TRAY; // 29912
+  const TRAY = ItemIdentifiers.BUTLERS_TRAY; // 29912, post-quest reward
+  const VILLA_TRAY = ItemIdentifiers.BUTLERS_TRAY_3; // 30156, worn inside the party
   const MASKS = [
     ItemIdentifiers.RAM_MASK, // 29929
     ItemIdentifiers.WOLF_MASK_4, // 29930
@@ -457,6 +458,11 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     );
   }
 
+  /** The hand-in transcript consumes these from the inventory, not the bank. */
+  function holdsEvidence(player) {
+    return EVIDENCE_ITEMS.every(id => hasItem(player, id));
+  }
+
   function playVariant(player, npcId, variant, select) {
     return startTranscript(api, player, npcId, PAGE, variant, select);
   }
@@ -776,7 +782,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         : "the-investigation-talking-to-hutza-or-stradius-after-pickpocketing-everyone";
     }
     if (stage >= STAGE_PICKPOCKET) {
-      return allEvidence(player)
+      return allEvidence(player) && (hasFlag(player, "given") || holdsEvidence(player))
         ? "the-investigation-talking-to-hutza-or-stradius-after-pickpocketing-everyone"
         : "the-investigation-talking-to-hutza-or-stradius-without-pickpocketing-everyone";
     }
@@ -1148,6 +1154,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       const last = intro.filter(step => step.type === 'line').at(-1)?.text;
       if (last) at(last, 14, 16, () => setFlag(player, `met.${info.key}`));
     }
+    at('But did you find anything that could tell us who did it?', 40, 40, () => setFlag(player, 'accusation.intro'));
     at("Well then we'll have to just speed things along a bit. I'm going out there!", 40, 40, () => advance(42));
     at('Argh! You\'re stronger than I thought... I need to regroup!', 42, 42, () => advance(45));
     at('Aha, villain! This is where you fall!', 45, 45, () => { setFinalFight(player, 2); player.setAttribute(flagKey('fight.step'), 2); });
@@ -1213,7 +1220,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       equipment[Equipment.BODY_SLOT] = [UNIFORM_TOP_VILLA, 1, null];
       equipment[Equipment.LEG_SLOT] = [UNIFORM_BOTTOM_VILLA, 1, null];
       equipment[Equipment.HEAD_SLOT] = [MASKS[maskAssignment(player) - 1], 1, null];
-      equipment[Equipment.WEAPON_SLOT] = [TRAY, 1, null];
+      equipment[Equipment.WEAPON_SLOT] = [VILLA_TRAY, 1, null];
       swapGear(player, GEAR_ATTRIBUTE, VILLA_GEAR_ATTRIBUTE, { inventory: blank(player.getInventory()), equipment });
     }
     fadeMove(player, () => { if (stageOf(player) < STAGE_ENTERED) quest.setStage(player, STAGE_ENTERED); player.moveTo(INSIDE_PARTY); });
@@ -1281,9 +1288,9 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const { player, stepId } = event;
     if (!player || !stepId || !event.pages?.some(page => page.page === PAGE)) return;
     const boxes = {
-      '0NeKgL': [UNIFORM_TOP_VILLA, UNIFORM_BOTTOM_VILLA],
+      '0NeKgL': [UNIFORM_TOP, UNIFORM_BOTTOM],
       '5z2Lhi': [WINE_LABELS], SsD2Fw: [THREATENING_NOTE], Adb65_: [DRINKING_FLASK], XXxTM6: [SHIPPING_CONTRACT],
-      JwtSTS: [WINE_LABELS, THREATENING_NOTE], FTSXlx: [CHEST_KEY], '1XIQ80': [ICON],
+      JwtSTS: [WINE_LABELS, DRINKING_FLASK], FTSXlx: [CHEST_KEY], '1XIQ80': [ICON],
     };
     if (boxes[stepId]) { event.handled = true; event.box = { items: boxes[stepId] }; }
     if (boxes[stepId]?.some(id => EVIDENCE_ITEMS.includes(id)) && stepId !== 'JwtSTS' && player.getInventory().getFreeSlots() < 1) {
@@ -1559,8 +1566,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       return;
     }
     if (player.getInventory().getFreeSlots() < 2) { player.sendMessage('You need two free inventory spaces.'); return; }
-    addItem(player, UNIFORM_TOP_VILLA);
-    addItem(player, UNIFORM_BOTTOM_VILLA);
+    addItem(player, UNIFORM_TOP);
+    addItem(player, UNIFORM_BOTTOM);
     playVariant(player, PATZI, "getting-a-uniform-stealing-a-uniform");
   }
 
