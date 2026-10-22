@@ -327,6 +327,16 @@ export class WeaponProfiles {
             itemIds: [12373, 12374, 12375, 12376, 12377, 12378, 12379, 12380],
             attackSpeed: 5,
         });
+        // Wands (Wiki): the staff interface's styles at 4 ticks, a tick faster than staves; the cache has no speed for them.
+        this.register({
+            itemIds: [
+                ItemIdentifiers.BEGINNER_WAND, ItemIdentifiers.BEGINNER_WAND_3, ItemIdentifiers.APPRENTICE_WAND,
+                ItemIdentifiers.APPRENTICE_WAND_3, ItemIdentifiers.TEACHER_WAND, ItemIdentifiers.MASTER_WAND,
+                ItemIdentifiers.MASTER_WAND_3, ItemIdentifiers._3RD_AGE_WAND, ItemIdentifiers.KODAI_WAND,
+                ItemIdentifiers.KODAI_WAND_3, ItemIdentifiers.DRAGON_HUNTER_WAND,
+            ],
+            attackSpeed: 4,
+        });
         // Composite bows (Wiki): 5-tick standard, 4-tick rapid, 10-tile range.
         this.register({
             itemIds: [4827, 10280, 10282, 10284],
