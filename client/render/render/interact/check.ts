@@ -195,12 +195,62 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS, formatPlayerCombatLabel } from "../constants";
 
-export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
+/** What the last world interaction pass saw, per renderer host. */
+type InteractionPassInputs = {
+    mouseX: number;
+    mouseY: number;
+    clientCycle: number;
+    menuOpen: boolean;
+    camera: Float32Array;
+};
+const lastPassInputs = new WeakMap<object, InteractionPassInputs>();
 
-        const frameCount = host.stats.frameCount;
-        host.lastInteractionRaycastHitCount = 0;
-        host.lastInteractionMenuOptionCount = 0;
-        let raycastHitCount = 0;
+/**
+ * True when nothing the world menu depends on changed since the last pass: the pointer, the
+ * camera, the client cycle (the world itself only changes on cycles) and the menu. Without this
+ * the scene is raycast at the display's frame rate under a still pointer.
+ */
+function isInteractionPassUnchanged(
+    host: WebGLOsrsRendererHost,
+    mouseX: number,
+    mouseY: number,
+    clicked: boolean,
+): boolean {
+    const camera = host.osrsClient.camera;
+    const clientCycle = getClientCycle() | 0;
+    const menuOpen = !!host.osrsClient.menuOpen;
+    let last = lastPassInputs.get(host);
+    let unchanged =
+        !clicked &&
+        !!last &&
+        last.mouseX === mouseX &&
+        last.mouseY === mouseY &&
+        last.clientCycle === clientCycle &&
+        last.menuOpen === menuOpen;
+    if (!last) {
+        last = { mouseX, mouseY, clientCycle, menuOpen, camera: new Float32Array(18) };
+        lastPassInputs.set(host, last);
+    }
+    const cam = last.camera;
+    for (let i = 0; i < 16; i++) {
+        if (cam[i] !== camera.viewMatrix[i]) {
+            cam[i] = camera.viewMatrix[i];
+            unchanged = false;
+        }
+    }
+    if (cam[16] !== camera.projectionMatrix[0] || cam[17] !== camera.projectionMatrix[5]) {
+        cam[16] = camera.projectionMatrix[0];
+        cam[17] = camera.projectionMatrix[5];
+        unchanged = false;
+    }
+    last.mouseX = mouseX;
+    last.mouseY = mouseY;
+    last.clientCycle = clientCycle;
+    last.menuOpen = menuOpen;
+    return unchanged;
+}
+
+export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
 
         const inputManager = host.osrsClient.inputManager;
         const mouseX = inputManager.getInteractionMouseX();
@@ -210,6 +260,14 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
         const pickY = inputManager.pickY;
         const picked = pickX !== -1 && pickY !== -1;
         const leftClicked = inputManager.leftClickX !== -1 && inputManager.leftClickY !== -1;
+        if (isInteractionPassUnchanged(host, mouseX, mouseY, picked || leftClicked || isMouseDown)) {
+            return;
+        }
+
+        const frameCount = host.stats.frameCount;
+        host.lastInteractionRaycastHitCount = 0;
+        host.lastInteractionMenuOptionCount = 0;
+        let raycastHitCount = 0;
 
         // If the click is inside the bottom-right UI tabs region, consume it (don't interact with world).
         if (leftClicked) {
