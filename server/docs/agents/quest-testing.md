@@ -403,7 +403,9 @@ around the run:
 2. **Route**: mandatory legs performed normally in order; diagnostic positioning (teleports
    used to inspect a stuck state) is labelled and does not count as full play.
 3. **Completion**: final dialogue/action, completion jingle/scroll, exact reward items and
-   XP/QP deltas, each rewarded once.
+   XP/QP deltas, each rewarded once. Take an immediate pre-completion snapshot as well as
+   the opening baseline, so ordinary activity XP stays accounted for. At First Light's
+   natural route gave 274 Hunter XP and 10 Crafting XP before its 4,500 Hunter reward.
 4. **Repeat**: repeat the completion action; expect no duplicate reward.
 5. **Relog**: log out and back in; stage and rewards persist, no duplicated items/XP, no
    changed state.

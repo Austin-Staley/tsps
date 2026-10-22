@@ -106,6 +106,14 @@ His Faithful Servants and Museum Kudos are supporting work discovered through ma
 Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the
 128 issue quests and tutorial below.
 
+Museum support now has a reviewed 100-Kudos source route through five Dig Site displays
+and ten Historian Minas reports. Five focused tests cover real cached transcripts, once-only
+Kudos/lamps, capacity retry, saved attributes, fixed find probabilities and duplicate artefact
+removal. Bone Voyage's owner is integrating the synchronous `museum:get-kudos` contract.
+Natural Museum testing remains pending. The quiz, fossils, pendant teaching and other
+Museum activities remain outside this bounded route; a missing Hazeel report transcript
+branch remains blocked at its source.
+
 ## Quest status
 
 “Pending” means no accepted evidence yet. Source review does not imply native completion.
