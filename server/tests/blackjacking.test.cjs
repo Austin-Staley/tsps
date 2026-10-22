@@ -31,8 +31,8 @@ test('knockout chart follows Blackjack/Jagex: low80 high240, independent of wood
 });
 test('quest training, target family and target-specific levels gate the action', () => {
   clear(); assert.equal(B.ready(event({ stage: 0 })), false); assert.equal(B.ready(event({ level: 64 })), false);
-  assert.equal(B.ready(event({ level: 45, id: core.NpcIdentifiers.BANDIT_7 })), true);
-  assert.equal(B.ready(event({ level: 54, id: core.NpcIdentifiers.BANDIT_9 })), false); assert.equal(B.ready(event({ id: core.NpcIdentifiers.BANDIT })), false);
+  assert.equal(B.ready(event({ level: 45, id: core.NpcIdentifiers.BANDIT_9 })), true);
+  assert.equal(B.ready(event({ level: 54, id: core.NpcIdentifiers.BANDIT_7 })), false); assert.equal(B.ready(event({ id: core.NpcIdentifiers.BANDIT })), false);
 });
 test('knockout grants 10 XP and exactly two guaranteed coin pickpockets before wakeup', () => {
   clear(); const e = event(); withRandom(0, () => B.knockOut(e));
@@ -51,4 +51,31 @@ test('failed knockout starts combat unless a quick pickpocket or knockout interr
 });
 test('lure follows the player and stops after the lure window', () => {
   clear(); const e = event(); B.lure(e); assert.equal(e.npc.following, e.player); tasks.at(-1).execute(); assert.equal(e.npc.following, null);
+});
+
+test('cache bandit transforms keep Lure and Knock-Out after The Feud and use the right rewards', async (t) => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  const Runtime = require('../plugins/quests/QuestRuntime');
+  t.mock.method(Runtime, 'refreshQuestList', () => {});
+  let login;
+  const questApi = new Proxy({ core: base, onPlayerLogin: (handler) => { login = handler; } }, { get: (object, name) => object[name] ?? (() => {}) });
+  require('../plugins/quests/quests/TheFeud.Quest')(questApi);
+  const values = new Map();
+  let stage = 28;
+  const player = { getAttribute: (key) => key === 'quest.the_feud.stage' ? stage : 0,
+    getPacketSender: () => ({ sendVarbit: (id, value) => values.set(id, value) }),
+  };
+  login({ player });
+  const vars = { getVarbit: (id) => values.get(id) ?? 0, getVarp: () => 0 };
+  for (const [parent, level, xp] of [['feud_arabian_guard_multi', 55, 84.3], ['feud_arabian_guard2_multi', 45, 65]]) {
+    const definition = CacheDefinitions.resolveNpc(CacheDefinitions.getNpcId(parent), vars);
+    assert.ok(definition.actions.includes('Lure') && definition.actions.includes('Knock-Out'));
+    const target = B.targetFor(definition.id);
+    assert.deepEqual([target.level, target.xp], [level, xp]);
+  }
+  stage = 0;
+  login({ player });
+  assert.equal(values.get(340), 0, 'untrained players retain the ordinary NPC options');
 });
