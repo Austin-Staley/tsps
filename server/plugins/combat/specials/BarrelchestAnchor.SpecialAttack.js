@@ -14,7 +14,9 @@ module.exports = function registerBarrelchestAnchorSpecialAttack(api) {
       return;
     }
     if (!target.isPlayer()) {
-      // TODO: NPC combat-stat drain is not exposed by our core NPC state.
+      // NPCs only model Defence (first in the order).
+      const npc = target.getAsNpc();
+      npc.setDefenceLevel(npc.getDefenceLevel() - remainingDrain);
       return;
     }
     const skillManager = target.getAsPlayer().getSkillManager();
