@@ -25,6 +25,7 @@ module.exports = function registerGettingAheadQuest(api) {
   const VARBIT_GETTING_AHEAD = 693; // ga, bits 0-5
   const STAGE_STARTED = 2;
   const STAGE_MARY_TALK = 4;
+  const STAGE_FLOUR_POURING = 6;
   const STAGE_FLOUR_POURED = 8;
   const STAGE_FLOUR_TRAIL = 10;
   const STAGE_LAIR_ENTERED = 12;
@@ -498,7 +499,7 @@ module.exports = function registerGettingAheadQuest(api) {
     inventory.deleteNumber(POT_OF_FLOUR_ITEM_ID, 1);
     inventory.adds(POT_ITEM_ID, 1);
     player.performAnimation(new Animation(8837));
-    quest.setStage(player, 6);
+    quest.setStage(player, STAGE_FLOUR_POURING);
     startTranscript(api, player, GORDON_NPC_ID, PAGE, "a-strange-event-pouring-the-flour-on-the-gate");
   }
 
@@ -512,7 +513,7 @@ module.exports = function registerGettingAheadQuest(api) {
   }
 
   function makeClayHead(player, inventory) {
-    if (quest.getStage(player) < STAGE_MARY_FAKE || quest.getStage(player) >= STAGE_CLAY_SHOWN || !held(player, SOFT_CLAY_ITEM_ID) || !held(player, KNIFE_ITEM_ID)) {
+    if (quest.getStage(player) < STAGE_MARY_FAKE || quest.getStage(player) >= STAGE_MOUNTED || !held(player, SOFT_CLAY_ITEM_ID) || !held(player, KNIFE_ITEM_ID)) {
       return;
     }
     player.performAnimation(new Animation(8838));
@@ -522,7 +523,7 @@ module.exports = function registerGettingAheadQuest(api) {
   }
 
   function makeFurHead(player, inventory) {
-    if (quest.getStage(player) < STAGE_CLAY_SHOWN || quest.getStage(player) >= STAGE_FUR_SHOWN || !held(player, CLAY_HEAD_ITEM_ID) || !hasTool(player, FUR_ITEM_IDS)) {
+    if (quest.getStage(player) < STAGE_CLAY_SHOWN || quest.getStage(player) >= STAGE_MOUNTED || !held(player, CLAY_HEAD_ITEM_ID) || !hasTool(player, FUR_ITEM_IDS)) {
       return;
     }
     if (!held(player, NEEDLE_ITEM_ID) || !held(player, THREAD_ITEM_ID)) {
@@ -539,7 +540,7 @@ module.exports = function registerGettingAheadQuest(api) {
   }
 
   function makeBloodyHead(player, inventory) {
-    if (quest.getStage(player) < STAGE_FUR_SHOWN || quest.getStage(player) >= STAGE_BLOODY_SHOWN || !held(player, FUR_HEAD_ITEM_ID) || !held(player, RED_DYE_ITEM_ID)) {
+    if (quest.getStage(player) < STAGE_FUR_SHOWN || quest.getStage(player) >= STAGE_MOUNTED || !held(player, FUR_HEAD_ITEM_ID) || !held(player, RED_DYE_ITEM_ID)) {
       return;
     }
     player.getPacketSender().sendSoundEffect(2392, 1, 0);
@@ -558,34 +559,34 @@ module.exports = function registerGettingAheadQuest(api) {
     const ids = new Set([usedItemId, usedWithItemId]);
     const inventory = player.getInventory();
     if (ids.has(KNIFE_ITEM_ID) && ids.has(SOFT_CLAY_ITEM_ID)) {
-      event.handled = true;
-      if (stage < STAGE_MARY_FAKE || stage >= STAGE_CLAY_SHOWN) {
+      if (stage < STAGE_MARY_FAKE || stage >= STAGE_MOUNTED) {
         return;
       }
+      event.handled = true;
       confirm(player, "Sculpt a clay head?", () => makeClayHead(player, inventory));
       return;
     }
     if (ids.has(CLAY_HEAD_ITEM_ID) && FUR_ITEM_IDS.some((itemId) => ids.has(itemId))) {
-      event.handled = true;
-      if (stage < STAGE_CLAY_SHOWN || stage >= STAGE_FUR_SHOWN) {
+      if (stage < STAGE_CLAY_SHOWN || stage >= STAGE_MOUNTED) {
         return;
       }
+      event.handled = true;
       confirm(player, "Attach the fur to the clay head?", () => makeFurHead(player, inventory));
       return;
     }
     if (ids.has(FUR_HEAD_ITEM_ID) && ids.has(RED_DYE_ITEM_ID)) {
-      event.handled = true;
-      if (stage < STAGE_FUR_SHOWN || stage >= STAGE_BLOODY_SHOWN) {
+      if (stage < STAGE_FUR_SHOWN || stage >= STAGE_MOUNTED) {
         return;
       }
+      event.handled = true;
       confirm(player, "Dye the fur head?", () => makeBloodyHead(player, inventory));
       return;
     }
     if (ids.has(FUR_HEAD_ITEM_ID) && BLOOD_ITEM_IDS.some((itemId) => ids.has(itemId))) {
-      event.handled = true;
       if (stage < STAGE_FUR_SHOWN || stage >= STAGE_BLOODY_SHOWN) {
         return;
       }
+      event.handled = true;
       startTranscript(api, player, GORDON_NPC_ID, PAGE, "a-strange-fake-using-a-vial-of-blood-or-a-blood-pint-on-the-fur-head");
     }
   }
@@ -712,6 +713,12 @@ module.exports = function registerGettingAheadQuest(api) {
       .sendVarbit(9684, Number(player.getAttribute(NAILS_TAKEN_ATTRIBUTE) || 0));
     if (player.getAttribute(FINISH_PENDING_ATTRIBUTE) && quest.getStage(player) === STAGE_MOUNTED) {
       player.setAttribute(FINISH_PENDING_ATTRIBUTE, 0);
+    }
+    // A save interrupted during the pour can still hold the captured intermediate
+    // value 6. Resume the overnight leg instead of leaving the player needing to
+    // pour another pot of flour.
+    if (quest.getStage(player) === STAGE_FLOUR_POURING) {
+      quest.setStage(player, STAGE_FLOUR_POURED);
     }
     if (quest.getStage(player) === STAGE_FLOUR_POURED) {
       later(player, 1, () => { if (player.isRegistered()) waitOvernight(player); });

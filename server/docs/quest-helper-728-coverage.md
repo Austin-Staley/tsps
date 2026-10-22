@@ -195,7 +195,7 @@ branch remains blocked at its source.
 | The Garden of Death | `GardenOfDeath` | Pending | Pending | Pending |
 | Garden of Tranquillity | `GardenOfTranquillity` | Pending | Pending | Pending |
 | Gertrude's Cat | `GertrudesCat` | Pending | Pending | Pending |
-| Getting Ahead | `GettingAhead` | Pending | Pending | Pending |
+| Getting Ahead | `GettingAhead` | Lost-head recrafting and interrupted flour-pour recovery reviewed | 9 focused tests pass, including registered sink filling | Pending |
 | Ghosts Ahoy | `GhostsAhoy` | Pending | Pending | Pending |
 | The Grand Tree | `GrandTree` | Pending | Pending | Pending |
 | The Great Brain Robbery | `GreatBrainRobbery` | Pending | Pending | Pending |
