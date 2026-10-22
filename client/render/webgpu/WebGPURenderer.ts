@@ -737,15 +737,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const roofPlaneLimit = drawScene ? this.interactionHost.getRoofPlaneLimit() : 3;
         this.frameRoofPlaneLimit = roofPlaneLimit;
         const camera = this.osrsClient.camera;
-        const bounds = this.mapManager.getGridTileBounds();
-        const tileX = bounds ? Math.max(bounds.minX, Math.min(bounds.maxX - 1, Math.floor(camera.getPosX())))
-            : Math.floor(camera.getPosX());
-        const tileZ = bounds ? Math.max(bounds.minY, Math.min(bounds.maxY - 1, Math.floor(camera.getPosZ())))
-            : Math.floor(camera.getPosZ());
         this.frameScenery = {
-            tileX, tileZ,
-            distance: world.sceneData[60] + Math.max(Math.abs(tileX - this.playerPosUni[0]),
-                Math.abs(tileZ - this.playerPosUni[1])),
+            tileX: this.playerPosUni[0], tileZ: this.playerPosUni[1],
+            distance: world.sceneData[60],
             lodDistance: resolveWebGPULodDistance(this), camera: camera.frustum,
         };
 

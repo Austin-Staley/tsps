@@ -13,6 +13,7 @@ import { resolveFogRange } from "../render/RenderDistancePolicy";
 (globalThis as any).self = globalThis;
 const { SceneBuffer } = require("../render/buffer/SceneBuffer");
 const { drawWithRoofPlaneFilter, getMapZoneDistanceFromPoint, isMapWithinRenderDistance } = require("../render/render/draw2");
+const { getRenderCullTile } = require("../render/render/camera/roof");
 
 // Fog follows the player while the camera orbits behind them, including without HD.
 const edgeRange = newDrawRange(0, 6);
@@ -23,7 +24,9 @@ let cameraX = 0, edgeDraws = 0;
 const edgeHost: any = {
     playerPosUni: [49, 0],
     mapManager: { worldEntityMapIds: new Set() },
-    getRenderCullTile: () => ({ x: cameraX, y: 0 }),
+    getCameraTileXY: () => ({ x: cameraX, y: 0 }),
+    clampCullTileToGridBounds: (point: any) => point,
+    getRenderCullTile: () => getRenderCullTile(edgeHost),
     getFrameRenderDistanceTiles: () => 25, getFrameLodThresholdTiles: () => 100,
     getMapZoneDistanceFromPoint: (map: any, x: number, y: number) => getMapZoneDistanceFromPoint(edgeHost, map, x, y),
     autoFogDepth: true, autoFogDepthFactor: 0.85, fogDepth: 24,
@@ -33,11 +36,34 @@ const edgeHost: any = {
 };
 for (const x of [0, 28, 70]) {
     cameraX = x;
-    assert.equal(isMapWithinRenderDistance(edgeHost, edgeMap, cameraX, 0, 25, 0), true,
+    const point = edgeHost.getRenderCullTile();
+    assert.equal(isMapWithinRenderDistance(edgeHost, edgeMap, point.x, point.y, 25, 0), true,
         "a whole-map guard must retain scenery inside the player's fog boundary during camera rotation");
     drawWithRoofPlaneFilter(edgeHost, {}, [edgeRange], undefined, 3, edgeMap);
 }
 assert.equal(edgeDraws, 3, "non-HD terrain inside player visibility must survive every camera orbit");
+
+const foggedMap = { id: -256, mapX: -1, mapY: 0,
+    getRenderBaseTileX: () => -64, getRenderBaseTileY: () => 0 };
+const workload = [];
+for (let x = -128; x <= 128; x += 8) for (let z = -128; z <= 128; z += 8) {
+    const range = newDrawRange(0, 6);
+    range.bounds = [x, -1, z, x + 8, 1, z + 8];
+    workload.push(range);
+}
+for (const x of [0, 28, 37, 70]) {
+    cameraX = x;
+    const point = edgeHost.getRenderCullTile();
+    assert.deepEqual(point, { x: 49, y: 0 }, "orbiting must not move the shader's fog/LOD origin");
+    assert.equal(isMapWithinRenderDistance(edgeHost, foggedMap, point.x, point.y, 25, 0), false);
+    let submitted = 0;
+    edgeHost.draw = (_call: unknown, ranges: unknown[], indices?: number[]) => {
+        submitted += indices?.length ?? ranges.length;
+    };
+    drawWithRoofPlaneFilter(edgeHost, {}, workload, undefined, 3,
+        { id: 0, getRenderBaseTileX: () => 0, getRenderBaseTileY: () => 0 });
+    assert.equal(submitted, 64, "distance culling excludes wholly fogged geometry at every camera offset");
+}
 
 const hdFog = resolveFogRange({ renderDistance: 160, autoFogDepth: true,
     autoFogDepthFactor: 0.85, manualFogDepth: 24, hd: true });
