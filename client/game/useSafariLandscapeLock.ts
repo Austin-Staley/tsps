@@ -57,6 +57,8 @@ export function applyForcedLandscapeSize(
     };
     root.style.setProperty("--ios-safari-landscape-w", `${size.width}px`);
     root.style.setProperty("--ios-safari-landscape-h", `${size.height}px`);
+    root.style.setProperty("--ios-safari-offset-x", `${offsetLeft}px`);
+    root.style.setProperty("--ios-safari-offset-y", `${offsetTop}px`);
     root.style.setProperty("--ios-safari-center-x", `${offsetLeft + width / 2}px`);
     root.style.setProperty("--ios-safari-center-y", `${offsetTop + height / 2}px`);
     root.dataset.iosSafariForceLandscapeRotated = size.rotated ? "1" : "0";
@@ -198,6 +200,8 @@ export function useSafariLandscapeLock(enabled: boolean = true): MobileLandscape
             root.style.removeProperty("--ios-safari-vh");
             root.style.removeProperty("--ios-safari-landscape-w");
             root.style.removeProperty("--ios-safari-landscape-h");
+            root.style.removeProperty("--ios-safari-offset-x");
+            root.style.removeProperty("--ios-safari-offset-y");
             root.style.removeProperty("--ios-safari-center-x");
             root.style.removeProperty("--ios-safari-center-y");
             delete root.dataset.iosSafariForceLandscape;
