@@ -162,6 +162,10 @@ export type NpcView = Tile & ActorUpdateView & {
   faceTile?: { x: number; y: number };
   /** Body-model slot overrides (OSRS npc model customisation); an empty list resets them. */
   modelCustomisation?: { slot: number; modelId: number }[];
+  /** Stand / walk / turn sequence overrides (0 idle, 1 walk, 2 turn left, 3 turn right); an empty list resets them. */
+  baseAnimations?: { slot: number; seqId: number }[];
+  /** A fade of its model (OSRS npc transparency): `from` (-1 its current look) to `to`, 0 opaque to 255 invisible. */
+  transparency?: { startCycles: number; endCycles: number; from: number; to: number };
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
   rotation: number;
@@ -2465,6 +2469,8 @@ const NPC_MASK = {
   EXACT_MOVE: 0x400,
   FACE_TILE: 0x800,
   MODEL_CUSTOMISATION: 0x1000,
+  BASE_ANIMATIONS: 0x2000,
+  TRANSPARENCY: 0x8000,
   SPOT_ANIM: 0x20000,
 } as const;
 
@@ -2595,6 +2601,8 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.faceTile ? NPC_MASK.FACE_TILE : 0) |
     (view.modelCustomisation ? NPC_MASK.MODEL_CUSTOMISATION : 0) |
+    (view.baseAnimations ? NPC_MASK.BASE_ANIMATIONS : 0) |
+    (view.transparency ? NPC_MASK.TRANSPARENCY : 0) |
     (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
 }
 
@@ -2700,6 +2708,21 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
       bytes.push(entry.slot & 0xff);
       shortLE(bytes, entry.modelId & 0xffff);
     }
+  }
+  if (view.baseAnimations) {
+    bytes.push(view.baseAnimations.length & 0xff);
+    for (const entry of view.baseAnimations) {
+      bytes.push(entry.slot & 0xff);
+      shortBE(bytes, entry.seqId < 0 ? 0xffff : entry.seqId);
+    }
+  }
+  if (view.transparency) {
+    // Start and end cycles into the tick, the transparency it fades from (0xffff: its current
+    // look) and to: 0 opaque, 255 invisible.
+    shortBE(bytes, view.transparency.startCycles & 0xffff);
+    shortBE(bytes, view.transparency.endCycles & 0xffff);
+    shortBE(bytes, view.transparency.from < 0 ? 0xffff : view.transparency.from & 0xff);
+    bytes.push(view.transparency.to & 0xff);
   }
   return Buffer.from(bytes);
 }

@@ -39,6 +39,7 @@ const NAMES = {
     BATTERY_DESTROYED: "tfa_guardian_battery_destroyed",
     TENTACLE: "archive_guardian_tentacle",
     GATHERING_SPRITE: "tfa_gathering_sprite",
+    NAVIGATOR: "tfa_room_navigator",
     RECORD_KEEPER: "tfa_record_keeper",
     WIZARD_APPRENTICE: "tfa_wizard_apprentice",
     BUILDERS: ["alliance_builder_1", "alliance_builder_2", "alliance_builder_3", "alliance_builder_4"],
@@ -58,6 +59,7 @@ const NAMES = {
     EXIT: "tfa_exit_large",
     SECTION_DOOR: "tfa_nexus_section_door_closed",
     OCELLUS_DOOR: "tfa_nexus_ocellus_door_closed",
+    OCELLUS_DOOR_OPEN: "tfa_nexus_ocellus_door_open",
     MUSHROOM_SPAWN: "tfa_guardian_mushroom_spawn",
     MUSHROOM_ACTIVE: "tfa_guardian_mushroom_active",
     MUSHROOM_DESPAWN: "tfa_guardian_mushroom_despawn",
@@ -101,6 +103,7 @@ const NAMES = {
     TAKE_OFF: "vfx_guardian_groundtoidle_spotanim01",
     LANDING_BLAST: "tfa_arena_sword_drop_explosion_instant",
     TENTACLE_INTRO: "vfx_guardian_tentacle_intro_spotanim01",
+    DEATH: "vfx_ocellus_null",
   },
   varbit: {
     SHORTCUT: "wgs_tfa_shortcut_unlocked",
@@ -188,8 +191,14 @@ const MUSIC = {
 
 /** The lobby (region 16470) and the Archive's first map square (region 16471, Nexus and Guardian). */
 const LOBBY = { minX: 4096, maxX: 4159, minY: 5504, maxY: 5567, z: 0 };
-const ARCHIVE = { minX: 4096, maxX: 4159, minY: 5568, maxY: 5631 };
-const ARCHIVE_PLANES = [0, 1];
+/**
+ * The Archive's map squares (64x64), as the captures' instances copy them: the Nexus (the
+ * Guardian on level 0, the hub on level 2), each boss's room, Ocellus (level 1) and the vault
+ * (level 2). One raid's PrivateArea covers them all, every plane.
+ */
+const ARCHIVE_SQUARES = [[64, 87], [65, 87], [63, 86], [65, 88], [65, 86], [64, 88], [64, 90]];
+const ARCHIVE_PLANES = [0, 1, 2, 3];
+const ARCHIVE_BOXES = ARCHIVE_SQUARES.map(([mx, my]) => ({ minX: mx * 64, maxX: mx * 64 + 63, minY: my * 64, maxY: my * 64 + 63 }));
 /** The Chasm of Tears map square, where the shortcut is. */
 const CHASM = { minX: 4032, maxX: 4095, minY: 4544, maxY: 4607 };
 
@@ -203,6 +212,8 @@ const TILE = {
   RAID_ARRIVAL: { x: 4127, y: 5571, z: 0 },
   /** Where the dead watch from (captured: the room's south-west corner). */
   SPECTATE: { x: 4097, y: 5569, z: 0 },
+  /** Outside spectators leaving (captured ~4117,5547, beside the Strategy board). */
+  SPECTATOR_LEAVE: { x: 4117, y: 5546, z: 0 },
   /** Back in the lobby after a wipe, in front of the Archive Door (captured). */
   WIPE_RETURN: { x: 4130, y: 5560, z: 0 },
   /** Leaving the raid by its exit, abandoning it (captured). */
@@ -254,6 +265,37 @@ function id(kind, key) {
   return ids()[kind][key];
 }
 
+const LOOKUPS = {
+  npc: "getNpcId", loc: "getLocId", obj: "getObjId", seq: "getSeqId", spotanim: "getSpotanimId",
+  varbit: "getVarbitId", varp: "getVarpId", dbrow: "getDbRowId",
+};
+const namedCache = new Map();
+
+/**
+ * Any id by its cache gameval name, looked up once: `named("seq", "npc_bork_death01")`. The
+ * boss units name what they use this way instead of carrying numbers.
+ */
+function named(kind, name) {
+  const key = `${kind}:${name}`;
+  let found = namedCache.get(key);
+  if (found === undefined) {
+    found = core().CacheDefinitions[LOOKUPS[kind]](name);
+    if (found === null || found === undefined) throw new Error(`[FracturedArchive] no ${kind} named ${name} in the cache`);
+    namedCache.set(key, found);
+  }
+  return found;
+}
+
+/** An Animation by its sequence's gameval name. */
+function anim(name) {
+  return new (core().Animation)(named("seq", name));
+}
+
+/** A Graphic by its spotanim's gameval name (`gfx` options: delay, height). */
+function spot(name, options) {
+  return gfx(named("spotanim", name), options);
+}
+
 function loc(tile, z) {
   const { Location } = core();
   return new Location(tile.x, tile.y, z ?? tile.z ?? 0);
@@ -277,7 +319,7 @@ function inLobby(location) {
 }
 
 function inArchive(location) {
-  return inBox(location, ARCHIVE, ARCHIVE_PLANES);
+  return ARCHIVE_BOXES.some((box) => inBox(location, box, ARCHIVE_PLANES));
 }
 
 function cycle() {
@@ -394,16 +436,35 @@ function areaSound(area, source, soundId, delay = 0) {
   }
 }
 
+/**
+ * Typeless damage now, with its hitsplat this tick: queued damage waits for the target's next
+ * turn, a tick late when a room's tick runs after it (an impact that must land as it shows).
+ */
+function damageNow(target, amount, mask = "RED") {
+  const { HitDamage, HitMask } = core();
+  if (!target || amount <= 0 || target.getHitpoints() <= 0) return;
+  target.addTickHit(target.decrementHealth(new HitDamage(Math.trunc(amount), HitMask[mask])));
+}
+
 /** Typeless damage, queued for the next hit processing. */
 function damage(target, amount, mask = "RED") {
   const { HitDamage, HitMask } = core();
   if (!target || amount <= 0 || target.getHitpoints() <= 0) return;
+  // A player takes it now: the rooms' ticks run after the player's turn, where queued damage
+  // would wait a tick, so an attack would land a tick after its graphic. An NPC keeps the
+  // queue, whose death handling the rooms' phase changes hang off.
+  if (target.isPlayer?.()) {
+    damageNow(target, amount, mask);
+    return;
+  }
   target.getCombat().getHitQueue().addPendingDamage([new HitDamage(Math.trunc(amount), HitMask[mask])]);
 }
 
 /**
- * A projectile between actors or tiles, seen inside `area`. It leaves after `delay` client
- * cycles and lands at `end` client cycles (as rsprox prints starttime/endtime); returns the
+ * A projectile between actors or tiles, seen inside `area`, with every value as rsprox prints
+ * map_projanim_v2: it leaves after `delay` client cycles and lands at `end`, and its heights are
+ * four times the packet's (so they are divided here). Fired from an actor, that actor is the
+ * packet's source, as live sends it, so the client starts it from the model. Returns the
  * flight in game ticks.
  */
 function projectile(area, from, to, projectileId, { delay = 0, end = 60, startHeight = 0, endHeight = 0, angle = 16, progress = 0 } = {}) {
@@ -411,11 +472,46 @@ function projectile(area, from, to, projectileId, { delay = 0, end = 60, startHe
   const start = from.getLocation ? Projectile.centreOf(from) : (from.getX ? from : loc(from));
   const target = to.getLocation ? Projectile.centreOf(to) : (to.getX ? to : loc(to));
   const lockon = to.getLocation ? to : null;
-  new Projectile(start, target, lockon, projectileId, delay, end, startHeight, endHeight, area)
+  const shot = new Projectile(start, target, lockon, projectileId, delay, end, Math.round(startHeight / 4), Math.round(endHeight / 4), area)
     .withAngle(angle)
-    .withProgress(progress)
-    .sendProjectile();
+    .withProgress(progress);
+  if (from.getLocation) shot.withSource(from);
+  shot.sendProjectile();
   return Math.ceil(end / 30);
+}
+
+/**
+ * A player's forced move to a tile over `cycles` client cycles with an animation (a roll, a push),
+ * as OSRS's exact move; their walk and combat stop. They face the way they move, or `facing`
+ * (0 north, 1 east, 2 south, 3 west) to keep facing elsewhere (a step back).
+ */
+function forceMove(player, tile, cycles, animationId = -1, facing = null) {
+  const { ForceMovement, ForceMovementTask, TaskManager, Location } = core();
+  // One still running (a roll chained straight after another) ends where it was going first.
+  const running = player.__tfaForceMove;
+  if (running && player.getForceMovement?.() === running.movement) {
+    running.task.stop();
+    player.moveTo(running.end);
+  }
+  player.__tfaForceMove = null;
+  const start = player.getLocation().clone();
+  const dx = tile.x - start.getX();
+  const dy = tile.y - start.getY();
+  if (dx === 0 && dy === 0) return;
+  const direction = facing ?? (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 0 : 2));
+  const movement = new ForceMovement(start, new Location(dx, dy, 0), 0, cycles, direction, animationId);
+  // A tick more than the glide: started from a click (between ticks), a one-tick task would end
+  // it in the next tick's task phase, before the flush, and only the teleport would be sent.
+  const task = new ForceMovementTask(player, Math.max(1, Math.ceil(cycles / 30)) + 1, movement);
+  player.__tfaForceMove = { task, movement, end: new Location(tile.x, tile.y, start.getZ()) };
+  TaskManager.submit(task);
+}
+
+/** Where a player stands for a hit: a forced move's landing while one is under way, else their tile. */
+function standingOn(player) {
+  const moving = player.__tfaForceMove;
+  if (moving && player.getForceMovement?.() === moving.movement) return { x: moving.end.getX(), y: moving.end.getY(), z: moving.end.getZ() };
+  return tileOf(player);
 }
 
 /** Chebyshev distance from a tile to an actor's footprint (0 when on it). */
@@ -471,9 +567,9 @@ function attr(player, key, fallback = 0) {
 }
 
 module.exports = {
-  bind, core, api, ids, id, NAMES, SCRIPT, SOUND, MUSIC,
-  LOBBY, ARCHIVE, ARCHIVE_PLANES, CHASM, TILE, MAX_PARTY_SIZE, MAX_APPLICANTS, LIST_ROWS, SLOT,
+  bind, core, api, ids, id, named, anim, spot, NAMES, SCRIPT, SOUND, MUSIC,
+  LOBBY, ARCHIVE_SQUARES, ARCHIVE_BOXES, ARCHIVE_PLANES, CHASM, TILE, MAX_PARTY_SIZE, MAX_APPLICANTS, LIST_ROWS, SLOT,
   loc, tileOf, inBox, inLobby, inArchive, cycle, later, repeat, cancel, mesbox, options, fade, closeFade,
   displayName, random, randomOf, shuffle, gfx, graphicAt, sound, areaSound, damage, projectile,
-  distanceTo, floorFree, isProtected, triggerInts, questComplete, attr,
+  distanceTo, floorFree, forceMove, standingOn, damageNow, isProtected, triggerInts, questComplete, attr,
 };

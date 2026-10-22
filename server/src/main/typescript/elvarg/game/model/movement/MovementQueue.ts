@@ -346,6 +346,17 @@ export class MovementQueue {
         }
         const mobility = this.getMobility();
         if (!mobility.canMove()) {
+            // Mid forced move (a roll) or being placed after one: a plugin may chain another
+            // straight away (Ezekiel's dodges), where a normal walk has to wait.
+            if ((this.player.getForceMovement() != null || this.character.isNeedsPlacement())
+                && !this.isMovementBlocked()
+                && require("../../../plugins/PluginManager").PluginManager.emitForcedWalkRoute({
+                    player: this.player,
+                    destination: { x: destination.getX(), y: destination.getY(), z: destination.getZ() },
+                    handled: false,
+                })) {
+                return;
+            }
             mobility.sendMessage(this.player);
             return;
         }
@@ -360,6 +371,11 @@ export class MovementQueue {
             handled: false,
         })) return;
         PathFinder.calculateWalkRoute(this.player, destination.getX(), destination.getY());
+    }
+
+    /** Where the queued walk ends, or null when nothing is queued. */
+    public getDestination(): Location | null {
+        return this.points.peekLast()?.position ?? null;
     }
 
     private getLast(): Point {
@@ -614,9 +630,9 @@ export class MovementQueue {
     }
 
     /**
-     * Diagonal first, then east/west, then north/south - except that only 1x1
-     * actors ever take the diagonal. Anything larger squares the corner with a
-     * cardinal step instead.
+     * Diagonal first, then east/west, then north/south, for any size: OSRS's larger NPCs step
+     * diagonally too when their whole footprint can (captured: the 3x3 Ocellus walks a diagonal
+     * a tile a tick), and only square the corner when the diagonal is blocked.
      */
     private validatedStep(source: Location, destination: Location): Location | null {
         const signX = Math.sign(destination.getX() - source.getX());
@@ -627,7 +643,7 @@ export class MovementQueue {
             return source.transform(signX, signY);
         }
         const candidates: number[][] = [];
-        if (this.character.getSize() === 1 && signX !== 0 && signY !== 0) {
+        if (signX !== 0 && signY !== 0) {
             candidates.push([signX, signY]);
         }
         if (signX !== 0) candidates.push([signX, 0]);

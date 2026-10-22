@@ -7817,6 +7817,15 @@ export class OsrsClient {
             this.applyNpcModelCustomisation(serverId, block.modelCustomisation);
         }
 
+        if (Array.isArray(block.baseAnimations) && ecsId !== undefined) {
+            this.npcEcs.setBaseAnimations(ecsId, block.baseAnimations);
+        }
+
+        if (block.transparency && ecsId !== undefined) {
+            const fade = block.transparency;
+            this.npcEcs.setTransparency(ecsId, fade.startCycle, fade.endCycle, fade.from, fade.to, getClientCycle() | 0);
+        }
+
         if (block.say && ecsId !== undefined) {
             this.npcEcs.setOverheadText(ecsId, block.say, 100);
         }

@@ -31,7 +31,19 @@ export interface GfxInstance {
         mapId?: number;
         slot?: number;
     };
+    /**
+     * A tile graphic sent again on its tile each tick (a looping effect such as a floor portal):
+     * it keeps playing a moment past its end, until the next one starts, so tick jitter doesn't
+     * leave a gap between them.
+     */
+    chained?: boolean;
+    graceUntilMs?: number;
 }
+
+/** How long a chained tile graphic outlives its end waiting for the next (ms). */
+const CHAIN_GRACE_MS = 150;
+/** A tile graphic sent within this of the last one on its tile continues it (ms). */
+const CHAIN_WINDOW_MS = 800;
 
 /**
  * Minimal GFX manager: tracks actor-attached spot animations and exposes
@@ -47,6 +59,8 @@ export class GfxManager {
     // Reusable buffers (avoid per-call allocation)
     private worldInstancesBuffer: GfxInstance[] = [];
     private worldInstancesWithSlotBuffer: Array<{ inst: GfxInstance; slot: number }> = [];
+    /** When a tile graphic was last sent on each tile, to tell a repeated one. */
+    private lastTileSpawnMs: Map<string, number> = new Map();
     constructor(private renderer: WebGLOsrsRenderer) {}
 
     private addInstance(id: number, instance: GfxInstance): void {
@@ -121,6 +135,11 @@ export class GfxManager {
                 }
             }
             if (!inst.loop && typeof inst.endTimeMs === "number" && nowMs >= (inst.endTimeMs | 0)) {
+                if (inst.chained && inst.graceUntilMs === undefined) {
+                    inst.graceUntilMs = nowMs + CHAIN_GRACE_MS;
+                    continue;
+                }
+                if (inst.graceUntilMs !== undefined && nowMs < inst.graceUntilMs) continue;
                 this.removeInstance(id);
             }
         }
@@ -260,6 +279,19 @@ export class GfxManager {
         opts?: { heightTiles?: number; startCycle?: number },
     ): number {
         const id = this.nextId++;
+        const level = tile.level ?? 0;
+        const tileKey = `${tile.x | 0},${tile.y | 0},${level}`;
+        const nowMs = (performance?.now?.() as number) || Date.now();
+        const last = this.lastTileSpawnMs.get(tileKey);
+        const chained = last !== undefined && nowMs - last <= CHAIN_WINDOW_MS;
+        this.lastTileSpawnMs.set(tileKey, nowMs);
+        if (this.lastTileSpawnMs.size > 4096) {
+            for (const [key, at] of this.lastTileSpawnMs) if (nowMs - at > CHAIN_WINDOW_MS) this.lastTileSpawnMs.delete(key);
+        }
+        // The one it continues stops waiting now this one is here.
+        for (const [otherId, other] of this.instances) {
+            if (other.graceUntilMs !== undefined && other.world && `${other.world.tileX},${other.world.tileY},${other.world.level}` === tileKey) this.removeInstance(otherId);
+        }
         let durationMs: number | undefined = undefined;
         try {
             const cache = (this.renderer as any).gfxRenderer?.getCache?.();
@@ -283,10 +315,11 @@ export class GfxManager {
             startTimeMs: undefined,
             durationMs,
             endTimeMs: undefined,
+            chained,
             world: {
                 tileX: tile.x | 0,
                 tileY: tile.y | 0,
-                level: tile.level ?? 0,
+                level,
                 heightOffsetTiles: opts?.heightTiles,
             },
         });

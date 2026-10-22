@@ -716,8 +716,13 @@ export class World {
      * A teleported NPC leaves the local list for its teleport tick, except one gliding there
      * (npc.exactMove): the glide has to reach clients in that very tick, with the teleport.
      */
+    /**
+     * A teleported NPC stays in view the tick it moves when that tick's update has to reach the
+     * client with it: an exact move (its glide), or a fade (its fade in where it lands); otherwise
+     * it is dropped and added back the next tick, and the update would be lost.
+     */
     private static isExactMoving(npc: NPC): boolean {
-        return npc.getExactMove?.() != null;
+        return npc.getExactMove?.() != null || npc.getTransparency?.() != null;
     }
 
     /** How far the player sees NPCs (15 unless an area widens it). */
