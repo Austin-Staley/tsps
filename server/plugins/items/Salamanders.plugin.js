@@ -1,0 +1,142 @@
+/**
+ * Salamanders (OSRS Wiki: Salamander, Swamp lizard, Orange/Red/Black salamander): one weapon,
+ * three styles. Scorch is a slash, Flare a ranged attack that burns one tar, Blaze a magic attack
+ * whose max hit is floor(0.5 + Magic * (64 + hidden bonus) / 640). The style buttons, speed and
+ * reach come from the SALAMANDER interface and its WeaponProfile; this plugin picks the combat
+ * method for the selected style and the Blaze spell.
+ */
+const BLAZE_MAGIC_BONUS_BY_ITEM = {
+  SWAMP_LIZARD: 56,
+  ORANGE_SALAMANDER: 59,
+  RED_SALAMANDER: 77,
+  BLACK_SALAMANDER: 92,
+};
+const TAR_PER_FLARE = 1;
+const ATTACK_SLASH = 1; // BonusManager.ATTACK_SLASH, the Scorch style's attack type
+const ATTACK_MAGIC = 3; // BonusManager.ATTACK_MAGIC, the Blaze style's attack type
+const BLAZE_ATTACK_RANGE = 1;
+const BLAZE_SPELL_LEVEL = 1; // the wield requirement (Attack/Ranged/Magic) is the real gate
+
+let core = null;
+let blazeBonusById = new Map();
+let tarIds = new Set();
+let BlazeCombatMethod = null;
+const blazeSpells = new WeakMap();
+
+function weaponOf(player) {
+  return player.getEquipment().getItems()[core.Equipment.WEAPON_SLOT];
+}
+
+function hiddenBonus(player) {
+  return blazeBonusById.get(Number(weaponOf(player)?.getId?.() ?? -1));
+}
+
+/** Wiki: Hitmax = floor(0.5 + Magic * (64 + Bonus) / 640), Magic being the visible level. */
+function blazeBaseMaxHit(magicLevel, bonus) {
+  return Math.floor(0.5 + (magicLevel * (64 + bonus)) / 640);
+}
+
+function blazeSpell(player) {
+  let spell = blazeSpells.get(player);
+  if (spell) return spell;
+  spell = new core.CombatNormalSpell({
+    spellId: () => weaponOf(player).getId(),
+    maximumHit: () =>
+      blazeBaseMaxHit(player.getSkillManager().getCurrentLevel(core.Skill.MAGIC), hiddenBonus(player) ?? 0),
+    castAnimation: () => new core.Animation(player.getAttackAnim()),
+    startGraphic: () => undefined,
+    castProjectile: () => undefined,
+    endGraphic: () => undefined,
+    baseExperience: () => 0,
+    levelRequired: () => BLAZE_SPELL_LEVEL,
+  });
+  blazeSpells.set(player, spell);
+  return spell;
+}
+
+function blazeMethod() {
+  if (BlazeCombatMethod) return BlazeCombatMethod;
+  const { MagicCombatMethod, PendingHit } = core;
+  BlazeCombatMethod = new (class extends MagicCombatMethod {
+    canAttack(character) {
+      const player = character.getAsPlayer();
+      if (hiddenBonus(player) === undefined) return false;
+      player.getCombat().setCastSpell(blazeSpell(player));
+      return true;
+    }
+
+    canPursue(character) {
+      return hiddenBonus(character.getAsPlayer()) !== undefined;
+    }
+
+    hits(character, target) {
+      const spell = blazeSpell(character.getAsPlayer());
+      const hit = new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell));
+      spell.onHitCalc(hit);
+      return [hit];
+    }
+
+    attackSpeed(character) {
+      return character.getBaseAttackSpeed();
+    }
+
+    attackDistance() {
+      return BLAZE_ATTACK_RANGE;
+    }
+
+    // Wiki: Blaze pays 2 Magic XP per damage and nothing to Defence, though it is a Defensive style.
+    splitsDefensiveMagicExperience() {
+      return false;
+    }
+
+    finished(character) {
+      const combat = character.getCombat();
+      combat.setPreviousCast(blazeSpell(character.getAsPlayer()));
+      combat.setCastSpell(null);
+    }
+  })();
+  return BlazeCombatMethod;
+}
+
+function resolveSalamander(attacker) {
+  if (!attacker?.isPlayer?.()) return null;
+  const player = attacker.getAsPlayer();
+  if (hiddenBonus(player) === undefined) return null;
+  const attackType = player.getFightType().getBonusType();
+  if (attackType === ATTACK_SLASH) return core.CombatFactory.MELEE_COMBAT;
+  if (attackType === ATTACK_MAGIC) return blazeMethod();
+  return null; // Flare: the ranged method, which checks and spends the tar
+}
+
+function checkAmmo() {
+  return null; // core's ammo-slot check already matches each salamander to its tar
+}
+
+/** A Flare burns its tar: no 20% break, nothing left on the floor, one per attack. */
+function decrementAmmo(player, _position, amount) {
+  if (hiddenBonus(player) === undefined) return false;
+  const slot = core.Equipment.AMMUNITION_SLOT;
+  const tar = player.getEquipment().get(slot);
+  if (!tarIds.has(Number(tar?.getId?.() ?? -1))) return false;
+  tar.decrementAmountBy(Math.min(tar.getAmount(), amount * TAR_PER_FLARE));
+  if (tar.getAmount() <= 0) {
+    player.sendMessage("You have run out of ammunition!");
+    player.getEquipment().set(slot, new core.Item(-1));
+  }
+  player.getEquipment().refreshItems();
+  return true;
+}
+
+module.exports = {
+  name: "Salamanders",
+  members: true,
+  _test: { blazeBaseMaxHit, resolveSalamander, decrementAmmo, blazeSpell, BLAZE_MAGIC_BONUS_BY_ITEM },
+  register(api) {
+    core = api.core;
+    const I = core.ItemIdentifiers;
+    blazeBonusById = new Map(Object.entries(BLAZE_MAGIC_BONUS_BY_ITEM).map(([name, bonus]) => [I[name], bonus]));
+    tarIds = new Set([I.GUAM_TAR, I.MARRENTILL_TAR, I.TARROMIN_TAR, I.HARRALANDER_TAR]);
+    api.registerCombatMethodResolver({ resolve: resolveSalamander });
+    api.registerRangedAmmoHandler({ checkAmmo, decrementAmmo });
+  },
+};

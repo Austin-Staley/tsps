@@ -882,7 +882,8 @@ export class CombatFactory {
             hit.getCombatType() === CombatType.MAGIC &&
             hitSkills.length > 1 &&
             hitSkills.includes(Skill.MAGIC.getIndex()) &&
-            hitSkills.includes(Skill.DEFENCE.getIndex());
+            hitSkills.includes(Skill.DEFENCE.getIndex()) &&
+            hit.getCombatMethod()?.splitsDefensiveMagicExperience() !== false;
 
         // OSRS pays 4 XP per damage to a melee or ranged style, and the other
         // hit skills are fixed fractions of that same 4 XP: magic 2 (4/2),
