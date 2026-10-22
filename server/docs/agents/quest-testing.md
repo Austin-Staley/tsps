@@ -269,10 +269,19 @@ in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot 
 
 - Narrow the contract once: quest key, start state, mandatory legs, rewards, recovery cases.
   Write it down; do not re-derive it every turn.
+- Include ordinary tools from the helper's item requirements in the declared setup before
+  the baseline: hammers, needles, spades, food and standard travel supplies. Exercise an
+  in-quest tool handout when it changes progression or is the recovery case being checked.
+  Keep unique quest items and required acquisition triggers on the natural route.
 - Split ownership: one owner reviews source/tests, one playthrough driver, one recovery
   specialist. Do not have two actors on one account.
 - One persistent MCP client per account. Batch normal packets; avoid LLM turns between every
   click. Use the highest batched action the tool supports, then assert once.
+- A successful packet response does not mean its interaction finished. Approach the actual
+  object, click, then wait for the observed open leaf, destination, menu or inventory change
+  with a bounded tick loop. Moving before that can cancel the pending interaction. For an
+  auto-closing door, open, verify and cross in the same script; a model turn between opening
+  and crossing can outlast the opening. Record the settled crossing, not just the click.
 - Send raw tool output to a temp file; keep only compact evidence in your notes (stage, tile,
   menu, message, id, HP). No giant JSON dumps in context, no repeated poll loops.
 - Discover schemas once (`listTools`), then stop listing tools.
@@ -486,6 +495,11 @@ the real contract. Check that a priority fix releases the NPC after its owning s
 does not block a different quest's start or hand-in. Run meaningful red/green tests, freeze
 all worker edits, run integration checks, then reload the slot once. Record source revision,
 loaded revision and exact coverage; source review is not a new end-to-end playthrough.
+
+Dialogue condition handlers also compete: the first boolean wins. Test foreign conditions
+through the real plugin dispatch order, including an earlier quest with similar prose.
+An unscoped Sins of the Father requirements check answered Mori's Ascent conditions before
+Ascent's correct handler could run. Testing the owning handler alone missed that failure.
 
 ## Report template
 

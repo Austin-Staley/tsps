@@ -52,10 +52,11 @@ timing. Frozen natural playthroughs may run alongside read-only peer reviews; th
 evidence remains provisional until the review passes for the same revision.
 
 Five quests have reached the native playthrough phase. At First Light and The Ascent of
-Arceuus are running on frozen loaded revisions. At First Light's nine focused tests and
-independent source review pass. Ascent's source review found a missing memoir-page
-interaction; its natural opening also selected the requirements refusal and is under
-investigation. Biohazard stopped at stage 1 and logged out; its owner is correcting five
+Arceuus entered playthroughs on frozen loaded revisions. At First Light's nine focused
+tests and independent source review pass. Ascent stopped at its opening: an unscoped
+Sins of the Father condition handler overrode Mori's requirements check. Its owner is
+also correcting memoir-page and ordered-tracking gaps. Biohazard stopped at stage 1 and
+logged out; its owner is correcting five
 source-review findings, including Elena's recovery of items belonging to the Chemist.
 No natural completion has been accepted yet.
 
@@ -63,8 +64,14 @@ Monk's Friend completed naturally, paid its rewards once and persisted through l
 relogin. Its run remains incomplete because normal runes arrive after the party instead
 of before it, and the Monk's named dialogue branches are unreachable. Its original owner
 is correcting those findings. Clock Tower acquired the red cog naturally but stopped at
-a cellar-door crossing; generic door geometry is under investigation. Its saved stage and
-cog persisted through relog, but completion is unproven.
+a cellar-door crossing. Real-cache door replay passes 51 focused tests and did not establish
+a geometry defect; the driver must wait for opening before crossing in the same script.
+Its saved stage and cog persisted through relog, but completion is unproven.
+
+Clock Tower's reviewed source checkpoint fixes cog handling, lever transforms, the shared
+world-lever condition, the scoped poison trough, the white-cog ladder's surface exit and
+the native completion wire. Thirteen focused tests pass. Its affected natural route still
+needs validation on the edited revision.
 
 Death on the Isle has a reviewed source checkpoint for captured uniform and party-tray
 IDs, the accusation-intro bit, evidence hand-in artwork and recovery after evidence loss.
@@ -105,7 +112,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | --- | --- | --- | --- | --- |
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
-| The Ascent of Arceuus | `AscentOfArceuus` | Missing memoir-page interaction found; opening requirements branch under investigation | Scoped source evidence; findings remain | Incomplete opening on frozen revision |
+| The Ascent of Arceuus | `AscentOfArceuus` | Shared Sins condition blocker diagnosed; memoir and ordered trail corrections pending | Scoped source evidence; findings remain | Incomplete opening; logged out |
 | At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed | 9 focused tests pass | In progress on frozen reviewed revision |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
@@ -113,7 +120,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | Bone Voyage | `BoneVoyage` | Pending | Pending | Pending |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
 | Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |
-| Clock Tower | `ClockTower` | Review in progress; cellar-door geometry under investigation | Scoped source evidence | Incomplete at door crossing after red-cog pickup |
+| Clock Tower | `ClockTower` | Cog handling, shared lever, trough scope, surface exit and completion wire reviewed | 13 focused tests pass | Incomplete at door crossing after red-cog pickup; edited route pending |
 | Cold War | `ColdWar` | Pending | Pending | Pending |
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
