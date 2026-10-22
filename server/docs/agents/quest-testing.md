@@ -277,11 +277,20 @@ in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot 
   specialist. Do not have two actors on one account.
 - One persistent MCP client per account. Batch normal packets; avoid LLM turns between every
   click. Use the highest batched action the tool supports, then assert once.
+- Treat `walk_to` as a local minimap click. The route finder searches a 128-tile square
+  centred on the player; distant targets can return `stuck` without taking a step. Plan
+  ordinary walks through reachable road/map waypoints about 32 tiles apart and batch
+  those hops. Open intervening doors normally. A failed long click does not establish a
+  quest blockage or require teleport supplies; do not repeat the same distant target.
 - A successful packet response does not mean its interaction finished. Approach the actual
   object, click, then wait for the observed open leaf, destination, menu or inventory change
   with a bounded tick loop. Moving before that can cancel the pending interaction. For an
   auto-closing door, open, verify and cross in the same script; a model turn between opening
   and crossing can outlast the opening. Record the settled crossing, not just the click.
+- A tool can return `stuck` or `timeout` without an MCP error. End that driver batch and
+  inspect its actual position/state. For a required pickup, assert the inventory increase
+  before leaving or talking to the recipient; an acknowledged Take packet proves no grant.
+  Reuse an earlier verified door/pickup route when that segment is unchanged.
 - Send raw tool output to a temp file; keep only compact evidence in your notes (stage, tile,
   menu, message, id, HP). No giant JSON dumps in context, no repeated poll loops.
 - Discover schemas once (`listTools`), then stop listing tools.
