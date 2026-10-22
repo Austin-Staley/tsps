@@ -480,3 +480,88 @@ test("Nulodion preserves decayed cannon ammunition, loaded in the next cannon ex
   Decay.pickUp({ player: p, object: restored.object });
   assert.equal(p.getInventory().getAmount(Items.GRANITE_CANNONBALL), 12);
 });
+
+test("Wiki source polygons, source map regions and canonical content bounds cover the remaining proven areas", () => {
+  for (const [name, x, y, z] of [
+    ['Feldip Hills jungle hunter area', 2558, 2911, 0], ['Brutus arena', 3261, 3287, 0],
+    ['Fight Arena interior', 2603, 3156, 0], ['Forthos Dungeon', 1840, 9900, 0],
+    ['Lizardman Caves', 1307, 9951, 0], ['Mogre Camp', 2960, 9512, 1],
+    ['Ruins of Tapoyauik', 1602, 9631, 0], ['Tonali Cavern', 1311, 9382, 0],
+    ['Vanstrom Klause', 3575, 3352, 0], ['Uzer Mastaba', 3850, 4578, 0],
+    ['Uzer Mastaba', 3892, 4714, 0], ['Abyssal Area', 3040, 4896, 0],
+    ['Barbarian Assault', 1888, 5440, 0], ['Barbarian Assault', 2592, 5280, 0],
+    ['Jiggig Dungeon', 2477, 9436, 2], ['Jiggig Dungeon', 2446, 9418, 0],
+    ['Fossil Island bank chest island', 3765, 3899, 0], ['Scabaras Dungeon', 3410, 9239, 0],
+    ['Scabaras Dungeon', 3372, 9248, 0], ['Scabaras Dungeon', 3445, 9248, 2],
+    ['Shellbane Gryphon Cave', 3179, 8876, 0],
+  ]) {
+    const entry = Restrictions.load().restrictions.find((r) => r.name === name);
+    assert.equal(Restrictions.restrictionAt(new core.Location(x, y, z)), entry.message, name);
+  }
+  assert.equal(Restrictions.restrictionAt(new core.Location(3733, 3893, 0)), null, 'Fossil Island mainland remains allowed');
+  assert.equal(Restrictions.restrictionAt(new core.Location(3765, 3899, 1)), null, 'bank island is on the surface');
+  assert.equal(Restrictions.restrictionAt(new core.Location(2617, 2911, 0)), null, 'outside the Wiki hunter polygon');
+  assert.equal(Restrictions.restrictionAt(new core.Location(2988, 4896, 0)), null, 'outside the exact Abyssal Area source region');
+});
+
+test("Karuulm restriction covers the two wyrm rooms and Alchemical Hydra, preserving normal hydras and other floors", () => {
+  const entry = Restrictions.load().restrictions.find((r) => r.name === 'Karuulm Slayer Dungeon');
+  for (const [x, y] of [[1259, 10154], [1268, 10191], [1364, 10265]]) {
+    assert.equal(Restrictions.restrictionAt(new core.Location(x, y, 0)), entry.message);
+  }
+  assert.equal(Restrictions.restrictionAt(new core.Location(1304, 10260, 0)), null, 'normal hydras allow cannons');
+  assert.equal(Restrictions.restrictionAt(new core.Location(1308, 10253, 1)), null, 'drakes allow cannons');
+});
+
+test("Tower of Magic restriction applies only during Ascent of Arceuus, through the quest stage event", () => {
+  let stage = 0;
+  const player = gunner();
+  const location = new core.Location(1589, 3819, 0);
+  Cannon.init({ core, emitCustomEvent: (name, request) => {
+    if (name === 'quest:get-stage' && request.key === 'the_ascent_of_arceuus' && request.player === player) request.stage = stage;
+  } });
+  try {
+    assert.equal(Restrictions.restrictionAt(location, null, player), null);
+    for (stage of [1, 5, 13]) assert.equal(Restrictions.restrictionAt(location, null, player), "You can't set up a cannon here.");
+    stage = 14;
+    assert.equal(Restrictions.restrictionAt(location, null, player), null, 'completed quest permits setup');
+    assert.equal(Restrictions.restrictionAt(location.transform(0, 0, 2), null, player), null, 'unrelated plane');
+  } finally { Cannon.init({ core, emitCustomEvent() {} }); }
+});
+
+test("cache-derived room restrictions match closed walkable components and cannot include another valid cannon room", () => {
+  const rooms = [
+    ['Fight Arena interior', 2603, 3156, 0, 382, [2583, 3152, 2606, 3170]],
+    ['Karuulm Slayer Dungeon', 1259, 10154, 0, 299, [1251, 10147, 1276, 10170]],
+    ['Karuulm Slayer Dungeon', 1268, 10191, 0, 603, [1256, 10175, 1301, 10206]],
+    ['Karuulm Slayer Dungeon', 1364, 10265, 0, 472, [1356, 10257, 1377, 10278]],
+    ['Scabaras Dungeon', 3410, 9239, 0, 578, [3406, 9220, 3439, 9275]],
+    ['Scabaras Dungeon', 3372, 9248, 0, 102, [3368, 9244, 3389, 9252]],
+    ['Scabaras Dungeon', 3390, 9248, 0, 90, [3390, 9243, 3405, 9253]],
+    ['Scabaras Dungeon', 3445, 9248, 2, 73, [3433, 9243, 3445, 9253]],
+    ['Scabaras Dungeon', 3427, 9248, 2, 34, [3421, 9247, 3432, 9249]],
+    ['Scabaras Dungeon', 3411, 9251, 2, 116, [3407, 9244, 3420, 9252]],
+    ['Shellbane Gryphon Cave', 3179, 8876, 0, 275, [3167, 8865, 3190, 8882]],
+  ];
+  for (const [name, startX, startY, z, count, box] of rooms) {
+    core.RegionManager.loadMapFiles(startX, startY);
+    const queue = [[startX, startY]], seen = new Set([`${startX},${startY}`]);
+    for (let i = 0; i < queue.length; i++) {
+      const [x, y] = queue[i];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+        if (seen.has(key) || !core.RegionManager.canMove(x, y, nx, ny, z, 1, 1, null)) continue;
+        assert.ok(Math.abs(nx - startX) < 140 && Math.abs(ny - startY) < 140, `${name}: component must close naturally`);
+        seen.add(key); queue.push([nx, ny]);
+      }
+    }
+    assert.equal(queue.length, count, name);
+    assert.deepEqual([Math.min(...queue.map(([x]) => x)), Math.min(...queue.map(([, y]) => y)), Math.max(...queue.map(([x]) => x)), Math.max(...queue.map(([, y]) => y))], box, name);
+    const entry = Restrictions.load().restrictions.find((r) => r.name === name);
+    for (const [x, y] of queue) assert.equal(Restrictions.restrictionAt(new core.Location(x, y, z)), entry.message, `${name}: ${x},${y}`);
+    for (let x = box[0] + 1; x < box[2]; x++) for (let y = box[1] + 1; y < box[3]; y++) {
+      if (seen.has(`${x},${y}`)) continue;
+      assert.ok(Setup.footprint(new core.Location(x - 1, y - 1, z)).some((tile) => core.RegionManager.blocked(tile, null)), `${name}: no unrelated valid cannon centre at ${x},${y}`);
+    }
+  }
+});

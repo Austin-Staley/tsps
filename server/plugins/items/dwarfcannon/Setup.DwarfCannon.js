@@ -39,7 +39,7 @@ function refusal(player, kind) {
   if (Cannon.cannonOf(player)) return MESSAGE.ONE_ONLY;
   if (!hasAllParts(player, kind)) return MESSAGE.PARTS;
   if (Cannon.core.BoatManager.getBoatAboard(player)) return Restrictions.load().default;
-  const restricted = Restrictions.restrictionAt(player.getLocation(), player.getPrivateArea?.() ?? null);
+  const restricted = Restrictions.restrictionAt(player.getLocation(), player.getPrivateArea?.() ?? null, player);
   if (restricted) return restricted;
   const sw = player.getLocation().transform(-1, -1);
   if (footprint(sw).some((tile) => Cannon.core.RegionManager.blocked(tile, null))) return MESSAGE.SPACE;
