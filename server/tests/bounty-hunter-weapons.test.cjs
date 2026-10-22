@@ -4,6 +4,8 @@ const path = require("node:path");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 const { PluginManager } = require("../dist/plugins/PluginManager");
+const { CanAttackResponse } = require("../dist/game/content/combat/CombatFactory");
+const { DuelState } = require("../dist/game/content/Duelling");
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const core = PluginManager.getCoreApi();
 let gate;
@@ -20,7 +22,7 @@ before(async () => {
 });
 
 function player(weapon = core.ItemIdentifiers.DARK_BOW_BH_) {
-  const player = { isPlayer: () => true, getAsPlayer: () => player,
+  const player = { isPlayer: () => true, isNpc: () => false, getAsPlayer: () => player,
     getEquipment: () => ({ get: () => ({ getId: () => weapon }) }), sendMessage() {},
     getArea: () => null, getPrivateArea: () => null, getLocation: () => new core.Location(3200, 3200, 0),
   };
@@ -36,6 +38,49 @@ function canAttack(attacker, target = player()) {
 test("BH darkbow refuses the wilderness and unsupported PvP areas; ordinary darkbow is unaffected", () => {
   assert.equal(canAttack(player()), false);
   assert.equal(canAttack(player(core.ItemIdentifiers.DARK_BOW)), null);
+});
+
+test("an area's PvP permission cannot bypass the equipped weapon's restriction", (t) => {
+  const area = {};
+  const attacker = player(), target = player();
+  attacker.getArea = target.getArea = () => area;
+  t.mock.method(PluginManager, "callArea", () => true);
+  t.mock.method(PluginManager, "emitCanAttack", (attacker, target) => canAttack(attacker, target));
+  assert.equal(core.CombatFactory.canAttackByPolicy(attacker, target), CanAttackResponse.CANT_ATTACK_IN_AREA);
+  attacker.getEquipment = player(core.ItemIdentifiers.DARK_BOW).getEquipment;
+  assert.equal(core.CombatFactory.canAttackByPolicy(attacker, target), CanAttackResponse.CAN_ATTACK);
+  t.mock.method(PluginManager, "callArea", () => false);
+  assert.equal(core.CombatFactory.canAttackByPolicy(attacker, target), CanAttackResponse.CANT_ATTACK_IN_AREA);
+});
+
+test("a global permission cannot bypass a later attack restriction", () => {
+  const original = PluginManager.canAttackHooks;
+  try {
+    for (const verdicts of [[true, false], [false, true], [null, false]]) {
+      PluginManager.canAttackHooks = verdicts.map((allow) => ({ pluginName: "test", handler: (event) => { event.allow = allow; } }));
+      assert.equal(PluginManager.emitCanAttack(player(), player()), false);
+    }
+    PluginManager.canAttackHooks = [{ pluginName: "test", handler: (event) => { event.allow = true; } }];
+    assert.equal(PluginManager.emitCanAttack(player(), player()), true);
+    PluginManager.canAttackHooks = [];
+    assert.equal(PluginManager.emitCanAttack(player(), player()), null);
+  } finally {
+    PluginManager.canAttackHooks = original;
+  }
+});
+
+test("an agreed duel still enforces equipment restrictions", (t) => {
+  const attacker = player(), target = player();
+  attacker.getDueling = () => ({ inDuel: () => true, getInteract: () => target, getState: () => DuelState.IN_DUEL });
+  target.getDueling = () => ({ inDuel: () => true, getInteract: () => attacker, getState: () => DuelState.IN_DUEL });
+  attacker.getCombatSpecial = () => null;
+  attacker.isSpecialActivated = () => false;
+  attacker.getTimers = () => ({ has: () => false });
+  t.mock.method(core.CombatFactory, "multiCombatBetween", () => true);
+  const policy = t.mock.method(PluginManager, "emitCanAttack", () => false);
+  assert.equal(core.CombatFactory.canAttackPermission(attacker, target, true), CanAttackResponse.CANT_ATTACK_IN_AREA);
+  policy.mock.mockImplementation(() => null);
+  assert.equal(core.CombatFactory.canAttackPermission(attacker, target, true), CanAttackResponse.CAN_ATTACK);
 });
 
 test("Castle Wars and the Fight Pit approve only their canonical game areas", () => {

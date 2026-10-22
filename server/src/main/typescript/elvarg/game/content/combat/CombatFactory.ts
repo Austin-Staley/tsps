@@ -547,7 +547,8 @@ export class CombatFactory {
 
         // Check plugin and area attack policy.
         const areaResponse = duelActive
-            ? CanAttackResponse.CAN_ATTACK
+            ? (PluginManager.emitCanAttack(attacker, target, method) === false
+                ? CanAttackResponse.CANT_ATTACK_IN_AREA : CanAttackResponse.CAN_ATTACK)
             : ServerPerf.measurePhase(
                 "combat.process.can_attack.policy",
                 () => CombatFactory.canAttackByPolicy(attacker, target, method)
@@ -613,9 +614,12 @@ export class CombatFactory {
         }
         const attackerArea = attacker.getArea();
         const targetArea = target.getArea();
-        const pluginCanAttack = (attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null)
-            ?? (targetArea && targetArea !== attackerArea ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null)
-            ?? PluginManager.emitCanAttack(attacker, target, method);
+        const areaCanAttack = (attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null)
+            ?? (targetArea && targetArea !== attackerArea ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null);
+        if (areaCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const globalCanAttack = PluginManager.emitCanAttack(attacker, target, method);
+        if (globalCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const pluginCanAttack = areaCanAttack ?? globalCanAttack;
         if (pluginCanAttack === true) {
             return CanAttackResponse.CAN_ATTACK;
         }

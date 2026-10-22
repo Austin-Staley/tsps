@@ -269,7 +269,9 @@ function allowBountyHunterWeapons(event) {
 }
 
 function attachCombatRings(api) {
-  for (const name of ["Boxing ring", "Fencing ring", "Combat ring"]) api.onObjectInteraction(name, { "Climb-over": climbOver });
+  api.onObjectInteraction("Boxing ring", { "Climb-over": climbOver });
+  api.onObjectInteraction("Fencing ring", { "Climb-over": climbOver });
+  api.onObjectInteraction("Combat ring", { "Climb-over": climbOver });
   api.onCustomEvent("bounty-hunter:weapon-area", allowBountyHunterWeapons);
   api.onObjectInteraction("Magic barrier", { "Walk-through": climbOver });
   api.onObjectInteraction("Glove Rack", { Search: searchRack });
