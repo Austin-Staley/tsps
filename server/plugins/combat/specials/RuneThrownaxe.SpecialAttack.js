@@ -5,21 +5,41 @@
  * prayers and gear: floor(0.5 + (visible Ranged + 10) * (axe Ranged strength + 64) / 640).
  * It swings one tick slower than the axe's normal attack.
  */
+// RSProx 1851/1856/1863: durations use the gap between occupied tiles, not SW corners.
+function footprintDistance(from, to) {
+  const a = from.getLocation(), b = to.getLocation();
+  const aSize = from.isNpc?.() ? from.getSize?.() ?? 1 : 1;
+  const bSize = to.isNpc?.() ? to.getSize?.() ?? 1 : 1;
+  return Math.max(0, b.getX() - a.getX() - aSize + 1, a.getX() - b.getX() - bSize + 1,
+    b.getY() - a.getY() - aSize + 1, a.getY() - b.getY() - bSize + 1);
+}
+
+function primaryProjectileEnd(from, to) {
+  return 41 + Math.max(10, 5 * (footprintDistance(from, to) + 1));
+}
+
+function bounceCycles(from, to) {
+  return 10 + 3 * footprintDistance(from, to);
+}
+
 function buildRuneThrownaxeSpecialAttack(api) {
-  const { Animation, CombatFactory, CombatSpecial, Equipment, Graphic, GraphicHeight, ItemIdentifiers, Misc, PendingHit, Projectile, RangedCombatMethod, Skill, WeaponProfiles } = api.core;
+  const { Animation, CombatFactory, CombatSpecial, Equipment, Graphic, ItemIdentifiers, Misc, PendingHit, Projectile, RangedCombatMethod, Skill, Sound, Sounds, WeaponProfiles } = api.core;
   const BonusManager = api.core.BonusManager;
 
   const DRAIN = 10;
   const MAX_TARGETS = 5;
   const BOUNCE_RADIUS = 3;
   const SPECIAL_ANIMATION = new Animation(1068);
-  const SPECIAL_VFX = new Graphic(257, 0, GraphicHeight.HIGH);
-  const IMPACT_GRAPHIC = new Graphic(258);
+  const LAUNCH_HEIGHT = 96;
+  const SPECIAL_VFX = new Graphic(257, 0, LAUNCH_HEIGHT);
+  const PROJECTILE_ID = 258;
+  const CHAINHIT_SOUND = new Sound(2528, 1, 0, 0);
   const RANGED_STRENGTH_BONUS = 10 + BonusManager.RANGED_STRENGTH;
   const STANCE_BONUS = 10;
   const CLIENT_CYCLES_PER_TICK = 30;
-  const BOUNCE_START_HEIGHT = 43;
-  const BOUNCE_END_HEIGHT = 31;
+  const PROJECTILE_DELAY = 41;
+  const BOUNCE_START_HEIGHT = 40;
+  const BOUNCE_END_HEIGHT = 36;
 
   function chainhitMaxHit(player) {
     const axe = player.getEquipment().get(Equipment.WEAPON_SLOT);
@@ -46,7 +66,14 @@ function buildRuneThrownaxeSpecialAttack(api) {
 
     start(character, target) {
       CombatSpecial.drain(character, DRAIN);
-      super.start(character, target);
+      const end = primaryProjectileEnd(character, target);
+      Projectile.createProjectile(character, target, PROJECTILE_ID, PROJECTILE_DELAY, end, BOUNCE_START_HEIGHT, BOUNCE_END_HEIGHT)
+        .withAngle(0).withProgress(11).sendProjectile();
+      Sounds.sendSound(character, CHAINHIT_SOUND);
+      const player = character.getAsPlayer();
+      const distance = character.getLocation().getDistance(target.getLocation());
+      const delay = WeaponProfiles.hitDelays(player, distance)[0] + (target.isNpc() ? 1 : 0);
+      CombatFactory.decrementAmmo(player, target.getLocation(), 1, delay);
       character.performAnimation(SPECIAL_ANIMATION);
       character.performGraphic(SPECIAL_VFX);
     }
@@ -61,24 +88,21 @@ function buildRuneThrownaxeSpecialAttack(api) {
         return hits;
       }
       const struck = new Set([target]);
-      const projectileId = player.getCombat().getAmmunition()?.getProjectileId?.();
       let origin = target;
       let previous = first;
-      let elapsedCycles = first.getDelay() * CLIENT_CYCLES_PER_TICK;
+      let elapsedCycles = primaryProjectileEnd(player, target);
       for (let bounce = 1; bounce < MAX_TARGETS && previous.isAccurate() && player.getSpecialPercentage() >= DRAIN; bounce++) {
         const next = nextTarget(player, target, struck);
         if (!next) {
           break;
         }
         CombatSpecial.drain(player, DRAIN);
-        const distance = origin.getLocation().getDistance(next.getLocation());
-        // shortcut: shared thrown flight parameters, replace when a Chainhit OSRS capture gives its exact flight.
-        const flight = RangedCombatMethod.projectileEnd(WeaponProfiles.ranged(player).projectiles[0], distance);
+        const flight = bounceCycles(origin, next);
         const start = elapsedCycles;
         elapsedCycles += flight;
-        if (projectileId != null) {
-          Projectile.createProjectile(origin, next, projectileId, start, elapsedCycles, BOUNCE_START_HEIGHT, BOUNCE_END_HEIGHT).sendProjectile();
-        }
+        Projectile.createProjectile(origin, next, PROJECTILE_ID, start, elapsedCycles, BOUNCE_START_HEIGHT, BOUNCE_END_HEIGHT)
+          .withAngle(0).withProgress(11).sendProjectile();
+        Sounds.sendSound(player, CHAINHIT_SOUND);
         previous = new PendingHit(player, next, this, Math.ceil(elapsedCycles / CLIENT_CYCLES_PER_TICK));
         CombatFactory.applyStyleDamage(previous, maxHit);
         hits.push(previous);
@@ -88,11 +112,6 @@ function buildRuneThrownaxeSpecialAttack(api) {
       return hits;
     }
 
-    handleAfterHitEffects(hit) {
-      if (hit.isAccurate()) {
-        hit.getTarget().performGraphic(IMPACT_GRAPHIC);
-      }
-    }
   }
 
   return {
@@ -109,3 +128,5 @@ function buildRuneThrownaxeSpecialAttack(api) {
 module.exports = function registerRuneThrownaxeSpecialAttack(api) {
   api.registerCombatSpecial(buildRuneThrownaxeSpecialAttack(api));
 };
+
+module.exports._test = { footprintDistance, primaryProjectileEnd, bounceCycles };

@@ -39,7 +39,7 @@ const WEAPON = Equipment.WEAPON_SLOT;
 /** Keeps projectiles, sounds and special-bar packets out of the way and records special drains. */
 function quiet(t) {
   const drains = [];
-  t.mock.method(Projectile, "createProjectile", () => ({ sendProjectile() {} }));
+  t.mock.method(Projectile, "createProjectile", () => ({ withAngle() { return this; }, withProgress() { return this; }, sendProjectile() {} }));
   t.mock.method(Sounds, "sendSound", () => {});
   t.mock.method(CombatSpecial, "drain", (character, amount) => {
     drains.push(amount);
@@ -219,6 +219,8 @@ function chainhitScene(t, { multi = true, special = 100, outcomes = [], bounceTa
   require("../plugins/combat/specials/RuneThrownaxe.SpecialAttack")(specialApi);
   const method = CombatSpecial.getById("rune_thrownaxe").getCombatMethod();
   t.mock.method(WeaponProfiles, "ranged", () => ({ projectiles: [{ delay: 32, lengthAdjustment: 0, stepMultiplier: 5 }] }));
+  t.mock.method(CombatFactory, "decrementAmmo", () => {});
+  t.mock.method(WeaponProfiles, "hitDelays", () => [1]);
   t.mock.method(RangedCombatMethod.prototype, "start", () => {});
   t.mock.method(RangedCombatMethod.prototype, "hits", () => [new PendingHit(player, target, method, 1)]);
   return { player, target, others, method, drains, styled, rolled };
@@ -230,7 +232,7 @@ test("Chainhit hits five targets total, never back to the first, for at most 50%
   const hits = method.hits(player, target);
 
   assert.equal(hits.length, 5);
-  assert.deepEqual(hits.map((hit) => hit.getDelay()), [1, 3, 4, 5, 7]);
+  assert.deepEqual(hits.map((hit) => hit.getDelay()), [1, 3, 4, 4, 5]);
   const struck = hits.map((hit) => hit.getTarget());
   assert.equal(new Set(struck).size, 5, "nobody is hit twice");
   assert.equal(struck[0], target);
@@ -559,4 +561,49 @@ test("Toxic siphon drains 50% once and heals half the damage, rounded down", (t)
   assert.equal(siphon.getStrengthMultiplier(), 1.5);
   assert.equal(CombatSpecial.getForWeaponId(ItemIdentifiers.TOXIC_BLOWPIPE), siphon);
   assert.equal(CombatSpecial.getForWeaponId(ItemIdentifiers.TOXIC_BLOWPIPE_EMPTY_), null, "an uncharged pipe has no special");
+});
+
+test('Chainhit replay fixtures preserve footprint gaps and the absolute client timeline', () => {
+  const { footprintDistance, primaryProjectileEnd, bounceCycles } = require('../plugins/combat/specials/RuneThrownaxe.SpecialAttack')._test;
+  const bossA = mobile(0, 0, { getSize: () => 3 }), bossB = mobile(-2, 0, { getSize: () => 3 });
+  assert.equal(footprintDistance(bossA, bossB), 0);
+  assert.equal(bounceCycles(bossA, bossB), 10, 'RSProx1863: overlapping Prime and Rex');
+  const thrower = mobile(0, 0, { isNpc: () => false, isPlayer: () => true });
+  const targets = [mobile(-2, -3), mobile(0, -1), mobile(0, -5), mobile(-2, -2)];
+  const durations = targets.slice(1).map((target, index) => bounceCycles(targets[index], target));
+  assert.deepEqual(durations, [16, 22, 19]);
+  let elapsed = primaryProjectileEnd(thrower, targets[0]);
+  const timeline = [elapsed];
+  for (const duration of durations) timeline.push(elapsed += duration);
+  assert.deepEqual(timeline, [61, 77, 99, 118], 'RSProx1851: four-target absolute arrival offsets');
+});
+
+test('Chainhit owns its projectile, sounds per hit and consumes only one axe', (t) => {
+  const scene = chainhitScene(t);
+  const projectiles = [], ammunition = [], sounds = [], graphics = [];
+  t.mock.method(RangedCombatMethod.prototype, 'start', () => { throw new Error('duplicate default projectile'); });
+  t.mock.method(Projectile, 'createProjectile', (...args) => {
+    const entry = { args }; projectiles.push(entry);
+    return { withAngle(value) { entry.angle = value; return this; },
+      withProgress(value) { entry.progress = value; return this; }, sendProjectile() {} };
+  });
+  t.mock.method(CombatFactory, 'decrementAmmo', (...args) => ammunition.push(args));
+  t.mock.method(Sounds, 'sendSound', (_player, sound) => sounds.push(sound.getId()));
+  scene.player.performGraphic = (graphic) => graphics.push(graphic);
+  scene.method.start(scene.player, scene.target);
+  const hits = scene.method.hits(scene.player, scene.target);
+  assert.equal(projectiles.length, hits.length);
+  assert.deepEqual(projectiles[0].args.slice(2), [258, 41, 71, 40, 36]);
+  for (const projectile of projectiles) {
+    assert.equal(projectile.angle, 0);
+    assert.equal(projectile.progress, 11);
+  }
+  for (let index = 1; index < projectiles.length; index++) {
+    assert.equal(projectiles[index].args[3], projectiles[index - 1].args[4]);
+  }
+  assert.equal(ammunition.length, 1);
+  assert.equal(ammunition[0][2], 1);
+  assert.deepEqual(sounds, Array(hits.length).fill(2528));
+  assert.equal(graphics[0].getId(), 257);
+  assert.equal(graphics[0].getHeight(), 96);
 });

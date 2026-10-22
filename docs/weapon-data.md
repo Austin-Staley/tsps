@@ -116,12 +116,19 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
   Clan Wars, Soul Wars and Clan Hall rings have no implementation to approve them yet;
   unrestricted wilderness, lobby, ordinary POH tiles and unrelated PvP areas stay blocked.
 - [Hit delay](https://oldschool.runescape.wiki/w/Hit_delay?action=raw): Snapshot now creates
-  two single-arrow hits a tick apart. Chainhit uses the shared thrown projectile profile's
-  distance-based flight for each leg; its hits land at each leg's arrival. Its five-target
-  cap includes the primary (50% maximum energy), and unused opponents are picked randomly,
-  as the Rune thrownaxe page's cited Mod Ash answers specify. Its exact bounce
-  launch/flight parameters still need an OSRS capture; the prior flat 30-cycle approximation
-  is removed, but the shared-profile timing is not claimed to be captured Chainhit timing.
+  two single-arrow hits a tick apart. Chainhit uses captured projectile 258, launch delay 41,
+  heights 40→36, angle 0 and progress 11. Initial flight is `max(10, 5*(distance+1))`
+  client cycles; each bounce starts at the previous arrival and takes `10+3*distance`,
+  using the Chebyshev gap between occupied footprints. RSProx recordings
+  [1851](https://rsprox.net/download/1851), [1856](https://rsprox.net/download/1856) and
+  [1863](https://rsprox.net/download/1863) (revision 227, Leagues V) show a four-target
+  timeline 41→61→77→99→118 and overlapping 3×3 bosses bouncing in 10 cycles. They also
+  show animation 1068, launch graphic 257 at height 96 and sound 2528 per hit. Only one
+  thrownaxe is consumed for the entire chain. Its five-target cap includes the primary
+  (50% maximum energy), and unused opponents are picked randomly, as the Rune thrownaxe
+  page's cited Mod Ash answers specify. Damage still uses the existing primary hit-delay
+  rule; the door-support targets in the Leagues capture do not establish a general new
+  primary impact-delay rule.
 - [Ammunition](https://oldschool.runescape.wiki/w/Ammunition?action=raw): ballista javelins
   already use the common 20% break, floor-drop and Ava's recovery path; the regression now
   actually selects BALLISTA. Salamander tar is consumed in **all three** styles, with the
