@@ -1198,6 +1198,7 @@ export class OsrsClient {
             this.clientPlugins.transformMenuEntries(entries, context),
         );
         if (editMode) {
+            document.title = "Edit Mode - RSPS.app";
             this.loadEditModePlugin();
         }
         // If cache is provided, initialize immediately
