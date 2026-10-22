@@ -473,7 +473,7 @@ export class CombatSpells {
 
     public static WEAKEN = new CombatEffectSpell({
         castAnimation() {
-            return new Animation(716);
+            return new Animation(717);
         },
 
         castProjectile(cast: Mobile, castOn: Mobile) {
@@ -631,7 +631,7 @@ export class CombatSpells {
 
     public static CURSE = new CombatEffectSpell({
         castAnimation() {
-            return new Animation(710);
+            return new Animation(718);
         },
 
         castProjectile(cast, castOn) {
@@ -717,6 +717,7 @@ export class CombatSpells {
         baseExperience: () => {
             return 31;
         },
+        splashExperience: () => 30,
 
         itemsRequired: (player) => {
             return [new Item(555, 3), new Item(557, 3), new Item(561, 2)];
@@ -995,6 +996,7 @@ export class CombatSpells {
         baseExperience() {
             return 61;
         },
+        splashExperience: () => 60,
         itemsRequired(player) {
             return [new Item(555, 3), new Item(557, 4), new Item(561, 3)];
         },
@@ -1279,7 +1281,7 @@ export class CombatSpells {
     public static VULNERABILITY = new CombatEffectSpell({
         members: true,
         castAnimation() {
-            return new Animation(729);
+            return new Animation(718);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 168, 0, 20, 43, 31);
@@ -1370,7 +1372,7 @@ export class CombatSpells {
     public static ENFEEBLE = new CombatEffectSpell({
         members: true,
         castAnimation: function () {
-            return new Animation(729);
+            return new Animation(728);
         },
         castProjectile: function (cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 171, 0, 20, 43, 31);
@@ -1670,6 +1672,7 @@ export class CombatSpells {
         baseExperience() {
             return 89;
         },
+        splashExperience: () => 70,
         itemsRequired(player) {
             return [new Item(555, 5), new Item(557, 5), new Item(561, 4)];
         },
@@ -1775,9 +1778,11 @@ export class CombatSpells {
         startGraphic: function () {
             return null;
         },
+        // OSRS update of 2 March 2017: 95 on a successful cast, 84 on a failed one.
         baseExperience: function () {
-            return 83.6;
+            return 95;
         },
+        splashExperience: () => 84,
         itemsRequired: function (player) {
             return [new Item(563, 1), new Item(562, 1), new Item(560, 1)];
         },
