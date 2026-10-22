@@ -101,10 +101,14 @@ function player() {
     sendString(text, uid) { if ([6, 3, 2].some(child => [217, 231, 229, 193].some(group => uid === (group << 16 | child)))) p.text = text; log.push(['text', uid, text]); return packet; },
     sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
   }, { get: (t, key) => t[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
-  const p = { attrs, items, varbits, log, xp, messages: [], animations: [], prompt: null, text: '', amulet: undefined, full: false, index: nextIndex++,
+  const equipment = new Map();
+  const p = { attrs, items, varbits, log, xp, messages: [], animations: [], prompt: null, text: '', amulet: undefined, equipment, full: false, index: nextIndex++,
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value), getInventory: () => inv,
     getBanks: () => [{ getAmount: () => 0 }],
-    getEquipment: () => ({ get: slot => slot === core.Equipment.AMULET_SLOT && p.amulet ? { getId: () => p.amulet } : null }),
+    getEquipment: () => ({ get: slot => {
+      const id = slot === core.Equipment.AMULET_SLOT ? p.amulet : equipment.get(slot);
+      return id ? { getId: () => id } : null;
+    } }),
     getPacketSender: () => packet, getDialogueManager: () => p.manager,
     getSkillManager: () => ({ addExperiences: (skill, amount) => xp.push([skill.getIndex(), amount]), getCombatLevel: () => 3,
       getCurrentLevel: () => 99, getMaxLevel: () => 99 }),
@@ -215,6 +219,7 @@ test('AFL mandatory route runs stage 0 to 12 through the real NPC, object, item 
     [core.Skill.CRAFTING.getIndex(), 10], [core.Skill.HUNTER.getIndex(), 4500],
     [core.Skill.CONSTRUCTION.getIndex(), 800], [core.Skill.HERBLORE.getIndex(), 500],
   ]);
+  assert.ok(!h.npcs.some(npc => npc.id === N.GUILD_HUNTER_FOX && !npc.removed), 'the owner-only Fox is removed on completion');
 });
 
 function petKiko(h, p) {
@@ -309,4 +314,68 @@ test('AFL full-inventory recovery stops the sample, trimmed fur and report hand-
   h.continueUntil(p, () => /adventuring way/.test(p.text));
   h.finish(p);
   assert.equal(p.items.get(I.FOXS_REPORT), undefined);
+});
+
+test('AFL Atza pile accepts ordinary, Imcando and off-hand hammers from inventory or equipment', () => {
+  const { h } = afl();
+  const cases = [
+    { name: 'ordinary hammer in inventory', items: [I.HAMMER] },
+    { name: 'Imcando hammer in inventory', items: [I.IMCANDO_HAMMER] },
+    { name: 'off-hand hammer in inventory', items: [I.IMCANDO_HAMMER_OFF_HAND_] },
+    { name: 'Imcando hammer equipped', equip: [core.Equipment.WEAPON_SLOT, I.IMCANDO_HAMMER] },
+    { name: 'off-hand hammer equipped', equip: [core.Equipment.SHIELD_SLOT, I.IMCANDO_HAMMER_OFF_HAND_] },
+  ];
+  for (const entry of cases) {
+    const p = player();
+    h.quest.setStage(p, 8);
+    p.attrs.set('at-first-light:vars', 1 << 9);
+    for (const id of entry.items ?? []) p.items.set(id, 1);
+    if (entry.equip) p.equipment.set(entry.equip[0], entry.equip[1]);
+    objectClick(h, p, 50880);
+    assert.ok(p.animations.includes(3676), entry.name);
+    h.tick(2); h.finish(p);
+  }
+});
+
+test('AFL stage 11 with no report keeps out-of-order bed repair and recovers through Fox and Verity', () => {
+  const { h, p } = afl();
+  h.quest.setStage(p, 9);
+  p.items.set(I.TRIMMED_FUR, 1); p.items.set(I.JERBOA_TAIL, 1); p.items.set(I.NEEDLE, 1);
+
+  h.hooks.onItemOnObject[0]({ player: p, itemId: I.JERBOA_TAIL, objectId: 53011 });
+  assert.equal(h.quest.getStage(p), 11, 'the canonical out-of-order repair is not blocked');
+  assert.equal(p.varbits.get(9838), 1);
+  assert.equal(p.items.get(I.FOXS_REPORT), undefined);
+  h.finish(p);
+
+  talkName(h, p, 'Guild Hunter Fox', N.GUILD_HUNTER_FOX);
+  h.continueUntil(p, () => /another one/.test(p.text));
+  h.finish(p);
+  assert.equal(p.items.get(I.FOXS_REPORT), 1, 'Fox replaces the not-yet-obtained report at stage 11');
+  assert.equal(h.quest.getStage(p), 11);
+
+  h.hooks.onItemOnNpc[0]({ player: p, itemId: I.FOXS_REPORT, npcId: N.GUILD_SCRIBE_VERITY });
+  assert.equal(p.varbits.get(9836), 1);
+  assert.equal(p.items.get(I.FOXS_REPORT), 0);
+  h.finish(p);
+
+  h.talk(p, N.GUILDMASTER_APATURA);
+  h.continueUntil(p, () => p.text.startsWith('Actually...'));
+  p.manager.advance();
+  assert.equal(h.quest.getStage(p), 12);
+  assert.equal(h.quest.isComplete(p), true);
+});
+
+test('AFL imported leaf-pick guards answer the real transcript conditions', () => {
+  const { h, p } = afl();
+  const condition = stepId => PluginManager.emitNpcDialogueCondition({ player: p, stepId, text: '', npcId: N.GUILD_HUNTER_FOX });
+  assert.equal(condition('c-avW4'), true, 'no smooth leaf');
+  assert.equal(condition('aXen1A'), false);
+  assert.equal(condition('khCtCH'), true, 'no sticky leaf');
+  assert.equal(condition('DM1ufw'), false);
+  p.items.set(I.SMOOTH_LEAF, 1); p.items.set(I.STICKY_LEAF, 1);
+  assert.equal(condition('c-avW4'), false);
+  assert.equal(condition('aXen1A'), true);
+  assert.equal(condition('khCtCH'), false);
+  assert.equal(condition('DM1ufw'), true);
 });

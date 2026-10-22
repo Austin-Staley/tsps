@@ -51,6 +51,11 @@ speech and ordinary chatheads. Its generic two-tick cadence is not capture-prove
 timing. Frozen natural playthroughs may run alongside read-only peer reviews; their
 evidence remains provisional until the review passes for the same revision.
 
+Three frozen natural playthroughs are running: At First Light, Clock Tower and Monk's
+Friend. At First Light's mandatory route, recovery and current dialogue bindings have
+passed independent source review at the loaded revision; its nine focused tests pass.
+No natural completion has been accepted yet.
+
 His Faithful Servants and Museum Kudos are supporting work discovered through mandatory
 Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the
 128 issue quests and tutorial below.
@@ -64,7 +69,7 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
 | The Ascent of Arceuus | `AscentOfArceuus` | Pending | Pending | Pending |
-| At First Light | `AtFirstLight` | Catspeak checks fixed; full route review pending | Focused source tests pass | Pending |
+| At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed | 9 focused tests pass | In progress on frozen reviewed revision |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Pending | Pending | Pending |
 | Biohazard | `Biohazard` | Pending | Pending | Pending |
