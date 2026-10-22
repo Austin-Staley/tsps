@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mat4, vec3 } from "gl-matrix";
 
 import { Camera } from "../game/Camera";
 import { LoadingRequirement, LoadingTracker } from "../game/state/LoadingTracker";
@@ -23,6 +24,40 @@ test("shortestYawDelta takes the short way across the 0/2048 seam", () => {
 });
 
 for (const backend of ["WebGL", "WebGPU"]) {
+    test(`${backend} renders every sub-unit vertical camera input`, () => {
+        const camera = new Camera(0, -10, 0, 210, 512);
+        const renderer: any = {
+            osrsClient: {
+                camera, followPlayerCamera: true, controlledPlayerServerId: 7,
+                zoomWidth: 256, zoomHeight: 256,
+                playerEcs: {
+                    getIndexForServerId: () => 0, size: () => 1,
+                    getX: () => 64, getY: () => 64, getLevel: () => 0, getWorldViewId: () => -1,
+                },
+                clientPlugins: { handleCameraFollow: () => false, hdEnabled: () => false, isStretchingResizable: () => false },
+            },
+            playerPosUni: new Float32Array(2), mapDataLoadedNotified: true,
+            mapManager: { getMapForWorldTile: () => undefined },
+            getControlledPlayerEcsIndex: () => 0, getControlledPlayerWorldViewId: () => -1,
+            updateCameraTerrainPitchPressure() {}, cameraTerrainPitchPressure: 32768,
+            cameraShakeEnabled: Array(5).fill(false),
+            followCamRot: mat4.create(), followCamForwardAxis: vec3.fromValues(0, 0, -1), followCamForward: vec3.create(),
+            getSceneViewportWidgetRect: () => ({ x: 0, y: 0, width: 800, height: 600 }),
+        };
+        const angles = new Set<number>();
+        const views = new Set<string>();
+        for (let i = 0; i < 20; i++) {
+            camera.updatePitch(camera.pitch, 0.2);
+            if (backend === "WebGPU") updateFollowCamera(renderer, i / 144, 1000 / 144);
+            else updateCameraFollow(renderer, 1000 / 144, i / 144);
+            camera.update(800, 600);
+            angles.add(camera.getScenePitchAngle());
+            views.add([...camera.viewMatrix].join(","));
+        }
+        assert.equal(angles.size, 20, "rendered pitch must retain every fractional control change");
+        assert.equal(views.size, 20, "the actual scene view must move on every input frame");
+    });
+
     test(`${backend} finishes login during a scripted camera without moving the shot`, () => {
         let terrainReady = false;
         let sceneReady = false;
