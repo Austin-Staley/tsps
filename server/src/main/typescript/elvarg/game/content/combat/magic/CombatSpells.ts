@@ -199,6 +199,26 @@ class DarkLureSpell extends CombatArceuusEffectSpell {
     }
 }
 
+const TELE_BLOCK_HIT = 1299;
+const TELE_BLOCK_FAIL = 1300;
+
+/**
+ * Tele Block's projectile shows whether it lands (Wiki: since 25 February 2016): teleport_reverse, a
+ * purple sphere, when it hits, as in rsprox captures, and the old tele_block_travel_forfail when it
+ * fails. The hit is rolled after the cast starts, so the projectile goes out with the roll, that tick.
+ */
+class TeleBlockSpell extends CombatEffectSpell {
+    public castProjectile(): Projectile {
+        return null;
+    }
+
+    public onHitCalc(hit: PendingHit): void {
+        super.onHitCalc(hit);
+        const projectile = hit.isAccurate() ? TELE_BLOCK_HIT : TELE_BLOCK_FAIL;
+        Projectile.createProjectile(hit.getAttacker(), hit.getTarget(), projectile, 0, 20, 43, 31).sendProjectile();
+    }
+}
+
 const ARCEUUS_MARK_UNTIL = "arceuus:mark-until";
 
 const hasArceuusMark = (target: Mobile): boolean =>
@@ -1743,14 +1763,12 @@ export class CombatSpells {
         }
     });
 
-    public static TELEBLOCK = new CombatEffectSpell({
+    public static TELEBLOCK = new TeleBlockSpell({
         castAnimation: function () {
             return new Animation(1819);
         },
-        castProjectile: function (cast, castOn) {
-            // Live, Tele Block travels as teleport_reverse; 344 is the ballista special.
-            return Projectile.createProjectile(cast, castOn, 1299, 0, 20, 43, 31);
-        },
+        // TeleBlockSpell sends it once the hit is rolled; 344 was the ballista special.
+        castProjectile: () => null,
         spellEffect: function (cast, castOn) {
             if (castOn.isPlayer()) {
                 let player = castOn as Player;

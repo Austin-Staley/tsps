@@ -1,5 +1,5 @@
 // Run after `yarn build`: node --test tests/spell-graphics.test.cjs
-// Stun's impact, Tele Block's projectile and Magic Dart's cast graphic, as in rsprox captures of live OSRS.
+// Stun's impact, Tele Block's projectiles and Magic Dart's cast graphic, as live (rsprox captures, Wiki).
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test, before } = require("node:test");
@@ -33,8 +33,25 @@ test("a Stun that lands shows stunned, not Weaken's impact", () => {
   assert.equal(CombatSpells.WEAKEN.endGraphic().getId(), spotanim("weaken_impact"));
 });
 
-test("Tele Block travels as teleport_reverse, not the ballista special", () => {
-  assert.equal(projectileOf(CombatSpells.TELEBLOCK), spotanim("teleport_reverse"));
+test("Tele Block sends teleport_reverse when it lands and its old travel when it fails, once rolled", () => {
+  assert.equal(CombatSpells.TELEBLOCK.castProjectile({}, {}), null, "nothing goes out before the roll");
+  const sent = [];
+  const original = Projectile.createProjectile;
+  Projectile.createProjectile = (_source, _victim, id) => ({ sendProjectile: () => sent.push(id) });
+  try {
+    for (const accurate of [true, false]) {
+      CombatSpells.TELEBLOCK.onHitCalc({
+        isAccurate: () => accurate,
+        getAttacker: () => ({}),
+        getTarget: () => ({}),
+        getTotalDamage: () => 0,
+      });
+    }
+  } finally {
+    Projectile.createProjectile = original;
+  }
+  assert.deepEqual(sent, [spotanim("teleport_reverse"), spotanim("tele_block_travel_forfail")]);
+  assert.notEqual(sent[0], spotanim("ballista_special"));
 });
 
 test("Magic Dart has no cast graphic", () => {
