@@ -13,6 +13,22 @@ for (const ext of [".png", ".jpg", ".webp"]) require.extensions[ext] = (module, 
 const { updateWebGPUMapStreaming } = require("../render/webgpu/frameConfig");
 const { WebGPURenderer } = require("../render/webgpu/WebGPURenderer");
 const { hasPendingMapStreamingWork: hasPendingWebGLStreaming } = require("../render/render/streaming");
+const { GameRenderer } = require("../game/GameRenderer");
+
+test("cache initialization leaves map scheduling to the first renderer frame", () => {
+    const calls: string[] = [];
+    const renderer = {
+        mapManager: { init: () => calls.push("init"), update: () => calls.push("eager queue") },
+        stats: { frameCount: 0 },
+        osrsClient: {
+            loadedCache: { info: { game: "oldschool", revision: 237 } }, mapFileIndex: {},
+            isLoggedIn: () => true, mapRadius: 1, expandedMapLoading: 0,
+            camera: { getPosX: () => 3200, getPosZ: () => 3200 },
+        },
+    };
+    GameRenderer.prototype.initCache.call(renderer);
+    assert.deepEqual(calls, ["init"], "cache readiness must not queue a second camera-centred loading policy");
+});
 
 test("WebGPU streams the server scene around the player across camera orbits and scene rebases", () => {
     const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
