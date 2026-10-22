@@ -292,6 +292,35 @@ test('captured door portals can hand off before the ordinary door swing', () => 
   }
 });
 
+test('cache-named ground doors open and close when the open loc precedes the closed loc', async () => {
+  await initializeMapCollisionOnce();
+  const closedId = CacheDefinitions.getLocId('canafis_door_ground');
+  const openId = CacheDefinitions.getLocId('canafis_door_ground_open');
+  const closed = CacheDefinitions.getObject(closedId);
+  const open = CacheDefinitions.getObject(openId);
+  assert.equal(closedId, 24369);
+  assert.equal(openId, 24368);
+  assert.equal(closed.actions[0], 'Open');
+  assert.equal(open.actions[0], 'Close');
+  assert.deepEqual(closed.models, open.models);
+
+  const h = buildHarness({ cacheObjects: new Map([[closedId, closed], [openId, open]]) });
+  try {
+    for (let face = 0; face < 4; face++) {
+      const opening = h.click(closedId, 1237, 3683, face, 'Open', 'Door');
+      assert.ok(opening.some(([action, id]) => action === 'deregister' && id === closedId));
+      const leaf = opening.find(([action, id]) => action === 'register' && id === openId);
+      assert.ok(leaf, `rotation ${face} uses the cache-named open variant`);
+      const closing = h.click(openId, leaf[2], leaf[3], leaf[4], 'Close', 'Door');
+      assert.ok(closing.some(([action, id]) => action === 'deregister' && id === openId));
+      assert.deepEqual(closing.find(([action, id]) => action === 'register' && id === closedId),
+        ['register', closedId, 1237, 3683, face], 'closing restores the original tile and rotation');
+    }
+  } finally {
+    h.restore();
+  }
+});
+
 test('Lassar blue-key room door uses its cache Close variant after the unused loc id', async () => {
   await initializeMapCollisionOnce();
   const closed = CacheDefinitions.getObject(48274);

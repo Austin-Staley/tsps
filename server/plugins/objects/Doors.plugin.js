@@ -369,6 +369,21 @@ function buildDoorCatalog() {
       closedToOpen.set(id, id);
       continue;
     }
+    // Gameval names can identify the open leaf even when its id comes first
+    // (canafis_door_ground_open / canafis_door_ground). Keep paired gates with
+    // their family handler and require a matching, Close-only cache definition.
+    const namedOpenId = namedOpenLeaf(id);
+    const namedOpen = namedOpenId == null ? null : core.CacheDefinitions.getObject(namedOpenId);
+    if (
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id) &&
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(namedOpenId) &&
+      namedOpen?.name === def.name &&
+      hasAction(namedOpen.actions, "close") && !hasAction(namedOpen.actions, "open")
+    ) {
+      closedToOpen.set(id, namedOpenId);
+      openToClosed.set(namedOpenId, id);
+      continue;
+    }
     const partner = core.CacheDefinitions.getObject(id + 1);
     if (!partner || partner.name !== def.name) {
       continue;
