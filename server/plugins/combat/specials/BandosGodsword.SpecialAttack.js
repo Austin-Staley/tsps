@@ -3,6 +3,7 @@ module.exports = function registerBandosGodswordSpecialAttack(api) {
   const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = api.core;
 
   const DRAIN = 50;
+  const SLASH_DEFENCE_BONUS_INDEX = 1;
   const ANIMATION = new Animation(7642);
   const GRAPHIC = new Graphic(1212, Priority.HIGH);
 
@@ -23,7 +24,9 @@ module.exports = function registerBandosGodswordSpecialAttack(api) {
       return;
     }
     if (!target.isPlayer()) {
-      // TODO: NPC combat-stat drain is not exposed by our core NPC state.
+      // NPCs only model Defence (first in the order); it can be drained to 0.
+      const npc = target.getAsNpc();
+      npc.setDefenceLevel(npc.getDefenceLevel() - remainingDrain);
       return;
     }
     const skillManager = target.getAsPlayer().getSkillManager();
@@ -63,7 +66,8 @@ module.exports = function registerBandosGodswordSpecialAttack(api) {
     traits: {
       hitCount: 1,
       accuracyMultiplier: 2,
-      damageMultiplier: 1.21,
+      damageMultiplierStages: [1.1, 1.1],
+      meleeDefenceBonusIndex: SLASH_DEFENCE_BONUS_INDEX,
     },
     combatMethod: new BandosGodswordCombatMethod(),
   });

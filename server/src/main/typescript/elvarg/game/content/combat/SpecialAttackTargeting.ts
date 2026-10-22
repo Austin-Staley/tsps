@@ -24,7 +24,7 @@ export class SpecialAttackTargetingResolver {
         primary: Mobile,
         targeting: SpecialAttackTargeting | undefined
     ): SpecialTargetingResult {
-        if (!targeting || targeting.pattern !== "forward_line") {
+        if (!targeting || (targeting.pattern !== "forward_line" && targeting.pattern !== "surrounding")) {
             return EMPTY;
         }
         if (!attacker || !primary || !attacker.isPlayer() || !primary.isNpc()) {
@@ -49,6 +49,10 @@ export class SpecialAttackTargetingResolver {
         const limit = Math.max(0, Math.trunc(targeting.maxTargets) - 1);
         if (limit === 0) {
             return EMPTY;
+        }
+
+        if (targeting.pattern === "surrounding") {
+            return { secondaryTargets: SpecialAttackTargetingResolver.surrounding(attacker, primary, limit), largeTargetExtraHit: false };
         }
 
         const width = Math.max(1, Math.trunc(targeting.width));
@@ -81,6 +85,27 @@ export class SpecialAttackTargetingResolver {
             }
         }
         return { secondaryTargets: found, largeTargetExtraHit: false };
+    }
+
+    /** Up to `limit` other NPCs whose footprint is within one tile of the attacker (own tile included). */
+    private static surrounding(attacker: Mobile, primary: Mobile, limit: number): Mobile[] {
+        const origin = attacker.getLocation();
+        const found: Mobile[] = [];
+        World.getNpcs().forEach((npc) => {
+            if (found.length >= limit || npc === primary || !npc.isRegistered() || npc.getHitpoints() <= 0) {
+                return;
+            }
+            const location = npc.getLocation();
+            const size = Math.max(1, npc.getSize());
+            if (
+                location.getZ() === origin.getZ() &&
+                origin.getX() >= location.getX() - 1 && origin.getX() <= location.getX() + size &&
+                origin.getY() >= location.getY() - 1 && origin.getY() <= location.getY() + size
+            ) {
+                found.push(npc);
+            }
+        });
+        return found;
     }
 
     private static npcAt(x: number, y: number, z: number, primary: Mobile): NPC | null {

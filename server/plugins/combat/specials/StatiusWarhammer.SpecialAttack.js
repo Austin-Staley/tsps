@@ -6,18 +6,17 @@ module.exports = function registerStatiusWarhammerSpecialAttack(api) {
   const DEFENCE_DRAIN_FRACTION = 0.75;
   const ANIMATION = new Animation(1378);
 
-  function smash(target, damage) {
-    if (Math.floor(damage) <= 0) {
+  function smash(hit) {
+    if (!hit.isAccurate() || Math.floor(hit.getTotalDamage()) <= 0) {
       return;
     }
-    if (!target.isPlayer()) {
-      // TODO: NPC combat-stat drain is not exposed by our core NPC state.
-      return;
-    }
-    const skillManager = target.getAsPlayer().getSkillManager();
-    const currentLevel = Math.max(0, Math.floor(skillManager.getCurrentLevel(Skill.DEFENCE)));
-    const drainAmount = Math.floor(currentLevel * DEFENCE_DRAIN_FRACTION);
-    skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(0, currentLevel - drainAmount));
+    const target = hit.getTarget();
+    const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : null;
+    const currentLevel = Math.max(0, Math.floor(skillManager
+      ? skillManager.getCurrentLevel(Skill.DEFENCE) : target.getAsNpc().getDefenceLevel()));
+    const level = currentLevel - Math.floor(currentLevel * DEFENCE_DRAIN_FRACTION);
+    if (skillManager) skillManager.setCurrentLevels(Skill.DEFENCE, level);
+    else target.getAsNpc().setDefenceLevel(level);
   }
 
   class StatiusWarhammerCombatMethod extends MeleeCombatMethod {
@@ -28,7 +27,7 @@ module.exports = function registerStatiusWarhammerSpecialAttack(api) {
     }
 
     handleAfterHitEffects(hit) {
-      smash(hit.getTarget(), hit.getTotalDamage());
+      smash(hit);
     }
   }
 
