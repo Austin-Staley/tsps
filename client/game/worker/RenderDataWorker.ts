@@ -373,13 +373,18 @@ const worker = {
         const outcome = { complete: false };
         // A stored build must carry every texture, whatever this session has already uploaded.
         const buildInput = cacheable ? { ...sdInput, loadedTextureIds: new Set<number>() } : input;
-        const run = () =>
-            runWithSparseRetry(
-                workerState,
-                () => dataLoader.load(workerState, buildInput as I),
-                mapInput?.mapProfileEnabled ? `${mapInput.mapX},${mapInput.mapY}` : undefined,
-                outcome,
-            );
+        const run = async () => {
+            try {
+                return await runWithSparseRetry(
+                    workerState,
+                    () => dataLoader.load(workerState, buildInput as I),
+                    mapInput?.mapProfileEnabled ? `${mapInput.mapX},${mapInput.mapY}` : undefined,
+                    outcome,
+                );
+            } finally {
+                if (dataLoader.shouldClearWorkerCacheAfterLoad?.(input) ?? true) clearCache(workerState);
+            }
+        };
         const { result: built, reads } = cacheable
             ? await recordVarReads(run)
             : { result: await run(), reads: [] };
@@ -391,10 +396,6 @@ const worker = {
             console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} store: ${shouldStore(outcome.complete, data) ? "written" : `skipped (complete=${outcome.complete})`} reads=${reads.length}`);
         }
         if (cacheable && data) dropLoadedTextures(data as unknown as SdMapData, sdInput.loadedTextureIds);
-
-        if (dataLoader.shouldClearWorkerCacheAfterLoad?.(input) ?? true) {
-            clearCache(workerState);
-        }
 
         if (!data) {
             return undefined;
@@ -413,19 +414,20 @@ const worker = {
             throw new Error("Worker not initialized");
         }
 
-        const { data, transferables } = await runWithSparseRetry(workerState, () =>
-            npcGeometryLoader.loadNpcGeometry(workerState, {
-                mapX,
-                mapY,
-                maxLevel,
-                loadedTextureIds: new Set(loadedTextureIds),
-                renderBaseTile,
-            }),
-        );
-
-        clearCache(workerState);
-
-        return Transfer<NpcGeometryData>(data, transferables);
+        try {
+            const { data, transferables } = await runWithSparseRetry(workerState, () =>
+                npcGeometryLoader.loadNpcGeometry(workerState, {
+                    mapX,
+                    mapY,
+                    maxLevel,
+                    loadedTextureIds: new Set(loadedTextureIds),
+                    renderBaseTile,
+                }),
+            );
+            return Transfer<NpcGeometryData>(data, transferables);
+        } finally {
+            clearCache(workerState);
+        }
     },
     async loadTexture(
         id: number,
