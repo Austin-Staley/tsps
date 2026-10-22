@@ -618,6 +618,20 @@ export interface PluginSpellOnObjectEvent {
   handled: boolean;
 }
 
+/** A combat spell aimed at a non-attackable NPC for a scripted interaction. */
+export interface PluginSpellOnNpcEvent {
+  player: any;
+  npc: any;
+  npcId: number;
+  npcIndex: number;
+  spell: any;
+  spellId: number;
+  location: { x: number; y: number; z: number };
+  /** Consume validated runes/cooldown and play the accepted cast once. */
+  consumeRunes: () => boolean;
+  handled: boolean;
+}
+
 /** A spell cast from the spellbook on nothing: utility spells, self-casts, teleports. */
 export interface PluginSpellCastEvent {
   player: any;
@@ -994,6 +1008,7 @@ export interface PluginApi {
   onItemOnNpc(handler: (event: PluginItemOnNpcEvent) => void, filter?: PluginItemUseFilter): void;
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
+  onSpellOnNpc(handler: (event: PluginSpellOnNpcEvent) => void): void;
   onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
   /** A spellbook spell cast on nothing, before the core spellbooks handle it. Set `handled` to own it. */
   onSpellCast(handler: (event: PluginSpellCastEvent) => void): void;
