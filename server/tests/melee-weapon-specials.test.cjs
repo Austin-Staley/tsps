@@ -96,6 +96,8 @@ function npcTarget(defence) {
     isPlayer: () => false,
     isNpc: () => true,
     getAsNpc() { return this; },
+    getCurrentLevel() { return this.defence; },
+    setCurrentLevels(skill, level) { this.defence = Math.max(0, level); },
     getDefenceLevel() { return this.defence; },
     setDefenceLevel(level) { this.defence = Math.max(0, level); },
   };
@@ -249,7 +251,7 @@ test("the infernal axe burns a third of its logs for half Firemaking XP and spen
   assert.equal(axe.meta["infernal-axe"].charges, 4999);
 });
 
-test("Smash lowers Defence by 30% (Statius 75%), only on a damaging hit, for players and NPCs", () => {
+test("Smash lowers Defence by 30% (Statius 75%), on a successful accuracy roll, for players and NPCs", () => {
   const dwh = special("dragon_warhammer").getCombatMethod();
   const statius = special("statius_warhammer").getCombatMethod();
 
@@ -260,14 +262,14 @@ test("Smash lowers Defence by 30% (Statius 75%), only on a damaging hit, for pla
   assert.equal(goblin.defence, 38, "wiki: then loses 15");
   dwh.handleAfterHitEffects(hit(goblin, 0));
   dwh.handleAfterHitEffects(hit(goblin, 20, false));
-  assert.equal(goblin.defence, 38, "zero damage or a miss drains nothing");
+  assert.equal(goblin.defence, 27, "a successful zero still drains; a miss does not");
 
   const boss = npcTarget(100);
   statius.handleAfterHitEffects(hit(boss, 30));
   assert.equal(boss.defence, 25);
   statius.handleAfterHitEffects(hit(boss, 30, false));
   statius.handleAfterHitEffects(hit(boss, 0));
-  assert.equal(boss.defence, 25);
+  assert.equal(boss.defence, 7);
 
   const pker = playerTarget({ DEFENCE: 99 });
   statius.handleAfterHitEffects(hit(pker, 30));

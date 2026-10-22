@@ -1,13 +1,13 @@
 // TODO: ported from xrsps-typescript; untested.
-module.exports = function registerStatiusWarhammerSpecialAttack(api) {
-  const { Animation, CombatSpecial, ItemIdentifiers, MeleeCombatMethod, Skill, Sounds } = api.core;
+function buildSpecial(core) {
+  const { Animation, CombatSpecial, ItemIdentifiers, MeleeCombatMethod, Skill, Sounds } = core;
 
   const DRAIN = 35;
   const DEFENCE_DRAIN_FRACTION = 0.75;
   const ANIMATION = new Animation(1378);
 
   function smash(hit) {
-    if (!hit.isAccurate() || Math.floor(hit.getTotalDamage()) <= 0) {
+    if (!hit.isAccurate()) {
       return;
     }
     const target = hit.getTarget();
@@ -31,7 +31,7 @@ module.exports = function registerStatiusWarhammerSpecialAttack(api) {
     }
   }
 
-  api.registerCombatSpecial({
+  return {
     id: "statius_warhammer",
     itemIds: [ItemIdentifiers.STATIUSS_WARHAMMER],
     drainAmount: DRAIN,
@@ -43,5 +43,9 @@ module.exports = function registerStatiusWarhammerSpecialAttack(api) {
       maximumDamageMultiplier: 1.25,
     },
     combatMethod: new StatiusWarhammerCombatMethod(),
-  });
+  };
+}
+
+module.exports = function registerStatiusWarhammerSpecialAttack(api) {
+  api.registerCombatSpecial(buildSpecial(api.core));
 };

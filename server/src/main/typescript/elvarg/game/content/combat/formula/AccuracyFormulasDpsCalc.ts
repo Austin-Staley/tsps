@@ -15,6 +15,7 @@ import { resolveSpecialAttackType, WeaponSpecialTraits } from "../WeaponSpecialT
 type RollCacheEntry = {
     cycle: number;
     defenceLevel: number;
+    npcLevels?: string;
     effectiveAttackLevel?: number;
     effectiveDefenseLevel?: number;
     effectiveRangedAttack?: number;
@@ -57,11 +58,13 @@ export class AccuracyFormulasDpsCalc {
         const cycle = World.getProcessCycle();
         const defenceLevel = entity.isNpc() ? entity.getAsNpc().getDefenceLevel()
             : entity.getAsPlayer().getSkillManager().getCurrentLevel(Skill.DEFENCE);
+        const npcLevels = entity.isNpc() ? [Skill.ATTACK, Skill.RANGED, Skill.MAGIC]
+            .map((skill) => entity.getAsNpc().getCurrentLevel(skill)).join(",") : undefined;
         const cached = this.rollCache.get(entity);
-        if (cached && cached.cycle === cycle && cached.defenceLevel === defenceLevel) {
+        if (cached && cached.cycle === cycle && cached.defenceLevel === defenceLevel && cached.npcLevels === npcLevels) {
             return cached;
         }
-        const next: RollCacheEntry = { cycle, defenceLevel, defenseMeleeRolls: new Map<number, number>() };
+        const next: RollCacheEntry = { cycle, defenceLevel, npcLevels, defenseMeleeRolls: new Map<number, number>() };
         this.rollCache.set(entity, next);
         return next;
     }
@@ -328,7 +331,7 @@ export class AccuracyFormulasDpsCalc {
             return cache.effectiveAttackLevel;
         }
         if (entity.isNpc()) {
-            const att = entity.getAsNpc().getCurrentDefinition().getStats()[0] + 9;
+            const att = entity.getAsNpc().getCurrentLevel(Skill.ATTACK) + 9;
             cache.effectiveAttackLevel = att;
             return att;
         }
@@ -488,7 +491,7 @@ export class AccuracyFormulasDpsCalc {
         }
         if (entity.isNpc()) {
             // Prayer bonuses don't apply to NPCs (yet)
-            cache.effectiveRangedAttack = entity.getAsNpc().getCurrentDefinition().getStats()[3] + 9;
+            cache.effectiveRangedAttack = entity.getAsNpc().getCurrentLevel(Skill.RANGED) + 9;
             return cache.effectiveRangedAttack;
         }
 
@@ -545,7 +548,7 @@ export class AccuracyFormulasDpsCalc {
         }
         if (entity.isNpc()) {
             // Prayer bonuses don't apply to NPCs (yet)
-            const mag = entity.getAsNpc().getCurrentDefinition().getStats()[4] + 9;
+            const mag = entity.getAsNpc().getCurrentLevel(Skill.MAGIC) + 9;
             cache.effectiveMagicLevel = mag;
             return mag;
         }
@@ -578,7 +581,7 @@ export class AccuracyFormulasDpsCalc {
         let defLevel: number;
 
         if (enemy.isNpc()) {
-            defLevel = enemy.getAsNpc().getCurrentDefinition().getStats()[4] + 9;
+            defLevel = enemy.getAsNpc().getCurrentLevel(Skill.MAGIC) + 9;
         } else {
             const player = enemy.getAsPlayer();
             const magicLevel = AccuracyFormulasDpsCalc.scalePercent(

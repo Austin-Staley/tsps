@@ -1,14 +1,13 @@
 // TODO: ported from xrsps-typescript; untested.
-module.exports = function registerBandosGodswordSpecialAttack(api) {
-  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = api.core;
+function buildSpecial(core) {
+  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = core;
 
   const DRAIN = 50;
   const SLASH_DEFENCE_BONUS_INDEX = 1;
   const ANIMATION = new Animation(7642);
   const GRAPHIC = new Graphic(1212, Priority.HIGH);
 
-  // OSRS drains one damage per level in this order; Prayer can reach 0, the
-  // other skills floor at 1.
+  // OSRS drains one damage per level in this order; NPCs have no Prayer stat.
   const PLAYER_DRAIN_ORDER = [
     [Skill.DEFENCE, 1],
     [Skill.STRENGTH, 1],
@@ -23,19 +22,14 @@ module.exports = function registerBandosGodswordSpecialAttack(api) {
     if (remainingDrain <= 0) {
       return;
     }
-    if (!target.isPlayer()) {
-      // NPCs only model Defence (first in the order); it can be drained to 0.
-      const npc = target.getAsNpc();
-      npc.setDefenceLevel(npc.getDefenceLevel() - remainingDrain);
-      return;
-    }
-    const skillManager = target.getAsPlayer().getSkillManager();
+    const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : target.getAsNpc();
     for (const [skill, minimumLevel] of PLAYER_DRAIN_ORDER) {
       if (remainingDrain <= 0) {
         break;
       }
+      if (!target.isPlayer() && skill === Skill.PRAYER) continue;
       const currentLevel = Math.max(0, Math.floor(skillManager.getCurrentLevel(skill)));
-      const amount = Math.min(remainingDrain, Math.max(0, currentLevel - minimumLevel));
+      const amount = Math.min(remainingDrain, Math.max(0, currentLevel - (target.isPlayer() ? minimumLevel : 0)));
       if (amount <= 0) {
         continue;
       }
@@ -57,7 +51,7 @@ module.exports = function registerBandosGodswordSpecialAttack(api) {
     }
   }
 
-  api.registerCombatSpecial({
+  return {
     id: "bandos_godsword",
     itemIds: [ItemIdentifiers.BANDOS_GODSWORD],
     drainAmount: DRAIN,
@@ -70,5 +64,9 @@ module.exports = function registerBandosGodswordSpecialAttack(api) {
       meleeDefenceBonusIndex: SLASH_DEFENCE_BONUS_INDEX,
     },
     combatMethod: new BandosGodswordCombatMethod(),
-  });
+  };
+}
+
+module.exports = function registerBandosGodswordSpecialAttack(api) {
+  api.registerCombatSpecial(buildSpecial(api.core));
 };
