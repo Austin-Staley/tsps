@@ -32,10 +32,9 @@ module.exports = function registerLearningTheRopesQuest(api) {
   /** Mirrors a tutorial step into the quest stage; completes it on crossing 671. */
   function applyTutorialProgress(player, value) {
     if (!player || player.isPlayerBot?.() === true) return;
-    if (value >= STAGE_COMPLETE && !quest.isComplete(player)) {
-      quest.complete(player);
-      return;
-    }
+    if (value >= STAGE_COMPLETE && !quest.isComplete(player)) quest.complete(player);
+    // A jump straight past the threshold (the island skip, or a save resync) still leaves the
+    // durable stage and the shared tutorial varp at the value the tutorial actually reached.
     if (quest.getStage(player) !== value) quest.setStage(player, value);
   }
 
