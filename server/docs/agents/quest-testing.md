@@ -303,6 +303,12 @@ or rereading raw streams. A done report is evidence to review, not permission to
   before starting more workers; stop only confirmed leftovers from your own test run and
   diagnose the hang before repeating it. An old hung child is not evidence that the current
   file still hangs, so check the existing result and revision first.
+- Count every successful worker launch against the concurrency limit, including recovery
+  and corrective turns. Pause new launches when memory pressure rises. On macOS, compressed
+  memory can make `ps` RSS misleading; inspect physical footprint before adding workers.
+  If the coordinator stalls, stop its schedulers first, record session ids, clients and
+  queued instructions, then recover only your own service. Verify histories survived and
+  resume the same sessions in bounded batches rather than restarting their audits.
 - Check provider retry status and pending permission/question requests when work stops.
   A live process may be waiting for a report-directory permission rather than the model.
   Verify the requested action and its assigned paths before replying. Preserve context;
