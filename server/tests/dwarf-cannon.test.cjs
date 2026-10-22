@@ -279,7 +279,7 @@ test("decay: broken at 25 minutes, Repair; gone 10 minutes on, and Nulodion give
   cannon.age = Data.LOSE_TICKS - 1;
   runTicks(p, 1);
   assert.equal(Cannon.cannonOf(p), null);
-  assert.deepEqual(p.getAttribute(Cannon.LOST_ATTRIBUTE), { kind: "plain", stage: 4 });
+  assert.deepEqual(p.getAttribute(Cannon.LOST_ATTRIBUTE), { kind: "plain", stage: 4, steel: 30, granite: 0 });
   const ask = (text) => Nulodion.answerCondition({ npcId: core.NpcIdentifiers.NULODION, player: p, text });
   assert.equal(ask("If the player's cannon is still set-up somewhere:"), false);
   assert.equal(ask("If the player has lost their cannon by world-hopping or letting it despawn:"), true);
@@ -359,4 +359,120 @@ test("every id the cannon uses is in the cache", () => {
       assert.ok(seqs.getFile(kind.turn + d)?.data, `turn ${kind.turn + d}`);
     }
   }
+});
+
+test("Combat Achievements raises capacity for setup, Fire, and Load X: medium35 hard45 elite60", () => {
+  for (const [tier, capacity] of [[null, 30], ["Medium", 35], ["Hard", 45], ["Elite", 60]]) {
+    Cannon.init({ core, emitCustomEvent: (name, request) => {
+      if (name === "combat-achievements:tier") request.unlocked = request.tier === tier;
+    } });
+    const p = gunner();
+    assert.equal(Cannon.capacity(p), capacity);
+    const cannon = built(p);
+    assert.equal(cannon.steel, capacity, "setup auto-load respects tier");
+    cannon.steel = 0;
+    Ammo.setLoadX(p, 999);
+    assert.equal(p.getAttribute(Cannon.LOAD_X_ATTRIBUTE), capacity);
+    Ammo.loadX({ player: p, object: cannon.object });
+    assert.equal(cannon.steel, capacity, "Load X respects tier");
+    cannon.steel = 0;
+    Ammo.fire({ player: p, object: cannon.object });
+    assert.equal(cannon.steel, capacity, "Fire respects tier");
+    Cannon.forget(cannon);
+  }
+  Cannon.init({ core, emitCustomEvent() {} });
+});
+
+test("Nulodion's generated transcript sells the750k six-item set and validates at payment", () => {
+  const p = gunner({ parts: [], steel: 0 });
+  const inventory = p.getInventory();
+  const event = { npcId: core.NpcIdentifiers.NULODION, player: p, kind: "message", text: Nulodion.SELLS_CANNON };
+  const condition = (text) => Nulodion.answerCondition({ ...event, text });
+  assert.equal(condition("If the player does not have at least 750,000 coins:"), true);
+  Nulodion.sellCannon(event);
+  assert.equal(inventory.getAmount(Items.CANNON_BASE), 0);
+  inventory.add(new core.Item(Items.COINS, Nulodion.CANNON_PRICE), false);
+  assert.equal(condition("If the player has at least 750,000 coins and enough inventory space:"), true);
+  Nulodion.sellCannon(event);
+  assert.equal(inventory.getAmount(Items.COINS), 0);
+  for (const id of [...Cannon.KINDS.plain.parts, Items.AMMO_MOULD, Items.INSTRUCTION_MANUAL]) assert.equal(inventory.getAmount(id), 1);
+  Nulodion.sellCannon(event);
+  assert.equal(inventory.getAmount(Items.CANNON_BASE), 1, "no duplicate set without another payment");
+  inventory.add(new core.Item(Items.COINS, Nulodion.CANNON_PRICE), false);
+  for (let i = 0; i < 22; i++) inventory.add(new core.Item(Items.SPADE, 1), false);
+  assert.equal(condition("If the player has less than six free inventory space:"), true);
+  Nulodion.sellCannon(event);
+  assert.equal(inventory.getAmount(Items.COINS), Nulodion.CANNON_PRICE, "no payment with insufficient space");
+});
+
+test("Nulodion revalidates replacement space and a still-deployed cannon", () => {
+  const p = gunner();
+  const cannon = built(p);
+  p.setAttribute(Cannon.LOST_ATTRIBUTE, { kind: "plain", stage: 4 });
+  const event = { npcId: core.NpcIdentifiers.NULODION, player: p, kind: "message", text: Nulodion.GIVES_CANNON };
+  Nulodion.giveCannon(event);
+  assert.ok(p.getAttribute(Cannon.LOST_ATTRIBUTE), "cannot reclaim while a cannon stands");
+  Cannon.forget(cannon);
+  for (let i = 0; i < 26; i++) p.getInventory().add(new core.Item(Items.SPADE, 1), false);
+  Nulodion.giveCannon(event);
+  assert.ok(p.getAttribute(Cannon.LOST_ATTRIBUTE), "cannot lose replacement to a full inventory");
+});
+
+test("firing zones match all49 tiles in the Wiki Cannon Double Shot.png diagram", () => {
+  // Wiki https://oldschool.runescape.wiki/images/Cannon_Double_Shot.png, centred on the barrel.
+  // Green=2 shots/revolution, grey=1, red/centre=0. Rows north to south.
+  const expected = [
+    [1, 1, 2, 1, 2, 1, 1],
+    [1, 1, 2, 1, 2, 1, 1],
+    [2, 2, 1, 0, 1, 2, 2],
+    [1, 1, 0, 0, 0, 1, 1],
+    [2, 2, 1, 0, 1, 2, 2],
+    [1, 1, 2, 1, 2, 1, 1],
+    [1, 1, 2, 1, 2, 1, 1],
+  ];
+  for (let row = 0; row < 7; row++) for (let col = 0; col < 7; col++) {
+    const shots = Data.DIRECTIONS.filter((_, direction) => Data.inZone(direction, col - 3, 3 - row)).length;
+    assert.equal(shots, expected[row][col], `Wiki tile ${col - 3},${3 - row}`);
+  }
+});
+
+test("new restricted outlines use existing content bounds and the Wiki Hair of the Dog polygon", () => {
+  for (const [name, x, y, z] of [
+    ["Callisto's Den", 3359, 10335, 0], ["Vet'ion's Rest", 3295, 10203, 1],
+    ["Silk Chasm", 3423, 10212, 2], ["Ancient Prison", 2856, 5225, 0],
+    ["Scurrius' Lair", 3300, 9865, 0], ["Ungael", 2272, 4064, 0],
+    ["Kraken Cove", 2270, 10010, 0], ["Hair of the Dog", 3495, 3475, 0],
+  ]) {
+    const restriction = Restrictions.load().restrictions.find((entry) => entry.name === name);
+    assert.equal(Restrictions.restrictionAt(new core.Location(x, y, z)), restriction.message, name);
+  }
+  assert.equal(Restrictions.restrictionAt(new core.Location(3495, 3467, 0)), null, "outside the pub polygon");
+  assert.equal(Restrictions.restrictionAt(new core.Location(3295, 10203, 0)), null, "Vet'ion plane is respected");
+});
+
+test("sailing boats reject cannon setup through the actual boarded boat state", () => {
+  const p = gunner();
+  const original = core.BoatManager.getBoatAboard;
+  try {
+    core.BoatManager.getBoatAboard = () => ({});
+    assert.equal(Setup.refusal(p, 'plain'), Restrictions.load().default);
+  } finally {
+    core.BoatManager.getBoatAboard = original;
+  }
+});
+
+test("Nulodion preserves decayed cannon ammunition, loaded in the next cannon exactly once", () => {
+  const p = gunner({ steel: 0, granite: 12 });
+  const cannon = built(p);
+  cannon.age = Data.LOSE_TICKS - 1;
+  runTicks(p, 1);
+  Nulodion.giveCannon({ npcId: core.NpcIdentifiers.NULODION, player: p, kind: 'message', text: Nulodion.GIVES_CANNON });
+  assert.deepEqual(p.getAttribute(Cannon.RECOVERED_AMMO_ATTRIBUTE), { steel: 0, granite: 12 });
+  const restored = built(p);
+  assert.equal(restored.granite, 12);
+  assert.equal(restored.steel, 0);
+  assert.equal(p.getAttribute(Cannon.RECOVERED_AMMO_ATTRIBUTE), null);
+  assert.equal(p.getAttribute(Cannon.LOST_ATTRIBUTE), null);
+  Decay.pickUp({ player: p, object: restored.object });
+  assert.equal(p.getInventory().getAmount(Items.GRANITE_CANNONBALL), 12);
 });

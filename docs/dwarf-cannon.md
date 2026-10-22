@@ -8,7 +8,7 @@
 | `Ammo` | Fire, Empty, Load X |
 | `Firing` | turning and shooting |
 | `Decay` | breaking, Repair, loss, Pick-up, logout and login |
-| `Nulodion` | getting a lost cannon back |
+| `Nulodion` | the 750,000-coin set purchase and getting a lost cannon back |
 | `Ornament` | the shattered cannon ornament kit |
 | `Restrictions` + `plugins/items/data/cannon-restrictions.json` | where a cannon can't be set up |
 | `Data`, `Common` | shared numbers and state |
@@ -17,7 +17,7 @@
 - **an OSRS capture** (rsprox) of a cannon's whole life at the Woodcutting Guild's ents: setup, auto-load, Fire, two shots, Empty, Load X, Pick-up;
 - **the OSRS Wiki:** "Dwarf multicannon" (its prohibited-areas list too), "Shattered cannon ornament kit", and Nulodion's transcript;
 - **this cache:** ids;
-- **Near-Reality's code** for what neither shows: the firing zones and most area outlines. It's flagged below wherever it's used.
+- **Near-Reality's code**, historically, for the firing polygons and most older area outlines. Their central 49 firing tiles are now independently checked against the Wiki diagram; the outer polygons and older outlines remain flagged where unverified.
 
 ## Setting up (captured)
 "Set-up" on the base marks the player busy (varbit 12393).
@@ -67,12 +67,15 @@ Only changed vars are sent, as in the capture; all of them are sent again on log
 - **Granite:** granite balls load first, and steel only once the granite is used up. Granite fires first (projectile 1443).
 
 **Ours or unverified:**
-- **Firing zones:** each direction's polygon is Near-Reality's (the Wiki gives no shape). Both captured shots fall inside the right zone. They overlap, so one monster can take two balls a rotation (Wiki), and they leave a few tiles uncovered.
+- **Firing zones:** all 49 tiles in the Wiki's [Cannon Double Shot.png diagram](https://oldschool.runescape.wiki/images/Cannon_Double_Shot.png) match the implemented 0/1/2 shots per revolution, covered by a regression test. The original polygons came from Near-Reality; their direction assignment and shapes outside the diagram remain unverified. Both captured shots fall inside the expected directional zones.
 - **Running dry:** "Your cannon is out of ammo!" and the cannon stops.
 - **Fire with nothing to load:** "You need to load the cannon with cannonballs first.".
 - **Logging out:** the cannon stops firing.
 
 ## Cannonballs (captured)
+
+The existing Combat Achievements tier event raises capacity to 35 (Medium), 45 (Hard) or 60 (Elite), with 30 by default. Setup auto-load, Fire, Load X and its input maximum all use the same capacity.
+
 - **Empty:** "You unload your cannon and receive Steel cannonball x 28." (granite: "Granite cannonball"). Varp 3 goes to 0, and firing stops the next tick. **Ours:** the no-space message.
 - **Load X:** the first time, a count prompt "Set load-x cannonballs (1 - 30):", then varbit 17870 and "You will now load 10 cannonballs when using Load-x.". After that it loads that many: "You load the cannon with 10 cannonballs.". Saved per player.
 
@@ -85,12 +88,17 @@ Also works on a broken cannon or a part-built one. **Ours:** the no-space messag
 
 ## Decay (Wiki)
 - **Breaking:** after 25 minutes set up it breaks: the broken multicannon (14916; ornament 43028), with "Repair" and "Pick-up". Repair starts the 25 minutes again.
-- **Loss:** 10 more minutes unrepaired and it's gone. Its parts wait at Nulodion; balls in it are lost.
+- **Loss:** 10 more minutes unrepaired and it's gone. Its parts and loaded balls wait at Nulodion; reclaimed ammunition loads into the next cannon that player sets up.
 - **Logout:** the cannon stays up while the owner is logged out. If the server restarts, a cannon saved on a player but missing from the world counts as lost.
 - **Messages (ours, unverified):** "Your cannon has broken!", "You repair your cannon, restoring it to working order.", "Your cannon has decayed. Speak to Nulodion to obtain a new one.".
 - **Testing:** `::cannondecay` (developer) breaks your cannon, and on a broken one makes it disappear, each on the next tick.
 
 ## Nulodion (Wiki transcript)
+
+The existing generated Nulodion transcript and `Multicannon parts for sale` shop already contain the sale branches. The plugin answers the six-free-slots and 750,000-coin conditions, then consumes payment and grants the four parts, ammo mould and instruction manual on the transcript's existing message. It rechecks funds and space at payment. The generated shop and dialogue JSON are unchanged.
+
+Lost-cannon replacement likewise rechecks inventory space and refuses while another owned cannon is deployed. Decayed/restart-lost cannons retain their loaded steel/granite ammunition, which is restored already loaded at the next setup (matching the Wiki's replacement-ammunition rule). The recovered ammunition is persisted on the player until setup.
+
 "I've lost my cannon." follows his transcript, with its conditions answered from the cannon's state:
 - still set up somewhere;
 - fewer than 4 free slots;
@@ -107,18 +115,12 @@ Also works on a broken cannon or a part-built one. **Ours:** the no-space messag
 - **Animations (not captured):** the cache's matching runs of eight, fire 9230–9237 and turn 9239–9246, taken in the same N-first order as the plain ones.
 
 ## Restricted areas
-`cannon-restrictions.json` lists all 71 of the Wiki's prohibited areas with their messages. Anywhere in an instance (a private area) is refused with the default "You can't set up a cannon here.".
+`cannon-restrictions.json` lists all 72 tracked prohibited areas with their Wiki messages. 42 have explicit coordinate outlines. Any private area is refused; this already covers Chambers of Xeric, Theatre of Blood, Tombs of Amascut and player-owned houses during their actual instances. Sailing boats use `BoatManager.getBoatAboard(player)` rather than fixed coordinates.
 
-**Outlines:** 28 have one. The others are listed but not bounded yet.
-- **From Near-Reality's code**, unverified: most of them, e.g. the Grand Exchange, the Dwarven Mine and the Slayer Tower.
-- **From this server's own bounds:**
-  - the Revenant Caves, from `world.json`;
-  - Pest Control's game area;
-  - Zulrah's shrine;
-  - the Gemstone Crab's three spots.
+Thirteen previously missing outlines now come from existing canonical content bounds or the Wiki's own polygon: Ancient Guthixian Temple, Ancient Prison, Bryophyta's lair, Callisto's Den, Hair of the Dog, Kraken Cove, Scurrius' Lair, Silk Chasm, Sorceress's Garden, Ungael, Vet'ion's Rest, Water mill cellar and Zemouregal's Base. Sources are recorded on each data entry. Sorceress's Garden uses its isolated map square enclosing the four cache-flood-filled mazes and central garden. Hair of the Dog uses the Wiki's exact map polygon. Older Near-Reality outlines remain labelled unverified.
+
+Still without supported outlines (25): Abyssal Area, Barbarian Assault, Brutus arena, Clan Hall, Feldip Hills jungle hunter area, Fight Arena interior, Forthos Dungeon, Fossil Island bank chest island, Near Gilbert, Jiggig Dungeon, Jormungand's Prison basilisk areas, Karuulm Slayer Dungeon, Lizardman Caves, Mogre Camp, Nightmare Zone, Realm of Memories, Ruins of Tapoyauik, Scabaras Dungeon, Mort'ton and Shades of Mort'ton, Shellbane Gryphon Cave, Smoke Dungeon, Tonali Cavern, Tower of Magic, Uzer Mastaba, Vanstrom Klause. Wiki location pins alone do not establish the prohibited boundaries, particularly partial areas such as Karuulm's wyrm rooms or the Smoke Dungeon task room. These need cache boundary evidence or an OSRS capture; they remain blocked rather than receiving guessed rectangles. Nightmare Zone and Realm of Memories also receive the generic prohibition whenever instanced.
 
 ## Follow-ups
-- outlines for the 43 unbounded areas;
-- Nulodion's cannon sale (his transcript's 750,000-coin set and the parts shop);
-- the Combat Achievements capacity increases (35/45/60), once that system exists;
+- supported outlines for the unresolved areas listed above, and independent verification of older imported outlines;
 - the real messages for the parts marked "ours".

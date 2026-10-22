@@ -82,11 +82,59 @@
   },
   {
    "name": "Ancient Guthixian Temple",
-   "message": "A strange magical force won't let you set up a cannon here"
+   "message": "A strange magical force won't let you set up a cannon here",
+   "areas": [
+    {
+     "points": [
+      [
+       4032,
+       4352
+      ],
+      [
+       4160,
+       4352
+      ],
+      [
+       4160,
+       4544
+      ],
+      [
+       4032,
+       4544
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/quests/wgs/Temple.WhileGuthixSleeps.js: temple PrivateArea Boundary"
   },
   {
    "name": "Ancient Prison",
-   "message": "An ancient power won't let you set up a cannon here."
+   "message": "An ancient power won't let you set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       2840,
+       5180
+      ],
+      [
+       2946,
+       5180
+      ],
+      [
+       2946,
+       5236
+      ],
+      [
+       2840,
+       5236
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/bosses/data/nex.json: prison.box"
   },
   {
    "name": "Barbarian Assault",
@@ -125,11 +173,59 @@
   },
   {
    "name": "Bryophyta's lair",
-   "message": "You can't set up a cannon here."
+   "message": "You can't set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3204,
+       9922
+      ],
+      [
+       3239,
+       9922
+      ],
+      [
+       3239,
+       9948
+      ],
+      [
+       3204,
+       9948
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/bosses/data/giant-boss-lairs.json: cache map and rsprox lair bounds"
   },
   {
    "name": "Callisto's Den",
-   "message": "It doesn't seem safe to set up a cannon here."
+   "message": "It doesn't seem safe to set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3328,
+       10304
+      ],
+      [
+       3392,
+       10304
+      ],
+      [
+       3392,
+       10368
+      ],
+      [
+       3328,
+       10368
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/bosses/data/wilderness-bosses.json: cache script 384 lair map-square bounds"
   },
   {
    "name": "Castle Wars",
@@ -693,7 +789,51 @@
   },
   {
    "name": "Hair of the Dog",
-   "message": "Roavar won't be happy if you set up a cannon here."
+   "message": "Roavar won't be happy if you set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3488,
+       3478
+      ],
+      [
+       3488,
+       3468
+      ],
+      [
+       3500,
+       3468
+      ],
+      [
+       3503,
+       3471
+      ],
+      [
+       3505,
+       3471
+      ],
+      [
+       3505,
+       3480
+      ],
+      [
+       3491,
+       3480
+      ],
+      [
+       3491,
+       3479
+      ],
+      [
+       3490,
+       3478
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "https://oldschool.runescape.wiki/w/Hair_of_the_Dog?action=raw: map polygon"
   },
   {
    "name": "Hespori",
@@ -875,7 +1015,30 @@
   },
   {
    "name": "Kraken Cove",
-   "message": "You can't set up a cannon here."
+   "message": "You can't set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       2240,
+       9984
+      ],
+      [
+       2301,
+       9984
+      ],
+      [
+       2301,
+       10049
+      ],
+      [
+       2240,
+       10049
+      ]
+     ]
+    }
+   ],
+   "source": "server/plugins/skills/data/slayer-areas.json: Kraken Cove, Wiki and spawn checked"
   },
   {
    "name": "Lair of Tarn Razorlor",
@@ -1076,11 +1239,59 @@
   },
   {
    "name": "Scurrius' Lair",
-   "message": "It's far too damp for you to set up a cannon here."
+   "message": "It's far too damp for you to set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3289,
+       9858
+      ],
+      [
+       3309,
+       9858
+      ],
+      [
+       3309,
+       9878
+      ],
+      [
+       3289,
+       9878
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/bosses/scurrius/Common.Scurrius.js: LAIR"
   },
   {
    "name": "Sorceress's Garden",
-   "message": "You can't set up a cannon here."
+   "message": "You can't set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       2880,
+       5440
+      ],
+      [
+       2944,
+       5440
+      ],
+      [
+       2944,
+       5504
+      ],
+      [
+       2880,
+       5504
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/minigames/sorceressgarden/Gardens.SorceresssGarden.js: isolated cache map square containing all four flood-filled mazes and central garden"
   },
   {
    "name": "Mort'ton and Shades of Mort'ton",
@@ -1092,7 +1303,31 @@
   },
   {
    "name": "Silk Chasm",
-   "message": "It doesn't seem safe to set up a cannon here."
+   "message": "It doesn't seem safe to set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3392,
+       10176
+      ],
+      [
+       3456,
+       10176
+      ],
+      [
+       3456,
+       10240
+      ],
+      [
+       3392,
+       10240
+      ]
+     ],
+     "z": 2
+    }
+   ],
+   "source": "server/plugins/bosses/data/wilderness-bosses.json: cache script 384 lair map-square bounds"
   },
   {
    "name": "Slayer Tower",
@@ -1646,7 +1881,31 @@
   },
   {
    "name": "Ungael",
-   "message": "The intense cold threatens to crack the metal of your cannon. You probably shouldn't put it down here."
+   "message": "The intense cold threatens to crack the metal of your cannon. You probably shouldn't put it down here.",
+   "areas": [
+    {
+     "points": [
+      [
+       2258,
+       4054
+      ],
+      [
+       2287,
+       4054
+      ],
+      [
+       2287,
+       4079
+      ],
+      [
+       2258,
+       4079
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/bosses/vorkath/Area.Vorkath.js: CRATER (Vorkath area)"
   },
   {
    "name": "Uzer Mastaba",
@@ -1658,11 +1917,59 @@
   },
   {
    "name": "Vet'ion's Rest",
-   "message": "It doesn't seem safe to set up a cannon here."
+   "message": "It doesn't seem safe to set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3264,
+       10176
+      ],
+      [
+       3328,
+       10176
+      ],
+      [
+       3328,
+       10240
+      ],
+      [
+       3264,
+       10240
+      ]
+     ],
+     "z": 1
+    }
+   ],
+   "source": "server/plugins/bosses/data/wilderness-bosses.json: cache script 384 lair map-square bounds"
   },
   {
    "name": "Water mill cellar",
-   "message": "It is too damp for the cannon to function here."
+   "message": "It is too damp for the cannon to function here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3200,
+       9678
+      ],
+      [
+       3251,
+       9678
+      ],
+      [
+       3251,
+       9716
+      ],
+      [
+       3200,
+       9716
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/quests/quests/DeathToTheDorgeshuun.Quest.js: STAGE_MILL interaction zone, Wiki map pin confirms location"
   },
   {
    "name": "Warriors' Guild",
@@ -2252,7 +2559,31 @@
   },
   {
    "name": "Zemouregal's Base",
-   "message": "A strange magical force won't let you set up a cannon here."
+   "message": "A strange magical force won't let you set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       3490,
+       4530
+      ],
+      [
+       3621,
+       4530
+      ],
+      [
+       3621,
+       4631
+      ],
+      [
+       3490,
+       4631
+      ]
+     ],
+     "z": 0
+    }
+   ],
+   "source": "server/plugins/quests/quests/DefenderOfVarrock.Quest.js: BASE_ZONE, Wiki map pin confirms location"
   },
   {
    "name": "Zulrah's Shrine",
