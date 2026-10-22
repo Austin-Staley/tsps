@@ -9,25 +9,32 @@
  *   five. Three rubble heaps (2x2) at 4193,5530, 4196,5536 and 4193,5540. Music 896.
  * - Phase one is three cycles of 31 ticks:
  *   - five magic attacks four ticks apart (fireball 4034 at a player);
- *   - an AoE (aoe_01): projanim 4378 at each player's tile, with a shadow and its hit 120 cycles
- *     later;
- *   - the flame blast (flame_blast_01). Three ticks later a fire wave rolls out from him
- *     (ennius_fire_explosion, delays by distance): a 90-degree wedge in the first two cycles,
- *     all round in the third.
- *   - A heap collapses in the same tick (the rubble NPC destroyed, collapse anim and graphic,
- *     hit for 100). The wave leaves out the tiles behind that heap.
- * - Phase two (the heaps gone):
- *   - seven arena fires and the eight corpse piles on the edge burning;
- *   - every 21 ticks four ranged attacks (projectile 4374 at a player), then two magic attacks
- *     (three for five players) at edge tiles;
- *   - three ticks after each magic attack a Corpse (16687, 62 hitpoints) rises on that tile and
+ *   - an AoE (aoe_01, sounds 9221, 9335, 9215): projanim 4378 at each player's tile, with a
+ *     shadow and its hit 120 cycles later;
+ *   - three ticks later the flame blast (flame_blast_01, sounds 9224, 9210, 9215, 9259, and 9240
+ *     for each player a tick later). Three ticks after it a fire wave (ennius_fire_explosion,
+ *     sound 10579) rolls out a cycle a tile from his footprint: a 90-degree wedge from it at the
+ *     heap that falls (the south or north heap first, at random, then the east, then the last),
+ *     all round in the third cycle.
+ *   - That heap collapses in the same tick (the rubble NPC destroyed, collapse anim and graphic;
+ *     invisible_type8_nonblocking and invisible_type8_blockrange_size2 on it) and shelters the
+ *     wave as it falls: a tile it hides from his centre tile (projectile line of sight) is spared,
+ *     and one it hides only from his nearest tile gets the smaller explosion (2,065 of 2,093
+ *     captured tiles).
+ * - Phase two starts on the third wave's tick:
+ *   - seven arena fires (one to seven tiles from him, mostly two to five) and the eight corpse
+ *     piles on the edge burning;
+ *   - ranged attacks (projectile 4374 at a player) seven and eleven ticks in, then a 21-tick
+ *     cycle from fifteen: two magic attacks (three for five players) two ticks apart at edge
+ *     tiles, four ranged attacks four ticks apart from five ticks in, three more fires at twelve;
+ *   - three ticks after each magic attack a Corpse (16687, 62 hitpoints) fades in on that tile and
  *     walks a tile a tick towards him. One that reaches him is absorbed and heals him twice the
- *     hitpoints it had left;
- *   - three more fires every cycle.
- * - At 0: death_01 with its graphic, gone six ticks later, and the room is won.
+ *     hitpoints it had left (hitsplat 6); one killed is doused and goes four ticks later.
+ * - At 0: death_01 with its graphic; six ticks later he and the corpses go, his footprint is
+ *   walkable again, and the room is won.
  * Estimates (a spectator sees no damage on players): every damage figure, what the fires do
- * (a burn each tick), which heap goes when and which way the wedge points (at that heap), where
- * the fires and corpses appear.
+ * (a burn each tick), whether the smaller explosions hurt (here they don't), where the corpses
+ * rise on the edge.
  */
 
 const Shared = require("./Shared.FracturedArchive");
@@ -48,14 +55,26 @@ const TIME = {
   CYCLE_ONE: 31,
   MAGIC_GAP: 4,
   MAGICS: 5,
+  AOE_TO_BLAST: 3,
   BLAST_WAVE: 3,
   CYCLE_TWO: 21,
-  RANGED_GAP: 3,
+  /** Phase two from the third wave: two ranged attacks, then the cycle. */
+  FIRST_RANGED: [7, 11],
+  FIRST_CYCLE: 15,
+  MAGIC_PAIR: 2,
+  RANGED_FROM: 5,
+  RANGED_GAP: 4,
+  FIRES_AT: 12,
   CORPSE_RISES: 3,
+  CORPSE_GONE: 4,
   HEAP_GONE: 3,
   DEATH: 6,
 };
 const DAMAGE = { MAGIC: 30, AOE: 35, WAVE: 45, RANGED: 25, FIRE: 6 };
+/** How far from his footprint the arena fires land (captured: 107 fires). */
+const FIRE_DISTANCES = [[1, 4], [2, 15], [3, 31], [4, 28], [5, 21], [6, 6], [7, 2]];
+/** The heaps, by index into LAYOUT.rubble: south and north first (one at random), east second. */
+const HEAP = { SOUTH: 0, EAST: 1, NORTH: 2 };
 const FIRES_AT_START = 7;
 const FIRES_PER_CYCLE = 3;
 const CORPSE_HP = 62;
@@ -64,8 +83,11 @@ class XarthRoom extends Raid.Room {
   onBuild() {
     this.boss = this.spawn(named("npc", "tfa_xarth"), LAYOUT.boss, { scripted: true, face: Shared.core().Direction.WEST.getId() });
     const blocker = named("loc", "invisible_type8_blocking");
-    for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) this.placeObject(blocker, { x: LAYOUT.boss.x + x, y: LAYOUT.boss.y + y, z: 0 });
+    this.blockers = [];
+    for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) this.blockers.push(this.placeObject(blocker, { x: LAYOUT.boss.x + x, y: LAYOUT.boss.y + y, z: 0 }));
     this.heaps = LAYOUT.rubble.map((tile) => ({ tile, npc: this.spawn(named("npc", "tfa_xarth_rubble_npc"), { ...tile, z: 0 }, { scripted: true }), down: false }));
+    const first = Math.random() < 0.5 ? HEAP.SOUTH : HEAP.NORTH;
+    this.order = [first, HEAP.EAST, first === HEAP.SOUTH ? HEAP.NORTH : HEAP.SOUTH].map((index) => this.heaps[index]);
     this.fires = new Map();
     this.corpses = new Set();
     this.cycles = 0;
@@ -93,8 +115,8 @@ class XarthRoom extends Raid.Room {
     for (let i = 0; i < TIME.MAGICS; i++) this.later(i * TIME.MAGIC_GAP, () => this.magic());
     const aoeAt = TIME.MAGICS * TIME.MAGIC_GAP;
     this.later(aoeAt, () => this.aoe());
-    this.later(aoeAt + 4, () => this.blast(cycle));
-    this.later(TIME.CYCLE_ONE, () => (this.heaps.every((heap) => heap.down) ? this.startPhaseTwo() : this.phaseOneCycle()));
+    this.later(aoeAt + TIME.AOE_TO_BLAST, () => this.blast(cycle));
+    if (cycle < this.order.length - 1) this.later(TIME.CYCLE_ONE, () => this.phaseOneCycle());
   }
 
   magic() {
@@ -109,6 +131,7 @@ class XarthRoom extends Raid.Room {
   aoe() {
     if (this.dead) return;
     this.boss.performAnimation(anim("xarth_attack_aoe_01"));
+    for (const sound of [9221, 9335, 9215]) Shared.areaSound(this.area, this.boss, sound);
     for (const player of this.fighters()) {
       const tile = Shared.tileOf(player);
       Shared.projectile(this.area, this.boss, tile, named("spotanim", "vfx_xarth_aoe_projanim_01"), { delay: 60, end: 120, angle: 30, progress: 128, startHeight: 470, endHeight: 0 });
@@ -118,35 +141,41 @@ class XarthRoom extends Raid.Room {
     }
   }
 
-  /** The flame blast: a wave out from him (a wedge at the heap he burns, then all round). */
+  /**
+   * The flame blast, and three ticks later the wave (captured): a cycle a tile from his
+   * footprint, a 90-degree wedge at the heap that falls (all round in the third cycle), the heap
+   * sheltering the tiles behind it as it falls.
+   */
   blast(cycle) {
     if (this.dead) return;
     this.boss.performAnimation(anim("xarth_attack_flame_blast_01"));
-    this.boss.performGraphic(spot("vfx_xarth_attack_flame_blast_01"));
-    const heap = this.heaps.find((candidate) => !candidate.down) ?? null;
+    this.boss.performGraphicInSlot(5, spot("vfx_xarth_attack_flame_blast_01", { delay: 30 }));
+    for (const sound of [9224, 9210, 9215, 9259]) Shared.areaSound(this.area, this.boss, sound);
+    this.later(1, () => {
+      for (const player of this.fighters()) Shared.sound(player, 9240);
+    });
+    const heap = this.order[cycle] ?? null;
     this.later(TIME.BLAST_WAVE, () => {
       if (this.dead) return;
-      const centre = { x: LAYOUT.boss.x + 1, y: LAYOUT.boss.y + 1 };
-      const all = cycle >= 2;
-      const aim = heap ? Math.atan2(heap.tile.y - centre.y, heap.tile.x - centre.x) : 0;
-      const tiles = [];
+      const all = cycle >= this.order.length - 1;
+      const full = [];
       const { arena } = LAYOUT;
       for (let x = arena.minX; x <= arena.maxX; x++) {
         for (let y = arena.minY; y <= arena.maxY; y++) {
           const tile = { x, y, z: 0 };
-          if (Shared.distanceTo(this.boss, tile) === 0) continue;
-          if (!all && Math.abs(angleBetween(Math.atan2(y - centre.y, x - centre.x), aim)) > Math.PI / 4) continue;
-          if (heap && behind(centre, heap.tile, tile)) continue;
-          tiles.push(tile);
+          const distance = Shared.distanceTo(this.boss, tile);
+          if (distance === 0 || (!all && heap && !inWedge(tile, heap.tile))) continue;
+          const cover = heap ? shelter(tile, heap.tile) : "none";
+          if (cover === "full") continue;
+          const smaller = cover === "partial";
+          Shared.graphicAt(this.area, named("spotanim", smaller ? "vfx_vmq4_ennius_fire_explosion_smaller" : "vfx_vmq4_ennius_fire_explosion"), tile, { delay: distance });
+          if (!smaller) full.push(tile);
         }
       }
-      for (const tile of tiles) {
-        const distance = Math.max(Math.abs(tile.x - centre.x), Math.abs(tile.y - centre.y));
-        Shared.graphicAt(this.area, named("spotanim", "vfx_vmq4_ennius_fire_explosion"), tile, { delay: Math.min(7, distance) * 6 });
-      }
       Shared.areaSound(this.area, this.boss, 10579);
-      this.hitOn(tiles, DAMAGE.WAVE);
+      this.hitOn(full, DAMAGE.WAVE);
       if (heap) this.collapse(heap);
+      if (all) this.startPhaseTwo();
     });
   }
 
@@ -166,25 +195,29 @@ class XarthRoom extends Raid.Room {
       this.later(TIME.HEAP_GONE, () => this.despawn(destroyed));
     }
     this.placeObject(named("loc", "invisible_type8_nonblocking"), tile);
+    this.placeObject(named("loc", "invisible_type8_blockrange_size2"), tile);
     for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) this.area.setClip(Shared.loc({ x: tile.x + dx, y: tile.y + dy, z: 0 }), 0);
   }
 
   // ---------------------------------------------------------------- phase two
 
+  /** On the third wave's tick (captured): the fires and piles, two ranged attacks, then the cycle. */
   startPhaseTwo() {
-    if (this.dead) return;
+    if (this.dead || this.phaseTwo) return;
     this.phaseTwo = true;
     for (let i = 0; i < FIRES_AT_START; i++) this.addFire();
     LAYOUT.piles.forEach(([x, y], index) => this.placeObject(named("loc", `tfa_xarth01_corpse_pile_fire0${index + 1}`), { x, y, z: 0 }));
-    this.phaseTwoCycle();
+    for (const at of TIME.FIRST_RANGED) this.later(at, () => this.ranged());
+    this.later(TIME.FIRST_CYCLE, () => this.phaseTwoCycle());
   }
 
+  /** Magic attacks two ticks apart (corpses), four ranged attacks from five, fires at twelve. */
   phaseTwoCycle() {
     if (this.dead) return;
-    for (let i = 0; i < 4; i++) this.later(i * TIME.RANGED_GAP, () => this.ranged());
     const magics = this.size >= 5 ? 3 : 2;
-    for (let i = 0; i < magics; i++) this.later(4 * TIME.RANGED_GAP + i * 2, () => this.summon());
-    this.later(TIME.CYCLE_TWO - 1, () => {
+    for (let i = 0; i < magics; i++) this.later(i * TIME.MAGIC_PAIR, () => this.summon());
+    for (let i = 0; i < 4; i++) this.later(TIME.RANGED_FROM + i * TIME.RANGED_GAP, () => this.ranged());
+    this.later(TIME.FIRES_AT, () => {
       for (let i = 0; i < FIRES_PER_CYCLE; i++) this.addFire();
     });
     this.later(TIME.CYCLE_TWO, () => this.phaseTwoCycle());
@@ -232,22 +265,27 @@ class XarthRoom extends Raid.Room {
   absorb(corpse) {
     corpse.__dying = true;
     corpse.performAnimation(anim("xarth_corpse_absorbed_01"));
-    corpse.performGraphic(spot("vfx_xarth_corpse_absorbed_01"));
+    corpse.performGraphicInSlot(2, spot("vfx_xarth_corpse_absorbed_01"));
     this.boss.performGraphic(spot("vfx_xarth_absorb_corpse_fire_01"));
-    const heal = corpse.getHitpoints() * 2;
-    this.boss.setHitpoints(Math.min(this.boss.getMaxHitpoints(), this.boss.getHitpoints() + heal));
+    const heal = Math.min(corpse.getHitpoints() * 2, this.boss.getMaxHitpoints() - this.boss.getHitpoints());
+    this.boss.setHitpoints(this.boss.getHitpoints() + heal);
+    if (heal > 0) this.boss.showHitsplat(heal, { mine: 6, others: 6 });
     this.later(2, () => {
       this.corpses.delete(corpse);
       this.despawn(corpse);
     });
   }
 
+  /** A fire one to seven tiles from him, mostly two to five (captured). */
   addFire() {
     const { arena } = LAYOUT;
-    for (let tries = 0; tries < 20; tries++) {
-      const tile = { x: Shared.random(arena.minX, arena.maxX), y: Shared.random(arena.minY, arena.maxY), z: 0 };
+    for (let tries = 0; tries < 40; tries++) {
+      const distance = weighted(FIRE_DISTANCES);
+      const tile = { x: Shared.random(LAYOUT.boss.x - distance, LAYOUT.boss.x + 2 + distance), y: Shared.random(LAYOUT.boss.y - distance, LAYOUT.boss.y + 2 + distance), z: 0 };
+      if (Shared.distanceTo(this.boss, tile) !== distance) continue;
+      if (tile.x < arena.minX || tile.x > arena.maxX || tile.y < arena.minY || tile.y > arena.maxY) continue;
       const key = `${tile.x},${tile.y}`;
-      if (this.fires.has(key) || Shared.distanceTo(this.boss, tile) <= 1 || !Shared.floorFree(this.area, tile)) continue;
+      if (this.fires.has(key) || !Shared.floorFree(this.area, tile)) continue;
       this.fires.set(key, this.placeObject(named("loc", "tfa_xarth_arenafire"), tile));
       return;
     }
@@ -279,7 +317,9 @@ class XarthRoom extends Raid.Room {
       npc.__dying = true;
       npc.performAnimation(anim("xarth_corpse_death_01"));
       npc.performGraphic(spot("vfx_xarth_corpse_death_01"));
-      this.later(2, () => {
+      npc.performGraphicInSlot(2, spot("vfx_xarth_corpse_walk_doused_01"));
+      npc.getMovementQueue().reset();
+      this.later(TIME.CORPSE_GONE, () => {
         this.corpses.delete(npc);
         this.despawn(npc);
       });
@@ -295,10 +335,16 @@ class XarthRoom extends Raid.Room {
     this.boss.performAnimation(anim("xarth_death_01"));
     this.boss.performGraphic(spot("vfx_xarth_death_01"));
     this.hideBars();
-    for (const corpse of [...this.corpses]) this.despawn(corpse);
-    this.corpses.clear();
+    for (const corpse of this.corpses) {
+      corpse.__dying = true;
+      corpse.getMovementQueue().reset();
+    }
     this.later(TIME.DEATH, () => {
       this.despawn(this.boss);
+      for (const corpse of [...this.corpses]) this.despawn(corpse);
+      this.corpses.clear();
+      const nonblocking = named("loc", "invisible_type8_nonblocking");
+      for (const blocker of this.blockers) this.replaceObject(blocker, nonblocking);
       this.complete();
     });
   }
@@ -319,21 +365,67 @@ function edgeTile() {
   return { x: arena.maxX, y: Shared.random(arena.minY, arena.maxY), z: 0 };
 }
 
-function angleBetween(a, b) {
-  let d = a - b;
-  while (d > Math.PI) d -= 2 * Math.PI;
-  while (d < -Math.PI) d += 2 * Math.PI;
-  return d;
+function weighted(table) {
+  let roll = Math.random() * table.reduce((sum, [, weight]) => sum + weight, 0);
+  for (const [value, weight] of table) if ((roll -= weight) < 0) return value;
+  return table[table.length - 1][0];
 }
 
-/** Whether a tile is behind a 2x2 heap, seen from the boss's centre. */
-function behind(centre, heap, tile) {
-  const heapCentre = { x: heap.x + 0.5, y: heap.y + 0.5 };
-  const toHeap = Math.hypot(heapCentre.x - centre.x, heapCentre.y - centre.y);
-  const toTile = Math.hypot(tile.x - centre.x, tile.y - centre.y);
-  if (toTile <= toHeap) return false;
-  const spread = Math.atan2(1.2, toHeap);
-  return Math.abs(angleBetween(Math.atan2(tile.y - centre.y, tile.x - centre.x), Math.atan2(heapCentre.y - centre.y, heapCentre.x - centre.x))) <= spread;
+/** In the 90-degree wedge out of his footprint towards a heap: a row out it is the footprint and a tile each side. */
+function inWedge(tile, heap) {
+  const { x: bx, y: by } = LAYOUT.boss;
+  const dx = heap.x + 1 - (bx + 1.5);
+  const dy = heap.y + 1 - (by + 1.5);
+  if (Math.abs(dy) > Math.abs(dx)) {
+    const out = dy < 0 ? by - tile.y : tile.y - (by + 2);
+    return out >= 1 && tile.x >= bx - out && tile.x <= bx + 2 + out;
+  }
+  const out = dx > 0 ? tile.x - (bx + 2) : bx - tile.x;
+  return out >= 1 && tile.y >= by - out && tile.y <= by + 2 + out;
+}
+
+/**
+ * How a falling heap shelters a tile from the wave (fitted to the captures): "full" when it is
+ * the heap or the heap blocks the line of sight from his centre tile, "partial" (the smaller
+ * explosion) when it only blocks it from his footprint's tile nearest the tile, else "none".
+ */
+function shelter(tile, heap) {
+  const onHeap = (x, y) => x >= heap.x && x <= heap.x + 1 && y >= heap.y && y <= heap.y + 1;
+  if (onHeap(tile.x, tile.y)) return "full";
+  const { x: bx, y: by } = LAYOUT.boss;
+  if (!lineOfSight(bx + 1, by + 1, tile.x, tile.y, onHeap)) return "full";
+  const nx = Math.max(bx, Math.min(bx + 2, tile.x));
+  const ny = Math.max(by, Math.min(by + 2, tile.y));
+  return lineOfSight(nx, ny, tile.x, tile.y, onHeap) ? "none" : "partial";
+}
+
+/** OSRS's projectile line of sight between tiles (16.16 fixed point along the long axis). */
+function lineOfSight(sx, sy, tx, ty, blocked) {
+  const dx = tx - sx;
+  const dy = ty - sy;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    const step = Math.sign(dx);
+    const slope = Math.trunc((dy * 65536) / Math.abs(dx));
+    let frac = sy * 65536 + 32768;
+    for (let x = sx; x !== tx;) {
+      x += step;
+      frac += slope;
+      const y = Math.floor(frac / 65536);
+      if ((x !== tx || y !== ty) && blocked(x, y)) return false;
+    }
+    return true;
+  }
+  if (dy === 0) return true;
+  const step = Math.sign(dy);
+  const slope = Math.trunc((dx * 65536) / Math.abs(dy));
+  let frac = sx * 65536 + 32768;
+  for (let y = sy; y !== ty;) {
+    y += step;
+    frac += slope;
+    const x = Math.floor(frac / 65536);
+    if ((x !== tx || y !== ty) && blocked(x, y)) return false;
+  }
+  return true;
 }
 
 module.exports = function registerXarth(api) {
@@ -341,4 +433,4 @@ module.exports = function registerXarth(api) {
   Raid.registerRoom("XARTH", XarthRoom);
 };
 
-Object.assign(module.exports, { XarthRoom, LAYOUT, HITPOINTS, TIME, DAMAGE });
+Object.assign(module.exports, { XarthRoom, LAYOUT, HITPOINTS, TIME, DAMAGE, inWedge, shelter });

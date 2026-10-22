@@ -62,6 +62,7 @@ Plugin data lives in `server/plugins/minigames/data/fractured-archive.json`: the
 - **Projectiles**: rsprox prints `map_projanim_v2` heights at four times the packet's, so `Shared.projectile` divides them; and it names the firing actor as the packet's source, as live does, so the client starts the projectile from the model.
 - **`MovementQueue.getDestination()`**: where a player's walk ends, for rolling them there (Ezekiel).
 - **`onForcedWalkRoute`**: a walk click the engine refuses because the player is mid forced move (or being placed after one) goes to these hooks first, so a plugin can chain a roll at once; other movement blocks still refuse it. Ezekiel's dodges use it with `onWalkRoute`, so the click itself rolls the player, with no normal step or wait first.
+- **Camera target** (`PacketSender.sendCameraTarget`, CAMERA_CONTROL subtype 12; OSRS's `cam_target`): the client's follow camera, scene centre, roofs and sound listener follow a tile or another player instead of the local player until a camera reset. `Player.setFixedViewDistance` holds a player's view distance (up to 64) for a spectator.
 - **Locs seen below the floor** (`render/loc/SunkenLocs.ts`): Ocellus' void locs (62701-62705) have faces down to 50 units under the floor. OSRS paints a loc after its floor with no depth test, so you see down into them, and their depth shows as the camera turns. Both renderers draw these locs again after the opaque scene. First their faces reset the depth under them to the far plane with no colour (depth range or viewport depth 1). Then they are drawn normally, and their translucent faces follow in the transparent pass.
 - **Omnishop buy amounts**: a shop row's `omnishop_buy_q1-4` are codes into enum 5844 (1→1, 2→5, 3→10, 4→50, 5→2, 6→3; client script 10163). Rows without them keep 1/5/10/50, so the existing shops are unchanged; Alliance Supplies buys 1, 2, 3 or 5.
 
@@ -356,10 +357,10 @@ From the captures of four fights (two to four players) and the Wiki's strategy, 
 
 ## Dreadnoth the Jellied
 
-- Dreadnoth (16665, 5x5) at 4189,5661 in an arena 4181-4198 x 5656-5670. It crawls after its target and hits in melee.
-- **Waves** at 85, 65 and 45%: one, two and three volleys. Each spawns jellies (16666, 75 hitpoints, at most 12) and leaves damage tiles that burn.
+- Dreadnoth (16665, 5x5) at 4189,5661 in an arena 4181-4198 x 5656-5670, with headbar 66 (90 wide). It crawls after its target, a tile every two ticks as live's crawl steps (which clients play over both ticks, so it doesn't stop and start), and hits whoever is beside it in melee.
+- **Waves** at 85, 65 and 45% (headbar 66 fills of about 75, 56 and 40 of 90): one, two and three volleys six ticks apart. Each is `jump01`, then a tick later three damage tiles in or by its footprint (sound 12361) and three `ranged_proj01` at each player (10-90, 12-120, 14-150). Where they land, a splat and `jelly_spawning_idle`, sent again every tick until the jellies (16666, 75 hitpoints, at most 12) rise eight ticks after the last volley.
 - It faces its target as an entity. The jellies are ordinary combat NPCs that always go for the nearest fighter; they and Dreadnoth walk through other NPCs, so jellies stack and never block it.
-- **Phase two** at 25%: "*glub glub*", a jump every eight ticks at its target: a 90-cycle exact move that lands centred on the player's tile, with `tfa_boss_jelly_5x5_jump` (the shadow) there as it leaves. A player still under it is slammed, and it heals by the damage (Wiki and guides). Then its two spits.
+- **Phase two** at 25%: "*glub glub*", then five ticks later (all five captures) and every eight ticks after, a jump (`jump02`) at its target, a 90-cycle exact move with `tfa_boss_jelly_5x5_jump` (the shadow) where it lands. It lands centred on the player's tile when they are within five tiles, else five tiles the nearest of eight ways towards them, never west of x 4184 (fits the captured jumps; 38 of 48 to a tile from the tile it faced). A player still under it is slammed, and it heals by the damage (Wiki and guides; hitsplat 6). As it lands: one to three damage tiles in its footprint, and at each player a `ranged_proj01` (10-90) and a `ranged_proj02` (10-180, sound 12362) at their tile, which becomes a damage tile six ticks later.
 - **Death:** it splits into seven jellies of 37 hitpoints; the room is won when the last one dies. The damage tiles are cleared (`invisible_type8_nonblocking`).
 - *Estimates:* every damage figure, how many jellies a volley makes, a jelly's damage (the cache's).
 
@@ -372,15 +373,23 @@ From the captures of four fights (two to four players) and the Wiki's strategy, 
 
 ## Xarth
 
-- Xarth (16684, 3x3) at 4190,5534 never moves. Three rubble heaps (2x2) at 4193,5530, 4196,5536 and 4193,5540.
+From the captures of five fights (four to five players).
+
+- Xarth (16684, 3x3) at 4190,5534 never moves; his footprint is nine `invisible_type8_blocking`. Three rubble heaps (2x2) at 4193,5530 (south), 4196,5536 (east) and 4193,5540 (north).
 - **Phase one**, three cycles of 31 ticks:
   - five magic attacks four ticks apart (fireball 4034 at a player);
-  - an AoE (`xarth_attack_aoe_01`): a projectile at each player's tile, with a shadow;
-  - the flame blast, and three ticks later a wave rolling out from him: a 90° wedge in the first two cycles, all round in the third.
-  - A heap collapses in the same tick, and the tiles behind it are safe from that wave. As captured, the heap NPC goes, a destroyed one plays `loc_xarth_rubble_collapse_01` with its graphic for three ticks, and the heap's loc is replaced by an invisible one: the 2x2 is clear and walkable.
-- **Phase two:** seven arena fires and the eight corpse piles burning; every 21 ticks four ranged attacks, then two magic attacks (three for five players) at edge tiles. Three ticks after each, a Corpse (16687, 62 hitpoints) rises there and walks to him. One that reaches him heals him twice the hitpoints it has left. Three more fires each cycle.
-- **Death:** `xarth_death_01`, gone six ticks later, and the room is won.
-- *Estimates:* every damage figure, the fires' burn, which heap goes when, where the fires and corpses appear.
+  - an AoE (`xarth_attack_aoe_01`, sounds 9221, 9335, 9215): a projectile at each player's tile, with a shadow;
+  - three ticks later the flame blast (sounds 9224, 9210, 9215, 9259, then 9240 for each player a tick later). Three ticks after that comes the wave (`vfx_vmq4_ennius_fire_explosion`, sound 10579), rolling out a cycle per tile of distance from his footprint (every captured tile).
+  - **The wave's shape:** a 90° wedge out of his footprint towards the heap that falls (a row out it is the footprint plus a tile each side, a tile wider each side every row), then all round in the third cycle. The heaps fall south or north first (at random: 3 and 2 of 5 captures), then east, then the last.
+  - **The falling heap shelters the tiles behind it.** A tile the heap hides from his centre tile, by OSRS's projectile line of sight, gets no fire. One it hides only from his footprint's tile nearest that tile gets the smaller explosion (`_smaller`). This fits 3,892 of 3,920 captured tiles.
+  - The heap NPC goes and a destroyed one plays `loc_xarth_rubble_collapse_01` with its graphic for three ticks. The heap's tiles get `invisible_type8_nonblocking` and `invisible_type8_blockrange_size2`, so the 2x2 is walkable.
+- **Phase two** starts on the third wave's tick:
+  - seven arena fires, one to seven tiles from his footprint (mostly two to five), and the eight corpse piles burning;
+  - ranged attacks seven and eleven ticks in;
+  - then a 21-tick cycle from 15: two magic attacks two ticks apart (three for five players) at edge tiles, four ranged attacks four ticks apart from five, three more fires at twelve.
+  - Three ticks after each magic attack a Corpse (16687, 62 hitpoints) fades in there (0 to 30 cycles) and walks a tile a tick to him. One that reaches him is absorbed (`xarth_corpse_absorbed_01`, gone two ticks later) and heals him twice the hitpoints it has left (hitsplat 6: 124 for an unhurt one). One killed plays `xarth_corpse_death_01` with the doused flame and goes four ticks later.
+- **Death:** `xarth_death_01` with its graphic. Six ticks later he and the corpses go, his footprint becomes `invisible_type8_nonblocking`, and the room is won.
+- *Estimates:* every damage figure, the fires' burn, whether the smaller explosions hurt (here they don't), where on the edge the corpses rise.
 
 ## Ocellus
 
@@ -475,6 +484,18 @@ From the captures of three kills, the Wiki's Ocellus and strategy pages, and the
   - Recent: "There aren't any recent raids to spectate." *Estimate:* otherwise the raid that started last.
   - Carrying anything: "Spectators cannot bring anything into the Archive. Please visit the bank to deposit your items." (live strikes the options out).
 - In: a fade, `tfa_client_spectate_mode` 2, "Spectating the room. Click a fighting player's health display to spectate them.", the body parked on local tile 62,1 of the party's room, the HUD, and `tfa_client_num_external_spectators` (16425) for everyone. Clicking a fighter's health follows them, as for the dead.
+- **The view** (captured `cam_target_v4`, for outside spectators and the dead alike): the camera looks at the room's middle, or at the followed fighter, until `cam_reset` when they leave. The parked body is 30-55 tiles from the fight, so the spectator sees players and NPCs out to 64 tiles, and the room's graphics, sounds and projectiles reach them as far.
+
+  | Room | Camera target |
+  | --- | --- |
+  | Guardian | 4127,5599 (level 0) |
+  | Nexus | 4127,5599 (level 2) |
+  | Bork | 4191,5599 |
+  | Ezekiel | 4063,5535 (*estimate:* not captured; square + 31,31 like Bork, Dreadnoth and Xarth) |
+  | Dreadnoth | 4191,5663 |
+  | Xarth | 4191,5535 |
+  | Ocellus | 4127,5673 (level 1) |
+  | Vault | 4127,5798 (level 2) |
 - The spectator follows the party between rooms. The HUD's leave (974:1, `[2]`), a wipe or the party leaving sends them back beside the board.
 - *Difference:* live closes side tabs 0-6; here the inventory and combat tabs close, as for the dead, because those are what the server can put back.
 
