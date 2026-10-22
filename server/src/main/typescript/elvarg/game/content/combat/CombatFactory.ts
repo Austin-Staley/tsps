@@ -1358,6 +1358,11 @@ export class CombatFactory {
     /** Fired ammunition has a 20% chance to break on impact; the rest lands on the floor. */
     private static readonly AMMO_BREAK_CHANCE = 20;
 
+    /** Percentage (0-100) of the ammunition this player fires that is recovered, e.g. by an Ava's device. */
+    public static ammoRecovery(player: Player): number {
+        return PluginManager.rangedAmmoRecovery(player);
+    }
+
     /**
      * @param delayTicks the shot's flight time in ticks. The outcome is rolled now but the
      *   count and the floor drop only apply when the projectile lands, so the quiver matches
@@ -1427,7 +1432,7 @@ export class CombatFactory {
 
         // Per shot: 20% break, (80 - recovery)% land on the floor where the target stood,
         // the rest is recovered by a plugin (Ava's devices).
-        const recovery = PluginManager.rangedAmmoRecovery(player);
+        const recovery = CombatFactory.ammoRecovery(player);
         const dropChance = 80 - recovery;
         let lost = 0;
         let dropped = 0;

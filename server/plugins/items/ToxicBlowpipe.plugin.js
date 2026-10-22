@@ -36,6 +36,8 @@ const DART_RANGED_STRENGTHS = new Map([
 ]);
 
 const TOXIC_BLOWPIPE_DART_ID_SET = new Set(Array.from(DART_RANGED_STRENGTHS.keys()));
+// Venom starts at 6 damage and escalates (Wiki: Venom); poisonEntity stores it as the damage.
+const VENOM_START_DAMAGE = 6;
 const EMPTY_STATE = Object.freeze({ scales: 0, dartId: -1, dartAmount: 0 });
 
 function normalizeInt(value, fallback) {
@@ -300,10 +302,9 @@ function sendStatus(player, blowpipeItem) {
 }
 
 function maybeConsumeLoadedDart(player, blowpipeItem) {
-  if (player.getEquipment().get(Equipment.CAPE_SLOT).getId() === ItemIdentifiers.AVAS_ACCUMULATOR) {
-    if (Misc.getRandom(12) <= 9) {
-      return false;
-    }
+  // An Ava's device keeps its share of the darts out of the pipe's count (Wiki: 60/72/80%).
+  if (Misc.getRandom(99) < CombatFactory.ammoRecovery(player)) {
+    return false;
   }
   if (BlowpipeState.consumeDart(blowpipeItem) <= 0) {
     player.sendMessage("Your Toxic blowpipe has run out of darts!");
@@ -404,7 +405,7 @@ class ToxicBlowpipeCombatMethod extends RangedCombatMethod {
     }
 
     if (Misc.getRandom(3) === 0) {
-      CombatFactory.poisonEntity(target, 12, 2);
+      CombatFactory.poisonEntity(target, VENOM_START_DAMAGE, 2);
     }
 
     if (!this.special) {
