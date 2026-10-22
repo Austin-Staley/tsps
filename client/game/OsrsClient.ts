@@ -214,7 +214,7 @@ import { markWidgetInteractionDirty } from "../widgets/WidgetInteraction";
 import { WidgetManager } from "../widgets/WidgetManager";
 import { WidgetSessionManager } from "../widgets/WidgetSessionManager";
 import { applyQuestListWidgetGroups } from "../widgets/custom/questList";
-import { cleanupInterfaceClickTargets } from "../widgets/gl/widgets-gl";
+import { cleanupInterfaceClickTargets, cleanupWidgetClickTarget } from "../widgets/gl/widgets-gl";
 import { layoutWidgets } from "../widgets/layout/WidgetLayout";
 import { sanitizeText } from "../widgets/menu/utils";
 import { Js5RangeClient } from "../rs/cache/js5/Js5RangeClient";
@@ -255,14 +255,12 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
+import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
+import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
 import { CombatOptionsController } from "./combat/CombatOptionsController";
 import { HitsplatFlushController } from "./combat/HitsplatFlushController";
 import { ClientScriptLoader } from "./cs2/ClientScriptLoader";
-import {
-    ClientGroundItemStack,
-    GroundItemOverlayEntry,
-    GroundItemStore,
-} from "./data/ground/GroundItemStore";
+import { ClientGroundItemStack, GroundItemStore } from "./data/ground/GroundItemStore";
 import { NpcEcs } from "./ecs/NpcEcs";
 import { PlayerEcs } from "./ecs/PlayerEcs";
 import { TileHighlightManager } from "./highlights/TileHighlightManager";
@@ -285,34 +283,15 @@ import { ContinuousMovement } from "./movement/ContinuousMovement";
 import { PlayerMovementSync } from "./movement/PlayerMovementSync";
 import { NpcInstanceFlushController } from "./npc/NpcInstanceFlushController";
 import { ClientPluginManager } from "./plugins/ClientPluginManager";
-import { FirstPersonPlugin } from "./plugins/firstperson/FirstPersonPlugin";
-import { GameFrame317Plugin } from "./plugins/gameframe317/GameFrame317Plugin";
-import { HdPlugin } from "./plugins/hd/HdPlugin";
-import { GroundItemsPlugin } from "./plugins/grounditems/GroundItemsPlugin";
-import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHighlightPlugin";
-import { NotesPlugin } from "./plugins/notes/NotesPlugin";
-import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
 import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
 import type { GraphicsDefaults } from "../rs/config/defaults/GraphicsDefaults";
 import { interactionModes } from "./InteractionModes";
-import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
-import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
-import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
-import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
-import { StretchedModePlugin } from "./plugins/stretchedmode/StretchedModePlugin";
-import { GpuPlugin } from "./plugins/gpu/GpuPlugin";
-import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
-import { WeatherPlugin } from "./plugins/weather/WeatherPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
 import { notifyActorGraphic, notifyActorHitsplat, notifyActorHealth } from "./ActorEventHooks";
 import { dispatchMenuAction } from "../ui/menu/menuEvents";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
-import {
-    SPLIT_PRIVATE_CHAT_VARP,
-    SplitPrivateChatPlugin,
-} from "./plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { ResolveTilePlaneFn } from "./scene/PlaneResolver";
 import {
     createSelectedSpellOnGroundItemPacket,
@@ -454,6 +433,10 @@ const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
 
 // Use shared OSRS rotation scale
 
+/** The account type (an Ironman mode), and the enum of its chat icon tags ("<img=N>"). */
+const ACCOUNT_TYPE_VARBIT = 1777;
+const ACCOUNT_TYPE_ICON_ENUM = 1894;
+
 /** logout:world_switcher (182:3). */
 const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
 /** The logout tab's stone (stone10) in the modern, classic and fixed layouts (rsprox captures). */
@@ -591,24 +574,7 @@ export class OsrsClient {
     /** Which sidebar panel is open; the buttons are `runeLite.clientToolbar`'s. */
     readonly sidebar: SidebarStore;
     readonly runeLite: RuneLite;
-    readonly groundItemsPlugin: GroundItemsPlugin;
-    readonly interactHighlightPlugin: InteractHighlightPlugin;
-    readonly notesPlugin: NotesPlugin;
-    readonly tileMarkersPlugin: TileMarkersPlugin;
-    readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
-    readonly poisonTimerPlugin: PoisonTimerPlugin;
-    readonly freezeTimerPlugin: FreezeTimerPlugin;
-    readonly attackTimerPlugin: AttackTimerPlugin;
-    readonly animationSmoothingPlugin: AnimationSmoothingPlugin;
-    readonly stretchedModePlugin: StretchedModePlugin;
-    readonly gpuPlugin: GpuPlugin;
-    readonly menuSwapperPlugin: MenuSwapperPlugin;
-    readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
     readonly clientPlugins: ClientPluginManager = new ClientPluginManager();
-    readonly firstPersonPlugin: FirstPersonPlugin;
-    readonly gameFrame317Plugin: GameFrame317Plugin;
-    readonly hdPlugin: HdPlugin;
-    readonly weatherPlugin: WeatherPlugin;
     readonly tileHighlightManager: TileHighlightManager = new TileHighlightManager();
 
     /** Current game state (getter for backwards compatibility) */
@@ -796,12 +762,6 @@ export class OsrsClient {
     customLabelScreens: { x: number; y: number; text: string }[] = [];
 
     groundItems: GroundItemStore = new GroundItemStore();
-    private groundItemOverlayCache?:
-        | {
-              key: string;
-              entries: GroundItemOverlayEntry[];
-          }
-        | undefined;
 
     // Pending widget action for input dialogs (Withdraw-X, Deposit-X, etc.)
     // When a CS2 script opens an input dialog, the widget action is deferred until dialog completion
@@ -1036,6 +996,20 @@ export class OsrsClient {
     /** Server NPC id -> synthetic render type id for its model customisation (enrage legs). */
     private readonly npcModelOverrides = new Map<number, number>();
 
+    /** The icon the cache's chat scripts show for the account type (varbit 1777), or -1. */
+    private getAccountTypeChatIcon(): number {
+        try {
+            const accountType = this.varManager.getVarbit(ACCOUNT_TYPE_VARBIT) | 0;
+            const enumType = this.loaderFactory?.getEnumTypeLoader()?.load(ACCOUNT_TYPE_ICON_ENUM);
+            const index = enumType?.keys?.indexOf(accountType) ?? -1;
+            const tag = index >= 0 ? enumType?.stringValues?.[index] : undefined;
+            const match = /^<img=(\d+)>$/i.exec(tag ?? "");
+            return match ? Number(match[1]) : -1;
+        } catch {
+            return -1;
+        }
+    }
+
     private resolveChatPlayerNameForScript(_scriptId: number): string {
         let baseName = this.localPlayerName ?? "";
         const handshakeName = baseName;
@@ -1055,8 +1029,12 @@ export class OsrsClient {
                 }
             }
         } catch {}
+        // The chatbox name line (script 223) puts the account type's icon (enum 1894 by varbit
+        // 1777, an Ironman's helmet) before chat_playername itself: leave that one out here, or
+        // it showed twice once the login sent it as a chat icon.
+        const accountTypeIcon = this.getAccountTypeChatIcon();
         const iconPrefix = this.localChatNameIcons
-            .filter((icon) => Number.isFinite(icon) && (icon | 0) >= 0)
+            .filter((icon) => Number.isFinite(icon) && (icon | 0) >= 0 && (icon | 0) !== accountTypeIcon)
             .map((icon) => `<img=${icon | 0}>`)
             .join("");
         const textPrefix = this.localChatNamePrefix || "";
@@ -1211,31 +1189,16 @@ export class OsrsClient {
         this.sidebar = new SidebarStore(createBrowserSidebarPersistence("osrs.sidebar.v1"));
         // Boots the RuneLite-shaped runtime: config, event bus, plugin manager,
         // core plugins (constructed inside the injector, enabled ones started).
-        this.runeLite = RuneLite.start(this);
-        const pluginManager = this.runeLite.pluginManager;
-        this.groundItemsPlugin = pluginManager.getPlugin(GroundItemsPlugin)!;
-        this.interactHighlightPlugin = pluginManager.getPlugin(InteractHighlightPlugin)!;
-        this.notesPlugin = pluginManager.getPlugin(NotesPlugin)!;
-        this.tileMarkersPlugin = pluginManager.getPlugin(TileMarkersPlugin)!;
-        this.vengeanceTimerPlugin = pluginManager.getPlugin(VengeanceTimerPlugin)!;
-        this.poisonTimerPlugin = pluginManager.getPlugin(PoisonTimerPlugin)!;
-        this.freezeTimerPlugin = pluginManager.getPlugin(FreezeTimerPlugin)!;
-        this.attackTimerPlugin = pluginManager.getPlugin(AttackTimerPlugin)!;
-        this.animationSmoothingPlugin = pluginManager.getPlugin(AnimationSmoothingPlugin)!;
-        this.stretchedModePlugin = pluginManager.getPlugin(StretchedModePlugin)!;
-        this.loginRenderer.loginStretch = () => this.stretchedModePlugin.loginStretch();
-        this.gpuPlugin = pluginManager.getPlugin(GpuPlugin)!;
-        this.menuSwapperPlugin = pluginManager.getPlugin(MenuSwapperPlugin)!;
-        this.splitPrivateChatPlugin = pluginManager.getPlugin(SplitPrivateChatPlugin)!;
-        this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;
-        this.gameFrame317Plugin = pluginManager.getPlugin(GameFrame317Plugin)!;
-        this.hdPlugin = pluginManager.getPlugin(HdPlugin)!;
-        this.weatherPlugin = pluginManager.getPlugin(WeatherPlugin)!;
+        // Edit mode loads none, so the editor runs without their per-frame work.
+        const editMode = new URLSearchParams(window.location.search).has("edit");
+        this.runeLite = RuneLite.start(this, !editMode);
+        this.loginRenderer.loginStretch = () => this.clientPlugins.loginStretch();
         // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
         setMenuTransform((entries, context) =>
             this.clientPlugins.transformMenuEntries(entries, context),
         );
-        if (new URLSearchParams(window.location.search).has("edit")) {
+        if (editMode) {
+            document.title = "Edit Mode - RSPS.app";
             this.loadEditModePlugin();
         }
         // If cache is provided, initialize immediately
@@ -2248,6 +2211,22 @@ export class OsrsClient {
             this.mobileChatKeyboard.show(hint, keyboardType);
         };
         this.cs2Vm.context.hideMobileKeyboard = () => this.mobileChatKeyboard.hide();
+        // That script runs in the frame loop, after the tap, where iOS will not open the
+        // keyboard: focus it from the touch itself when the tapped widget's script would.
+        const keyboardButtons = new KeyboardButtonProbe((id) => this.cs2Vm.context.loadScript(id));
+        this.inputManager.onCanvasTouchStart = (x, y) => {
+            const widgetManager = this.widgetManager;
+            if (!this.isLoggedIn() || !widgetManager) return;
+            const hits = collectInputWidgetsAtPoint(widgetManager, x, y);
+            for (let i = hits.length - 1; i >= 0; i--) {
+                const widget = hits[i];
+                if (widgetManager.isEffectivelyHidden((widget?.uid ?? 0) | 0)) continue;
+                if (keyboardButtons.widgetShowsKeyboard(widget)) {
+                    this.mobileChatKeyboard.show();
+                    return;
+                }
+            }
+        };
 
         // Wire up the deferred callbacks - triggers queued var changes after script execution
         this.cs2Vm.onVarpChange = (varpId) => {
@@ -2347,6 +2326,11 @@ export class OsrsClient {
             if (glCanvas) {
                 cleanupInterfaceClickTargets(glCanvas, groupId);
             }
+        };
+        // Deleted dynamic widgets never draw again, so nothing else drops their click targets.
+        this.widgetManager.onWidgetUnregistered = (uid) => {
+            const glCanvas = (this.renderer as any)?.getWidgetsGLCanvas?.();
+            if (glCanvas) cleanupWidgetClickTarget(glCanvas, uid);
         };
 
         this.playerAnimController = new PlayerAnimController(
@@ -3117,9 +3101,6 @@ export class OsrsClient {
         // Subscribe to chat messages to add to history and mark chatCycle for transmit
         try {
             this.unsubscribeChatMessages = subscribeChatMessages((msg) => {
-                if (this.varManager?.getVarp(SPLIT_PRIVATE_CHAT_VARP) === 1) {
-                    this.splitPrivateChatPlugin.addMessage(msg);
-                }
                 // Add message to chat history for CS2 scripts to query
                 const isTradeRequest = msg.chatType === ChatMessageType.TRADE_REQUEST;
                 if (isTradeRequest && msg.from && msg.playerId !== undefined) {
@@ -5092,7 +5073,7 @@ export class OsrsClient {
         return this.groundItems.getStacksAt(tileX | 0, tileY | 0, level | 0);
     }
 
-    private getLocalAccountType(): number {
+    getLocalAccountType(): number {
         if (!this.varManager) return ACCOUNT_TYPE_MAIN;
         if (this.accountTypeVarbitAvailable === undefined) {
             const varbitDef = this.varManager.varbitLoader.load(VARBIT_ACCOUNT_TYPE);
@@ -5108,174 +5089,6 @@ export class OsrsClient {
         const value = this.varManager.getVarbit(VARBIT_ACCOUNT_TYPE);
         if (!Number.isFinite(value)) return ACCOUNT_TYPE_MAIN;
         return Math.max(0, value | 0);
-    }
-
-    getGroundItemOverlayEntries(
-        tileX: number,
-        tileY: number,
-        level: number,
-        opts?: { radius?: number; maxEntries?: number },
-    ): GroundItemOverlayEntry[] {
-        const plugin = this.groundItemsPlugin;
-        const config = plugin.getConfig();
-        if (!config.enabled) {
-            return [];
-        }
-
-        const radius = Math.max(1, opts?.radius ?? 12);
-        const maxEntries = Math.max(1, opts?.maxEntries ?? 40);
-        const serverTiming = getServerTickPhaseNow();
-        const accountType = this.getLocalAccountType();
-        const timerBucket =
-            config.despawnTimerMode === "seconds"
-                ? Math.max(
-                      0,
-                      Math.floor(
-                          (Math.max(
-                              0,
-                              Math.min(
-                                  0.999,
-                                  Number.isFinite(serverTiming.phase) ? serverTiming.phase : 0,
-                              ),
-                          ) *
-                              Math.max(1, serverTiming.tickMs | 0)) /
-                              100,
-                      ),
-                  )
-                : 0;
-        const cacheKey = [
-            tileX | 0,
-            tileY | 0,
-            level | 0,
-            radius | 0,
-            maxEntries | 0,
-            accountType | 0,
-            serverTiming.tick | 0,
-            timerBucket | 0,
-            this.groundItems.getVersion() | 0,
-            plugin.getVersion() | 0,
-        ].join("|");
-        const cachedOverlay = this.groundItemOverlayCache;
-        if (cachedOverlay?.key === cacheKey) {
-            return cachedOverlay.entries;
-        }
-
-        const stacks = this.groundItems.getStacksInRadius(tileX | 0, tileY | 0, level | 0, {
-            radius,
-            // Pull a bounded candidate set, then apply plugin filtering down to maxEntries.
-            maxEntries: Math.max(maxEntries * 4, 128),
-        });
-        const centerX = tileX | 0;
-        const centerY = tileY | 0;
-
-        type OverlayCandidate = {
-            stack: (typeof stacks)[number];
-            label: string;
-            color: number;
-            timerLabel?: string;
-            timerColor?: number;
-            value: number;
-            distance: number;
-        };
-        const groups = new Map<
-            string,
-            {
-                tileX: number;
-                tileY: number;
-                level: number;
-                distance: number;
-                candidates: OverlayCandidate[];
-            }
-        >();
-
-        for (const stack of stacks) {
-            const evaluated = plugin.evaluateStack(stack, {
-                includeTimerLabel: true,
-                timing: {
-                    currentTick: serverTiming.tick | 0,
-                    tickPhase: serverTiming.phase,
-                    tickMs: serverTiming.tickMs | 0,
-                },
-                accountType,
-            });
-            if (!evaluated.highlighted) {
-                if (evaluated.hidden) {
-                    continue;
-                }
-                if (config.showHighlightedOnly) {
-                    continue;
-                }
-            }
-
-            const stackTileX = stack.tile.x | 0;
-            const stackTileY = stack.tile.y | 0;
-            const stackLevel = stack.tile.level | 0;
-            const distance = Math.max(
-                Math.abs(stackTileX - centerX),
-                Math.abs(stackTileY - centerY),
-            );
-            const key = `${stackLevel}|${stackTileX}|${stackTileY}`;
-            let group = groups.get(key);
-            if (!group) {
-                group = {
-                    tileX: stackTileX,
-                    tileY: stackTileY,
-                    level: stackLevel,
-                    distance,
-                    candidates: [],
-                };
-                groups.set(key, group);
-            }
-            group.candidates.push({
-                stack,
-                label: evaluated.baseLabel,
-                color: evaluated.color,
-                timerLabel: evaluated.timerLabel,
-                timerColor: evaluated.timerColor,
-                value: plugin.getValueForStack(stack),
-                distance,
-            });
-        }
-
-        if (groups.size === 0) {
-            this.groundItemOverlayCache = { key: cacheKey, entries: [] };
-            return [];
-        }
-
-        const sortedGroups = [...groups.values()].sort((a, b) => {
-            if (a.distance !== b.distance) return a.distance - b.distance;
-            if (a.tileY !== b.tileY) return a.tileY - b.tileY;
-            return a.tileX - b.tileX;
-        });
-        const entries: GroundItemOverlayEntry[] = [];
-        for (const group of sortedGroups) {
-            group.candidates.sort((a, b) => {
-                if (a.value !== b.value) return b.value - a.value;
-                if (a.stack.quantity !== b.stack.quantity)
-                    return b.stack.quantity - a.stack.quantity;
-                return a.stack.itemId - b.stack.itemId;
-            });
-            for (let line = 0; line < group.candidates.length; line++) {
-                const candidate = group.candidates[line];
-                entries.push({
-                    tileX: group.tileX,
-                    tileY: group.tileY,
-                    level: group.level,
-                    label: candidate.label,
-                    color: candidate.color,
-                    timerLabel: candidate.timerLabel,
-                    timerColor: candidate.timerColor,
-                    line,
-                });
-                if (entries.length >= maxEntries) {
-                    this.groundItemOverlayCache = { key: cacheKey, entries };
-                    return entries;
-                }
-            }
-        }
-
-        this.groundItemOverlayCache = { key: cacheKey, entries };
-        return entries;
     }
 
     takeGroundItem(stack: ClientGroundItemStack, quantity?: number): void {
@@ -5906,7 +5719,7 @@ export class OsrsClient {
             }
 
             case "forget_remembered_login": {
-                // "Switch account" on the remembered-account screen: the server drops the token too.
+                // "Sign out" on the remembered-account screen: the server drops the token too.
                 const remembered = this.loginState.getRememberedLogin();
                 if (remembered) {
                     forgetRememberedLogin(remembered.username, remembered.token);
@@ -6314,7 +6127,6 @@ export class OsrsClient {
                 this.playerMovementSync?.updateInteractionRotations?.();
             } catch {}
             try {
-                this.firstPersonPlugin?.tickMovement();
                 this.continuousMovement?.tick();
                 this.playerEcs.updateClient(1);
             } catch {}
@@ -7134,8 +6946,14 @@ export class OsrsClient {
     }
 
     /** Display an item's cache-defined Examine text in game chat. */
-    examineWidgetItem(widget: { itemId?: number } | null | undefined): boolean {
-        const itemId = widget?.itemId ?? -1;
+    examineWidgetItem(widget: { itemId?: number; fileId?: number } | null | undefined): boolean {
+        // A worn-equipment slot (387, 84) keeps its ops on a static layer and draws the item in a
+        // CC_CREATE child (script 546), so a static widget without an item examines its child's.
+        const own = widget?.itemId ?? -1;
+        const itemId = own > 0 || widget?.fileId === -1
+            ? own
+            : this.widgetManager?.getDynamicChildrenByParent(widget as any)
+                .find((child) => (child.itemId ?? -1) > 0)?.itemId ?? -1;
         if (!(itemId > 0)) return false;
         try {
             const examine = this.objTypeLoader?.load?.(itemId)?.examine;
@@ -7453,6 +7271,10 @@ export class OsrsClient {
             localTileY: decodeBase.tileY | 0,
             rootTileX: payload.rootTileX | 0,
             rootTileY: payload.rootTileY | 0,
+            worldViewBase: (worldViewId: number) => {
+                const view = this.worldViewManager.getWorldView(worldViewId | 0);
+                return view && !view.isTopLevel() ? { x: view.regionX * 8, y: view.regionY * 8 } : undefined;
+            },
             level: decodeBase.level | 0,
         });
 
@@ -7598,9 +7420,16 @@ export class OsrsClient {
             );
             this.npcEcs.setLevel(existingEcs, spawn.level | 0);
             this.npcEcs.setOccTile(existingEcs, localTileX, localTileY, spawn.level | 0);
-            if ((spawn as any).worldViewId !== undefined && (spawn as any).worldViewId >= 0) {
-                this.npcEcs.setWorldViewId(existingEcs, (spawn as any).worldViewId);
-                this.worldViewManager.addNpcToWorldView((spawn as any).worldViewId, existingEcs);
+            const nextWorldView = (spawn as any).worldViewId ?? -1;
+            const previousWorldView = this.npcEcs.getWorldViewId(existingEcs) | 0;
+            if (previousWorldView !== nextWorldView) {
+                if (previousWorldView >= 0) {
+                    this.worldViewManager.removeNpcFromWorldView(previousWorldView, existingEcs);
+                }
+                this.npcEcs.setWorldViewId(existingEcs, nextWorldView);
+                if (nextWorldView >= 0) {
+                    this.worldViewManager.addNpcToWorldView(nextWorldView, existingEcs);
+                }
             }
 
             // Keep the instance map entry up to date for geometry streaming.
@@ -7982,6 +7811,8 @@ export class OsrsClient {
         } catch {}
         const ecsId = this.npcEcs.getEcsIdForServer(sid);
         if (ecsId !== undefined) {
+            const worldViewId = this.npcEcs.getWorldViewId(ecsId) | 0;
+            if (worldViewId >= 0) this.worldViewManager.removeNpcFromWorldView(worldViewId, ecsId);
             this.npcEcs.destroyNpc(ecsId);
         }
         this.npcInstances.instanceMap.delete(instanceKey);
@@ -8488,7 +8319,6 @@ export class OsrsClient {
             } catch (err) {
                 console.warn("[OsrsClient] ChatHistory clear error:", err);
             }
-            this.splitPrivateChatPlugin.clear();
             // Live sets walk again before every logout; a dropped connection doesn't get that far.
             interactionModes.clear();
 

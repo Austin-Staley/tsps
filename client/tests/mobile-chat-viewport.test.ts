@@ -67,6 +67,29 @@ test("chat keyboard resizes gameplay while login inputs keep the stable viewport
         assert.equal(properties.get("--ios-safari-center-x"), "422px");
         assert.equal(properties.get("--ios-safari-center-y"), "195px");
 
+        for (const viewport of [
+            { width: 844, height: 150, offsetLeft: 0, offsetTop: 0 },
+            { width: 844, height: 150, offsetLeft: 5, offsetTop: 240 },
+            { width: 844, height: 140, offsetLeft: 5, offsetTop: 250 },
+            { width: 844, height: 390, offsetLeft: 0, offsetTop: 0 },
+        ]) {
+            const applied = applyForcedLandscapeSize(
+                root,
+                viewport.width,
+                viewport.height,
+                true,
+                viewport.offsetLeft,
+                viewport.offsetTop,
+            );
+            assert.equal(applied.rotated, false, "typing keeps native landscape unrotated");
+            assert.equal(properties.get("--ios-safari-offset-x"), `${viewport.offsetLeft}px`);
+            assert.equal(
+                properties.get("--ios-safari-offset-y"),
+                `${viewport.offsetTop}px`,
+                "the game follows keyboard panning even when the offset exceeds its height",
+            );
+        }
+
         const sequenceRoot = {
             dataset: { iosSafariForceLandscapeRotated: "1" },
             style: { setProperty: () => {} },
@@ -105,6 +128,12 @@ test("chat keyboard resizes gameplay while login inputs keep the stable viewport
         }
 
         const css = readFileSync(new URL("../index.css", import.meta.url), "utf8");
+        const landscapeLayout = css.match(
+            /\.App\.ios-safari-force-landscape\s*\{([^}]+)\}/,
+        )?.[1];
+        assert.ok(landscapeLayout, "native-landscape layout rule exists");
+        assert.match(landscapeLayout, /top:\s*var\(--ios-safari-offset-y/);
+        assert.match(landscapeLayout, /left:\s*var\(--ios-safari-offset-x/);
         const rotatedLayout = css.match(
             /\.App\.ios-safari-force-landscape\.ios-safari-force-landscape-rotated\s*\{([^}]+)\}/,
         )?.[1];

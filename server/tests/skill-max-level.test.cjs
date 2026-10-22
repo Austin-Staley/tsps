@@ -21,6 +21,17 @@ test("lowering a skill takes effect on the first call (issue #101)", () => {
   }
 });
 
+test("rate 1 keeps OSRS's tenths of experience instead of flooring each gain away (issue #748)", () => {
+  const xp = new SkillManager({ getPacketSender: () => sender, getAttribute: () => undefined });
+  xp.setExperience(Skill.WOODCUTTING, 0);
+  for (let log = 0; log < 2; log++) xp.addExperience(Skill.WOODCUTTING, 37.5, true);
+  assert.equal(xp.getExperience(Skill.WOODCUTTING), 75, "two oak logs");
+  xp.setExperience(Skill.HITPOINTS, 1154);
+  for (let hit = 0; hit < 10; hit++) xp.addExperience(Skill.HITPOINTS, 4 / 3, true);
+  assert.equal(xp.skills.experience[Skill.HITPOINTS.getIndex()], 1167, "ten 1-damage hits are 1.3 each, as OSRS");
+  assert.equal(xp.getExperience(Skill.HITPOINTS), 1167);
+});
+
 test("Hunter cache data, trap ownership, transactions, cancellation and persisted birdhouses", async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   const { PluginManager } = require("../dist/plugins/PluginManager");
@@ -479,7 +490,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     let completed = 0, queued = 0;
     const queue = { player: { ...p, getIndex: () => 1, setMobileInteraction() {} }, getMobility: () => ({ canMove: () => true }),
       checkDestination: () => true, reset() {}, walkToReset() {}, isInteractionTargetValid: () => true,
-      canInteractWithUnreachableNpc: () => false };
+      isProjectedMainWorldNpc: () => false, canInteractWithUnreachableNpc: () => false };
     try {
       core.PathFinder.reachedEntity = () => false;
       core.PathFinder.calculateEntityRoute = () => {};
@@ -957,10 +968,12 @@ test("disconnecting before a pickpocket's outcome tick cancels it", () => {
   // (thieving-pickpocket.test.cjs). A player gone by then gets nothing.
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi(), tasks = [], npcHooks = {};
-  registerFeedbackPlugin("skills/Thieving", core, {
-    getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
-    getCombatFactory: () => ({ inCombat: () => false }),
+  registerFeedbackPlugin("skills/Thieving", { ...core,
+    TaskManager: { submit(task) { task.setRunning(true); tasks.push(task); } },
+    CombatFactory: { inCombat: () => false },
+  }, {
     onNpcInteraction: (name, actions) => { npcHooks[name] = actions; },
+    onNpcsInteraction: (names, actions) => { for (const name of names) npcHooks[name] = { ...npcHooks[name], ...actions }; },
   });
   const p = feedbackPlayer(core);
   p.getIndex = () => 1; p.getTimers = () => ({ has: () => false, getTicks: () => 0 });
