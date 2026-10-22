@@ -167,7 +167,11 @@ test("firing: the flag the next tick, then a turn a tick; a target is shot befor
   const stop = watch(p);
   const { rollAccuracy } = core.AccuracyFormulasDpsCalc;
   const random = Math.random;
-  core.AccuracyFormulasDpsCalc.rollAccuracy = () => true;
+  core.AccuracyFormulasDpsCalc.rollAccuracy = (_attacker, _target, _style, defenceType, rangedDefenceType) => {
+    assert.equal(defenceType, core.CombatType.RANGED);
+    assert.equal(rangedDefenceType, "heavy", "cannonballs use heavy defence regardless of the held weapon");
+    return true;
+  };
   Math.random = () => 0.5;
   try {
     const start = p.ticks.length - 1;

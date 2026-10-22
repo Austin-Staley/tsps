@@ -223,7 +223,8 @@ export class AccuracyFormulasDpsCalc {
         entity: any,
         enemy: any,
         style: any,
-        defenceType?: CombatType
+        defenceType?: CombatType,
+        rangedDefenceType?: "light" | "standard" | "heavy"
     ): { attack: number; defence: number } | null {
         const traits: WeaponSpecialTraits | null = CombatSpecial.activeTraitsFor(entity);
         const attackStyle = resolveSpecialAttackType(traits?.rollAttackType) ?? style;
@@ -248,7 +249,7 @@ export class AccuracyFormulasDpsCalc {
             const defenceIndex = traits?.meleeDefenceBonusIndex ?? meleeIndex;
             defRoll = AccuracyFormulasDpsCalc.defenseMeleeRoll(enemy, defenceIndex);
         } else if (defenceStyle === CombatType.RANGED) {
-            defRoll = AccuracyFormulasDpsCalc.defenseRangedRoll(enemy, entity.isPlayer() ? WeaponProfiles.ranged(entity.getAsPlayer()).rangedDefenceType : undefined);
+            defRoll = AccuracyFormulasDpsCalc.defenseRangedRoll(enemy, rangedDefenceType ?? (entity.isPlayer() ? WeaponProfiles.ranged(entity.getAsPlayer()).rangedDefenceType : undefined));
         } else {
             defRoll = AccuracyFormulasDpsCalc.defenseMagicRoll(enemy);
         }
@@ -281,8 +282,8 @@ export class AccuracyFormulasDpsCalc {
         }
     }
 
-    public static rollAccuracy(entity: any, enemy: any, style: any, defenceType?: CombatType) {
-        const rolls = AccuracyFormulasDpsCalc.specialRolls(entity, enemy, style, defenceType);
+    public static rollAccuracy(entity: any, enemy: any, style: any, defenceType?: CombatType, rangedDefenceType?: "light" | "standard" | "heavy") {
+        const rolls = AccuracyFormulasDpsCalc.specialRolls(entity, enemy, style, defenceType, rangedDefenceType);
         if (rolls == null) {
             return false;
         }

@@ -74,11 +74,13 @@ test("NPC ranged defences retain the Wiki light/standard/heavy split and cache r
   definition.rangedDefenceBonuses = { light: -10, heavy: 80 };
   const npc = {
     isPlayer: () => false, isNpc: () => true, getAsNpc: () => npc,
-    getDefenceLevel: () => 99, getCurrentDefinition: () => definition,
+    getDefenceLevel: () => 99, getCurrentLevel: () => 99, getCurrentDefinition: () => definition,
+    getRollFactor: () => 1,
     getDefenceBonus: (index, type) => NPC.prototype.getDefenceBonus.call(npc, index, type),
   };
   const rolls = ["light", "standard", "heavy"].map((type) => core.AccuracyFormulasDpsCalc.defenseRangedRoll(npc, type));
   assert.deepEqual(rolls, [108 * 54, 108 * 94, 108 * 144]);
+  assert.equal(core.AccuracyFormulasDpsCalc.specialRolls(npc, npc, core.CombatType.RANGED, core.CombatType.RANGED, "heavy").defence, 108 * 144);
   const chin = playerWith(I.RED_CHINCHOMPA_2);
   chin.getWeapon = () => core.WeaponInterfaces.CHINCHOMPA;
   assert.equal(core.WeaponProfiles.ranged(chin).rangedDefenceType, "heavy");
