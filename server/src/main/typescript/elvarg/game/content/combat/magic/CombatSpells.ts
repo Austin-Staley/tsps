@@ -473,7 +473,7 @@ export class CombatSpells {
 
     public static WEAKEN = new CombatEffectSpell({
         castAnimation() {
-            return new Animation(716);
+            return new Animation(717);
         },
 
         castProjectile(cast: Mobile, castOn: Mobile) {
@@ -631,7 +631,7 @@ export class CombatSpells {
 
     public static CURSE = new CombatEffectSpell({
         castAnimation() {
-            return new Animation(710);
+            return new Animation(718);
         },
 
         castProjectile(cast, castOn) {
@@ -1281,7 +1281,7 @@ export class CombatSpells {
     public static VULNERABILITY = new CombatEffectSpell({
         members: true,
         castAnimation() {
-            return new Animation(729);
+            return new Animation(718);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 168, 0, 20, 43, 31);
@@ -1372,7 +1372,7 @@ export class CombatSpells {
     public static ENFEEBLE = new CombatEffectSpell({
         members: true,
         castAnimation: function () {
-            return new Animation(729);
+            return new Animation(728);
         },
         castProjectile: function (cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 171, 0, 20, 43, 31);
