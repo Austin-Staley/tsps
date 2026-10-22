@@ -135,47 +135,123 @@ test("seeking dragon arrows have their own ammunition and successful minimum, le
   assert.equal(damage.getDamage(), 8);
 });
 
-test("ancient sceptre buffs each ancient family once, and ordinary staves keep the existing effect", (t) => {
-  let handler;
-  const frozen = [], poisoned = [], heals = [];
+function sceptreEffects(t, veto = () => {}) {
+  const handlers = new Map();
   require("../plugins/items/AncientSceptre.plugin").register({
-    core: { ...core, CombatFactory: { freeze: (_target, seconds) => frozen.push(seconds / 0.6), poisonEntity: (_target, severity) => poisoned.push(severity) }, Misc: { getRandom: () => 0 } },
-    onCustomEvent: (_name, entry) => { handler = entry; },
+    core, onCustomEvent: (name, handler) => handlers.set(name, handler),
   });
-  const cast = playerWith(I.ANCIENT_SCEPTRE);
-  cast.heal = (damage) => heals.push(damage);
+  t.mock.method(PluginManager, "emitCustomEvent", (name, event) => {
+    handlers.get(name)?.(event);
+    if (name === "magic:hit-effects") veto(event);
+  });
+}
+
+function ancientHit(cast, target, damage = 40, accurate = true) {
+  return { isAccurate: () => accurate, getAttacker: () => cast, getTarget: () => target, getTotalDamage: () => damage };
+}
+
+test("ancient sceptre modifies all sixteen base effects once; ordinary staves retain their base effects", (t) => {
+  sceptreEffects(t);
+  const frozen = [], poisoned = [], heals = [];
+  t.mock.method(core.CombatFactory, "freezeTicks", (_target, ticks) => frozen.push(ticks));
+  t.mock.method(core.CombatFactory, "poisonEntity", (_target, severity) => poisoned.push(severity));
+  t.mock.method(core.Misc, "getRandom", () => 0);
   let attack = 100;
-  const castOn = { isPlayer: () => true, getAsPlayer: () => castOn, getSkillManager: () => ({ getCurrentLevel: () => attack, getMaxLevel: () => 100, setCurrentLevelCombat: (_skill, value) => { attack = value; }, updateSkill() {} }) };
-  for (const [tier, ticks] of [["RUSH", 8], ["BURST", 17], ["BLITZ", 26], ["BARRAGE", 35]]) {
-    for (const family of ["ICE", "SMOKE", "BLOOD", "SHADOW"]) {
-      attack = 100;
-      const event = { attacker: cast, target: castOn, spell: core.CombatSpells[`${family}_${tier}`], hit: { getTotalDamage: () => 40 }, allowed: true };
-      handler(event);
-      assert.equal(event.allowed, false);
-      if (family === "SHADOW") assert.equal(attack, tier === "RUSH" || tier === "BURST" ? 89 : 84);
+  const target = { isPlayer: () => true, getSkillManager: () => ({ getCurrentLevel: () => attack, getMaxLevel: () => 100,
+    setCurrentLevelCombat: (_skill, value) => { attack = value; }, updateSkill() {} }) };
+  for (const weapon of [I.ANCIENT_STAFF, I.ANCIENT_SCEPTRE, I.ANCIENT_SCEPTRE_L_]) {
+    const enhanced = weapon !== I.ANCIENT_STAFF;
+    const cast = playerWith(weapon);
+    cast.heal = (damage) => heals.push(damage);
+    for (const [index, tier] of ["RUSH", "BURST", "BLITZ", "BARRAGE"].entries()) {
+      for (const family of ["ICE", "SMOKE", "BLOOD", "SHADOW"]) {
+        attack = 100;
+        const spell = core.CombatSpells[`${family}_${tier}`];
+        const baseEffect = spell.spellEffectOnHitCalc;
+        let calls = 0;
+        const check = t.mock.method(spell, "spellEffectOnHitCalc", function (...args) {
+          calls++;
+          assert.equal(args[3], enhanced ? 1.1 : 1);
+          baseEffect.apply(this, args);
+        });
+        const before = [frozen.length, poisoned.length, heals.length];
+        spell.onHitCalc(ancientHit(cast, target));
+        assert.equal(calls, 1, `${family}_${tier}: base callback is preserved`);
+        assert.deepEqual([frozen.length, poisoned.length, heals.length], before.map((n, i) => n + Number(family === ["ICE", "SMOKE", "BLOOD"][i])));
+        if (family === "SHADOW") {
+          assert.equal(attack, index < 2 ? (enhanced ? 89 : 90) : (enhanced ? 84 : 85));
+          spell.onHitCalc(ancientHit(cast, target));
+          assert.equal(attack, index < 2 ? (enhanced ? 89 : 90) : (enhanced ? 84 : 85), "does not stack");
+        }
+        check.mock.restore();
+      }
+      assert.equal(frozen.at(-1), (enhanced ? [8, 17, 26, 35] : [8, 16, 24, 32])[index]);
+      assert.equal(poisoned.at(-1), (index < 2 ? 10 : 20) * (enhanced ? 1.1 : 1));
+      assert.equal(heals.at(-1), enhanced ? 11 : 10);
     }
-    assert.equal(frozen.at(-1), ticks);
   }
-  assert.deepEqual(heals, [11, 11, 11, 11]);
-  assert.deepEqual(poisoned, [11, 11, 22, 22]);
-  const ordinary = { attacker: playerWith(I.ANCIENT_STAFF), target: castOn, spell: core.CombatSpells.ICE_BARRAGE, hit: { getTotalDamage: () => 40 }, allowed: true };
-  handler(ordinary);
-  assert.equal(ordinary.allowed, true);
-  t.mock.method(PluginManager, "emitCustomEvent", (name, event) => { if (name === "magic:hit-effects") handler(event); });
-  core.CombatSpells.ICE_BARRAGE.onHitCalc({ isAccurate: () => true, getAttacker: () => cast, getTarget: () => castOn, getTotalDamage: () => 40 });
-  assert.equal(frozen.at(-1), 35, "the real spell hook applies the enhanced effect instead of the original effect");
 });
 
-test("ancient sceptre's Shadow spells drain NPC Attack once", () => {
-  let handler;
-  require("../plugins/items/AncientSceptre.plugin").register({ core, onCustomEvent: (_name, entry) => { handler = entry; } });
-  let level = 100;
+test("sceptre effects preserve later quest vetoes, misses, non-ancient effects and smoke's poison roll", (t) => {
+  let veto = false;
+  sceptreEffects(t, (event) => { if (veto) event.allowed = false; });
+  let healed = 0, poisoned = 0;
+  const cast = playerWith(I.ANCIENT_SCEPTRE);
+  cast.heal = (damage) => { healed += damage; };
+  t.mock.method(core.CombatFactory, "poisonEntity", () => poisoned++);
+  t.mock.method(core.Misc, "getRandom", (upper) => { assert.equal(upper, 7); return 7; });
+  const npc = { isPlayer: () => false, getAsNpc: () => npc, getCurrentLevel: () => 100, getMaxLevel: () => 100,
+    setCurrentLevels: () => { throw new Error("vetoed Shadow must not drain"); } };
+  veto = true;
+  core.CombatSpells.BLOOD_BARRAGE.onHitCalc(ancientHit(cast, npc));
+  core.CombatSpells.SHADOW_BARRAGE.onHitCalc(ancientHit(cast, npc));
+  veto = false;
+  core.CombatSpells.BLOOD_BARRAGE.onHitCalc(ancientHit(cast, npc, 40, false));
+  assert.equal(healed, 0);
+  core.CombatSpells.SMOKE_BARRAGE.onHitCalc(ancientHit(cast, npc));
+  assert.equal(poisoned, 0, "sceptre does not force poisoning");
+  t.mock.method(core.CombatSpells.FIRE_SURGE, "spellEffectOnHitCalc", (_cast, _target, _damage, multiplier) => {
+    assert.equal(multiplier, 1, "non-ancient base effects are untouched");
+    healed++;
+  });
+  core.CombatSpells.FIRE_SURGE.onHitCalc(ancientHit(cast, npc));
+  assert.equal(healed, 1);
+});
+
+test("ancient sceptre's Shadow supplement drains NPC Attack once after the base effect", (t) => {
+  sceptreEffects(t);
+  let level = 100, baseCalls = 0;
   const target = { isPlayer: () => false, getAsNpc: () => target, getMaxLevel: () => 100,
-    getCurrentLevel: () => level, setCurrentLevels: (_skill, value) => { level = value; },
+    getCurrentLevel: () => level, setCurrentLevels: (_skill, value) => { assert.ok(baseCalls > 0); level = value; },
   };
-  const event = { attacker: playerWith(I.ANCIENT_SCEPTRE), target, spell: core.CombatSpells.SHADOW_BARRAGE, hit: { getTotalDamage: () => 10 }, allowed: true };
-  handler(event);
+  const spell = core.CombatSpells.SHADOW_BARRAGE;
+  const baseEffect = spell.spellEffectOnHitCalc;
+  t.mock.method(spell, "spellEffectOnHitCalc", function (...args) { baseCalls++; baseEffect.apply(this, args); });
+  const hit = ancientHit(playerWith(I.ANCIENT_SCEPTRE), target, 10);
+  spell.onHitCalc(hit);
   assert.equal(level, 84);
-  handler({ ...event, allowed: true });
+  spell.onHitCalc(hit);
   assert.equal(level, 84, "shadow drain does not stack");
+  assert.equal(baseCalls, 2, "base callback is never suppressed");
+});
+
+test("sceptre ice durations use whole real timer ticks and retain freeze immunity", (t) => {
+  sceptreEffects(t);
+  const { TimerRepository } = require("../dist/util/timers/TimerRepository");
+  const { TimerKey } = require("../dist/util/timers/TimerKey");
+  const cast = playerWith(I.ANCIENT_SCEPTRE);
+  for (const [tier, ticks] of [["RUSH", 8], ["BURST", 17], ["BLITZ", 26], ["BARRAGE", 35]]) {
+    const timers = new TimerRepository();
+    const target = { isPlayer: () => false, getTimers: () => timers, getSize: () => 1, getMovementQueue: () => ({ reset() {} }) };
+    core.CombatSpells[`ICE_${tier}`].onHitCalc(ancientHit(cast, target));
+    assert.equal(timers.getTicks(TimerKey.FREEZE), ticks);
+    assert.equal(timers.getTicks(TimerKey.FREEZE_IMMUNITY), ticks + 5);
+    timers.process();
+    core.CombatSpells[`ICE_${tier}`].onHitCalc(ancientHit(cast, target));
+    assert.equal(timers.getTicks(TimerKey.FREEZE), ticks - 1, "existing freeze is not refreshed");
+    for (let i = 1; i < ticks; i++) timers.process();
+    assert.equal(timers.has(TimerKey.FREEZE), false, "expires after exactly the Wiki tick count");
+    core.CombatSpells[`ICE_${tier}`].onHitCalc(ancientHit(cast, target));
+    assert.equal(timers.has(TimerKey.FREEZE), false, "immunity prevents immediate refreezing");
+  }
 });

@@ -1229,6 +1229,10 @@ export class CombatFactory {
 
     /** `message` is what a frozen player is told (some bosses send their own, coloured). */
     static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!") {
+        CombatFactory.freezeTicks(character, Misc.getTicks(seconds), message);
+    }
+
+    static freezeTicks(character: Mobile, ticks: number, message: string = "You have been frozen!") {
         if (character.getTimers().has(TimerKey.FREEZE) || character.getTimers().has(TimerKey.FREEZE_IMMUNITY)) {
             return;
         }
@@ -1238,14 +1242,13 @@ export class CombatFactory {
             return;
         }
 
-        const ticks = Misc.getTicks(seconds);
         character.getTimers().registers(TimerKey.FREEZE, ticks);
         character.getTimers().registers(TimerKey.FREEZE_IMMUNITY, ticks + Misc.getTicks(3));
         character.getMovementQueue().reset();
 
         if (character.isPlayer()) {
             character.getAsPlayer().sendMessage(message);
-            character.getAsPlayer().getPacketSender().sendEffectTimer(seconds, EffectTimer.FREEZE);
+            character.getAsPlayer().getPacketSender().sendEffectTimer(Misc.getSeconds(ticks), EffectTimer.FREEZE);
         }
     }
 

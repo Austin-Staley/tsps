@@ -152,7 +152,15 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
 - [Ancient sceptre](https://oldschool.runescape.wiki/w/Ancient_sceptre?action=raw): plain
   and locked sceptres now apply the 10% improved ancient effects through the existing
   `magic:hit-effects` event: poison severity 11/22, shadow drain 11%/16.5%, blood healing
-  27.5%, ice freeze 8/17/26/35 ticks. Its cache supplies +10% magic damage. Tests also
+  27.5%, ice freeze 8/17/26/35 ticks. These values are listed in that page's Passive
+  effect table; [Smoke spells](https://oldschool.runescape.wiki/w/Smoke_spells?action=raw)
+  supplies the unchanged 1/8 poison chance. The plugin modifies the base spell's effect
+  multiplier rather than cancelling/replacing its callback. Its NPC-only Shadow
+  supplement runs through `magic:hit-effects-applied` after the base callback and all
+  quest vetoes. [Ice spells](https://oldschool.runescape.wiki/w/Ice_spells?action=raw)
+  gives base durations of 8/16/24/32 ticks and rounds the 10% enhancement down. These
+  now use `freezeTicks` directly, preserving exact durations and the existing immunity.
+  Its cache supplies +10% magic damage. Tests also
   verify Kodai's +15%, every normal wand's 4-tick melee profile, and the actual
   [3rd Age bow](https://oldschool.runescape.wiki/w/3rd_Age_bow) data (the Wiki redirects
   “3rd age longbow” to that bow).

@@ -1,39 +1,38 @@
-/** Wiki: Ancient sceptre strengthens Ancient Magicks effects by 10%; its +10% damage is item data. */
+/**
+ * https://oldschool.runescape.wiki/w/Ancient_sceptre?action=raw#Passive_effect
+ * All Ancient effects ×1.1: smoke severity 10/20→11/22, Shadow drain 10%/15%→11%/16.5%,
+ * Blood healing 25%→27.5%, Ice floor(8/16/24/32 ×1.1)→8/17/26/35 ticks.
+ * Smoke's 1/8 poison chance is unchanged: https://oldschool.runescape.wiki/w/Smoke_spells?action=raw
+ */
 let core;
 const SCEPTRES = ["ANCIENT_SCEPTRE", "ANCIENT_SCEPTRE_L_"];
-const ICE_TICKS = [8, 17, 26, 35];
 const TIERS = ["RUSH", "BURST", "BLITZ", "BARRAGE"];
 
-function enhanceAncientEffect(event) {
-  const { attacker: cast, target: castOn, spell, hit } = event;
-  const damage = hit.getTotalDamage();
-  if (!event.allowed) return;
-  if (!cast?.isPlayer?.()) return;
+function hasSceptre(cast) {
+  if (!cast?.isPlayer?.()) return false;
   const weaponId = cast.getEquipment().get(core.Equipment.WEAPON_SLOT).getId();
-  if (!SCEPTRES.some((name) => core.ItemIdentifiers[name] === weaponId)) return;
-  for (const family of ["SMOKE", "SHADOW", "BLOOD", "ICE"]) {
-    const tier = TIERS.findIndex((name) => core.CombatSpells[`${family}_${name}`] === spell);
-    if (tier < 0) continue;
-    event.allowed = false;
-    if (family === "ICE") core.CombatFactory.freeze(castOn, ICE_TICKS[tier] * 0.6);
-    if (family === "BLOOD") cast.heal(Math.floor(damage * 0.275));
-    if (family === "SMOKE" && core.Misc.getRandom(7) === 0) core.CombatFactory.poisonEntity(castOn, tier < 2 ? 11 : 22);
-    if (family === "SHADOW") {
-      const skills = castOn.isPlayer() ? castOn.getAsPlayer().getSkillManager() : castOn.getAsNpc();
-      const level = skills.getCurrentLevel(core.Skill.ATTACK);
-      const base = skills.getMaxLevel(core.Skill.ATTACK);
-      if (level >= base) {
-        const next = level - Math.floor(level * (tier < 2 ? 0.11 : 0.165));
-        if (castOn.isPlayer()) {
-          skills.setCurrentLevelCombat(core.Skill.ATTACK, next);
-          skills.updateSkill(core.Skill.ATTACK);
-        } else {
-          skills.setCurrentLevels(core.Skill.ATTACK, next);
-        }
-      }
-    }
-    return;
+  return SCEPTRES.some((name) => core.ItemIdentifiers[name] === weaponId);
+}
+
+function spellTier(spell, family) {
+  return TIERS.findIndex((name) => core.CombatSpells[`${family}_${name}`] === spell);
+}
+
+function enhanceAncientEffect(event) {
+  if (!event.allowed || !hasSceptre(event.attacker)) return;
+  if (["SMOKE", "SHADOW", "BLOOD", "ICE"].some((family) => spellTier(event.spell, family) >= 0)) {
+    event.effectMultiplier *= 1.1;
   }
+}
+
+function drainNpcAttack(event) {
+  const tier = spellTier(event.spell, "SHADOW");
+  if (tier < 0 || event.target.isPlayer() || !hasSceptre(event.attacker)) return;
+  // The base Shadow effect handles players; supplement NPCs only after every veto has run.
+  const npc = event.target.getAsNpc();
+  const level = npc.getCurrentLevel(core.Skill.ATTACK);
+  if (level < npc.getMaxLevel(core.Skill.ATTACK)) return;
+  npc.setCurrentLevels(core.Skill.ATTACK, level - Math.floor(level * (tier < 2 ? 0.1 : 0.15) * event.effectMultiplier));
 }
 
 module.exports = {
@@ -42,5 +41,6 @@ module.exports = {
   register(api) {
     core = api.core;
     api.onCustomEvent("magic:hit-effects", enhanceAncientEffect);
+    api.onCustomEvent("magic:hit-effects-applied", drainNpcAttack);
   },
 };
