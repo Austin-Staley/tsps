@@ -7,6 +7,7 @@ Server.installProductionPathResolver();
 const { Sounds } = require('../dist/game/Sounds');
 const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
+const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 const Thieving = require('../plugins/skills/Thieving.plugin');
 const Pickpocket = require('../plugins/skills/thieving/Pickpocket.Thieving');
@@ -314,8 +315,9 @@ test('gloves of silence wear out after 62 failed pickpockets', () => {
 test('NPC ids pick between targets that share a name; anything else falls through', (t) => {
     const { targetFor } = Pickpocket._test;
     assert.equal(targetFor('Bandit', 695).key, 'desert_bandit');
-    assert.equal(targetFor('Bandit', 735).key, 'pollnivnian_bearded_bandit');
-    const result = attempt(t, { name: 'Bandit', npcId: 735 });
+    assert.equal(targetFor('Bandit', N.BANDIT_8).key, 'pollnivnian_bandit');
+    assert.equal(targetFor('Bandit', N.BANDIT_10).key, 'pollnivnian_bearded_bandit');
+    const result = attempt(t, { name: 'Bandit', npcId: N.BANDIT_10 });
     assert.equal(result.handled, true);
     assert.ok(result.click.some((line) => line.includes('level of at least 45')));
 });
