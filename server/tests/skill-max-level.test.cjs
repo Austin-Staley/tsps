@@ -972,6 +972,7 @@ test("disconnecting before a pickpocket's outcome tick cancels it", () => {
     getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
     getCombatFactory: () => ({ inCombat: () => false }),
     onNpcInteraction: (name, actions) => { npcHooks[name] = actions; },
+    onNpcsInteraction: (names, actions) => { for (const name of names) npcHooks[name] = { ...npcHooks[name], ...actions }; },
   });
   const p = feedbackPlayer(core);
   p.getIndex = () => 1; p.getTimers = () => ({ has: () => false, getTicks: () => 0 });
