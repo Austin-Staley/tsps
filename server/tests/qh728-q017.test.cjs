@@ -6,6 +6,8 @@ const { test, before } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const { Item } = require('../dist/game/model/Item');
 const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
@@ -57,6 +59,7 @@ function playerFixture(inventory = inventoryFixture()) {
   const messages = [];
   const configs = [];
   let manager;
+  let activeInventory = inventory;
   const sender = new Proxy({}, { get: (_target, key) => {
     if (key === 'sendConfig') return (id, value) => { configs.push({ id, value }); return sender; };
     if (key === 'sendVarbit') return (id, value) => { configs.push({ id, value, varbit: true }); return sender; };
@@ -69,13 +72,14 @@ function playerFixture(inventory = inventoryFixture()) {
     getUsername: () => 'qh728-q017',
     getAttribute: (key) => attributes.get(key),
     setAttribute(key, value) { attributes.set(key, value); },
-    getInventory: () => inventory,
+    getInventory: () => activeInventory,
     getSkillManager: () => ({ addExperiences: (skill, amount) => player.xp.push({ skill: skill.getIndex?.() ?? skill, amount }) }),
     getLocation: () => new core.Location(2896, 3529, 0),
     getPacketSender: () => sender,
     sendMessage: (message) => messages.push(message),
     xp: [],
   };
+  player.setInventory = (value) => { activeInventory = value; };
   manager = {
     reset() {},
     isActive: () => false,
@@ -101,9 +105,10 @@ function registerQuestPlugin(name, pluginName, questKey) {
     login: PluginManager.loginHooks.length,
   };
   const customEvents = new Set();
+  const persistedAttributes = new Map();
   const api = new Proxy({ core }, { get(target, key) {
     if (key in target) return target[key];
-    if (key === 'persistAttribute') return () => {};
+    if (key === 'persistAttribute') return (attribute, defaultValue) => persistedAttributes.set(attribute, defaultValue);
     if (key === 'onNpcDialogueVariant') return (handler) => PluginManager.npcDialogueVariantHooks.push({ pluginName, handler });
     if (key === 'onNpcDialogueCondition') return (handler) => PluginManager.npcDialogueConditionHooks.push({ pluginName, handler });
     if (key === 'onNpcInteraction') return (names, actions) => {
@@ -146,6 +151,7 @@ function registerQuestPlugin(name, pluginName, questKey) {
   require(`../plugins/quests/quests/${name}.Quest`)(api);
   return {
     quest: getRegisteredQuests().findLast((entry) => entry.key === questKey),
+    persistedAttributes,
     cleanup() {
       PluginManager.npcDialogueVariantHooks.length = before.variant;
       PluginManager.npcDialogueConditionHooks.length = before.condition;
@@ -352,6 +358,61 @@ test('Denulth does not reissue the certificate after it was handed to Dunstan', 
   const message = { player, npcId: N().DENULTH, stepId: 'KZG0PG', kind: 'message', handled: false };
   PluginManager.emitCustomEvent('npc-dialogue:action', message);
   assert.equal(player.inventory.getAmount(I().CERTIFICATE_2), 0, 'no duplicate certificate');
+});
+
+test('Denulth uses the imported lost-certificate branch for a genuine replacement', () => {
+  const { quest } = registered;
+  const player = playerFixture();
+  quest.setStage(player, 73);
+
+  const firstIssue = PluginManager.emitNpcDialogueVariant({ player, npcId: N().DENULTH });
+  assert.equal(firstIssue, 'new-route-up-death-plateau-talking-to-denulth-after-talking-to-dunstan');
+  PluginManager.emitCustomEvent('npc-dialogue:action', {
+    player, npcId: N().DENULTH, stepId: 'KZG0PG', kind: 'message', handled: false,
+  });
+  assert.equal(player.inventory.getAmount(I().CERTIFICATE_2), 1);
+  player.inventory.deleteNumber(I().CERTIFICATE_2, 1);
+
+  const recovery = PluginManager.emitNpcDialogueVariant({ player, npcId: N().DENULTH });
+  assert.equal(recovery, 'new-route-up-death-plateau-talking-to-denulth-after-losing-the-certificate');
+  startVariant(player, N().DENULTH, recovery);
+  assert.equal(player.inventory.getAmount(I().CERTIFICATE_2), 1, 'the canonical VuuQKK branch restores one certificate');
+  assert.equal(quest.getStage(player), 73);
+});
+
+test('a full bag does not mark a certificate issued, and the first-issue branch retries after room opens', () => {
+  const { quest } = registered;
+  assert.equal(registered.persistedAttributes.get('death-plateau:certificate-issued'), false, 'a new player defaults to not issued');
+  const player = playerFixture();
+  const inventory = new Inventory(player);
+  player.setInventory(inventory);
+  for (let slot = 0; slot < 28; slot++) inventory.setItem(slot, new Item(I().SANDSTONE_1KG_, 1));
+  assert.equal(inventory.getFreeSlots(), 0, 'the real 28-slot container is full');
+  quest.setStage(player, 73);
+
+  const firstIssue = 'new-route-up-death-plateau-talking-to-denulth-after-talking-to-dunstan';
+  assert.equal(PluginManager.emitNpcDialogueVariant({ player, npcId: N().DENULTH }), firstIssue);
+  assert.equal(player.getAttribute('death-plateau:certificate-issued'), undefined);
+  startVariant(player, N().DENULTH, firstIssue);
+  assert.equal(inventory.getAmount(I().CERTIFICATE_2), 0, 'the failed add leaves the full inventory unchanged');
+  assert.equal(player.getAttribute('death-plateau:certificate-issued'), undefined, 'a failed add does not record an issue');
+  assert.ok(!player.messages.includes('Denulth has given you a certificate.'), 'the canonical receipt message is suppressed when the add fails');
+  assert.ok(player.messages.includes("You couldn't hold all those items."));
+
+  assert.equal(PluginManager.emitNpcDialogueVariant({ player, npcId: N().DENULTH }), firstIssue, 'retry stays on the genuine first-issue variant');
+  inventory.deleteAtSlot(1);
+  assert.equal(inventory.getFreeSlots(), 1);
+  startVariant(player, N().DENULTH, firstIssue);
+  assert.equal(inventory.getAmount(I().CERTIFICATE_2), 1, 'the certificate is delivered when the slot is free');
+  assert.equal(player.getAttribute('death-plateau:certificate-issued'), true);
+  assert.ok(player.messages.includes('Denulth has given you a certificate.'), 'the receipt is shown after the item is actually delivered');
+
+  inventory.deleteNumber(I().CERTIFICATE_2, 1);
+  assert.equal(
+    PluginManager.emitNpcDialogueVariant({ player, npcId: N().DENULTH }),
+    'new-route-up-death-plateau-talking-to-denulth-after-losing-the-certificate',
+    'only a certificate actually received can later be reported lost',
+  );
 });
 
 test('the imported after-losing-the-map messages restore the map without re-taking supplies', () => {

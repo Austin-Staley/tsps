@@ -57,6 +57,7 @@ module.exports = function registerDeathPlateauQuest(api) {
   const PREMADE_BLURBERRY_ITEM_ID = ItemIdentifiers.PREMADE_BLURB_SP;
   const DRUNK_ATTRIBUTE = "death-plateau:harold-drunk";
   const CERTIFICATE_DELIVERED_ATTRIBUTE = "death-plateau:certificate-delivered";
+  const CERTIFICATE_ISSUED_ATTRIBUTE = "death-plateau:certificate-issued";
   const PUZZLE_ATTRIBUTE = "death-plateau:stone-balls";
   const MAP_RECEIVED_ATTRIBUTE = "death-plateau:map-received";
   const MAP_DELIVERED_ATTRIBUTE = "death-plateau:map-delivered";
@@ -216,7 +217,9 @@ module.exports = function registerDeathPlateauQuest(api) {
       }
       if (stage >= STAGE_DUNSTAN && stage < STAGE_BOOTS && !hasCertificate(player)
         && player.getAttribute(CERTIFICATE_DELIVERED_ATTRIBUTE) !== true) {
-        return "new-route-up-death-plateau-talking-to-denulth-after-talking-to-dunstan";
+        return player.getAttribute(CERTIFICATE_ISSUED_ATTRIBUTE) === true
+          ? "new-route-up-death-plateau-talking-to-denulth-after-losing-the-certificate"
+          : "new-route-up-death-plateau-talking-to-denulth-after-talking-to-dunstan";
       }
       return "new-route-up-death-plateau-talking-to-denulth-after-opening-the-equipment-room";
     }
@@ -464,6 +467,8 @@ module.exports = function registerDeathPlateauQuest(api) {
     if (GIVE_CERTIFICATE_IDS.has(stepId)) {
       if (!hasCertificate(player) && player.getAttribute(CERTIFICATE_DELIVERED_ATTRIBUTE) !== true) {
         player.getInventory().adds(CERTIFICATE_ITEM_ID, 1);
+        if (hasCertificate(player)) player.setAttribute(CERTIFICATE_ISSUED_ATTRIBUTE, true);
+        else request.handled = true;
       }
     }
   }
@@ -607,6 +612,7 @@ module.exports = function registerDeathPlateauQuest(api) {
 
   api.persistAttribute(DRUNK_ATTRIBUTE);
   api.persistAttribute(CERTIFICATE_DELIVERED_ATTRIBUTE);
+  api.persistAttribute(CERTIFICATE_ISSUED_ATTRIBUTE, false);
   api.persistAttribute(PUZZLE_ATTRIBUTE);
   api.persistAttribute(MAP_RECEIVED_ATTRIBUTE);
   api.persistAttribute(MAP_DELIVERED_ATTRIBUTE);
