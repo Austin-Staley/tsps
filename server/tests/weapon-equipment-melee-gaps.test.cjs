@@ -10,7 +10,7 @@ function special(name, options = {}) {
   require(`../plugins/combat/specials/${name}.SpecialAttack`)({ core: options.core ?? core,
     registerCombatSpecial: (entry) => { value = entry; },
     emitCustomEvent: (_name, event) => { event.inside = options.inside ?? false; },
-    onCombatHitDamage: (handler) => { options.damageHook = handler; } });
+    onPlayerDealtDamage: (handler) => { options.damageHook = handler; } });
   return value;
 }
 function attacker() {
@@ -22,16 +22,18 @@ function attacker() {
 }
 function target() {
   const value = { isPlayer: () => false, isNpc: () => true, getAsNpc: () => value,
-    getHitpoints: () => 8, performGraphic() {} };
+    getHitpoints: () => 8, getPrayerActive: () => [], performGraphic() {} };
   return value;
 }
 function lightning(source, victim) {
   let value;
+  const oldMax = core.DamageFormulas.sourceMaxHit;
+  core.DamageFormulas.sourceMaxHit = () => 0;
   const old = CombatFactory.addPendingHit;
   CombatFactory.addPendingHit = (hit) => { value = hit; };
   try { special('SaradominSword').combatMethod.handleAfterHitEffects({ isAccurate: () => true,
     getAttacker: () => source, getTarget: () => victim }); }
-  finally { CombatFactory.addPendingHit = old; }
+  finally { CombatFactory.addPendingHit = old; core.DamageFormulas.sourceMaxHit = oldMax; }
   return value;
 }
 test('lightning is a capped delayed Magic hit paying 2 Magic XP per damage', () => {
@@ -43,6 +45,22 @@ test('lightning is a capped delayed Magic hit paying 2 Magic XP per damage', () 
   assert.equal(hit.rewardsExperience(), false);
   hit.getCombatMethod().handleAfterHitEffects(hit);
   assert.equal(source.xp.find(([skill]) => skill === Skill.MAGIC)[1], hit.getTotalDamage() * 2);
+});
+test('fixed Magic hits keep Elysian and incoming damage reductions', () => {
+  const oldMax = core.DamageFormulas.sourceMaxHit, oldRandom = Math.random;
+  core.DamageFormulas.sourceMaxHit = () => 0;
+  Math.random = () => 0;
+  try {
+    const source = { isNpc: () => true, isPlayer: () => false, getAsNpc: () => source,
+      getCurrentDefinition: () => ({ isDemon: () => false }) };
+    const victim = { isPlayer: () => true, isNpc: () => false, getAsPlayer: () => victim,
+      getHitpoints: () => 100, getPrayerActive: () => [], getAttribute: () => null, performGraphic() {},
+      getEquipment: () => ({ getItems: () => Array.from({ length: 14 }, () => ({ getId: () => ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD })) }) };
+    const { registerIncomingDamageModifier } = require('../dist/game/content/combat/EquipmentEffects');
+    registerIncomingDamageModifier((entity, damage) => { if (entity === victim) damage.multiplyDamage(0.5); });
+    const hit = new core.PendingHit(source, victim, { type: () => CombatType.MAGIC, accuracyDefenceType: (type) => type }, { damage: 16, rollAccuracy: false });
+    assert.equal(hit.getTotalDamage(), 6, '16 reduced by Elysian25%, then incoming50%');
+  } finally { core.DamageFormulas.sourceMaxHit = oldMax; Math.random = oldRandom; }
 });
 test('guild cyclopes reject real lightning through existing non-melee immunity and give no XP', () => {
   let immune;
@@ -68,18 +86,26 @@ test('Corruption is ToA-only, successful hits mark for ten ticks, refreshing wit
     assert.match(messages[0], /only be used within the Tombs/);
     const options = { inside: true };
     const value = special('KerisPartisanOfCorruption', options), victim = target();
+    victim.getHitpoints = () => 100;
     assert.equal(value.traits.attackSpeedTicks, 8);
     assert.equal(value.combatMethod.canAttack({}, victim), true);
     const hit = (accurate) => ({ isAccurate: () => accurate, getTarget: () => victim });
     const damage = () => {
       const splat = new core.HitDamage(20, core.HitMask.RED);
-      options.damageHook({ target: victim, damage: splat });
+      options.damageHook({ target: victim, hit: { getHits: () => [splat], updateTotalDamage() {} } });
       return splat.getDamage();
     };
     value.combatMethod.handleAfterHitEffects(hit(false)); assert.equal(damage(), 20);
     value.combatMethod.handleAfterHitEffects(hit(true)); assert.equal(damage(), 25);
     cycle = 109; assert.equal(damage(), 25);
     value.combatMethod.handleAfterHitEffects(hit(true)); assert.equal(damage(), 25);
+    victim.getHitpoints = () => 12;
+    const first = new core.HitDamage(8, core.HitMask.RED), second = new core.HitDamage(8, core.HitMask.RED);
+    let updated = false;
+    options.damageHook({ target: victim, hit: { getHits: () => [first, second], updateTotalDamage() { updated = true; } } });
+    assert.deepEqual([first.getDamage(), second.getDamage()], [10, 2], 'final rerolled hits are amplified and capped together');
+    assert.equal(updated, true);
+    victim.getHitpoints = () => 100;
     cycle = 119; assert.equal(damage(), 20);
   } finally { World.getProcessCycle = old; }
 });

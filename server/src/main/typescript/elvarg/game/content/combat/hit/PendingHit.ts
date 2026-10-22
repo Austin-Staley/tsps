@@ -205,9 +205,15 @@ export class PendingHit {
             const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
             this.accurate = resolved.accurate;
             const damage: HitDamage = this.accurate
-                ? fixedDamage !== undefined ? new HitDamage(Math.max(0, Math.floor(fixedDamage)), HitMask.RED) : ServerPerf.measurePhase(
+                ? ServerPerf.measurePhase(
                     "combat.process.method_hits.damage",
-                    () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer, resolved.bounds)
+                    () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
+                        fixedDamage === undefined ? resolved.bounds : {
+                            minimumMultiplier: 0,
+                            maximumMultiplier: 0,
+                            minimumBonus: fixedDamage,
+                            maximumBonus: fixedDamage,
+                        })
                 )
                 : new HitDamage(0, HitMask.BLUE);
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {

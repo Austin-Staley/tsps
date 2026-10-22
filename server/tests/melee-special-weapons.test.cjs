@@ -329,6 +329,8 @@ test("four missed dragon claws rolls deal 0 or a 2-damage split, never anything 
 
 function lightningHit({ accurate, splashed = false }) {
   const queued = [];
+  const oldMax = PluginManager.getCoreApi().DamageFormulas.sourceMaxHit;
+  PluginManager.getCoreApi().DamageFormulas.sourceMaxHit = () => 0;
   const realQueue = CombatFactory.addPendingHit;
   CombatFactory.addPendingHit = (hit) => queued.push(hit);
   const target = {
@@ -338,6 +340,8 @@ function lightningHit({ accurate, splashed = false }) {
     getAsPlayer() { return this; },
     performGraphic() { this.graphics++; },
     getHitpoints: () => 50,
+    getPrayerActive: () => [],
+    getEquipment: () => ({ getItems: () => Array.from({ length: 14 }, () => ({ getId: () => -1 })) }),
   };
   const attacker = { isPlayer: () => false, isNpc: () => true };
   const hit = { getTarget: () => target, isAccurate: () => accurate, getAttacker: () => attacker };
@@ -345,6 +349,7 @@ function lightningHit({ accurate, splashed = false }) {
     special("saradomin_sword").getCombatMethod().handleAfterHitEffects(hit);
   } finally {
     CombatFactory.addPendingHit = realQueue;
+    PluginManager.getCoreApi().DamageFormulas.sourceMaxHit = oldMax;
   }
   for (const hit of queued) {
     assert.equal(hit.getCombatType(), CombatType.MAGIC);

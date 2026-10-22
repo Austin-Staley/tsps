@@ -9,9 +9,15 @@ function canUseInTombs(api, player) {
   return query.inside;
 }
 
-function amplifyDamage({ target, damage }) {
+function amplifyDamage({ target, hit }) {
   if ((weakenedUntil.get(target) ?? -1) > core.World.getProcessCycle()) {
-    damage.setDamage(Math.floor(damage.getDamage() * 5 / 4));
+    let remaining = target.getHitpoints();
+    for (const damage of hit.getHits()) {
+      const value = Math.min(remaining, Math.floor(damage.getDamage() * 5 / 4));
+      damage.setDamage(value);
+      remaining -= value;
+    }
+    hit.updateTotalDamage();
   }
 }
 
@@ -63,5 +69,5 @@ function buildSpecial(api) {
 module.exports = function registerKerisPartisanOfCorruptionSpecialAttack(api) {
   core = api.core;
   api.registerCombatSpecial(buildSpecial(api));
-  api.onCombatHitDamage(amplifyDamage);
+  api.onPlayerDealtDamage(amplifyDamage);
 };

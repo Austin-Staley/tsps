@@ -1,4 +1,4 @@
-// Smash drains 30% of current Defence after a damaging hit.
+// Smash drains 30% of current Defence after a successful accuracy roll.
 function buildSpecial(core) {
   const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = core;
 
