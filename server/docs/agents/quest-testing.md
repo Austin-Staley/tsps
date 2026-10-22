@@ -267,6 +267,29 @@ in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot 
 
 ## Go fast without faking the proof
 
+### Preserve evidence between runs
+
+Before starting or resuming a quest, read the committed coverage ledger and
+[verification history](../quest-helper-728-verification.md). Reuse the recorded checkpoint
+and verified route prefix. A new agent session is not a reason to repeat an unchanged test.
+
+Record each reviewed result in the tracked quest ledger before handing off: quest and
+scope, source/test/loaded hashes, Quest Helper revision, cache and relevant shared runtime
+or dialogue dependencies, starting checkpoint, stages reached, rewards/repeat/relog/offline
+checks, recovery checks and remaining gaps. Include a concise, sanitized evidence summary;
+temporary report paths alone are not a durable record. Never commit raw logs or credentials.
+
+Keep previous results when code changes. Mark the affected claim as needing revalidation,
+with the changed dependency and required check; do not erase its history or label it never
+tested. Inspect the diff before deciding whether a shared or generated-data change affects
+that quest. An unrelated dialogue-page change does not require replaying every quest.
+Resume from a preserved, verified checkpoint when valid, then test the affected route.
+
+Report implementation, source review, focused tests and natural playthroughs separately.
+Count original issue quests and supplemental work separately. A partial recovery failure
+does not erase an observed main-route completion, and that completion does not certify the
+unresolved recovery case. Commit and push ledger updates with the reviewed fix batches.
+
 - Narrow the contract once: quest key, start state, mandatory legs, rewards, recovery cases.
   Write it down; do not re-derive it every turn.
 - Include ordinary tools from the helper's item requirements in the declared setup before
