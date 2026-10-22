@@ -446,9 +446,10 @@ export class NPC extends Mobile {
      * A defence bonus (BonusManager.DEFENCE_STAB..DEFENCE_RANGE) as this NPC has it now: the
      * definition's, unless a fight has changed it for this NPC (setDefenceBonusOverrides).
      */
-    public getDefenceBonus(index: number): number {
+    public getDefenceBonus(index: number, rangedType: "light" | "standard" | "heavy" = "standard"): number {
         const override = this.defenceBonusOverrides?.[index];
         if (typeof override === "number") return override;
+        if (index === 4) return this.getCurrentDefinition().getRangedDefenceBonus(rangedType);
         return this.getCurrentDefinition().getStats()[10 + index] ?? 0;
     }
 

@@ -100,3 +100,54 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
 - The Warped sceptre spell uses `VFX_WARPED_SCEPTRE_CAST` (10500), with cast/projectile/impact spotanims 2567/2569/2568 and charge-count varbit `CHARGES_WARPED_SCEPTRE_QUANTITY` (16155), from the client gameval definitions. Its 4-tick speed, 7-tile range (9 on Longrange), 62 Magic requirement, and base max-hit formula are from the [OSRS Wiki item page](https://oldschool.runescape.wiki/w/Warped_sceptre), not another RSPS.
 - **Weak captures, left alone:** banners (`human_banner_spike`, 3 recordings, one style), the Bone mace (`barrow_guthan_crush`, half the attacks), the Twinflame staff.
 - **Weapons outside the captures' coverage** keep their type's animations. 69 weapons have attacks in 3 or more recordings; the rest need a capture or the Wiki.
+
+## Remaining ranged and magic checks (PR #797)
+
+- [Dark bow](https://oldschool.runescape.wiki/w/Dark_bow?action=raw) and
+  [its BH variant](https://oldschool.runescape.wiki/w/Dark_bow_(bh)?action=raw): both arrows
+  roll independently and use the bow profile's separate hit delays. Ordinary Descent rolls
+  zero to its boosted maximum, then clamps to the guaranteed minimum and 48 dragon-arrow
+  cap; BH rolls minimum to maximum, with minima 7/10. Seeking dragon arrows use Descent of
+  Dragons and their successful ordinary hits have a minimum of 3. Painted, LMS, BH,
+  corrupted and Deadman bows share ammunition and special registration. The dark bow's
+  ordinary range is 10 tiles.
+- [Hit delay](https://oldschool.runescape.wiki/w/Hit_delay?action=raw): Snapshot now creates
+  two single-arrow hits a tick apart. Chainhit uses the shared thrown projectile profile's
+  distance-based flight for each leg; its hits land at each leg's arrival. Its exact bounce
+  launch/flight parameters still need an OSRS capture; the prior flat 30-cycle approximation
+  is removed, but the shared-profile timing is not claimed to be captured Chainhit timing.
+- [Ammunition](https://oldschool.runescape.wiki/w/Ammunition?action=raw): ballista javelins
+  already use the common 20% break, floor-drop and Ava's recovery path; the regression now
+  actually selects BALLISTA. Salamander tar is consumed in **all three** styles, with the
+  matching tar required for Scorch and Blaze as well as Flare. Flare and Blaze have no hit
+  delay, as the Wiki Hit delay page specifies.
+- [Chinchompa](https://oldschool.runescape.wiki/w/Chinchompa_(weapon)?action=raw): accuracy
+  uses heavy ranged defence. The NPC loader now preserves the dump's light/standard/heavy
+  bonuses and rolls cache each category separately; weapon profiles select the category.
+- [Morrigan's throwing axe](https://oldschool.runescape.wiki/w/Morrigan%27s_throwing_axe):
+  Hamstring uses the existing movement drain modifier to multiply actual drain by six for
+  one minute; repeated hits refresh a single expiry instead of stacking drain tasks.
+- [Toxic blowpipe](https://oldschool.runescape.wiki/w/Toxic_blowpipe?action=raw): Toxic
+  Siphon remembers its damage roll before the target-HP cap, so a killing 40 roll against a
+  4 HP target heals 20. Ordinary venom still requires an accurate positive hit.
+- [Staff of the Dead](https://oldschool.runescape.wiki/w/Staff_of_the_Dead): the main text
+  and its cited Mod Ash answer give **1/7** rune saving. The comparison table still says
+  1/8; the cited direct answer takes precedence. Offensive spells only; Kodai remains 15%.
+- Power of Death IDs were checked with cache revision 241 `dump:seq` and `dump:spotanim`
+  and its gamevals: dead 7083/1228, light 7967/1516, balance 3652/1733, **charged toxic
+  1720/1228** (1719 is explicitly the uncharged animation).
+- [Ancient sceptre](https://oldschool.runescape.wiki/w/Ancient_sceptre?action=raw): plain
+  and locked sceptres now apply the 10% improved ancient effects through the existing
+  `magic:hit-effects` event: poison severity 11/22, shadow drain 11%/16.5%, blood healing
+  27.5%, ice freeze 8/17/26/35 ticks. Its cache supplies +10% magic damage. Tests also
+  verify Kodai's +15%, every normal wand's 4-tick melee profile, and the actual
+  [3rd Age bow](https://oldschool.runescape.wiki/w/3rd_Age_bow) data (the Wiki redirects
+  “3rd age longbow” to that bow).
+- [Black salamander](https://oldschool.runescape.wiki/w/Black_salamander?action=raw)
+  explicitly defines Bonus as the hidden salamander bonus (92), with equipment magic
+  damage applied afterwards. The existing shared formula already does this; a regression
+  verifies that +15% gear takes the level-99 Blaze base of 24 to 27. Gear is not added to
+  the hidden Bonus term. Exact Blaze projectile/impact mapping is still unverified: cache
+  FIREBREATH/POISONBREATH/EXPLODE names alone do not establish which this attack uses.
+- The wand of the praesul is a RuneScape 3 item; neither the OSRS Wiki wand list nor this
+  cache has one. No unrelated item or invented identifier was added.

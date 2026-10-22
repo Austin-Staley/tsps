@@ -1,6 +1,6 @@
 /**
  * Salamanders (OSRS Wiki: Salamander, Swamp lizard, Orange/Red/Black salamander): one weapon,
- * three styles. Scorch is a slash, Flare a ranged attack that burns one tar, Blaze a magic attack
+ * three styles. Every style burns one compatible tar. Scorch is slash, Flare ranged, Blaze magic
  * whose max hit is floor(0.5 + Magic * (64 + hidden bonus) / 640). The style buttons, speed and
  * reach come from the SALAMANDER interface and its WeaponProfile; this plugin picks the combat
  * method for the selected style and the Blaze spell.
@@ -11,7 +11,7 @@ const BLAZE_MAGIC_BONUS_BY_ITEM = {
   RED_SALAMANDER: 77,
   BLACK_SALAMANDER: 92,
 };
-const TAR_PER_FLARE = 1;
+const TAR_PER_ATTACK = 1;
 const ATTACK_SLASH = 1; // BonusManager.ATTACK_SLASH, the Scorch style's attack type
 const ATTACK_MAGIC = 3; // BonusManager.ATTACK_MAGIC, the Blaze style's attack type
 const BLAZE_ATTACK_RANGE = 1;
@@ -20,6 +20,8 @@ const BLAZE_SPELL_LEVEL = 1; // the wield requirement (Attack/Ranged/Magic) is t
 let core = null;
 const TARS = ["GUAM_TAR", "MARRENTILL_TAR", "TARROMIN_TAR", "HARRALANDER_TAR"];
 let BlazeCombatMethod = null;
+let scorchCombatMethod = null;
+let flareCombatMethod = null;
 const blazeSpells = new WeakMap();
 
 function weaponOf(player) {
@@ -60,7 +62,7 @@ function blazeMethod() {
   BlazeCombatMethod = new (class extends MagicCombatMethod {
     canAttack(character) {
       const player = character.getAsPlayer();
-      if (hiddenBonus(player) === undefined) return false;
+      if (hiddenBonus(player) === undefined || !hasTar(player)) return false;
       player.getCombat().setCastSpell(blazeSpell(player));
       return true;
     }
@@ -69,9 +71,14 @@ function blazeMethod() {
       return hiddenBonus(character.getAsPlayer()) !== undefined;
     }
 
+    start(character, target) {
+      super.start(character, target);
+      decrementAmmo(character.getAsPlayer(), target.getLocation(), 1);
+    }
+
     hits(character, target) {
       const spell = blazeSpell(character.getAsPlayer());
-      const hit = new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell));
+      const hit = new PendingHit(character, target, this, 0).setSpell(spell);
       spell.onHitCalc(hit);
       return [hit];
     }
@@ -103,22 +110,51 @@ function resolveSalamander(attacker) {
   const player = attacker.getAsPlayer();
   if (hiddenBonus(player) === undefined) return null;
   const attackType = player.getFightType().getBonusType();
-  if (attackType === ATTACK_SLASH) return core.CombatFactory.MELEE_COMBAT;
+  if (attackType === ATTACK_SLASH) return scorchMethod();
   if (attackType === ATTACK_MAGIC) return blazeMethod();
-  return null; // Flare: the ranged method, which checks and spends the tar
+  return flareMethod();
 }
 
-function checkAmmo() {
-  return null; // core's ammo-slot check already matches each salamander to its tar
+function hasTar(player, silent = false) {
+  const expected = core.RangedWeapon.getFor(player)?.getAmmunitionData()[0];
+  const ammo = player.getEquipment().get(core.Equipment.AMMUNITION_SLOT);
+  if (ammo?.getAmount?.() > 0 && core.Ammunition.getForItem(ammo.getId()) === expected) return true;
+  if (!silent) player.sendMessage("Your salamander needs its matching herb tar.");
+  return false;
 }
 
-/** A Flare burns its tar: no 20% break, nothing left on the floor, one per attack. */
+function scorchMethod() {
+  if (scorchCombatMethod) return scorchCombatMethod;
+  scorchCombatMethod = new (class extends core.MeleeCombatMethod {
+    canAttack(character) { return hasTar(character.getAsPlayer()); }
+    canPursue(character) { return hasTar(character.getAsPlayer(), true); }
+    start(character, target) {
+      super.start(character, target);
+      decrementAmmo(character.getAsPlayer(), target.getLocation(), 1);
+    }
+  })();
+  return scorchCombatMethod;
+}
+
+function flareMethod() {
+  if (flareCombatMethod) return flareCombatMethod;
+  flareCombatMethod = new (class extends core.RangedCombatMethod {
+    hits(character, target) { return [new core.PendingHit(character, target, this, 0)]; }
+  })();
+  return flareCombatMethod;
+}
+
+function checkAmmo(player, _amount, silent) {
+  return hiddenBonus(player) === undefined ? null : hasTar(player, silent);
+}
+
+/** Every style burns its tar: no 20% break, nothing left on the floor, one per attack. */
 function decrementAmmo(player, _position, amount) {
   if (hiddenBonus(player) === undefined) return false;
   const slot = core.Equipment.AMMUNITION_SLOT;
   const tar = player.getEquipment().get(slot);
   if (!TARS.some((name) => core.ItemIdentifiers[name] === Number(tar?.getId?.() ?? -1))) return false;
-  tar.decrementAmountBy(Math.min(tar.getAmount(), amount * TAR_PER_FLARE));
+  tar.decrementAmountBy(Math.min(tar.getAmount(), amount * TAR_PER_ATTACK));
   if (tar.getAmount() <= 0) {
     player.sendMessage("You have run out of ammunition!");
     player.getEquipment().set(slot, new core.Item(-1));

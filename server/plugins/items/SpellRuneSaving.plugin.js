@@ -1,13 +1,13 @@
 /**
  * Passive rune saving on staves.
- * - Staff of the dead (and its staff of light, staff of balance and toxic variants): 1/8 chance to
+ * - Staff of the dead (and its staff of light, staff of balance and toxic variants): 1/7 chance to
  *   negate the rune cost of a combat spell (https://oldschool.runescape.wiki/w/Staff_of_the_dead).
  * - Kodai wand: 15% chance to negate the rune cost of an offensive spell
  *   (https://oldschool.runescape.wiki/w/Kodai_wand).
  */
 let core;
 
-const STAFF_OF_THE_DEAD_CHANCE = 1 / 8;
+const STAFF_OF_THE_DEAD_CHANCE = 1 / 7;
 const KODAI_WAND_CHANCE = 0.15;
 const STAFF_OF_THE_DEAD_MESSAGE = "Your Staff of the dead negated your runes for this cast.";
 

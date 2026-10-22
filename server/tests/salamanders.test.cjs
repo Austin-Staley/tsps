@@ -74,8 +74,8 @@ test("Blaze max hit follows the Wiki tables", () => {
 test("each style picks the matching combat method", () => {
   const [resolver] = registered.resolvers;
   for (const id of SALAMANDERS) {
-    assert.equal(resolver.resolve(wielding(id, FightType.SALAMANDER_SCORCH)), CombatFactory.MELEE_COMBAT);
-    assert.equal(resolver.resolve(wielding(id, FightType.SALAMANDER_FLARE)), null, "Flare falls through to the ranged method");
+    assert.equal(resolver.resolve(wielding(id, FightType.SALAMANDER_SCORCH)).type(), CombatType.MELEE);
+    assert.equal(resolver.resolve(wielding(id, FightType.SALAMANDER_FLARE)).type(), CombatType.RANGED);
     const blaze = resolver.resolve(wielding(id, FightType.SALAMANDER_BLAZE));
     assert.equal(blaze.type(), CombatType.MAGIC);
     assert.equal(blaze.attackDistance(), 1);
@@ -145,4 +145,37 @@ test("a Flare burns exactly one tar and drops nothing", () => {
   assert.equal(decrementAmmo(player, null, 1), true);
   assert.equal(player.getEquipment().get(Equipment.AMMUNITION_SLOT).getId(), -1, "the last tar empties the slot");
   assert.equal(decrementAmmo(wielding(I.ABYSSAL_WHIP, FightType.SALAMANDER_FLARE, new Item(I.GUAM_TAR, 5)), null, 1), false);
+});
+
+test("Scorch and Blaze require the matching tar and burn exactly one each", (t) => {
+  const { MeleeCombatMethod } = PluginManager.getCoreApi();
+  const { MagicCombatMethod } = PluginManager.getCoreApi();
+  t.mock.method(MeleeCombatMethod.prototype, "start", () => {});
+  t.mock.method(MagicCombatMethod.prototype, "start", () => {});
+  for (const style of [FightType.SALAMANDER_SCORCH, FightType.SALAMANDER_BLAZE]) {
+    let selected;
+    const player = wielding(I.BLACK_SALAMANDER, style, new Item(I.HARRALANDER_TAR, 2));
+    player.getCombat = () => ({ setCastSpell: (spell) => { selected = spell; } });
+    const method = registered.resolvers[0].resolve(player);
+    assert.equal(method.canAttack(player), true);
+    method.start(player, { getLocation: () => null });
+    assert.equal(player.getEquipment().get(Equipment.AMMUNITION_SLOT).getAmount(), 1);
+    method.start(player, { getLocation: () => null });
+    assert.equal(player.getEquipment().get(Equipment.AMMUNITION_SLOT).getId(), -1);
+    assert.equal(method.canAttack(player), false);
+    const wrong = wielding(I.BLACK_SALAMANDER, style, new Item(I.GUAM_TAR, 2));
+    assert.equal(method.canAttack(wrong), false);
+  }
+});
+
+test("Blaze applies equipment magic damage after its hidden salamander bonus", () => {
+  const { DamageFormulas } = PluginManager.getCoreApi();
+  const player = wielding(I.BLACK_SALAMANDER, FightType.SALAMANDER_BLAZE);
+  const spell = Salamanders._test.blazeSpell(player);
+  player.getCombat = () => ({ getSelectedSpell: () => spell });
+  player.getAttribute = () => undefined;
+  player.getPrayerActive = () => [];
+  player.getBonusManager = () => ({ getOtherBonus: () => [0, 0, 15] });
+  assert.equal(spell.maximumHit(), 24);
+  assert.equal(DamageFormulas.getMagicMaxhit(player), 27);
 });

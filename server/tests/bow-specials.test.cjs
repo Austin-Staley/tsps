@@ -80,7 +80,7 @@ test("each special is registered for every wieldable variant", () => {
   for (const id of [I.MAGIC_SHORTBOW, I.MAGIC_SHORTBOW_I_, I.MAGIC_SHORTBOW_3]) {
     assert.equal(CombatSpecial.getForWeaponId(id).getId(), "magic_shortbow");
   }
-  for (const id of [I.DARK_BOW, I.DARK_BOW_3, I.DARK_BOW_4, I.DARK_BOW_5, I.DARK_BOW_6]) {
+  for (const id of [I.DARK_BOW, I.DARK_BOW_3, I.DARK_BOW_4, I.DARK_BOW_5, I.DARK_BOW_6, I.DARK_BOW_7, I.DARK_BOW_BH_, I.CORRUPTED_DARK_BOW, I.DARK_BOW_DEADMAN_]) {
     assert.equal(CombatSpecial.getForWeaponId(id).getId(), "dark_bow", `special for ${id}`);
     assert.equal(RangedWeapon.rangedWeapons.get(id), RangedWeapon.DARK_BOW, `painted bows fire as the dark bow: ${id}`);
   }
@@ -94,7 +94,7 @@ test("Snapshot costs 55%, or 50% on the imbued bow, drained once per shot", () =
   const snapshot = CombatSpecial.getById("magic_shortbow");
   assert.equal(snapshot.getDrainAmountForWeaponId(I.MAGIC_SHORTBOW), 55);
   assert.equal(snapshot.getDrainAmountForWeaponId(I.MAGIC_SHORTBOW_I_), 50);
-  assert.equal(snapshot.getTraits().hitCount, 2, "two arrows");
+  assert.equal(snapshot.getTraits().hitCount, 1, "each PendingHit rolls one arrow");
   assert.ok(Math.abs(snapshot.getAccuracyMultiplier() - 10 / 7) < 1e-9);
   for (const [weapon, cost] of [[I.MAGIC_SHORTBOW, 55], [I.MAGIC_SHORTBOW_I_, 50]]) {
     drains.length = 0;
@@ -137,12 +137,12 @@ test("Descent of Dragons: dragon arrows hit up to 1.5x, at least 8, at most 48",
   const attacker = fakePlayer({ weapon: I.DARK_BOW, ammo: Ammunition.DRAGON_ARROW, special: "dark_bow" });
   sourceMax = 20;
   assert.equal(shoot(attacker, true).damage, 30);
-  assert.deepEqual(rolledBounds[0].minimumBonus, 8);
+  assert.deepEqual(rolledBounds[0].minimumBonus, 0);
   sourceMax = 40; // 1.5x would be 60
   assert.equal(shoot(attacker, true).damage, 48);
   sourceMax = 3; // a tiny max hit still gets the minimum
   const small = shoot(attacker, true);
-  assert.equal(small.bounds[0].minimumBonus, 8);
+  assert.equal(small.bounds[0].minimumBonus, 0);
   assert.equal(small.damage, 8);
 });
 
@@ -151,14 +151,14 @@ test("Descent of Darkness: other arrows hit up to 1.3x, at least 5, uncapped", (
   sourceMax = 50;
   const hit = shoot(attacker, true);
   assert.equal(hit.damage, 65);
-  assert.equal(hit.bounds[0].minimumBonus, 5);
+  assert.equal(hit.bounds[0].minimumBonus, 0);
 });
 
 test("a dark bow arrow that misses still deals the minimum", () => {
   const dragon = fakePlayer({ weapon: I.DARK_BOW, ammo: Ammunition.DRAGON_ARROW, special: "dark_bow" });
   sourceMax = 40;
   const miss = shoot(dragon, false);
-  assert.deepEqual(miss.bounds[0], { minimumMultiplier: 0, maximumMultiplier: 0, minimumBonus: 8, maximumBonus: 8 });
+  assert.deepEqual(miss.bounds[0], { minimumMultiplier: 0, maximumMultiplier: 0, minimumBonus: 0, maximumBonus: 8 });
   assert.equal(miss.damage, 8);
   const rune = fakePlayer({ weapon: I.DARK_BOW, ammo: Ammunition.RUNE_ARROW, special: "dark_bow" });
   assert.equal(shoot(rune, false).damage, 5);
@@ -215,4 +215,47 @@ test("toggling the special off cancels it without draining", () => {
     assert.deepEqual(drains, []);
     assert.ok(sent.includes("orb"), "the bar is refreshed");
   }
+});
+
+test("Snapshot and Descent each launch two independently delayed hits", (t) => {
+  const { PendingHit } = core;
+  const rolledAmounts = [];
+  t.mock.method(PendingHit.prototype, "prepareHits", (amount) => { rolledAmounts.push(amount); return []; });
+  const { WeaponInterfaces } = core;
+  for (const [special, weapon, profile, expected] of [
+    ["magic_shortbow", I.MAGIC_SHORTBOW, WeaponInterfaces.SHORTBOW, [2, 3]],
+    ["dark_bow", I.DARK_BOW, WeaponInterfaces.DARK_BOW, [2, 3]],
+  ]) {
+    const player = fakePlayer({ weapon, special });
+    const items = [];
+    items[Equipment.WEAPON_SLOT] = { getId: () => weapon };
+    player.getEquipment = () => ({ getItems: () => items });
+    player.getWeapon = () => profile;
+    player.getFightType = () => null;
+    player.getLocation = () => ({ getDistance: () => 6 });
+    const hits = CombatSpecial.getById(special).getCombatMethod().hits(player, target);
+    assert.deepEqual(hits.map((hit) => hit.getDelay()), expected);
+    assert.equal(hits.length, 2);
+  }
+  assert.deepEqual(rolledAmounts, [1, 1, 1, 1], "one accuracy and damage roll per arrow");
+});
+
+test("seeking dragon arrows use Descent of Dragons, and BH increases each minimum by two", () => {
+  sourceMax = 40;
+  for (const ammo of [Ammunition.DRAGON_ARROW, Ammunition.SEEKING_DRAGON_ARROW]) {
+    assert.equal(shoot(fakePlayer({ weapon: I.DARK_BOW, ammo, special: "dark_bow" }), false).damage, 8);
+    const bh = fakePlayer({ weapon: I.DARK_BOW_BH_, ammo, special: "dark_bow" });
+    assert.equal(shoot(bh, false).damage, 10);
+    assert.equal(shoot(bh, true).damage, 48);
+    assert.equal(rolledBounds[0].minimumBonus, 10);
+  }
+  assert.equal(shoot(fakePlayer({ weapon: I.DARK_BOW_BH_, ammo: Ammunition.RUNE_ARROW, special: "dark_bow" }), false).damage, 7);
+});
+
+test("ordinary Descent rolls before clamping so over-cap rolls keep their probability", () => {
+  sourceMax = 40;
+  const shot = shoot(fakePlayer({ weapon: I.DARK_BOW, ammo: Ammunition.DRAGON_ARROW, special: "dark_bow" }), true);
+  assert.equal(shot.bounds[0].maximumBonus, 60);
+  assert.equal(shot.bounds[0].minimumBonus, 0);
+  assert.equal(shot.damage, 48);
 });

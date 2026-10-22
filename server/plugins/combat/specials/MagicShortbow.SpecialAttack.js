@@ -1,15 +1,40 @@
-module.exports = function registerMagicShortbowSpecialAttack(api) {
-  const { Animation, CombatFactory, CombatSpecial, CombatType, Equipment, Graphic, GraphicHeight, ItemIdentifiers, Projectile, RangedCombatMethod, RangedWeapon, Skill, Sound, Sounds } = api.core;
+let core;
 
-  const SPECIAL_ID = "magic_shortbow";
-  const DRAIN = 55;
-  const IMBUED_DRAIN = 50;
-  const RANGED_STRENGTH_BONUS_INDEX = 11;
-  const ACCURACY_MULTIPLIER = 10 / 7;
+const ACCURACY_MULTIPLIER = 10 / 7;
+const RANGED_STRENGTH_BONUS_INDEX = 11;
+const IMBUED_DRAIN = 50;
+const DRAIN = 55;
+const SPECIAL_ID = "magic_shortbow";
+
+function snapshotMaxHit(player) {
+  const { Equipment, Skill } = core;
+  const level = player.getSkillManager().getCurrentLevel(Skill.RANGED);
+  const ammo = player.getEquipment().get(Equipment.AMMUNITION_SLOT);
+  const strength = ammo?.getDefinition?.()?.getBonuses?.()?.[RANGED_STRENGTH_BONUS_INDEX] ?? 0;
+  return Math.max(0, Math.floor(0.5 + ((level + 10) * (strength + 64)) / 640));
+}
+
+function rollSnapshot({ attacker, target, damage, accurate }) {
+  const { CombatFactory, CombatType } = core;
+  if (!accurate || !attacker.isPlayer() || !attacker.isSpecialActivated() || attacker.getCombatSpecial()?.getId() !== SPECIAL_ID) {
+    return;
+  }
+  const bounds = { minimumMultiplier: 0, maximumMultiplier: 0, minimumBonus: 0, maximumBonus: snapshotMaxHit(attacker) };
+  damage.setDamage(CombatFactory.getHitDamage(attacker, target, CombatType.RANGED, false, bounds).getDamage());
+}
+
+function buildMagicShortbowSpecialAttack(core) {
+  const { Animation, CombatFactory, CombatSpecial, CombatType, Equipment, Graphic, GraphicHeight, ItemIdentifiers, PendingHit, Projectile, WeaponProfiles, RangedCombatMethod, RangedWeapon, Skill, Sound, Sounds } = core;
   const ANIMATION = new Animation(1074);
   const GRAPHIC = new Graphic(250, GraphicHeight.HIGH);
 
   class MagicShortbowCombatMethod extends RangedCombatMethod {
+    hits(character, target) {
+      const distance = character.getLocation().getDistance(target.getLocation());
+      const delay = WeaponProfiles.hitDelays(character.getAsPlayer(), distance)[0];
+      return [delay, delay + 1].map((ticks) => new PendingHit(character, target, this, { delay: ticks, hitAmount: 1 }));
+    }
+
     canAttack(character, target) {
       const player = character.getAsPlayer();
       if (player.getCombat().getRangedWeapon() != RangedWeapon.MAGIC_SHORTBOW) {
@@ -37,26 +62,8 @@ module.exports = function registerMagicShortbowSpecialAttack(api) {
     }
   }
 
-  // Wiki (Magic shortbow): Snapshot's max hit ignores gear, prayers and Void - only the visible
-  // Ranged level and the arrow's Ranged Strength count.
-  function snapshotMaxHit(player) {
-    const level = player.getSkillManager().getCurrentLevel(Skill.RANGED);
-    const ammo = player.getEquipment().get(Equipment.AMMUNITION_SLOT);
-    const strength = ammo?.getDefinition?.()?.getBonuses?.()?.[RANGED_STRENGTH_BONUS_INDEX] ?? 0;
-    return Math.max(0, Math.floor(0.5 + ((level + 10) * (strength + 64)) / 640));
-  }
 
-  function rollSnapshot({ attacker, target, damage, accurate }) {
-    if (!accurate || !attacker.isPlayer() || !attacker.isSpecialActivated() || attacker.getCombatSpecial()?.getId() !== SPECIAL_ID) {
-      return;
-    }
-    const bounds = { minimumMultiplier: 0, maximumMultiplier: 0, minimumBonus: 0, maximumBonus: snapshotMaxHit(attacker) };
-    damage.setDamage(CombatFactory.getHitDamage(attacker, target, CombatType.RANGED, false, bounds).getDamage());
-  }
-
-  api.onCombatHitDamage(rollSnapshot);
-
-  api.registerCombatSpecial({
+  return {
     id: SPECIAL_ID,
     itemIds: [
       ItemIdentifiers.MAGIC_SHORTBOW,
@@ -68,11 +75,17 @@ module.exports = function registerMagicShortbowSpecialAttack(api) {
     strengthMultiplier: 1,
     accuracyMultiplier: ACCURACY_MULTIPLIER,
     traits: {
-      hitCount: 2,
+      hitCount: 1,
       accuracyMultiplier: ACCURACY_MULTIPLIER,
       damageMultiplier: 1,
     },
     combatMethod: new MagicShortbowCombatMethod(),
     metadata: { finisherDamageMultiplier: 2 },
-  });
+  };
+}
+
+module.exports = function registerMagicShortbowSpecialAttack(api) {
+  core = api.core;
+  api.onCombatHitDamage(rollSnapshot);
+  api.registerCombatSpecial(buildMagicShortbowSpecialAttack(core));
 };

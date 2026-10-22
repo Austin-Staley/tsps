@@ -217,6 +217,7 @@ function chainhitScene(t, { multi = true, special = 100, outcomes = [], bounceTa
     candidate !== primary && candidate.getLocation().getDistance(primary.getLocation()) <= radius);
   require("../plugins/combat/specials/RuneThrownaxe.SpecialAttack")(specialApi);
   const method = CombatSpecial.getById("rune_thrownaxe").getCombatMethod();
+  t.mock.method(WeaponProfiles, "ranged", () => ({ projectiles: [{ delay: 32, lengthAdjustment: 0, stepMultiplier: 5 }] }));
   t.mock.method(RangedCombatMethod.prototype, "start", () => {});
   t.mock.method(RangedCombatMethod.prototype, "hits", () => [new PendingHit(player, target, method, 1)]);
   return { player, target, others, method, drains, styled, rolled };
@@ -228,7 +229,7 @@ test("Chainhit ricochets to five other targets, never back to the first, for 10%
   const hits = method.hits(player, target);
 
   assert.equal(hits.length, 6);
-  assert.deepEqual(hits.map((hit) => hit.getDelay()), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(hits.map((hit) => hit.getDelay()), [1, 3, 4, 5, 6, 8]);
   const struck = hits.map((hit) => hit.getTarget());
   assert.equal(new Set(struck).size, 6, "nobody is hit twice");
   assert.equal(struck[0], target);
@@ -428,8 +429,11 @@ function blowpipeScene(t, { scales, darts, recovery = 0, special = false }) {
   quiet(t);
   t.mock.method(CombatFactory, "ammoRecovery", () => recovery);
   let resolver = null;
+  let damageHandler;
   const api = new Proxy({}, {
     get: (_, name) => {
+      if (name === "core") return core;
+      if (name === "onCombatHitDamage") return (handler) => { damageHandler = handler; };
       if (name === "registerCombatMethodResolver") return (entry) => { resolver = entry; };
       if (name === "getBonusManager") return () => BonusManager;
       if (name === "getCombatFactory") return () => CombatFactory;
@@ -459,7 +463,7 @@ function blowpipeScene(t, { scales, darts, recovery = 0, special = false }) {
   });
   t.mock.method(WeaponInterfaceManager, "assign", () => {});
   t.mock.method(BonusManager, "update", () => {});
-  return { player, pipe, meta, method: resolver.resolve(player), state: () => meta.get(BLOWPIPE_STATE_KEY) };
+  return { player, pipe, meta, damageHandler, method: resolver.resolve(player), state: () => meta.get(BLOWPIPE_STATE_KEY) };
 }
 
 function throwOnce(scene) {
@@ -533,6 +537,10 @@ test("Toxic siphon drains 50% once and heals half the damage, rounded down", (t)
   const hit = { getAttacker: () => scene.player, getTarget: () => mobile(3203, 3200), getTotalDamage: () => 25, isAccurate: () => true };
   scene.method.handleAfterHitEffects(hit);
   assert.equal(levels.current, 72, "floor(25 / 2) = 12");
+  const killingHit = { ...hit, getTotalDamage: () => 4 };
+  scene.damageHandler({ attacker: scene.player, hit: killingHit, damage: { getDamage: () => 40 } });
+  scene.method.handleAfterHitEffects(killingHit);
+  assert.equal(levels.current, 92, "a 40 roll against 4 HP still heals 20");
 
   require("../plugins/combat/specials/ToxicBlowpipe.SpecialAttack")(specialApi);
   const siphon = CombatSpecial.getById("toxic_blowpipe");

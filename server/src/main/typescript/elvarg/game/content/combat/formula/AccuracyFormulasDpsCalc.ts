@@ -1,3 +1,4 @@
+import { WeaponProfiles } from "../WeaponProfile";
 import { PrayerHandler } from "../../../content/PrayerHandler";
 import { CombatType } from "../CombatType";
 import { FightStyle } from '../FightStyle';
@@ -23,7 +24,7 @@ type RollCacheEntry = {
     attackMeleeRoll?: number;
     attackRangedRoll?: number;
     attackMagicRoll?: number;
-    defenseRangedRoll?: number;
+    defenseRangedRolls?: Map<string, number>;
     defenseMagicRoll?: number;
     defenseMeleeRolls?: Map<number, number>;
 };
@@ -247,7 +248,7 @@ export class AccuracyFormulasDpsCalc {
             const defenceIndex = traits?.meleeDefenceBonusIndex ?? meleeIndex;
             defRoll = AccuracyFormulasDpsCalc.defenseMeleeRoll(enemy, defenceIndex);
         } else if (defenceStyle === CombatType.RANGED) {
-            defRoll = AccuracyFormulasDpsCalc.defenseRangedRoll(enemy);
+            defRoll = AccuracyFormulasDpsCalc.defenseRangedRoll(enemy, entity.isPlayer() ? WeaponProfiles.ranged(entity.getAsPlayer()).rangedDefenceType : undefined);
         } else {
             defRoll = AccuracyFormulasDpsCalc.defenseMagicRoll(enemy);
         }
@@ -468,20 +469,22 @@ export class AccuracyFormulasDpsCalc {
     }
 
     // Ranged
-    public static defenseRangedRoll(enemy: Mobile) {
+    public static defenseRangedRoll(enemy: Mobile, type: "light" | "standard" | "heavy" = "standard") {
         const cache = this.getRollCache(enemy);
-        if (cache.defenseRangedRoll != null) {
-            return cache.defenseRangedRoll;
-        }
+        const cached = cache.defenseRangedRolls?.get(type);
+        if (cached != null) return cached;
         let defLevel = AccuracyFormulasDpsCalc.effectiveDefenseLevel(enemy);
 
-        const defRange = AccuracyFormulasDpsCalc.defenceBonus(enemy, BonusManager.DEFENCE_RANGE);
+        const defRange = enemy.isNpc()
+            ? enemy.getAsNpc().getDefenceBonus(BonusManager.DEFENCE_RANGE, type)
+            : AccuracyFormulasDpsCalc.defenceBonus(enemy, BonusManager.DEFENCE_RANGE);
 
         defLevel = applyRangedDefenseModifiers(enemy, defLevel);
         defLevel *= defRange + 64;
 
-        cache.defenseRangedRoll = Math.floor(defLevel);
-        return cache.defenseRangedRoll;
+        const resolved = Math.floor(defLevel);
+        (cache.defenseRangedRolls ??= new Map()).set(type, resolved);
+        return resolved;
     }
 
     private static effectiveRangedAttack(entity: Mobile) {

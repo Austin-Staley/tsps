@@ -37,6 +37,7 @@ export interface WeaponCombatProfile {
     fireSound?: Sound;
     ammoRequired?: number;
     boltEffects?: boolean;
+    rangedDefenceType?: "light" | "standard" | "heavy";
 }
 
 // OSRS projectile types (server projanim config): an arrow ends at delay + lengthAdjustment +
@@ -152,6 +153,7 @@ export class WeaponProfiles {
             fireSound: Sound.SHOOT_BOW_QUIET,
         });
         this.add(WeaponInterfaces.CROSSBOW, {
+            rangedDefenceType: "heavy",
             attackAnimation: 4230,
             npcAttackAnimation: 7552,
             attackSpeed: 6,
@@ -164,6 +166,7 @@ export class WeaponProfiles {
             boltEffects: true,
         });
         this.add(WeaponInterfaces.KARILS_CROSSBOW, {
+            rangedDefenceType: "heavy",
             attackSpeed: 4,
             attackDistance: 7,
             longRangeDistance: 9,
@@ -173,6 +176,7 @@ export class WeaponProfiles {
             fireSound: Sound.SHOOT_CROSSBOW,
         });
         this.add(WeaponInterfaces.BLOWPIPE, {
+            rangedDefenceType: "light",
             attackAnimation: 5061,
             attackSpeed: 3,
             attackDistance: 5,
@@ -184,6 +188,7 @@ export class WeaponProfiles {
             fireSound: Sound.THROW_DART,
         });
         this.add(WeaponInterfaces.KNIFE, {
+            rangedDefenceType: "light",
             attackAnimation: 806,
             attackSpeed: 3,
             attackDistance: 4,
@@ -194,6 +199,7 @@ export class WeaponProfiles {
             fireSound: Sound.THROW_DART,
         });
         this.add(WeaponInterfaces.DART, {
+            rangedDefenceType: "light",
             attackAnimation: 806,
             attackSpeed: 3,
             attackDistance: 3,
@@ -204,6 +210,7 @@ export class WeaponProfiles {
             fireSound: Sound.THROW_DART,
         });
         this.add(WeaponInterfaces.JAVELIN, {
+            rangedDefenceType: "heavy",
             attackAnimation: 929,
             attackSpeed: 6,
             attackDistance: 5,
@@ -222,9 +229,16 @@ export class WeaponProfiles {
             projectiles: [{ delay: 32, lengthAdjustment: 0, stepMultiplier: 5, startHeight: 43, endHeight: 31 }],
             fireSound: Sound.THROW_DART,
         });
+        this.register({
+            itemIds: [ItemIdentifiers.RUNE_THROWNAXE, ItemIdentifiers.RUNE_THROWNAXE_2, ItemIdentifiers.DRAGON_THROWNAXE, ItemIdentifiers.MORRIGANS_THROWING_AXE, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_],
+            rangedDefenceType: "light",
+            hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
+            projectiles: [THROWN_PROJECTILE],
+        });
         this.add(WeaponInterfaces.HALBERD, { attackDistance: 2 });
         this.add(WeaponInterfaces.WHIP, { attackAnimation: 1658, attackSpeed: 4, attackSound: Sound.WEAPON_WHIP });
         this.add(WeaponInterfaces.BALLISTA, {
+            rangedDefenceType: "heavy",
             attackSpeed: 7,
             attackDistance: 7,
             longRangeDistance: 9,
@@ -236,7 +250,7 @@ export class WeaponProfiles {
         this.add(WeaponInterfaces.DARK_BOW, {
             attackAnimation: 426,
             attackSpeed: 9,
-            attackDistance: 9,
+            attackDistance: 10,
             longRangeDistance: 10,
             longRangeFightType: FightType.LONGBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT, { base: 1, distanceOffset: 2, divisor: 3 }],
@@ -361,6 +375,7 @@ export class WeaponProfiles {
         });
         // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise, 9-tile range (10 on the long fuse).
         const chinchompa = {
+            rangedDefenceType: "heavy" as const,
             attackSpeed: 4,
             attackDistance: 9,
             longRangeDistance: 10,

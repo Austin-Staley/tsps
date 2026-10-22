@@ -165,8 +165,8 @@ test("the staff of the dead family and the Kodai wand save runes on offensive sp
     }
   };
   for (const staff of POWER_OF_DEATH_STAVES) {
-    assert.equal(cast(staff, true, 0.12).saved, true, `${staff} saves on the 1/8 roll`);
-    assert.equal(cast(staff, true, 0.13).saved, false);
+    assert.equal(cast(staff, true, 0.12).saved, true, `${staff} saves on the 1/7 roll`);
+    assert.equal(cast(staff, true, 0.15).saved, false);
     assert.equal(cast(staff, false, 0).saved, false, "not for utility spells");
   }
   assert.match(cast(I.STAFF_OF_THE_DEAD, true, 0).message, /Staff of the dead/);
@@ -232,7 +232,7 @@ test("wands swing every 4 ticks, mystic staves every 5 and the staff of the dead
     items[Equipment.WEAPON_SLOT] = { getId: () => itemId, getDefinition: () => ItemDefinition.forId(itemId) };
     return { getEquipment: () => ({ getItems: () => items }), getWeapon: () => weaponInterface, getFightType: () => null };
   };
-  for (const wand of [I.KODAI_WAND, I.KODAI_WAND_3, I.MASTER_WAND, I.BEGINNER_WAND, I.DRAGON_HUNTER_WAND, I._3RD_AGE_WAND]) {
+  for (const wand of [I.KODAI_WAND, I.KODAI_WAND_3, I.MASTER_WAND, I.MASTER_WAND_3, I.TEACHER_WAND, I.APPRENTICE_WAND, I.APPRENTICE_WAND_3, I.BEGINNER_WAND, I.BEGINNER_WAND_3, I.DRAGON_HUNTER_WAND, I._3RD_AGE_WAND]) {
     assert.equal(WeaponProfiles.attackSpeed(wielding(wand, WeaponInterfaces.STAFF), 5), 4, `wand ${wand}`);
   }
   assert.equal(WeaponProfiles.attackSpeed(wielding(I.MYSTIC_FIRE_STAFF, WeaponInterfaces.STAFF), 5), 5);
