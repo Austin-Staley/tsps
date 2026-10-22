@@ -378,6 +378,16 @@ export class WeaponProfiles {
             projectiles: [THROWN_PROJECTILE],
             fireSound: Sound.THROW_DART,
         });
+        // Wiki (Blackjack): 4-tick attack speed. The cache has no speed param for them, so the
+        // blunt (warhammer) interface's 6 would apply.
+        this.register({
+            itemIds: [
+                ItemIdentifiers.OAK_BLACKJACK, ItemIdentifiers.OAK_BLACKJACK_O_, ItemIdentifiers.OAK_BLACKJACK_D_,
+                ItemIdentifiers.WILLOW_BLACKJACK, ItemIdentifiers.WILLOW_BLACKJACK_O_, ItemIdentifiers.WILLOW_BLACKJACK_D_,
+                ItemIdentifiers.MAPLE_BLACKJACK, ItemIdentifiers.MAPLE_BLACKJACK_O_, ItemIdentifiers.MAPLE_BLACKJACK_D_,
+            ],
+            attackSpeed: 4,
+        });
         return true;
     })();
 }
