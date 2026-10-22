@@ -64,9 +64,6 @@ body,
 }
 
 .App.ios-safari-force-landscape {
-    /* Android can pan the visual viewport to keep the hidden chat input in view. */
-    top: var(--ios-safari-offset-y, 0px);
-    left: var(--ios-safari-offset-x, 0px);
     width: var(--ios-safari-landscape-w, var(--app-vw, 100vw));
     height: var(--ios-safari-landscape-h, var(--app-vh, 100dvh));
 }
