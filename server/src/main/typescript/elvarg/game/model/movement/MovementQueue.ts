@@ -1112,11 +1112,16 @@ export class MovementQueue {
         const direction = object.getFace();
 
         if (type === 10 || type === 11 || type === 22) {
-            // Multi-locs expose their real footprint/mask only after the player's
-            // varbits resolve the MORPH child; raw ids can carry the parent's size.
+            // The MORPH child supplies the displayed actions and the side-access mask.
+            // Collision builds solid rectangular locs (types 10/11) from the placed map
+            // object's definition (RegionManager.addObjectClipping), so the route must use
+            // that same base footprint; a smaller child (Ancient Grave 34602 is 4x2, child
+            // 33578 is 1x1) would put the reach rectangle inside the blocked footprint.
+            // Type 22 clips only its origin tile, so it keeps the resolved child size.
             const def = ObjectDefinition.forPlayer(id, this.player) ?? ObjectDefinition.forId(id);
-            const xLength = def.getSizeX();
-            const yLength = def.getSizeY();
+            const footprint = type === 22 ? def : (ObjectDefinition.forId(id) ?? def);
+            const xLength = footprint.getSizeX();
+            const yLength = footprint.getSizeY();
             const blockingMask = def.getBlockingMask() | blockAccessFlags;
 
             return {
