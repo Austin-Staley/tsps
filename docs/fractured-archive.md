@@ -474,8 +474,8 @@ From the captures of three kills, the Wiki's Ocellus and strategy pages, and the
   - one unique (Rondache > Zorya's tome = Horn of Bran > Ascension crossbows > Obligator), or else three standard rolls (weights out of 148 from the Drop Rate Project; each roll 1/51 to give five times as much);
   - tertiaries: the inert Archivist's folio 1/20, each elemental fragment 1/80, an elite clue;
   - Orion, the pet.
-  - Bulky drops come noted, and what doesn't fit goes to the bank. Each item counts for the collection log.
-- *Estimates:* the unique chance (4%) and weights, the pet's rate (1/400), the unique chest's tile, opening only your own chest, unclaimed loot going to the bank on leaving (the Wiki says the lobby's Loot Wheelbarrow keeps it), and the cabbage for a poor run (not done). Aether catalyst (3/148) is left out: the cache has no item by that name.
+- **The reward chest:** Search opens `tfa_chests` (973), the Archive's copy of the Tombs of Amascut's chest. Its items sit on inventory 1029 (six slots, `tfa_chests`), with Take / Take-5 / Take-10 / Take-All on an item (`interface_inv_init`, 149) and Bank-all (973:5), Take-all (973:7) and Discard-all (973:9, after "Are you sure you want to discard everything?"). Taken to the inventory, bulky drops come noted; banked, they're unnoted. The loot counts for the collection log when the chest is first opened.
+- *Estimates:* the unique chance (4%) and weights, the pet's rate (1/400), the unique chest's tile, opening only your own chest, the chest's item options (as the Tombs of Amascut's), unclaimed loot going to the bank on leaving or logging out (the Wiki says the lobby's Loot Wheelbarrow keeps it), and the cabbage for a poor run (not done). Aether catalyst (3/148) is left out: the cache has no item by that name.
 
 ## Spectating from outside
 

@@ -8,14 +8,18 @@
  * - Eight chests stand round the island (4124,5793 to 4133,5803), one per party slot. Each is a
  *   multinpc on tfa_vault_own_chest, so a player's own chest shows as theirs. Opened, it plays
  *   chest_guthixian02_open01 and becomes a Rift ("Search").
+ * - Searching it opens the Archive's reward chest (tfa_chests, 973: the Tombs of Amascut's
+ *   layout) on its six-slot inventory (1029), with Take / Take-5 / Take-10 / Take-All on an
+ *   item, Bank-all, Take-all and Discard-all.
  * - The Merit scroll reads the records. The Rift out ("Leave", "Quick-leave") fades in at
  *   4126,5796 about 15 ticks after the party arrives.
  * - The loot itself was never seen. It follows the Wiki's chest table (data
  *   fractured-archive.json): three standard rolls (1/51 for five times as much) when no unique,
  *   and tertiaries.
  * Estimates: the unique chance and weights, the pet's rate, the unique chest's tile, a player
- * opening only their own chest, and leftovers going to the bank when a player leaves (the Wiki
- * says the lobby's Loot Wheelbarrow keeps them).
+ * opening only their own chest, the chest's item options (as the Tombs of Amascut's), and
+ * leftovers going to the bank when a player leaves (the Wiki says the lobby's Loot Wheelbarrow
+ * keeps them).
  */
 
 const path = require("path");
@@ -37,6 +41,13 @@ const LAYOUT = {
   braziers: [[4131, 5805], [4123, 5805]],
 };
 const RIFT_AFTER = 15;
+/** The reward chest's inventory (gameval inv tfa_chests) and its size in the cache. */
+const CHEST_INV = 1029;
+const CHEST_SLOTS = 6;
+/** interface_inv_init: the items' grid and their options. */
+const INV_INIT_SCRIPT = 149;
+/** The items' click events: Take, Take-5, Take-10, Take-All and Examine. */
+const ITEM_EVENTS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 10);
 
 class VaultRoom extends Raid.Room {
   onBuild() {
@@ -50,7 +61,7 @@ class VaultRoom extends Raid.Room {
       const chest = this.spawn(named("npc", `tfa_rewards_chest_vault_${slot + 1}_closed`), { x, y, z: 2 }, { scripted: true });
       if (chest) this.chests.set(slot, { npc: chest, open: false });
     });
-    for (const player of this.raid.players) this.loot.set(player.getUsername(), rollLoot());
+    for (const player of this.raid.players) this.loot.set(player.getUsername(), toEntries(rollLoot()));
     if ([...this.loot.values()].some((loot) => loot.unique)) {
       this.uniqueChest = this.spawn(named("npc", "tfa_unique_chest_vault_closed"), LAYOUT.unique, { scripted: true });
     }
@@ -78,7 +89,7 @@ class VaultRoom extends Raid.Room {
     player.getPacketSender().sendVarbit(named("varbit", `tfa_vault_chest_${slot}_state`), 1);
   }
 
-  /** Search the Rift: the loot, into the inventory, or the bank where it won't fit. */
+  /** Search the Rift: the reward chest, to take, bank or discard the loot. */
   search(player, npc) {
     const slot = this.raid.slotOf(player);
     const own = this.chests.get(slot);
@@ -93,9 +104,64 @@ class VaultRoom extends Raid.Room {
       player.sendMessage("Something special waits for you in the chest at the north end of the vault.");
       return;
     }
-    this.loot.delete(player.getUsername());
-    give(player, loot.items);
-    player.getPacketSender().sendVarbit(named("varbit", "tfa_has_claimable_loot"), 0);
+    this.openChest(player, loot);
+  }
+
+  /** The reward chest: its items, with their options, and the loot's collection log entries once. */
+  openChest(player, loot) {
+    if (!loot.logged) {
+      loot.logged = true;
+      for (const { id, amount } of loot.entries) Shared.api().emitCustomEvent("collection-log:obtain", { player, itemId: id, amount });
+    }
+    const sender = player.getPacketSender();
+    this.sendChest(player, loot);
+    sender.sendInterface(Shared.id("iface", "CHESTS"));
+    const items = Shared.id("component", "CHEST_ITEMS");
+    sender.sendClientScript(INV_INIT_SCRIPT, items, CHEST_INV, 2, 3, 0, -1, "Take", "Take-5", "Take-10", "Take-All", "");
+    sender.sendInterfaceFlagsRange(items, 0, CHEST_SLOTS - 1, ITEM_EVENTS);
+  }
+
+  sendChest(player, loot) {
+    const shown = loot.entries.slice(0, CHEST_SLOTS);
+    player.getPacketSender().sendInventory(CHEST_INV, CHEST_SLOTS, shown.map(({ id, amount }) => ({ id, amount })));
+    if (loot.entries.length === 0) {
+      this.loot.delete(player.getUsername());
+      player.getPacketSender().sendVarbit(named("varbit", "tfa_has_claimable_loot"), 0);
+    }
+  }
+
+  /** Take / Take-5 / Take-10 / Take-All on one item, or Take-all / Bank-all on the lot. */
+  take(player, slot, amount, destination) {
+    const loot = this.loot.get(player.getUsername());
+    const entry = loot?.entries[slot];
+    if (!entry) return;
+    entry.amount -= move(player, entry, amount, destination);
+    if (entry.amount <= 0) loot.entries.splice(slot, 1);
+    this.sendChest(player, loot);
+  }
+
+  takeAll(player, destination) {
+    const loot = this.loot.get(player.getUsername());
+    if (!loot || loot.entries.length === 0) {
+      player.sendMessage(`There is nothing to ${destination === "bank" ? "bank" : "put in your inventory"}.`);
+      return;
+    }
+    loot.entries = loot.entries.filter((entry) => (entry.amount -= move(player, entry, entry.amount, destination)) > 0);
+    this.sendChest(player, loot);
+  }
+
+  discardAll(player) {
+    const loot = this.loot.get(player.getUsername());
+    if (!loot || loot.entries.length === 0) {
+      player.sendMessage("There is nothing to discard.");
+      return;
+    }
+    Shared.options(player, "Are you sure you want to discard everything?",
+      "No.", () => this.openChest(player, loot),
+      "Yes.", () => {
+        loot.entries = [];
+        this.sendChest(player, loot);
+      });
   }
 
   /** Leaving with loot still unclaimed sends it to the bank (estimate). */
@@ -112,8 +178,12 @@ class VaultRoom extends Raid.Room {
   bankUnclaimed(player) {
     const loot = this.loot.get(player.getUsername());
     if (!loot) return;
+    if (!loot.logged) {
+      loot.logged = true;
+      for (const { id, amount } of loot.entries) Shared.api().emitCustomEvent("collection-log:obtain", { player, itemId: id, amount });
+    }
+    for (const entry of loot.entries) move(player, entry, entry.amount, "bank");
     this.loot.delete(player.getUsername());
-    give(player, loot.items, true);
     player.sendMessage("Your unclaimed rewards from the Archive have been sent to your bank.");
   }
 }
@@ -157,21 +227,35 @@ function itemId(name) {
   return named("obj", name);
 }
 
-function give(player, items, toBank = false) {
+/** A player's loot as chest entries (items by id). */
+function toEntries(loot) {
+  return { unique: loot.unique, entries: loot.items.map(([name, amount]) => ({ id: itemId(name), amount })), logged: false };
+}
+
+/**
+ * Up to `amount` of an entry into the inventory (bulky drops noted, as the other raids' chests
+ * give them) or the bank (unnoted); how many moved.
+ */
+function move(player, entry, amount, destination) {
   const { Item, ItemDefinition, Bank } = Shared.core();
-  const inventory = player.getInventory();
-  for (const [name, amount] of items) {
-    const base = itemId(name);
-    const definition = ItemDefinition.forId(base);
-    // Bulky drops come noted, as the other raids' chests give them; the bank keeps them unnoted.
-    const id = !definition.isStackable() && amount > 1 && definition.getNoteId() >= 0 ? definition.getNoteId() : base;
-    const fits = ItemDefinition.forId(id).isStackable() ? inventory.contains(id) || inventory.getFreeSlots() > 0 : inventory.getFreeSlots() >= amount;
-    if (!toBank && fits) inventory.add(new Item(id, amount), false);
-    else player.getBank(Bank.getTabForItem(player, base)).add(new Item(base, amount), false);
-    Shared.api().emitCustomEvent("collection-log:obtain", { player, itemId: base, amount });
+  const wanted = Math.max(0, Math.min(entry.amount, amount));
+  if (wanted === 0) return 0;
+  if (destination === "bank") {
+    player.getBank(Bank.getTabForItem(player, entry.id)).add(new Item(entry.id, wanted), false);
+    return wanted;
   }
+  const inventory = player.getInventory();
+  const definition = ItemDefinition.forId(entry.id);
+  const id = !definition.isStackable() && wanted > 1 && definition.getNoteId() >= 0 ? definition.getNoteId() : entry.id;
+  const stackable = ItemDefinition.forId(id).isStackable();
+  const moved = stackable ? (inventory.contains(id) || inventory.getFreeSlots() > 0 ? wanted : 0) : Math.min(wanted, inventory.getFreeSlots());
+  if (moved <= 0) {
+    player.sendMessage("You don't have enough inventory space.");
+    return 0;
+  }
+  inventory.add(new Item(id, moved), false);
   inventory.refreshItems();
-  player.sendMessage("You claim your rewards from the vault.");
+  return moved;
 }
 
 // ---------------------------------------------------------------- clicks
@@ -207,6 +291,31 @@ function leaveVault(event) {
   return true;
 }
 
+function chestRoomOf(player) {
+  const room = vaultOf(player);
+  return room && room.loot.has(player.getUsername()) ? room : null;
+}
+
+/** The reward chest's buttons and items (their ids resolved at click time, from the cache). */
+function chestClick(event) {
+  if (event.scriptTrigger) return;
+  const { player, buttonId } = event;
+  const id = (key) => Shared.id("component", key);
+  if (![id("CHEST_BANK_ALL"), id("CHEST_TAKE_ALL"), id("CHEST_DISCARD_ALL"), id("CHEST_ITEMS")].includes(buttonId)) return;
+  event.handled = true;
+  const room = chestRoomOf(player);
+  if (!room) return;
+  if (buttonId === id("CHEST_BANK_ALL")) room.takeAll(player, "bank");
+  else if (buttonId === id("CHEST_TAKE_ALL")) room.takeAll(player, "inventory");
+  else if (buttonId === id("CHEST_DISCARD_ALL")) room.discardAll(player);
+  else {
+    // Take / Take-5 / Take-10 / Take-All on one slot.
+    const op = event.opId ?? event.action;
+    const amount = op === 2 ? 5 : op === 3 ? 10 : op === 4 ? Number.MAX_SAFE_INTEGER : 1;
+    room.take(player, Number.isInteger(event.slot) ? event.slot : -1, amount, "inventory");
+  }
+}
+
 function readMerits({ player }) {
   if (!vaultOf(player)) return false;
   Records.open(player);
@@ -219,6 +328,7 @@ module.exports = function registerVault(api) {
   api.onNpcInteraction("<col=00ffff>Chest</col>", { Open: openChest, Search: searchChest });
   api.onNpcInteraction("<col=00ffff>Rift</col>", { Search: searchChest, Leave: leaveVault, "Quick-leave": leaveVault });
   api.onObjectInteraction("Merit scroll", { Read: readMerits });
+  api.onInterfaceActionClick(chestClick);
 };
 
 Object.assign(module.exports, { VaultRoom, LAYOUT, rollLoot });
