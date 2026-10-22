@@ -296,6 +296,15 @@ unresolved recovery case. Commit and push ledger updates with the reviewed fix b
   the baseline: hammers, needles, spades, food and standard travel supplies. Exercise an
   in-quest tool handout when it changes progression or is the recovery case being checked.
   Keep unique quest items and required acquisition triggers on the natural route.
+- Provision ordinary ingredients in that batch too: Druidic Ritual's raw meats can be
+  supplied; its enchanted meats must be earned at the cauldron. If an ordinary supply is
+  missing later, record the supplemental setup, exact quantity, and unchanged quest state
+  before continuing. Preserve the original baseline and disclose the aid; do not claim
+  the item was gathered naturally. This exception never supplies a quest transformation
+  or replaces a required acquisition trigger.
+- Prefer a normal teleport or transport over a long walk. A declared ordinary ring or
+  tablet may shorten travel; use its real menu and destination, then play every required
+  door, ladder and arrival interaction. An admin teleport does not prove those steps.
 - Split ownership: one owner reviews source/tests, one playthrough driver, one recovery
   specialist. Do not have two actors on one account.
 - One persistent MCP client per account. When a driver reconnects, check `list_players` for
