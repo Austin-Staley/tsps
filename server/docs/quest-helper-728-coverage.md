@@ -57,8 +57,10 @@ tests and independent source review pass. It reached stage 12, paid the exact qu
 rewards once and retained them after relogging. Its two jerboa catches separately
 awarded 274 Hunter XP; repairing the bed awarded 10 Crafting XP. Missing ground tools
 were bought from ordinary shops, and an optional upstairs detour needed a teleport
-recovery. Ground pickups, remaining post-quest history and recovery branches still
-need validation, so the run remains provisional.
+recovery. The missing needle and hammer spawns now match the pinned helper and Wiki
+tiles in hand-maintained world data; this file is not a dumper export. Ground pickup,
+remaining post-quest history and recovery branches still need validation, so the run
+remains provisional. Respawn uses the Wiki's 100-tick value without a new capture.
 
 Ascent stopped at its opening: an unscoped Sins of the Father condition handler overrode
 Mori's requirements check. The reviewed fix answers only Sins' nine canonical condition
@@ -134,7 +136,7 @@ branch remains blocked at its source.
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
 | The Ascent of Arceuus | `AscentOfArceuus` | Shared Sins condition fix reviewed; memoir and ordered trail corrections await peer review | 8 quest and 9 shared focused tests pass | Incomplete opening; logged out |
-| At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed; ground pickups pending | 9 focused tests pass | Stage 12, exact rewards once and relog observed; provisional due remaining pickup/history/recovery checks |
+| At First Light | `AtFirstLight` | Mandatory route, hammer tools, report recovery, Fox cleanup and leaf guards reviewed; canonical ground spawns added | 9 focused tests pass; spawn JSON/uniqueness/cache placements checked | Stage 12, exact rewards once and relog observed; provisional due remaining pickup/history/recovery checks |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
 | Biohazard | `Biohazard` | Recovery and canonical receipts corrected; premature Guidor advancement returned to owner | Scoped source evidence; correction pending | Incomplete at stage 1; logged out |
