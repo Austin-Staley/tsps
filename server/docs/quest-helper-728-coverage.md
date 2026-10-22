@@ -53,12 +53,22 @@ evidence remains provisional until the review passes for the same revision.
 
 Five quests have reached the native playthrough phase. At First Light and The Ascent of
 Arceuus entered playthroughs on frozen loaded revisions. At First Light's nine focused
-tests and independent source review pass. Ascent stopped at its opening: an unscoped
-Sins of the Father condition handler overrode Mori's requirements check. Its owner is
-also correcting memoir-page and ordered-tracking gaps. Biohazard stopped at stage 1 and
-logged out; its owner is correcting five
-source-review findings, including Elena's recovery of items belonging to the Chemist.
-No natural completion has been accepted yet.
+tests and independent source review pass. It reached stage 12, paid the exact quest
+rewards once and retained them after relogging. Its two jerboa catches separately
+awarded 274 Hunter XP; repairing the bed awarded 10 Crafting XP. Missing ground tools
+were bought from ordinary shops, and an optional upstairs detour needed a teleport
+recovery. Ground pickups, remaining post-quest history and recovery branches still
+need validation, so the run remains provisional.
+
+Ascent stopped at its opening: an unscoped Sins of the Father condition handler overrode
+Mori's requirements check. The reviewed fix answers only Sins' nine canonical condition
+IDs, leaving foreign conditions to their own quests. Nine focused tests pass, including
+real registration-order dispatch and existing Sins actions. Ascent's memoir-page and
+ordered-tracking corrections pass eight focused tests; independent review and a new
+natural run remain pending. Biohazard stopped at stage 1 and logged out. Its owner has
+corrected Elena/Chemist recovery and canonical receipt rendering; a further review
+found Guidor advanced before the player requested his analysis. That transition is
+being moved to the actual revelation dialogue. No whole quest is certified yet.
 
 Monk's Friend completed naturally, paid its rewards once and persisted through logout and
 relogin. That run exposed late normal-rune payment and unreachable named Monk variants.
@@ -110,7 +120,8 @@ Museum support now has a reviewed 100-Kudos source route through five Dig Site d
 and ten Historian Minas reports. Five focused tests cover real cached transcripts, once-only
 Kudos/lamps, capacity retry, saved attributes, fixed find probabilities and duplicate artefact
 removal. Bone Voyage's owner is integrating the synchronous `museum:get-kudos` contract.
-Natural Museum testing remains pending. The quiz, fossils, pendant teaching and other
+The native `VM_KUDOS` mirror and login replay are being checked separately, since Quest
+Helper reads that state. Natural Museum testing remains pending. The quiz, fossils, pendant teaching and other
 Museum activities remain outside this bounded route; a missing Hazeel report transcript
 branch remains blocked at its source.
 
@@ -122,11 +133,11 @@ branch remains blocked at its source.
 | --- | --- | --- | --- | --- |
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
-| The Ascent of Arceuus | `AscentOfArceuus` | Shared Sins condition blocker diagnosed; memoir and ordered trail corrections pending | Scoped source evidence; findings remain | Incomplete opening; logged out |
-| At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed | 9 focused tests pass | In progress on frozen reviewed revision |
+| The Ascent of Arceuus | `AscentOfArceuus` | Shared Sins condition fix reviewed; memoir and ordered trail corrections await peer review | 8 quest and 9 shared focused tests pass | Incomplete opening; logged out |
+| At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed; ground pickups pending | 9 focused tests pass | Stage 12, exact rewards once and relog observed; provisional due remaining pickup/history/recovery checks |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
 | Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
-| Biohazard | `Biohazard` | Five final source findings returned to original owner | Scoped source evidence; corrections pending | Incomplete at stage 1; logged out |
+| Biohazard | `Biohazard` | Recovery and canonical receipts corrected; premature Guidor advancement returned to owner | Scoped source evidence; correction pending | Incomplete at stage 1; logged out |
 | Bone Voyage | `BoneVoyage` | Pending | Pending | Pending |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
 | Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |

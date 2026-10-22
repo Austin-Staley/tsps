@@ -1741,37 +1741,29 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   // ---------------------------------------------------------------------------
 
   function answerCondition(event) {
-    const { player, stepId, text } = event;
-    const key = stepId ?? "";
-    const prose = String(text ?? "");
-    if (key === "7D8z_N" || prose.startsWith("If the player does not have the requirements")) {
-      return !meetsRequirements(player);
+    const { player, stepId } = event;
+    switch (stepId) {
+      case "7D8z_N": // requirements, missing
+        return !meetsRequirements(player);
+      case "S4umqc": // requirements, met
+        return meetsRequirements(player);
+      case "SGj1He": // combat, below recommended
+        return combatLevel(player) < 95;
+      case "Y7Eh4F": // vyre disguise, present
+        return hasVyreNoble(player);
+      case "CIrOJv": // vyre disguise, missing
+        return !hasVyreNoble(player);
+      case "kqP6AE": // blisterwood flail, present
+        return hasBlisterwoodFlail(player);
+      case "pl5f2L": // blisterwood flail, missing
+        return !hasBlisterwoodFlail(player);
+      case "svlKBi": // 40,000 coins, missing
+        return !held(player, ItemIdentifiers.COINS, 40000);
+      case "z2xhAs": // 40,000 coins, present
+        return held(player, ItemIdentifiers.COINS, 40000);
+      default:
+        return null;
     }
-    if (key === "S4umqc" || prose.startsWith("If the player has the requirements")) {
-      return meetsRequirements(player);
-    }
-    if (key === "SGj1He" || prose.startsWith("If the player has a lower combat level")) {
-      return combatLevel(player) < 95;
-    }
-    if (key === "Y7Eh4F" || prose.startsWith("If the player has the vyre disguise")) {
-      return hasVyreNoble(player);
-    }
-    if (key === "CIrOJv" || prose.startsWith("If the player does not have the vyre disguise")) {
-      return !hasVyreNoble(player);
-    }
-    if (key === "kqP6AE" || prose.startsWith("If the player has a blisterwood flail")) {
-      return hasBlisterwoodFlail(player);
-    }
-    if (key === "pl5f2L" || prose.startsWith("If the player does not have a blisterwood flail")) {
-      return !hasBlisterwoodFlail(player);
-    }
-    if (key === "svlKBi" || prose.startsWith("If the player does not have 40,000 coins")) {
-      return !held(player, ItemIdentifiers.COINS, 40000);
-    }
-    if (key === "z2xhAs" || prose.startsWith("If the player has at least 40,000 coins")) {
-      return held(player, ItemIdentifiers.COINS, 40000);
-    }
-    return null;
   }
 
   // ---------------------------------------------------------------------------
