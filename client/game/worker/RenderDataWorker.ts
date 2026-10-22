@@ -22,6 +22,7 @@ import { ConfigType } from "../../rs/cache/ConfigType";
 import { IndexType } from "../../rs/cache/IndexType";
 import { Js5RangeClient } from "../../rs/cache/js5/Js5RangeClient";
 import { WorkerJs5Coordinator } from "../../rs/cache/js5/Js5Coordinator";
+import { Js5Persistence } from "../../rs/cache/js5/Js5Persistence";
 import { PresenceBitset } from "../../rs/cache/js5/PresenceBitset";
 import { SparseDat2 } from "../../rs/cache/store/SparseDat2";
 import { SparseMemoryStore } from "../../rs/cache/store/SparseMemoryStore";
@@ -174,7 +175,11 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
             if (sharedPresence && cache.sparse.fetchChannel && typeof BroadcastChannel !== "undefined") {
                 js5 = sparseCoordinator = new WorkerJs5Coordinator(store, cache.sparse.fetchChannel);
             } else {
-                js5 = new Js5RangeClient(cache.sparse.dat2Url, store);
+                const ranges = new Js5RangeClient(cache.sparse.dat2Url, store);
+                const persistence = new Js5Persistence(cache.info.name, cache.sparse.dat2Url, store.dat2);
+                ranges.readStored = (start, length) => persistence.read(start, length);
+                ranges.onFetched((offset, bytes) => persistence.queue(offset, bytes.byteLength));
+                js5 = ranges;
             }
         }
     }

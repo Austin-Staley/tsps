@@ -1,7 +1,7 @@
 import Denque from "denque";
 import { mat4, vec3 } from "gl-matrix";
 
-import { isWebGPUSupported } from "../../common/utils/DeviceUtil";
+import { isLowEndDevice, isWebGPUSupported } from "../../common/utils/DeviceUtil";
 import { GameRenderer } from "../../game/GameRenderer";
 import type {
     HitsplatEventPayload,
@@ -342,6 +342,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.locUpdates.applyGamemode();
         const locVersion = this.locUpdates.version(mapX, mapY);
         const input: SdMapLoaderInput = {
+            persistentCache: isLowEndDevice,
             mapX,
             mapY,
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, Scene.MAX_LEVELS - 1)),
