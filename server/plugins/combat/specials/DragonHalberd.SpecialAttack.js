@@ -38,7 +38,7 @@ module.exports = function registerDragonHalberdSpecialAttack(api) {
 
   api.registerCombatSpecial({
     id: "dragon_halberd",
-    itemIds: [ItemIdentifiers.DRAGON_HALBERD, ...CRYSTAL_HALBERD_IDS],
+    itemIds: [ItemIdentifiers.DRAGON_HALBERD, ItemIdentifiers.DRAGON_HALBERD_CR_, ...CRYSTAL_HALBERD_IDS],
     drainAmount: DRAIN,
     strengthMultiplier: 1.1,
     accuracyMultiplier: 1,

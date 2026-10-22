@@ -259,7 +259,22 @@ export class AccuracyFormulasDpsCalc {
             defRoll = Math.floor(defRoll * enemy.getAsNpc().getRollFactor());
         }
 
+        attRoll = Math.floor(attRoll * AccuracyFormulasDpsCalc.scopedAccuracyScale);
+
         return { attack: attRoll, defence: defRoll };
+    }
+
+    private static scopedAccuracyScale = 1;
+
+    /** Runs `build` with every accuracy roll's attack roll scaled (halberd Sweep's reduced second hit). */
+    public static withAccuracyScale<T>(scale: number, build: () => T): T {
+        const previous = AccuracyFormulasDpsCalc.scopedAccuracyScale;
+        AccuracyFormulasDpsCalc.scopedAccuracyScale = scale;
+        try {
+            return build();
+        } finally {
+            AccuracyFormulasDpsCalc.scopedAccuracyScale = previous;
+        }
     }
 
     public static rollAccuracy(entity: any, enemy: any, style: any, defenceType?: CombatType) {
