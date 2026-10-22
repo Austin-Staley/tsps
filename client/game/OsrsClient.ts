@@ -214,7 +214,7 @@ import { markWidgetInteractionDirty } from "../widgets/WidgetInteraction";
 import { WidgetManager } from "../widgets/WidgetManager";
 import { WidgetSessionManager } from "../widgets/WidgetSessionManager";
 import { applyQuestListWidgetGroups } from "../widgets/custom/questList";
-import { cleanupInterfaceClickTargets } from "../widgets/gl/widgets-gl";
+import { cleanupInterfaceClickTargets, cleanupWidgetClickTarget } from "../widgets/gl/widgets-gl";
 import { layoutWidgets } from "../widgets/layout/WidgetLayout";
 import { sanitizeText } from "../widgets/menu/utils";
 import { Js5RangeClient } from "../rs/cache/js5/Js5RangeClient";
@@ -2387,6 +2387,11 @@ export class OsrsClient {
             if (glCanvas) {
                 cleanupInterfaceClickTargets(glCanvas, groupId);
             }
+        };
+        // Deleted dynamic widgets never draw again, so nothing else drops their click targets.
+        this.widgetManager.onWidgetUnregistered = (uid) => {
+            const glCanvas = (this.renderer as any)?.getWidgetsGLCanvas?.();
+            if (glCanvas) cleanupWidgetClickTarget(glCanvas, uid);
         };
 
         this.playerAnimController = new PlayerAnimController(

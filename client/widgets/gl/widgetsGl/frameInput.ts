@@ -78,3 +78,19 @@ export function cleanupInterfaceClickTargets(canvas: HTMLCanvasElement, groupId:
         clicks.unregisterWidgetGroup(groupId);
     }
 }
+
+/** Drop the click target and metadata of one deleted widget (CC_DELETE / CC_DELETEALL). */
+export function cleanupWidgetClickTarget(canvas: HTMLCanvasElement, uid: number): void {
+    const canvasAny = canvas as any;
+    const clickTargetCache: Map<number, CachedClickTarget> | undefined =
+        canvasAny.__clickTargetCache;
+    const target = clickTargetCache?.get(uid);
+    if (!target) return;
+    clickTargetCache!.delete(uid);
+    (canvasAny.__clickMetaMap as Map<number, WidgetClickMeta> | undefined)?.delete(uid);
+    const clicks =
+        (canvasAny.__input as any)?.getClicks?.() ||
+        (canvasAny.__inputBridge as any)?.getClicks?.() ||
+        canvasAny.__clicks;
+    clicks?.unregister?.(target.id);
+}
