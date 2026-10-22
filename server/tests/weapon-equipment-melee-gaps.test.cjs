@@ -46,6 +46,15 @@ test('lightning is a capped delayed Magic hit paying 2 Magic XP per damage', () 
   hit.getCombatMethod().handleAfterHitEffects(hit);
   assert.equal(source.xp.find(([skill]) => skill === Skill.MAGIC)[1], hit.getTotalDamage() * 2);
 });
+test('lightning never inherits a newly activated special hit count, skip flag or damage cap', () => {
+  const source = attacker();
+  source.isSpecialActivated = () => true;
+  source.getCombatSpecial = () => ({ getTraits: () => ({ skipAttack: true, hitCount: 4, maximumDamageCap: 0, damageType: 'melee' }) });
+  const hit = lightning(source, target());
+  assert.equal(hit.getHits().length, 1);
+  assert.ok(hit.getTotalDamage() > 0);
+  assert.equal(hit.getCombatType(), CombatType.MAGIC);
+});
 test('fixed Magic hits keep Elysian and incoming damage reductions', () => {
   const oldMax = core.DamageFormulas.sourceMaxHit, oldRandom = Math.random;
   core.DamageFormulas.sourceMaxHit = () => 0;
@@ -150,14 +159,14 @@ test('scythe cleaves three forward tiles across NPCs and players in multi with a
   Scythe.register({ core: { ...core,
     AreaManager: { inMulti: () => multi }, World: { getNpcs: () => npcs, getPlayers: () => players },
     CombatFactory: { canAttackSecondaryTarget: (_a, _b, c) => c.attackable !== false,
-      applyStyleDamage: (hit, max) => { hit.max = max; } },
+      applyStyleDamage: (hit, max) => { hit.max = max; hit.damage = max; } },
     DamageFormulas: { calculateMaxMeleeHit: () => 48 },
-    PendingHit: class { constructor(a, target) { this.target = target; } getTotalDamage() { return 0; } },
+    PendingHit: class { constructor(a, target) { this.target = target; this.damage = 48; } getTotalDamage() { return this.damage ?? 0; } setTotalDamage(value) { this.damage = value; } },
   }, onServerStartup: (fn) => fn(), onItemAction() {}, onItemOnItem() {},
     registerCombatMethodResolver: (value) => { resolver = value; } });
   const actor = (x, y, player = false, size = 1) => {
     const value = { getLocation: () => loc(x, y), isNpc: () => !player, isPlayer: () => player,
-      getAsNpc: () => value, getAsPlayer: () => value, getSize: () => size };
+      getAsNpc: () => value, getAsPlayer: () => value, getHitpoints: () => 1000, getSize: () => size };
     return value;
   };
   const wielder = actor(0, 0, true);
@@ -174,4 +183,6 @@ test('scythe cleaves three forward tiles across NPCs and players in multi with a
   multi = true;
   const large = actor(0, 1, false, 3);
   assert.deepEqual(method.hits(wielder, large).map((hit) => hit.target), [large, large, large]);
+  large.getHitpoints = () => 50;
+  assert.deepEqual(method.hits(wielder, large).map((hit) => hit.getTotalDamage()), [48, 2, 0], 'a swing cannot pay XP for more than the victim HP');
 });

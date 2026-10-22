@@ -170,21 +170,21 @@ export class CombatFactory {
         return CombatFactory.MELEE_COMBAT;
     }
 
-    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds) {
-        const specialTraits = CombatSpecial.activeTraitsFor(entity);
+    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
+        const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
         }
         const prayerType = resolveSpecialAttackType(specialTraits?.damageType) ?? type;
         let damage = 0;
         if (type == CombatType.MELEE) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MELEE), boundsOverride);
+            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MELEE), boundsOverride, applySpecialTraits);
         } else if (type == CombatType.RANGED) {
             let maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.RANGED);
             maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
-            damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride);
+            damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits);
         } else if (type == CombatType.MAGIC) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
+            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride, applySpecialTraits);
         }
 
         // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
@@ -279,8 +279,8 @@ export class CombatFactory {
      * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
      * bonuses and a maximum cap.
      */
-    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds): number {
-        const traits = CombatSpecial.activeTraitsFor(entity);
+    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): number {
+        const traits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (!traits && !boundsOverride) {
             return Misc.randomInclusive(0, maxHit);
         }

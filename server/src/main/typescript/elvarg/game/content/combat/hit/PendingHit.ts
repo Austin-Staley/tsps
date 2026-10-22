@@ -167,7 +167,7 @@ export class PendingHit {
 
         // Utility-only specials (e.g. stat boosts that resolve outside the hit
         // pipeline) declare skipAttack and produce no hitsplat.
-        const traits = CombatSpecial.activeTraitsFor(this.attacker);
+        const traits = fixedDamage === undefined ? CombatSpecial.activeTraitsFor(this.attacker) : null;
         if (traits?.skipAttack === true) {
             this.totalDamage = 0;
             return [];
@@ -213,7 +213,7 @@ export class PendingHit {
                             maximumMultiplier: 0,
                             minimumBonus: fixedDamage,
                             maximumBonus: fixedDamage,
-                        })
+                        }, fixedDamage === undefined)
                 )
                 : new HitDamage(0, HitMask.BLUE);
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {
