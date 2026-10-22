@@ -6,7 +6,7 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Original 128: accepted natural main-route proofs
 
-Four quests have accepted natural main-route completion evidence: **4 / 128 (3.125%)**. The accepted set is q003, q008, q041, and q074. These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress.
+Five quests have accepted natural main-route completion evidence: **5 / 128 (3.90625%)** (q003, q008, q041, q063, q074). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress.
 
 ### q003 — The Ascent of Arceuus
 
@@ -33,9 +33,9 @@ Four quests have accepted natural main-route completion evidence: **4 / 128 (3.1
 - **Natural route and result:** the accepted epoch-2 run started fresh at stage 0 and naturally completed the route. Cache quest row 97 uses varp 30 with completion value 80; live completion reached 80. It verified the full-inventory rune drop (eight law runes on the floor), normal logout/relogin interruption after rune handover, party completion, and pickup/reconciliation. QP +1 and Woodcutting quest XP +2000 (ordinary chopping XP is separately accounted); repeat/relog/save evidence showed no duplicate reward. Root accepted the bounded functional evidence.
 - **Limits/recheck:** a Wiki-marked later dialogue and visual overlay remain unchecked. The accepted run is scoped to this exact revision; it does not assert exact uncaptured presentation cadence. Evidence: `/tmp/tsps-728/native/jobs/q074-recovery.report.json`, `/tmp/tsps-728/root-reviews/q074-recovery.json`.
 
-## Original 128: additional completion observed, main-route proof incomplete
+## Original 128: completion observations not yet accepted
 
-Five original-128 quests have native evidence of the target completion action/state (**5 / 128 = 3.90625%**), but only four satisfy the accepted main-route category above. q004 is the additional completion and remains explicitly incomplete overall.
+Six original-128 quests have native evidence of the target completion action/state (**6 / 128 = 4.6875%**), while five are accepted in the main-route category above. q004 remains the additional completion that is overall incomplete.
 
 ### q004 — At First Light (completion observed; overall INCOMPLETE)
 
@@ -70,10 +70,34 @@ These are real attempts, not completed quests. A clean source test or peer revie
 | q128 Zogre Flesh Eaters | Native source `78f10f0e62c9f67408c12b48a714c5f68a1039b8a11d4a0a468550d975ca1fb6`; test `a1883397b108d473f1ff282a018ea27497992d673b10575e63b346d2d5caa5f9`. | Stopped at stage 3 after repeated identical unreachable responses for the tankard/NPC interaction; no workaround or completion. Exact failed route remains an owner diagnosis item. `/tmp/tsps-728/native/jobs/q128.report.json`. |
 | q129 epoch 5 | Tutorial-plugin-disabled runtime; no valid loaded quest-plugin hash for the intended tutorial proof. | Blocked before meaningful route proof. Superseded only for the bounded epoch-6 completion facts above, not retroactively erased. `/tmp/tsps-728/native/jobs/q129-epoch5.report.json`. |
 
+## Recent checkpoint continuation
+
+### q063 — Jungle Potion (epochs 7–8; accepted natural main-route continuation)
+
+- **Revision:** source = loaded = exact-hash peer-reviewed `8ea7b34ff9261686084a51006f13593c65b0dd0625513c0e377c78d20fd38b61`; focused test `3a0d34892796b16e6e2e2e84cf3cb7c62defca9484f53572311fdb10f0e38c08`; Quest Helper pin `06da90f982518a093f2fe1c9cfac5547fa7053d3`. Epoch-8 loaded shared components included NpcDialogues `252da523…54c723`, MovementQueue `62eefaee…0bab4`, dialogue data `7b596997…298237` and index `e1bd3116…1664f`.
+- **Natural route and completion:** epoch 7 established the fresh stage-0 prefix through varp 175=9 (all four initial herb hand-ins). Epoch 8 resumed that same account/checkpoint at stage 9, naturally walked to and entered Pothole Cave, searched the Fungus-covered Cavern Wall for the Rogue’s Purse, climbed out, cleaned it normally, and handed it to Trufitus. Cache quest row 80 uses varp 175 with threshold 12; natural completion UI appeared at 12. QP +1 (varp 101: 4→5); Herblore +775 quest XP and +10 cleaning XP across five herbs; no item reward, clean purse consumed. Repeated canonical post-quest talk did not duplicate rewards. Relog preserved completion/rewards; official save history showed baseline #242 followed by quest-completion #246 and logout #349; final offline was confirmed. Trufitus’s canonical post-quest lines were heard after relog. A supported lost-herb recovery was exercised: re-search after completion returned a grimy purse without progress/reward changes; it was dropped normally.
+- **Limits:** full-bag, interrupted hand-in, pre-start/stale-slot recovery and overlay remain unchecked. One grimy Rogue’s Purse remains on the ground at `(2809,3085,0)` after the documented recovery cleanup. The epoch-7 portion and epoch-8 completion are one checkpoint-linked route, not two quests. The source coordinator accepted the combined checkpoint and continuation evidence; the ready entry was revoked after the final offline boundary. Evidence: `/tmp/tsps-728/native/jobs/q063-epoch7-checkpoint.json`, `/tmp/tsps-728/native/jobs/q063-epoch8.report.json`, `/tmp/tsps-728/native/jobs/native-q063.raw.jsonl`, `/tmp/tsps-728/native/evidence/service-epoch8.json`, `/tmp/tsps-728/native/evidence/q063-epoch8-root-release.json`.
+
 ## Evidence and revalidation policy
+
+### Provider checkpoint — 22 October 2026
+
+OpenCode workers stopped after MiniMax Free returned HTTP 410 (model retired).
+Read-only probes of DeepSeek V4.1 Flash Free, GLM 5.3 Flash Free and Mimo v2.6
+Flash Free returned `free_tier_limit`; none supplied a successful replacement.
+No paid fallback was used. q006, q049 and q094 were logged out normally and
+confirmed offline; preserve their existing saves and baselines on resumption.
+Their last recorded tiles were `(2912,3327,0)`, `(1245,3682,0)` and
+`(2945,3368,0)` respectively. q049 is Getting Ahead; q094 is Recipe for Disaster.
+These are interrupted attempts, not failed quests or completed proofs.
+The detailed source/loaded hashes and log references are retained in
+`/tmp/tsps-728/native/jobs/provider-quota-checkpoint.json`; the prepared next-epoch
+queue also includes q074 and q083 at their newer reviewed revisions. Earlier
+accepted q003/q074 results above remain historical evidence; changes to their
+plugins require checking the affected claims against the new loaded revisions.
 
 - A completion is counted only when the native report, actual loaded plugin hash, reward/state deltas, persistence evidence, normal offline boundary, and independent/root acceptance agree. A source report/test or review by itself is not native evidence.
 - Retain each historical result against its recorded source/test/loaded hashes. When a quest plugin changes, mark only claims depending on that plugin as requiring recheck; a changed unrelated plugin does not invalidate the whole ledger. Shared-core or data changes require targeted revalidation of affected routes/claims, not an automatic replay of every unchanged quest prefix.
 - Prefixes resumed across epochs remain one checkpoint-linked route with provenance. Supplemental routes, post-quest checks and retries never increment the whole-quest count.
 - `PASS` for a scoped contract means only that scope. Do not infer untested branches, overlay visibility, timing, full-bag behavior or recovery from a different branch.
-- The historical reconciliation inventory found four accepted natural main-route proofs and five original-128 completion observations. The q129 tutorial result is additional and outside the original 128. See `/tmp/tsps-728/native/history-reconciliation.md` for the inventory cross-check.
+- The historical reconciliation inventory found four accepted natural main-route proofs and five original-128 completion observations before the q063 epoch-8 continuation recorded above. The q129 tutorial result is additional and outside the original 128. See `/tmp/tsps-728/native/history-reconciliation.md` for the inventory cross-check.
