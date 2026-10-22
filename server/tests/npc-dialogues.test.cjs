@@ -988,3 +988,104 @@ test('paired cutscene NPCs can use the native right-side chatbox without the pla
   assert.ok(sent.some(row => row[0] === 'sendNpcHeadOnInterface' && row[1] === 16536 && row[2] === (217 << 16 | 2)));
   assert.ok(!sent.some(row => row[0] === 'sendPlayerHeadOnInterface'));
 });
+
+test('live condition runs fall through only after a chosen true branch', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  let answers = {};
+  const condition = { pluginName: 'test', handler: ({ text }) => Object.hasOwn(answers, text) ? answers[text] : null };
+  PluginManager.npcDialogueConditionHooks.unshift(condition);
+
+  const play = (tree, script = []) => {
+    const lines = [];
+    const actions = [];
+    const player = {
+      getDialogueManager: () => ({ reset() {}, startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (entry.constructor.name === 'ActionDialogue') entry.send(player);
+          else if (entry.text) lines.push(String(entry.text));
+        }
+      } }),
+      getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+      sendMessage() {},
+    };
+    const definition = { getName: () => 'Guard', getId: () => 1 };
+    const event = { player, npcId: 1, npc: null, definition };
+    const api = {
+      emitCustomEvent(name, request) {
+        if (name !== 'npc-dialogue:action' || !request.stepId) return;
+        actions.push(request.stepId);
+        if (request.stepId === 'flag') answers['If flag:'] = true;
+      },
+      sendMultiChatboxPrompt(_player, _title, ...pairs) {
+        const pick = script.shift();
+        for (let i = 0; i < pairs.length; i += 2) if (pairs[i] === pick) { pairs[i + 1](); return true; }
+        assert.fail(`missing menu option ${pick}`);
+      },
+    };
+    startDialogue(api, event, tree, {}, { ...event, pages: [] });
+    return { lines, actions };
+  };
+
+  try {
+    // A true, unended branch continues; the next true branch's end stops the run.
+    answers = { 'If A:': true, 'If B:': true, 'If C:': true };
+    assert.deepEqual(play([
+      { type: 'condition', text: 'If A:', steps: [{ npc: 'a' }] },
+      { type: 'condition', text: 'If B:', steps: [{ npc: 'b' }, { type: 'end' }] },
+      { type: 'condition', text: 'If C:', steps: [{ npc: 'c' }] },
+      { npc: 'tail' },
+    ]).lines, ['a', 'b']);
+
+    // With no true answer the first unknown still plays and does not fall through.
+    answers = { 'If A:': null, 'If B:': null };
+    assert.deepEqual(play([
+      { type: 'condition', text: 'If A:', steps: [{ npc: 'a' }] },
+      { type: 'condition', text: 'If B:', steps: [{ npc: 'b' }] },
+      { npc: 'tail' },
+    ]).lines, ['a', 'tail']);
+
+    // An explicit continue still reaches later siblings when the answer is unknown.
+    answers = { 'If A:': null, 'If B:': null };
+    assert.deepEqual(play([
+      { type: 'condition', text: 'If A:', steps: [{ npc: 'a' }, { type: 'jump', reference: 'continues' }] },
+      { type: 'condition', text: 'If B:', steps: [{ npc: 'b' }] },
+    ]).lines, ['a', 'b']);
+
+    // Nested menus keep their existing control flow; only linear true branches implicitly continue.
+    answers = { 'If A:': true, 'If B:': true };
+    assert.deepEqual(play([
+      { type: 'condition', text: 'If A:', steps: [{ type: 'choice', options: [
+        { text: 'yes', steps: [{ npc: 'yes' }] },
+        { text: 'no', steps: [{ npc: 'no' }, { type: 'end' }] },
+      ] }] },
+      { type: 'condition', text: 'If B:', steps: [{ npc: 'after' }] },
+    ], ['yes']).lines, ['yes']);
+    assert.deepEqual(play([
+      { type: 'condition', text: 'If A:', steps: [{ type: 'choice', options: [
+        { text: 'yes', steps: [{ npc: 'yes' }] },
+        { text: 'no', steps: [{ npc: 'no' }, { type: 'end' }] },
+      ] }] },
+      { type: 'condition', text: 'If B:', steps: [{ npc: 'after' }] },
+    ], ['no']).lines, ['no']);
+
+    // A branch action changes the next sibling guard before it is resolved.
+    answers = { 'If A:': true };
+    const branchAction = play([
+      { type: 'condition', text: 'If A:', steps: [{ type: 'action', id: 'flag' }] },
+      { type: 'condition', text: 'If flag:', steps: [{ npc: 'guarded' }] },
+    ]);
+    assert.deepEqual(branchAction.actions, ['flag']);
+    assert.deepEqual(branchAction.lines, ['guarded']);
+
+    // Lazy conditions see an action that ran before the following guard.
+    answers = {};
+    const run = play([
+      { type: 'action', id: 'flag', action: 'set flag' },
+      { type: 'condition', text: 'If flag:', steps: [{ npc: 'guarded' }] },
+    ]);
+    assert.deepEqual(run.actions, ['flag']);
+    assert.deepEqual(run.lines, ['guarded']);
+  } finally {
+    PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(condition), 1);
+  }
+});

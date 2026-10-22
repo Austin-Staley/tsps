@@ -216,6 +216,15 @@ function continues(steps) {
   return false;
 }
 
+/** True for a linear condition body whose continuation is not controlled by menus or jumps. */
+function isLinearConditionBranch(steps) {
+  for (const step of steps ?? []) {
+    if (["choice", "condition", "jump"].includes(step.type)) return false;
+    if (!isLinearConditionBranch(step.steps)) return false;
+  }
+  return true;
+}
+
 /** True when a branch is only a navigation jump (no dialogue of its own). */
 function jumpOnly(steps) {
   return !Array.isArray(steps) || steps.length === 0 || steps.every((step) => step.type === "jump");
@@ -364,7 +373,7 @@ function chooseCondition(run, resolveCondition) {
     if (unknown === -1) return null;
     index = unknown;
   }
-  return { index, condition: run[index] };
+  return { index, condition: run[index], answer: answers[index] };
 }
 
 /**
@@ -682,7 +691,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           // this point have run and may have changed what the guards observe.
           const chosen = chooseCondition(step.run, resolveCondition);
           if (!chosen) return run(after, currentRecord);
-          const tail = continues(chosen.condition.steps) ? step.run.slice(chosen.index + 1) : [];
+          // A branch selected by an explicit true answer keeps the sibling conditions
+          // after it until the run actually ends: wiki tconds continue in order.
+          // An unknown fallback does not, so unrelated unknown branches stay unselected.
+          const tail = continues(chosen.condition.steps)
+            || (chosen.answer === true && isLinearConditionBranch(chosen.condition.steps))
+            ? step.run.slice(chosen.index + 1)
+            : [];
           run([
             { type: "condition_chosen", id: chosen.condition.id, text: chosen.condition.text },
             ...(chosen.condition.steps || []),

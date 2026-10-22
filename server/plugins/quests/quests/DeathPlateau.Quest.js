@@ -88,18 +88,17 @@ module.exports = function registerDeathPlateauQuest(api) {
   const COMPLETE_ACTION_IDS = new Set(["-0mf7N", "IRymYG"]);
 
   /** Transcript message ids that hand the player a key item (the dump repeats each line). */
-  const GIVE_IOU_IDS = new Set(["4p9H2-", "MBm6Sz", "mhKulF", "wAz_jn", "23tpMt"]);
+  const GIVE_IOU_IDS = new Set(["4p9H2-", "MBm6Sz", "mhKulF", "wAz_jn", "23tpMt", "mUS50D"]);
   const GIVE_MAP_IDS = new Set(["yDYvE0", "MtULDz", "TgL2Wy"]);
-  const GIVE_CLIMBING_BOOTS_IDS = new Set(["aZ5-DY", "FG69_B"]);
+  const GIVE_CLIMBING_BOOTS_IDS = new Set(["aZ5-DY", "FG69_B", "gUxInm"]);
   const GIVE_SPIKED_BOOTS_IDS = new Set(["AuWfYt", "MKP0WU", "1TFYaK", "WryBLk"]);
   const GIVE_CERTIFICATE_IDS = new Set(["KZG0PG", "VuuQKK"]);
 
   /** Hand-over lines that consume what the transcript says the player gives. */
   const READ_IOU_STEP_ID = "abx6jE";
-  const REPLACE_MAP_ACTION_ID = "vVV4wM";
   const GIVE_DENULTH_MAP_STEP_ID = "sdE5c5";
   const GIVE_DENULTH_COMBINATION_STEP_ID = "liaDgz";
-  const GIVE_ALE_STEP_ID = "_ELP6x";
+  const GIVE_ALE_STEP_IDS = new Set(["_ELP6x", "7gOtrA"]);
   const GIVE_BLURBERRY_STEP_ID = "VZS4Rq";
   const GIVE_CERTIFICATE_STEP_ID = "jmuuX8";
 
@@ -215,7 +214,8 @@ module.exports = function registerDeathPlateauQuest(api) {
       if (stage >= STAGE_SCOUTED) {
         return "finishing-up-talking-to-denulth-after-opening-the-equipment-room-and-exploring-the-path";
       }
-      if (stage >= STAGE_DUNSTAN && stage < STAGE_BOOTS && !hasCertificate(player)) {
+      if (stage >= STAGE_DUNSTAN && stage < STAGE_BOOTS && !hasCertificate(player)
+        && player.getAttribute(CERTIFICATE_DELIVERED_ATTRIBUTE) !== true) {
         return "new-route-up-death-plateau-talking-to-denulth-after-talking-to-dunstan";
       }
       return "new-route-up-death-plateau-talking-to-denulth-after-opening-the-equipment-room";
@@ -258,13 +258,21 @@ module.exports = function registerDeathPlateauQuest(api) {
       if (stage >= STAGE_SCOUTED) return "finishing-up-talking-to-tenzing-after-scouting-the-path";
       if (hasMap(player)) return "new-route-up-death-plateau-talking-to-tenzing-while-holding-the-map";
       if (stage >= STAGE_SABA) {
-        if (!hasBoots(player)) return "new-route-up-death-plateau-talking-to-tenzing";
+        if (!hasBoots(player)) {
+          return stage >= STAGE_CLIMBING_BOOTS
+            ? "new-route-up-death-plateau-talking-to-tenzing-without-climbing-or-spiked-boots"
+            : "new-route-up-death-plateau-talking-to-tenzing";
+        }
         return "new-route-up-death-plateau-talking-to-tenzing-while-holding-climbing-or-spiked-boots";
       }
       return "new-route-up-death-plateau-talking-to-tenzing-before-fixing-the-boots";
     }
     if (npcId === DUNSTAN_NPC_ID) {
-      if (stage >= STAGE_BOOTS) return "new-route-up-death-plateau-talking-to-dunstan-after-getting-the-spiked-boots";
+      if (stage >= STAGE_BOOTS) {
+        return held(player, SPIKED_BOOTS_ITEM_ID)
+          ? "new-route-up-death-plateau-talking-to-dunstan-after-getting-the-spiked-boots"
+          : "new-route-up-death-plateau-talking-to-dunstan-before-getting-the-spiked-boots";
+      }
       if (stage >= STAGE_DUNSTAN) {
         if (player.getAttribute(CERTIFICATE_DELIVERED_ATTRIBUTE) === true) return "new-route-up-death-plateau-talking-to-dunstan-before-getting-the-spiked-boots";
         if (hasCertificate(player)) return "new-route-up-death-plateau-talking-to-dunstan-while-holding-the-certificate";
@@ -291,6 +299,8 @@ module.exports = function registerDeathPlateauQuest(api) {
       return null;
     }
     const has = (itemId, amount = 1) => held(player, itemId, amount);
+    if (value === "if harold is drunk:") return player.getAttribute(DRUNK_ATTRIBUTE) === true;
+    if (value === "if harold is not drunk:") return player.getAttribute(DRUNK_ATTRIBUTE) !== true;
     if (value.includes("does not have an asgarnian ale")) return !has(ASGARNIAN_ALE_ITEM_ID);
     if (value.includes("has an asgarnian ale")) return has(ASGARNIAN_ALE_ITEM_ID);
     if (value.includes("does not have a blurberry special")) return !has(BLURBERRY_SPECIAL_ITEM_ID) && !has(PREMADE_BLURBERRY_ITEM_ID);
@@ -367,7 +377,6 @@ module.exports = function registerDeathPlateauQuest(api) {
       return;
     }
     // Only message events consume and hand out items.
-    if (npcId === TENZING_NPC_ID && stepId === REPLACE_MAP_ACTION_ID) { request.handled = true; return; }
     if (kind !== "message") return;
     if (npcId === HAROLD_NPC_ID && stepId === READ_IOU_STEP_ID && held(player, IOU_ITEM_ID)) {
       player.getInventory().deleteNumber(IOU_ITEM_ID, 1);
@@ -399,7 +408,7 @@ module.exports = function registerDeathPlateauQuest(api) {
       inventory.adds(CLIMBING_BOOTS_ITEM_ID, 1);
       return;
     }
-    if (stepId === GIVE_ALE_STEP_ID) {
+    if (GIVE_ALE_STEP_IDS.has(stepId)) {
       player.getInventory().deleteNumber(ASGARNIAN_ALE_ITEM_ID, 1);
       if (quest.getStage(player) < STAGE_ALE) quest.setStage(player, STAGE_ALE);
       return;
@@ -453,7 +462,9 @@ module.exports = function registerDeathPlateauQuest(api) {
       return;
     }
     if (GIVE_CERTIFICATE_IDS.has(stepId)) {
-      if (!hasCertificate(player)) player.getInventory().adds(CERTIFICATE_ITEM_ID, 1);
+      if (!hasCertificate(player) && player.getAttribute(CERTIFICATE_DELIVERED_ATTRIBUTE) !== true) {
+        player.getInventory().adds(CERTIFICATE_ITEM_ID, 1);
+      }
     }
   }
 

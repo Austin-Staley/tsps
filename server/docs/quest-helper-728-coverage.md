@@ -163,7 +163,7 @@ branch remains blocked at its source.
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
 | Darkness of Hallowvale | `DarknessOfHallowvale` | Pending | Pending | Pending |
 | Death on the Isle | `DeathOnTheIsle` | Captured item IDs, accusation bit and evidence recovery checkpoint reviewed; full parity review pending | 8 focused dispatch tests pass | Pending |
-| Death Plateau | `DeathPlateau` | Pending | Pending | Pending |
+| Death Plateau | `DeathPlateau` | Harold’s IOU recovery, ordered condition checks and missing-item handouts use the imported transcript; shared runner now continues explicitly true linear sibling conditions | 47 shared/runtime and quest regressions pass | Natural completion and native recovery remain pending |
 | Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Pending | Pending | Pending |
 | The Depths of Despair | `DepthsOfDespair` | Pending | Pending | Pending |
 | Desert Treasure I | `DesertTreasureI` | Pending | Pending | Pending |
@@ -282,6 +282,19 @@ branch remains blocked at its source.
 Learning the Ropes has no helper in the pinned Quest Helper source. Review its canonical
 behaviour against the Wiki/cache and test its natural tutorial route separately; do not
 claim Quest Helper parity for it. Source, regression and native checks: pending.
+
+## Supplemental Waterfall route
+
+The user-reported raft and rope crossing is covered separately from the 128 Quest Helper
+issue quests. Source and focused peer review pass for the real raft-to-island route, rope
+on the crossing rock, and rope on the dead tree to reach the waterfall ledge. A resumed
+native run also confirmed the ordinary River Swim sends the player downstream and leaves
+quest stage, QP, XP and inventory unchanged; the same account relogged and remained saved.
+At the ledge, the no-amulet door refusal was observed, so this evidence establishes the
+reported crossing and cave entrance, not cave entry or whole-quest completion. The native
+artifacts are `/tmp/tsps-728/native/jobs/q131-epoch3.report.json` and
+`/tmp/tsps-728/native/jobs/q131-riverswim.report.json`; source-only tests do not substitute
+for this route evidence.
 
 ## Evidence and limits
 
