@@ -24,6 +24,8 @@ type PendingHitConfig = {
     experience?: boolean;
     /** A pre-rolled damage value, still passing through damage hooks and the HP cap. */
     damage?: number;
+    /** Shared across one attack's hits on the same victim; applied after queue-time modifiers. */
+    damageBudget?: { remaining: number };
 };
 
 export class PendingHit {
@@ -37,6 +39,7 @@ export class PendingHit {
     private accurate: boolean;
     private handleAfterHitEffects: boolean;
     private experience = true;
+    private damageBudget?: { remaining: number };
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
     /** Spell selected when this hit was launched; the caster may clear it before impact. */
@@ -61,6 +64,7 @@ export class PendingHit {
                 resolvedHandleAfterHitEffects = handleAfterHitEffects;
             }
         } else if (delayOrConfig && typeof delayOrConfig === "object") {
+            this.damageBudget = delayOrConfig.damageBudget;
             if (Number.isInteger(delayOrConfig.delay)) {
                 resolvedDelay = delayOrConfig.delay as number;
             }
@@ -114,6 +118,16 @@ export class PendingHit {
 
     public getTotalDamage(): number {
         return this.totalDamage;
+    }
+
+    public capDamageToBudget(): void {
+        if (!this.damageBudget) return;
+        for (const damage of this.hits) {
+            const value = Math.max(0, Math.min(damage.getDamage(), this.damageBudget.remaining));
+            damage.setDamage(value);
+            this.damageBudget.remaining -= value;
+        }
+        this.updateTotalDamage();
     }
 
     /** Whether the attacker gets the usual combat XP for this hit. */

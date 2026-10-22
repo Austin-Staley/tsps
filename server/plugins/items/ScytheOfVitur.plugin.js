@@ -129,14 +129,12 @@ function createMethod() {
     hits(character, target) {
       const maxHit = DamageFormulas.calculateMaxMeleeHit(character);
       const hits = [];
-      const remainingHp = new Map();
+      const budgets = new Map();
       const targets = [...Array(hitCount(target)).fill(target), ...cleaveTargets(character, target)];
       for (const [index, victim] of targets.entries()) {
-        const hit = new PendingHit(character, victim, this);
+        if (!budgets.has(victim)) budgets.set(victim, { remaining: victim.getHitpoints() });
+        const hit = new PendingHit(character, victim, this, { damageBudget: budgets.get(victim) });
         if (index > 0) CombatFactory.applyStyleDamage(hit, hitMax(maxHit, index));
-        const remaining = remainingHp.get(victim) ?? victim.getHitpoints();
-        hit.setTotalDamage(Math.min(hit.getTotalDamage(), remaining));
-        remainingHp.set(victim, remaining - hit.getTotalDamage());
         hits.push(hit);
       }
       if (character?.isPlayer?.()) {

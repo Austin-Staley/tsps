@@ -183,6 +183,45 @@ test('scythe cleaves three forward tiles across NPCs and players in multi with a
   multi = true;
   const large = actor(0, 1, false, 3);
   assert.deepEqual(method.hits(wielder, large).map((hit) => hit.target), [large, large, large]);
-  large.getHitpoints = () => 50;
-  assert.deepEqual(method.hits(wielder, large).map((hit) => hit.getTotalDamage()), [48, 2, 0], 'a swing cannot pay XP for more than the victim HP');
+});
+
+test('scythe queue caps a corrupted victim across every hit before awarding XP', () => {
+  const previous = { damage: CombatFactory.getHitDamage, source: core.DamageFormulas.sourceMaxHit,
+    melee: core.DamageFormulas.calculateMaxMeleeHit, accuracy: core.AccuracyFormulasDpsCalc.rollAccuracy,
+    dealt: PluginManager.emitPlayerDealtDamage };
+  const options = { inside: true };
+  const corruption = special('KerisPartisanOfCorruption', options);
+  const queued = [];
+  const victim = target();
+  Object.assign(victim, { getHitpoints: () => 50, getSize: () => 3, getLocation: () => loc(0, 1),
+    isUntargetable: () => false, isNeedsPlacement: () => false,
+    getCombat: () => ({ getHitQueue: () => ({ addPendingHit: (hit) => queued.push(hit) }) }) });
+  const source = attacker();
+  Object.assign(source, { getLocation: () => loc(0, 0), getEquipment: () => ({ get: () => ({ getId: () => ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_ }) }),
+    getFightType: () => ({ getStyle: () => ({ skill: () => [Skill.ATTACK.getIndex()] }) }) });
+  try {
+    core.DamageFormulas.sourceMaxHit = () => 48;
+    core.DamageFormulas.calculateMaxMeleeHit = () => 48;
+    core.AccuracyFormulasDpsCalc.rollAccuracy = () => true;
+    CombatFactory.getHitDamage = (_a, _b, _c, _d, bounds) => new core.HitDamage(bounds?.maximumBonus ?? 48, core.HitMask.RED);
+    PluginManager.emitPlayerDealtDamage = options.damageHook;
+    let resolver;
+    delete require.cache[require.resolve('../plugins/items/ScytheOfVitur.plugin')];
+    require('../plugins/items/ScytheOfVitur.plugin').register({ core: { ...core, AreaManager: { inMulti: () => false } },
+      onServerStartup: (handler) => handler(), onItemAction() {}, onItemOnItem() {},
+      registerCombatMethodResolver: (value) => { resolver = value; } });
+    const hits = resolver.resolve(source).hits(source, victim);
+    assert.deepEqual(hits.map((hit) => hit.getTotalDamage()), [48, 24, 12]);
+    corruption.combatMethod.handleAfterHitEffects({ isAccurate: () => true, getTarget: () => victim });
+    for (const hit of hits) CombatFactory.addPendingHit(hit);
+    assert.deepEqual(queued.map((hit) => hit.getTotalDamage()), [50, 0, 0]);
+    assert.equal(source.xp.filter(([skill]) => skill === Skill.ATTACK).reduce((sum, [, xp]) => sum + xp, 0), 200);
+    assert.equal(source.xp.filter(([skill]) => skill === Skill.HITPOINTS).reduce((sum, [, xp]) => sum + xp, 0), 50 * 4 / 3);
+  } finally {
+    CombatFactory.getHitDamage = previous.damage;
+    core.DamageFormulas.sourceMaxHit = previous.source;
+    core.DamageFormulas.calculateMaxMeleeHit = previous.melee;
+    core.AccuracyFormulasDpsCalc.rollAccuracy = previous.accuracy;
+    PluginManager.emitPlayerDealtDamage = previous.dealt;
+  }
 });

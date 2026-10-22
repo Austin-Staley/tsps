@@ -498,6 +498,7 @@ export class NPC extends Mobile {
     public setCurrentLevels(skill: Skill, level: number): void {
         if (!Number.isFinite(level)) throw new RangeError("Invalid NPC combat level");
         const base = this.getMaxLevel(skill);
+        this.getCurrentLevel(skill);
         const cycle = this.drainedLevels.get(skill)?.cycle ?? World.getProcessCycle();
         level = Math.max(0, Math.min(base, Math.floor(level)));
         if (level === base) this.drainedLevels.delete(skill);

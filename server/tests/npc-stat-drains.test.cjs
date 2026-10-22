@@ -46,6 +46,18 @@ test('all five NPC combat levels restore independently without mutating shared d
   assert.equal(value.getMaxLevel(Skill.MAGIC), 100);
   assert.throws(() => value.setCurrentLevels(Skill.MAGIC, NaN), RangeError);
 });
+test('a fresh drain after natural full recovery starts a fresh regeneration minute', () => {
+  cycle = 0;
+  const value = npc();
+  value.setCurrentLevels(Skill.ATTACK, 99);
+  cycle = 1000;
+  value.setCurrentLevels(Skill.ATTACK, 90);
+  assert.equal(value.getCurrentLevel(Skill.ATTACK), 90);
+  cycle = 1099;
+  assert.equal(value.getCurrentLevel(Skill.ATTACK), 90);
+  cycle = 1100;
+  assert.equal(value.getCurrentLevel(Skill.ATTACK), 91);
+});
 test('NPC drained levels immediately affect accuracy, magic defence and damage', () => {
   cycle = 0;
   const value = npc();

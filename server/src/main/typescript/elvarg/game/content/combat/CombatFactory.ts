@@ -690,7 +690,11 @@ export class CombatFactory {
                 target,
                 hit: qHit,
             });
+        }
 
+        qHit.capDamageToBudget();
+
+        if (attacker.isPlayer()) {
             // Reward the player experience after plugins have finalized this hit.
             if (qHit.rewardsExperience()) CombatFactory.rewardExp(attacker.getAsPlayer(), qHit);
 
