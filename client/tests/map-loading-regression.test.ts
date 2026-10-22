@@ -345,6 +345,66 @@ function instanceReadinessExcludesThePreviousWorldAndBoatOverlays(): void {
     }
 }
 
+function foregroundLoadsBeforeBackgroundAndPublishesTogether(): void {
+    const queued: number[] = [];
+    const manager = new MapManager(4, (x, y) => { queued.push(getMapSquareId(x, y)); });
+    let cameraX = 3250;
+    const camera = { getPosX: () => cameraX, getPosZ: () => 3250 } as any;
+    const update = (frame: number, x = 3250) => manager.update(x, 3250, camera, frame, 1, 3224, 3200, 2, 25);
+    const addMap = (id: number, readyAt = 0) => manager.addMap(id >> 8, id & 255, {
+        mapX: id >> 8, mapY: id & 255, canRender: (frame: number) => frame >= readyAt, delete() {},
+    });
+    const ids = (coords: number[][]) => new Set(coords.map(([x, y]) => getMapSquareId(x, y)));
+    const visible = () => new Set(manager.visibleMaps.map(map => getMapSquareId(map.mapX, map.mapY)));
+    const initialView = ids([[50, 50], [50, 51], [51, 50], [51, 51]]);
+    update(0);
+    assert.equal(manager.gridMapCount, 9, "the stable padded resident grid is preserved");
+    const revision = manager.getGridRevision();
+    assert.deepEqual(new Set(queued), initialView, "off-screen work must not enter the cold foreground queue");
+    for (const id of [...initialView].slice(0, 3)) addMap(id);
+    update(1);
+    assert.equal(manager.visibleMapCount, 0, "the first visible group still publishes atomically");
+    assert.equal(queued.length, 4, "background work waits for the foreground group");
+    addMap([...initialView][3], 3);
+    update(2);
+    assert.equal(manager.visibleMapCount, 0, "the last foreground map must pass canRender");
+    update(3);
+    assert.deepEqual(visible(), initialView);
+    assert.equal(manager.isSceneReady(3), true, "a slow background region must not hold the loading overlay");
+    assert.equal(manager.hasPendingMapLoads(3), true, "unfinished background scenery still counts as streaming work");
+    assert.equal(queued.length, 5);
+    assert.equal(manager.loadingMapIds.size, 1, "only one background map can build at a time");
+    for (let frame = 4; frame < 64; frame++) update(frame);
+    assert.equal(queued.length, 5, "a slow background map must not flood the worker queue");
+    addMap(queued[4]);
+    update(64);
+    assert.ok(manager.getMap(queued[4] >> 8, queued[4] & 255), "ready background maps stay resident");
+    assert.deepEqual(visible(), initialView, "resident background maps do not enter per-frame drawing");
+    assert.equal(manager.loadingMapIds.size, 1);
+
+    update(65, 3300);
+    assert.equal(manager.getGridRevision(), revision, "walking inside the server scene keeps the resident grid stable");
+    assert.ok(manager.loadingMapIds.has(getMapSquareId(52, 50)));
+    assert.ok(manager.loadingMapIds.has(getMapSquareId(52, 51)), "walking reprioritizes newly visible foreground maps");
+    addMap(getMapSquareId(52, 50));
+    update(66, 3300);
+    const sharedOldView = ids([[51, 50], [51, 51]]);
+    assert.deepEqual(visible(), sharedOldView, "one new region must not publish before the rest of its view");
+    addMap(getMapSquareId(52, 51), 68);
+    update(67, 3300);
+    assert.deepEqual(visible(), sharedOldView);
+    update(68, 3300);
+    assert.deepEqual(visible(), ids([[51, 50], [51, 51], [52, 50], [52, 51]]));
+    assert.ok(manager.getMap(50, 50), "leaving the view must not evict useful target-grid scenery");
+    const queuedBeforeOrbit = queued.length;
+    for (let frame = 69; frame < 79; frame++) {
+        cameraX += 32;
+        update(frame, 3300);
+    }
+    assert.equal(manager.getGridRevision(), revision);
+    assert.equal(queued.length, queuedBeforeOrbit, "camera orbits must not change foreground membership or queue work");
+}
+
 function duplicateLocReplayIsIgnored(): void {
     let refreshes = 0;
     const host = {
@@ -533,6 +593,7 @@ lowEndGridDropsOutOfRangeSquares();
 multipartLocsRequestAllMissingModelsTogether();
 targetScenesPublishTogether();
 instanceReadinessExcludesThePreviousWorldAndBoatOverlays();
+foregroundLoadsBeforeBackgroundAndPublishesTogether();
 duplicateLocReplayIsIgnored();
 locUpdateBeforeInitialMapDoesNotStartADuplicateMapTask();
 locReplayInvalidatesCompletedMapsWaitingToRender();

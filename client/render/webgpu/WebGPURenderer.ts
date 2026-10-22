@@ -902,6 +902,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     hasPendingMapStreamingWork(): boolean {
         return this.pendingMapBuilds > 0 || this.mapManager.loadingMapIds.size > 0 || this.mapsToLoad.length > 0 ||
             this.instances.hasPendingWork() ||
+            this.mapManager.hasPendingMapLoads(this.stats.frameCount) ||
             !this.mapManager.isSceneReady(this.stats.frameCount);
     }
 

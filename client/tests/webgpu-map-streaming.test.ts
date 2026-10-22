@@ -12,6 +12,7 @@ require.extensions[".glsl"] = (module, file) => { module.exports = fs.readFileSy
 for (const ext of [".png", ".jpg", ".webp"]) require.extensions[ext] = (module, file) => { module.exports = file; };
 const { updateWebGPUMapStreaming } = require("../render/webgpu/frameConfig");
 const { WebGPURenderer } = require("../render/webgpu/WebGPURenderer");
+const { hasPendingMapStreamingWork: hasPendingWebGLStreaming } = require("../render/render/streaming");
 
 test("WebGPU streams the server scene around the player across camera orbits and scene rebases", () => {
     const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
@@ -37,6 +38,8 @@ test("WebGPU streams the server scene around the player across camera orbits and
             },
         } as any;
         updateWebGPUMapStreaming(renderer, 0);
+        for (let frame = 1; frame <= maps.gridMapCount; frame++) updateWebGPUMapStreaming(renderer, frame);
+        assert.equal(maps.hasPendingMapLoads(maps.gridMapCount), false, "finish the stationary background preload before orbiting");
         const revision = maps.getGridRevision();
         const initial = queued.length;
         for (let i = 1; i <= 64; i++) {
@@ -171,6 +174,24 @@ test("WebGPU does not report idle while a required region waits for retry backof
     assert.equal(f.maps.loadingMapIds.has(f.mapId), false, "backoff has no active request marker");
     assert.equal(WebGPURenderer.prototype.hasPendingMapStreamingWork.call(f.renderer), true,
         "the unfinished target scene must keep background prefetch waiting");
+});
+
+test("both backends stay busy when off-screen scenery waits for retry backoff", () => {
+    const f = loaderFixture();
+    f.maps.loadingMapIds.clear();
+    f.maps.removeMap(49, 55);
+    f.maps.deferFailedMapLoad(49, 55);
+    const camera = { getPosX: () => 3089.5, getPosZ: () => 3524.5 } as any;
+    f.maps.update(3089.5, 3524.5, camera, 10, 1, 3040, 3464, 0, 25);
+    assert.equal(f.maps.isSceneReady(10), true, "off-screen retry backoff must not block login");
+    assert.equal(f.maps.loadingMapIds.size, 0, "the background map is waiting for its next retry");
+    const webgl = { mapManager: f.maps, mapsToLoad: new Denque(), stats: { frameCount: 10 },
+        getPendingStreamMapCount: () => 0 };
+    assert.equal(WebGPURenderer.prototype.hasPendingMapStreamingWork.call(f.renderer), true);
+    assert.equal(hasPendingWebGLStreaming(webgl), true, "prefetch must wait for unfinished background scenery");
+    f.maps.addInvalidMap(49, 55);
+    assert.equal(WebGPURenderer.prototype.hasPendingMapStreamingWork.call(f.renderer), false);
+    assert.equal(hasPendingWebGLStreaming(webgl), false);
 });
 
 test("WebGPU drops streamed results superseded by a scene move or session reset", async () => {
