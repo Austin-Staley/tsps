@@ -5,6 +5,9 @@ import { setImmediate } from "node:timers/promises";
 import { runWithSparseRetry } from "../game/worker/SparseRetry";
 import { GroupMissingError } from "../rs/cache/js5/GroupMissingError";
 import type { GroupSpan } from "../rs/cache/store/SparseMemoryStore";
+import { SceneBuffer } from "../render/buffer/SceneBuffer";
+import { SdMapDataLoader } from "../render/loader/SdMapDataLoader";
+import { Scene } from "../rs/scene/Scene";
 
 function sparseCache() {
     const present = new Set<number>();
@@ -65,6 +68,43 @@ test("worker waits for every dependency beyond eight download waves", async () =
     assert.equal(attempts, 13);
     assert.equal(result.geometry, "complete", "incomplete geometry must never leave the worker");
     assert.equal(outcome.complete, true);
+});
+
+test("sparse map loads wait for missing scene models before baking geometry and minimaps", async (t) => {
+    const cache = sparseCache();
+    let attempts = 0, terrainBakes = 0;
+    const addTerrain = SceneBuffer.prototype.addTerrain;
+    t.mock.method(SceneBuffer.prototype, "addTerrain", function (
+        this: SceneBuffer, ...args: Parameters<SceneBuffer["addTerrain"]>
+    ) {
+        terrainBakes++;
+        return addTerrain.apply(this, args);
+    });
+    const state: any = {
+        ...cache.state,
+        cache: { info: { name: "test", game: "oldschool" } },
+        cacheSystem: { getIndex: () => ({ archiveExists: () => false }) },
+        textureLoader: { getTextureIds: () => [], isSd: () => true },
+        sceneBuilder: {
+            mapFileLoader: { setRegionReplacements() {} },
+            clearLocOverrides() {}, clearLocSpawns() {}, clearTerrainOverrides() {},
+            buildScene: () => {
+                attempts++;
+                for (const model of [1, 2]) if (cache.missing(model)) break;
+                return new Scene(4, 76, 76);
+            },
+        },
+    };
+    const loader = new SdMapDataLoader();
+    const outcome = { complete: false };
+    const result = await runWithSparseRetry(state, () => loader.load(state, {
+        mapX: 50, mapY: 50, maxLevel: 3, loadNpcs: false, smoothTerrain: false,
+        minimizeDrawCalls: true, loadedTextureIds: new Set(),
+    }), undefined, outcome);
+    assert.equal(attempts, 3, "the cold cache still discovers both dependency waves");
+    assert.equal(terrainBakes, 1, "incomplete scene passes must skip discarded geometry and minimap work");
+    assert.equal(result.data?.minimapBlobs.length, 4, "the completed build still includes every minimap plane");
+    assert.equal(outcome.complete, true, "only a complete scene can leave the worker");
 });
 
 test("blocking group downloads recover from transient fetch errors", async (t) => {
