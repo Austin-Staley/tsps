@@ -381,7 +381,7 @@ export class RangedWeapon {
 
     /** Wiki: fires arrows up to dragon arrows. */
     public static readonly SCORCHING_BOW = new RangedWeapon([ItemIdentifiers.SCORCHING_BOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.SCORCHING_BOW)
-    public static readonly DARK_BOW = new RangedWeapon([11235, 13405, 15701, 15702, 15703, 15704], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.LONGBOW)
+    public static readonly DARK_BOW = new RangedWeapon([ItemIdentifiers.DARK_BOW, ItemIdentifiers.DARK_BOW_3, ItemIdentifiers.DARK_BOW_4, ItemIdentifiers.DARK_BOW_5, ItemIdentifiers.DARK_BOW_6], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.LONGBOW)
 
     public static readonly BRONZE_CROSSBOW = new RangedWeapon([9174], [Ammunition.BRONZE_BOLT], RangedWeaponType.CROSSBOW)
     public static readonly IRON_CROSSBOW = new RangedWeapon([9177], [Ammunition.BRONZE_BOLT, Ammunition.OPAL_BOLT, Ammunition.ENCHANTED_OPAL_BOLT, Ammunition.IRON_BOLT], RangedWeaponType.CROSSBOW)
@@ -422,7 +422,7 @@ export class RangedWeapon {
 
     public static readonly KARILS_CROSSBOW = new RangedWeapon([4734], [Ammunition.BOLT_RACK], RangedWeaponType.CROSSBOW)
 
-    public static readonly BALLISTA = new RangedWeapon([19478, 19481], [Ammunition.BRONZE_JAVELIN, Ammunition.IRON_JAVELIN, Ammunition.STEEL_JAVELIN, Ammunition.MITHRIL_JAVELIN, Ammunition.ADAMANT_JAVELIN, Ammunition.RUNE_JAVELIN, Ammunition.DRAGON_JAVELIN], RangedWeaponType.BALLISTA)
+    public static readonly BALLISTA = new RangedWeapon([ItemIdentifiers.LIGHT_BALLISTA, ItemIdentifiers.HEAVY_BALLISTA, ItemIdentifiers.LIGHT_BALLISTA_4, ItemIdentifiers.HEAVY_BALLISTA_OR_], [Ammunition.BRONZE_JAVELIN, Ammunition.IRON_JAVELIN, Ammunition.STEEL_JAVELIN, Ammunition.MITHRIL_JAVELIN, Ammunition.ADAMANT_JAVELIN, Ammunition.RUNE_JAVELIN, Ammunition.DRAGON_JAVELIN], RangedWeaponType.BALLISTA)
     public static readonly SILVTHRILL_BALLISTA = new RangedWeapon([ItemIdentifiers.SILVTHRILL_BALLISTA], [Ammunition.SILVTHRILL_JAVELIN], RangedWeaponType.BALLISTA)
 
 

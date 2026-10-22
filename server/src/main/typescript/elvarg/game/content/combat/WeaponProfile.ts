@@ -37,7 +37,6 @@ export interface WeaponCombatProfile {
     fireSound?: Sound;
     ammoRequired?: number;
     boltEffects?: boolean;
-    specialDamage?: { minimum: number; maximum: number };
 }
 
 // OSRS projectile types (server projanim config): an arrow ends at delay + lengthAdjustment +
@@ -245,7 +244,6 @@ export class WeaponProfiles {
             fireSound: Sound.SHOOT_BOW_QUIET,
             ammoRequired: 2,
             doubleStartGraphic: true,
-            specialDamage: { minimum: 8, maximum: 48 },
         });
         this.register({
             itemIds: CRYSTAL_BOW_ALL_WEAPON_IDS,

@@ -183,20 +183,6 @@ export class CombatFactory {
             let maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.RANGED);
             maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
             damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride);
-
-            // Do ranged effects with the calculated damage..
-            if (entity.isPlayer()) {
-
-                let player = entity.getAsPlayer();
-
-                const profile = WeaponProfiles.get(player);
-                const damageRange = player.isSpecialActivated() && getPlayerCombatSpecial(player)
-                    ? profile?.specialDamage
-                    : undefined;
-                if (damageRange) {
-                    damage = Math.max(damageRange.minimum, Math.min(damageRange.maximum, damage));
-                }
-            }
         } else if (type == CombatType.MAGIC) {
             damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
         }
