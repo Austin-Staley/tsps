@@ -113,7 +113,9 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
   ordinary range is 10 tiles.
 - [Hit delay](https://oldschool.runescape.wiki/w/Hit_delay?action=raw): Snapshot now creates
   two single-arrow hits a tick apart. Chainhit uses the shared thrown projectile profile's
-  distance-based flight for each leg; its hits land at each leg's arrival. Its exact bounce
+  distance-based flight for each leg; its hits land at each leg's arrival. Its five-target
+  cap includes the primary (50% maximum energy), and unused opponents are picked randomly,
+  as the Rune thrownaxe page's cited Mod Ash answers specify. Its exact bounce
   launch/flight parameters still need an OSRS capture; the prior flat 30-cycle approximation
   is removed, but the shared-profile timing is not claimed to be captured Chainhit timing.
 - [Ammunition](https://oldschool.runescape.wiki/w/Ammunition?action=raw): ballista javelins

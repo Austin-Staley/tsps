@@ -197,6 +197,7 @@ test("Momentum Throw costs 25% energy and bypasses the attack delay", () => {
 /** A rune-axe wielder with `bounceTargets` possible opponents standing around the first target. */
 function chainhitScene(t, { multi = true, special = 100, outcomes = [], bounceTargets = 6 } = {}) {
   const drains = quiet(t);
+  t.mock.method(Misc, "randomElement", (candidates) => candidates[0]);
   const rolled = stubRolls(t, outcomes);
   const axe = new Item(ItemIdentifiers.RUNE_THROWNAXE, 100);
   axe.getDefinition = () => ({ getBonuses: () => [0, 0, 0, 0, 26, 0, 0, 0, 0, 0, 0, 36, 0, 0] });
@@ -223,20 +224,29 @@ function chainhitScene(t, { multi = true, special = 100, outcomes = [], bounceTa
   return { player, target, others, method, drains, styled, rolled };
 }
 
-test("Chainhit ricochets to five other targets, never back to the first, for 10% a hit", (t) => {
+test("Chainhit hits five targets total, never back to the first, for at most 50% energy", (t) => {
   const { player, target, method, drains, styled } = chainhitScene(t);
   method.start(player, target);
   const hits = method.hits(player, target);
 
-  assert.equal(hits.length, 6);
-  assert.deepEqual(hits.map((hit) => hit.getDelay()), [1, 3, 4, 5, 6, 8]);
+  assert.equal(hits.length, 5);
+  assert.deepEqual(hits.map((hit) => hit.getDelay()), [1, 3, 4, 5, 7]);
   const struck = hits.map((hit) => hit.getTarget());
-  assert.equal(new Set(struck).size, 6, "nobody is hit twice");
+  assert.equal(new Set(struck).size, 5, "nobody is hit twice");
   assert.equal(struck[0], target);
   assert.ok(struck.every((mob) => mob.getLocation().getDistance(target.getLocation()) <= 3), "within three tiles");
-  assert.deepEqual(drains, [10, 10, 10, 10, 10, 10], "10% for the throw and each of the five bounces");
+  assert.deepEqual(drains, [10, 10, 10, 10, 10], "10% for the throw and each of four bounces");
   // Wiki: floor(0.5 + (99 + 10) * (36 + 64) / 640)
-  assert.ok(styled.length === 6 && styled.every(([, maxHit]) => maxHit === 17));
+  assert.ok(styled.length === 5 && styled.every(([, maxHit]) => maxHit === 17));
+});
+
+test("Chainhit selects random unused opponents instead of the nearest one", (t) => {
+  const { player, target, method, others } = chainhitScene(t);
+  Misc.randomElement.mock.mockImplementation((candidates) => candidates.at(-1));
+  method.start(player, target);
+  const hits = method.hits(player, target);
+  assert.equal(hits[1].getTarget(), others.at(-1));
+  assert.equal(new Set(hits.map((hit) => hit.getTarget())).size, hits.length);
 });
 
 test("Chainhit ends at the first miss, outside multicombat and when the energy runs out", (t) => {

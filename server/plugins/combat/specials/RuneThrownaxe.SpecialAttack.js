@@ -1,16 +1,16 @@
 /**
  * Rune thrownaxe - Chainhit (Wiki: Rune thrownaxe). 10% energy per hit. In multicombat the axe
- * ricochets to up to five other opponents within three tiles of the first target, never back to it;
+ * hits up to five opponents within three tiles of the first target, never back to it;
  * an accuracy roll follows each hit and a miss ends the chain. Its max hit ignores offensive
  * prayers and gear: floor(0.5 + (visible Ranged + 10) * (axe Ranged strength + 64) / 640).
  * It swings one tick slower than the axe's normal attack.
  */
 function buildRuneThrownaxeSpecialAttack(api) {
-  const { Animation, CombatFactory, CombatSpecial, Equipment, Graphic, GraphicHeight, ItemIdentifiers, PendingHit, Projectile, RangedCombatMethod, Skill, WeaponProfiles } = api.core;
+  const { Animation, CombatFactory, CombatSpecial, Equipment, Graphic, GraphicHeight, ItemIdentifiers, Misc, PendingHit, Projectile, RangedCombatMethod, Skill, WeaponProfiles } = api.core;
   const BonusManager = api.core.BonusManager;
 
   const DRAIN = 10;
-  const MAX_BOUNCES = 5;
+  const MAX_TARGETS = 5;
   const BOUNCE_RADIUS = 3;
   const SPECIAL_ANIMATION = new Animation(1068);
   const SPECIAL_VFX = new Graphic(257, 0, GraphicHeight.HIGH);
@@ -32,21 +32,11 @@ function buildRuneThrownaxeSpecialAttack(api) {
     return [...player.getLocalNpcs().values(), ...player.getLocalPlayers().values()];
   }
 
-  /** The nearest untouched opponent within the radius of the first target, or null. */
-  function nextTarget(player, primary, origin, struck) {
-    let best = null;
-    let bestDistance = Infinity;
-    for (const candidate of nearbyMobiles(player)) {
-      if (struck.has(candidate) || !CombatFactory.canAttackSecondaryTarget(player, primary, candidate, BOUNCE_RADIUS)) {
-        continue;
-      }
-      const distance = origin.getLocation().getDistance(candidate.getLocation());
-      if (distance < bestDistance) {
-        best = candidate;
-        bestDistance = distance;
-      }
-    }
-    return best;
+  /** Wiki / Mod Ash: random unused targets, without tactical routing. */
+  function nextTarget(player, primary, struck) {
+    const candidates = nearbyMobiles(player).filter((candidate) =>
+      !struck.has(candidate) && CombatFactory.canAttackSecondaryTarget(player, primary, candidate, BOUNCE_RADIUS));
+    return Misc.randomElement(candidates) ?? null;
   }
 
   class RuneThrownaxeCombatMethod extends RangedCombatMethod {
@@ -75,13 +65,14 @@ function buildRuneThrownaxeSpecialAttack(api) {
       let origin = target;
       let previous = first;
       let elapsedCycles = first.getDelay() * CLIENT_CYCLES_PER_TICK;
-      for (let bounce = 1; bounce <= MAX_BOUNCES && previous.isAccurate() && player.getSpecialPercentage() >= DRAIN; bounce++) {
-        const next = nextTarget(player, target, origin, struck);
+      for (let bounce = 1; bounce < MAX_TARGETS && previous.isAccurate() && player.getSpecialPercentage() >= DRAIN; bounce++) {
+        const next = nextTarget(player, target, struck);
         if (!next) {
           break;
         }
         CombatSpecial.drain(player, DRAIN);
         const distance = origin.getLocation().getDistance(next.getLocation());
+        // shortcut: shared thrown flight parameters, replace when a Chainhit OSRS capture gives its exact flight.
         const flight = RangedCombatMethod.projectileEnd(WeaponProfiles.ranged(player).projectiles[0], distance);
         const start = elapsedCycles;
         elapsedCycles += flight;
