@@ -275,8 +275,11 @@ in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot 
   Keep unique quest items and required acquisition triggers on the natural route.
 - Split ownership: one owner reviews source/tests, one playthrough driver, one recovery
   specialist. Do not have two actors on one account.
-- One persistent MCP client per account. Batch normal packets; avoid LLM turns between every
-  click. Use the highest batched action the tool supports, then assert once.
+- One persistent MCP client per account. When a driver reconnects, check `list_players` for
+  its own username first: reuse an already-online account and log in only when it is offline.
+  Reconnecting does not authorize repeating setup, granting items or resetting progress.
+  Batch normal packets; avoid LLM turns between every click. Use the highest batched action
+  the tool supports, then assert once.
 - Treat `walk_to` as a local minimap click. The route finder searches a 128-tile square
   centred on the player; distant targets can return `stuck` without taking a step. Plan
   ordinary walks through reachable road/map waypoints about 32 tiles apart and batch
@@ -315,6 +318,10 @@ Keep the returned session id for a corrective `--session <id>` follow-up. Ask wo
 write a compact done report with changed files, red/green evidence, rejected findings and
 remaining limits. Review reports between independent work blocks; avoid constant polling
 or rereading raw streams. A done report is evidence to review, not permission to skip review.
+Use low reasoning for a bounded follow-up with a reviewed contract and failing reproduction;
+reserve higher reasoning for unresolved source or binary-format questions. Finish with one
+bounded tool batch that writes both reports and hashes, verifies them once, then stops.
+Repeated report-editing turns can take longer than the fix itself.
 
 - Bound each source assignment to **one whole quest**, including its mandatory scenes and
   final hand-in. It does not mean fixing only one finding. Compare every helper `loadSteps`
