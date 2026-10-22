@@ -51,10 +51,13 @@ speech and ordinary chatheads. Its generic two-tick cadence is not capture-prove
 timing. Frozen natural playthroughs may run alongside read-only peer reviews; their
 evidence remains provisional until the review passes for the same revision.
 
-Five quests have reached the native playthrough phase. At First Light, The Ascent of
-Arceuus and Biohazard are running on frozen loaded revisions. At First Light's nine
-focused tests and independent source review pass. The other two reviews run alongside
-provisional playthroughs on the same hashes. No natural completion has been accepted yet.
+Five quests have reached the native playthrough phase. At First Light and The Ascent of
+Arceuus are running on frozen loaded revisions. At First Light's nine focused tests and
+independent source review pass. Ascent's source review found a missing memoir-page
+interaction; its natural opening also selected the requirements refusal and is under
+investigation. Biohazard stopped at stage 1 and logged out; its owner is correcting five
+source-review findings, including Elena's recovery of items belonging to the Chemist.
+No natural completion has been accepted yet.
 
 Monk's Friend completed naturally, paid its rewards once and persisted through logout and
 relogin. Its run remains incomplete because normal runes arrive after the party instead
@@ -79,6 +82,17 @@ category and adds the full His Faithful Servants page. All 124 dialogue tests pa
 fresh exports match for 3,292 generated files; existing dialogue records are unchanged by
 that addition. Its TSPS import is pending the current native batch finishing.
 
+The His Faithful Servants source still needs generic parsing fixes for inline anchors
+before NPC speech and a navigation footer. Skipping unavailable nodes in the quest
+consumer was rejected because it removed actual dialogue. The canonical dumper owns the
+repair; its new export is not yet imported into the running server.
+
+Big Chompy Bird Hunting has a reviewed source checkpoint for the hunting route, item
+capacity and recovery, scoped dialogue conditions, and cancellation of the first hunt
+on logout. Its combat hook now restricts its own tracked birds and leaves other quests'
+owned NPCs alone. Fourteen focused tests pass, including the real combat policy and
+plugin dispatch path. Natural completion and recovery remain pending.
+
 His Faithful Servants and Museum Kudos are supporting work discovered through mandatory
 Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the
 128 issue quests and tutorial below.
@@ -91,11 +105,11 @@ Desert Treasure II and Bone Voyage prerequisites. They are tracked separately fr
 | --- | --- | --- | --- | --- |
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
-| The Ascent of Arceuus | `AscentOfArceuus` | Focused review in progress on frozen loaded source | Scoped source evidence; review pending | Provisional playthrough in progress |
+| The Ascent of Arceuus | `AscentOfArceuus` | Missing memoir-page interaction found; opening requirements branch under investigation | Scoped source evidence; findings remain | Incomplete opening on frozen revision |
 | At First Light | `AtFirstLight` | Mandatory route, hammer tools, out-of-order report recovery, Fox cleanup and imported leaf guards reviewed | 9 focused tests pass | In progress on frozen reviewed revision |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
-| Big Chompy Bird Hunting | `BigChompyBirdHunting` | Pending | Pending | Pending |
-| Biohazard | `Biohazard` | Focused review in progress on frozen loaded source | Scoped source evidence; review pending | Provisional playthrough in progress |
+| Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
+| Biohazard | `Biohazard` | Five final source findings returned to original owner | Scoped source evidence; corrections pending | Incomplete at stage 1; logged out |
 | Bone Voyage | `BoneVoyage` | Pending | Pending | Pending |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
 | Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |

@@ -301,16 +301,27 @@ or rereading raw streams. A done report is evidence to review, not permission to
 - Bound each source assignment to **one whole quest**, including its mandatory scenes and
   final hand-in. It does not mean fixing only one finding. Compare every helper `loadSteps`
   key with the action that earns that state and the varp/varbit actually sent; a durable
-  plugin stage can differ from the helper's wire value. Test the mapping and login resend.
+  plugin stage can differ from the helper's wire value. Test the mapping and login resend. Also map
+  every auxiliary varp/varbit that the helper reads. A saved plugin attribute does not
+  update the client: for example, RFD's ingredient-enchantment flags must be sent as their
+  own native bits, including after login and recovery.
 - Check the named NPC transcript pages as well as the quest transcript. Post-quest and
   recovery dialogue may already exist on the NPC page; do not invent a missing-data fix.
 - Check each state-changing node's actual imported type. Spoken lines emit
   `npc-dialogue:line`; message boxes emit `npc-dialogue:action` with `kind: "message"`.
   Drive the real transcript runner in transition regressions: directly emitting a line
   event for a message node can make a broken mandatory conversation look green.
+- Query generated JSON with a parser and print only the needed page, variant, node or
+  definition fields. Do not `cat` or text-search an entire minified export: one matching
+  line can flood the worker context and its saved history.
+- Native drivers use the reviewed route contract and current source/loaded hashes. Start
+  declared setup and the stage-zero baseline after reading the required guide; inspect
+  the relevant helper/source segment when needed. Repeating the complete source audit
+  before the first player action adds delay without supplying native evidence.
 - Keep the OS process PID, execution-tool session id and OpenCode `ses_...` id distinct.
   A detached launcher must survive its parent shell (for example,
-  `subprocess.Popen(..., start_new_session=True)` with separate output/error files).
+  `subprocess.Popen(..., start_new_session=True)` with separate output/error files). Record the
+  session id from the first CLI event while the worker is alive, not only at completion.
 - Keep long worker histories compact: save the route checkpoint and evidence paths before
   using OpenCode's same-session summarization at an idle boundary. Preserve baseline,
   inventory, account ownership and unresolved findings; do not replay a verified prefix.
@@ -406,9 +417,14 @@ Never report "PASS" if a mandatory leg, reward, relog or post-quest check is mis
   reclaim routes with their own guards. Read the source, then exercise the canonical route.
 - Keep reward identities separate: reward item id, reward label, "once" attribute, and the
   pending/reclaim flag are different things. Verify each.
-- If a fixture grants ordinary supplies/gear/prerequisites, declare it and keep it outside the
-  native proof. Never grant quest items, set stages, varbits, events or handlers in a run you
-  will call natural.
+- Declare ordinary supplies, gear, skills and prerequisite-completion fixtures before the
+  target quest baseline. Verified developer command forms include `quest <prerequisite
+  name> complete`, `master`, `item <id> <amount>` and `tele <x> <y> <plane>`. Complete only the
+  prerequisite, verify the target remains at stage zero, then record every XP/QP/item delta
+  in the setup and capture the baseline. This does not prove the prerequisite was played.
+  After that baseline, never grant target quest items or set target stages, varbits, events
+  or handlers in a run claimed as natural. Use ordinary travel and item acquisition; boss
+  damage assistance still requires the real encounter and hit described above.
 
 ## Tests
 
