@@ -717,6 +717,7 @@ export class CombatSpells {
         baseExperience: () => {
             return 31;
         },
+        splashExperience: () => 30,
 
         itemsRequired: (player) => {
             return [new Item(555, 3), new Item(557, 3), new Item(561, 2)];
@@ -995,6 +996,7 @@ export class CombatSpells {
         baseExperience() {
             return 61;
         },
+        splashExperience: () => 60,
         itemsRequired(player) {
             return [new Item(555, 3), new Item(557, 4), new Item(561, 3)];
         },
@@ -1670,6 +1672,7 @@ export class CombatSpells {
         baseExperience() {
             return 89;
         },
+        splashExperience: () => 70,
         itemsRequired(player) {
             return [new Item(555, 5), new Item(557, 5), new Item(561, 4)];
         },
@@ -1775,9 +1778,11 @@ export class CombatSpells {
         startGraphic: function () {
             return null;
         },
+        // OSRS update of 2 March 2017: 95 on a successful cast, 84 on a failed one.
         baseExperience: function () {
-            return 83.6;
+            return 95;
         },
+        splashExperience: () => 84,
         itemsRequired: function (player) {
             return [new Item(563, 1), new Item(562, 1), new Item(560, 1)];
         },

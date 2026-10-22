@@ -906,7 +906,7 @@ export class CombatFactory {
         // Some NPCs give less (the Gemstone Crab 87.5%: 3.5 per damage).
         const target = hit.getTarget?.();
         const OSRS_DAMAGE_XP = 4 * (target?.isNpc?.() ? target.getAsNpc().getCombatXpMultiplier?.() ?? 1 : 1);
-        // A spell's base XP is paid once per cast by MagicCombatMethod.start (a splash
+        // A spell's base XP is paid once per cast by MagicCombatMethod.hits (a splash
         // gets only that), so each target's hit adds just its per-damage Magic XP.
         if (hit.getCombatType() === CombatType.MAGIC) {
             // The hit is queued before MagicCombatMethod.finished() moves the

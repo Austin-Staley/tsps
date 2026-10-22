@@ -62,6 +62,11 @@ export abstract class CombatSpell extends Spell {
   }
 
 
+  /** XP a splash pays instead of the base XP; most spells pay the same either way. */
+  public splashExperience(): number {
+    return this.baseExperience();
+  }
+
   public getAttackSpeed(): number {
     return 5;
   }
