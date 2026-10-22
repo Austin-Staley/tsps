@@ -149,6 +149,12 @@ is not "three ticks later": wait bounded and verify the new plane/area/object.
 stream, not a saved-state read; use `varbitValues`/`varpValues` for current values. Messages are
 returned once per call.
 
+Keep the raw response when reducing observations for logs. Nearby floor items are in
+`groundItems`; reading a guessed `ground` field and defaulting it to `[]` falsely reports
+missing spawns. Assert required response fields before using an abbreviated view as evidence.
+`ground_item_option` sends a click; it does not prove pickup. Let the action settle for a
+bounded number of ticks, then check the inventory and ground item before diagnosing a blocker.
+
 ## Stages: saved attribute is not the wire
 
 `QuestRuntime` stores each quest's progress in a persisted player attribute,
@@ -219,6 +225,10 @@ resend. Preserve existing durable saves through an explicit wire mapping when ne
 renumber saved stages blindly. The completion threshold alone does not establish every later
 post-quest wire value. The [issue 728 cache reference](../quest-helper-728-cache.md) records
 this cache snapshot, separate from gameplay or native proof.
+
+Check that a purported alias shares the actual parent and bit range. Creature of Fenkenstrain
+still has legacy helper progress in varp 399, while this cache's quest-status varbit 13715 is
+in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot update it.
 
 ## Route facts: cache, transforms, tiles, items
 
@@ -294,9 +304,16 @@ or rereading raw streams. A done report is evidence to review, not permission to
   plugin stage can differ from the helper's wire value. Test the mapping and login resend.
 - Check the named NPC transcript pages as well as the quest transcript. Post-quest and
   recovery dialogue may already exist on the NPC page; do not invent a missing-data fix.
+- Check each state-changing node's actual imported type. Spoken lines emit
+  `npc-dialogue:line`; message boxes emit `npc-dialogue:action` with `kind: "message"`.
+  Drive the real transcript runner in transition regressions: directly emitting a line
+  event for a message node can make a broken mandatory conversation look green.
 - Keep the OS process PID, execution-tool session id and OpenCode `ses_...` id distinct.
   A detached launcher must survive its parent shell (for example,
   `subprocess.Popen(..., start_new_session=True)` with separate output/error files).
+- Keep long worker histories compact: save the route checkpoint and evidence paths before
+  using OpenCode's same-session summarization at an idle boundary. Preserve baseline,
+  inventory, account ownership and unresolved findings; do not replay a verified prefix.
 - Bound focused tests with a timeout that terminates their whole process group, waits for
   exit and verifies no child remains. Killing only `node --test` can orphan its test-file
   process. If throughput drops, inspect CPU use, elapsed time, command and working directory

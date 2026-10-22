@@ -54,7 +54,20 @@ evidence remains provisional until the review passes for the same revision.
 Three frozen natural playthroughs are running: At First Light, Clock Tower and Monk's
 Friend. At First Light's mandatory route, recovery and current dialogue bindings have
 passed independent source review at the loaded revision; its nine focused tests pass.
-No natural completion has been accepted yet.
+No natural completion has been accepted yet. Monk's Friend's natural run reproduced a
+reward timing defect: ordinary law runes arrive after the party instead of at the earlier
+handover box. Its source remains frozen while persistence and post-quest checks finish.
+
+The six affected consumers outside this issue's quest list now use the regenerated node
+types and IDs, preserving their message text and removing obsolete fixture-only aliases.
+The final four focused suites pass 99 tests, including real transcript-runner checks for
+Hazelmere's lamp handover and the Khazard barman's once-only bribe. This checks compatibility
+with the import; it does not certify those six complete quest routes.
+
+Companion dumper commit `75d42c9589` also discovers the official miniquest transcript
+category and adds the full His Faithful Servants page. All 124 dialogue tests pass, and two
+fresh exports match for 3,292 generated files; existing dialogue records are unchanged by
+that addition. Its TSPS import is pending the current native batch finishing.
 
 His Faithful Servants and Museum Kudos are supporting work discovered through mandatory
 Desert Treasure II and Bone Voyage prerequisites. They are tracked separately from the

@@ -179,8 +179,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
   const ACTION_BAG_RUMMAGE = "zy3NHn";
   const ACTION_DOORS_OPEN = "D1Y7Rh";
   const ACTION_RAMARNO_DEPARTS = "i5wpmS";
-  // Wiki "unavailable"/"{{tact|...}}" markers whose branch should simply carry on.
-  const BRANCH_CONTINUE_IDS = new Set(["W0vwlg", "bEqDuA", "_siJEW"]);
+  // Mid-scene markers whose branch should simply carry on.
+  const BRANCH_CONTINUE_IDS = new Set(["W0vwlg", "KNloP7", "_siJEW"]);
   const DIALOGUE_STEP_IDS = new Set([
     ACTION_TRAIN_START,
     ACTION_FLEX_UNLOCK,
