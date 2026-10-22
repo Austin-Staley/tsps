@@ -109,6 +109,9 @@ function getCameraTileXY(renderer: WebGPURenderer): TilePoint {
 
 /** Port of getPlayerTileXY (render/render/camera/roof.ts); camera tile if no player. */
 function getPlayerTileXY(renderer: WebGPURenderer): TilePoint {
+    // A camera target (a spectator's) stands in for the player.
+    const cameraTarget = renderer.osrsClient.getCameraTargetPosition();
+    if (cameraTarget) return { x: (cameraTarget.x / 128) | 0, y: (cameraTarget.y / 128) | 0 };
     const controlledIndex = getControlledPlayerEcsIndex(renderer);
     if (controlledIndex !== undefined) {
         return {
@@ -123,7 +126,10 @@ function getPlayerTileXY(renderer: WebGPURenderer): TilePoint {
 function getPlayerBasePlane(renderer: WebGPURenderer): number {
     let rawPlane = 0;
     const idx = getControlledPlayerEcsIndex(renderer);
-    if (idx !== undefined) {
+    const cameraTarget = renderer.osrsClient.getCameraTargetPosition();
+    if (cameraTarget) {
+        rawPlane = cameraTarget.level;
+    } else if (idx !== undefined) {
         rawPlane = renderer.osrsClient.playerEcs.getLevel(idx) | 0;
     }
     return resolveBridgePromotedPlane(renderer.mapManager, rawPlane, getPlayerTileXY(renderer));

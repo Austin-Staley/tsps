@@ -414,11 +414,16 @@ function gfx(graphicId, { delay = 0, height = 0 } = {}) {
   return Object.assign(new Graphic(graphicId), { delay, height });
 }
 
+/** Whether a viewer sees a tile: 15 tiles, or as far as they see NPCs (a spectator sees the room). */
+function sees(viewer, location) {
+  return location.isViewableFromWithin?.(viewer.getLocation(), Math.max(15, viewer.getNpcViewDistance?.() ?? 15)) !== false;
+}
+
 /** A graphic on a tile, for everyone in `area` who can see it. */
 function graphicAt(area, graphicId, tile, options = {}) {
   const location = tile.getX ? tile : loc(tile);
   for (const viewer of area.getPlayers()) {
-    if (location.isViewableFrom?.(viewer.getLocation()) === false) continue;
+    if (!sees(viewer, location)) continue;
     viewer.getPacketSender().sendGraphic(gfx(graphicId, options), location);
   }
 }
@@ -431,7 +436,7 @@ function sound(player, soundId, delay = 0) {
 function areaSound(area, source, soundId, delay = 0) {
   const at = source.getLocation ? source.getLocation() : (source.getX ? source : loc(source));
   for (const viewer of area.getPlayers()) {
-    if (at.isViewableFrom?.(viewer.getLocation()) === false) continue;
+    if (!sees(viewer, at)) continue;
     sound(viewer, soundId, delay);
   }
 }

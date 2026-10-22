@@ -272,7 +272,10 @@ export function tickPass(host: WebGLOsrsRendererHost,
                 const idxListener = peListener.getIndexForServerId(
                     host.osrsClient.controlledPlayerServerId,
                 );
-                if (idxListener !== undefined) {
+                const cameraTarget = host.osrsClient.getCameraTargetPosition();
+                if (cameraTarget) {
+                    soundSystem.updateListenerPosition(cameraTarget.x, cameraTarget.y, cameraTarget.level * 128);
+                } else if (idxListener !== undefined) {
                     const px = peListener.getX(idxListener) | 0;
                     const py = peListener.getY(idxListener) | 0;
                     const level = peListener.getLevel(idxListener) | 0;

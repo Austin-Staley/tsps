@@ -1394,6 +1394,27 @@ export function encodeResetInteractionMode(worldId: number): Buffer {
 }
 
 /** Puts the camera back on the player and stops any shake (cam_reset). */
+/**
+ * cam_target: the camera (and what the client centres its view and sound on) follows a tile or
+ * another player instead of the local player, as for a spectator; cam_reset ends it.
+ */
+export function encodeCameraTarget(target: { x: number; y: number; level: number } | { player: number }): Buffer {
+  if ("player" in target) {
+    const payload = Buffer.alloc(4);
+    payload[0] = 12;
+    payload[1] = 1;
+    payload.writeUInt16BE(target.player & 0xffff, 2);
+    return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+  }
+  const payload = Buffer.alloc(7);
+  payload[0] = 12;
+  payload[1] = 0;
+  payload.writeUInt16BE(target.x & 0xffff, 2);
+  payload.writeUInt16BE(target.y & 0xffff, 4);
+  payload[6] = target.level & 0x3;
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
 export function encodeCameraReset(): Buffer {
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([0]));
 }

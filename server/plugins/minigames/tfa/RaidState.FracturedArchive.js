@@ -625,6 +625,7 @@ class Raid {
     Shared.later(player, ROOM_MOVE_DELAY, () => {
       if (this.watchers.get(player) !== watcher) return;
       this.park(player, room);
+      watchView(player, room);
       watcher.moving = false;
       const sender = player.getPacketSender();
       sender.sendVarbit(Shared.id("varbit", "SPECTATE_MODE"), 2);
@@ -663,6 +664,7 @@ class Raid {
       Shared.later(player, ROOM_MOVE_DELAY, () => {
         if (this.watchers.get(player) !== watcher) return;
         this.park(player, room);
+        watchView(player, room);
         watcher.moving = false;
         Shared.fade(player, false);
         Shared.later(player, ROOM_HUD_DELAY, () => {
@@ -907,6 +909,7 @@ class Raid {
     member.spectating = -1;
     player.sendMessage("Spectating the room. Click a fighting player's health display to spectate them.");
     player.moveTo(room.worldLoc(room.def.spectate ?? TILE.SPECTATE));
+    watchView(player, room);
     player.getMovementQueue().setBlockMovement(true).reset();
     player.setUntargetable(true);
     player.getCombat().reset();
@@ -926,12 +929,14 @@ class Raid {
     const target = slot >= 0 ? this.players.find((other) => other.getUsername() === this.roster[slot]?.getUsername()) : null;
     if (!target || this.member(target).dead) {
       member.spectating = -1;
+      watchView(player, this.room);
       sender.sendVarbit(Shared.id("varbit", "SPECTATE_SLOT"), 0);
       player.sendMessage("Spectating the room. Click a fighting player's health display to spectate them.");
       sender.closeSubInterface(Shared.id("component", "SIDE_INVENTORY"));
       return;
     }
     member.spectating = slot;
+    watchView(player, this.room, target);
     sender.sendVarbit(Shared.id("varbit", "SPECTATE_SLOT"), slot + 1);
     player.sendMessage(`Spectating ${Shared.displayName(target)}. Click a fighting player's health display to spectate them.`);
     this.sendSpectatedInventory(player, target);
@@ -1133,11 +1138,34 @@ const INVOTHER_INIT_SCRIPT = 158;
 
 /** The inventory and combat tabs back after spectating. */
 function restoreTabs(player) {
+  endWatchView(player);
   const sender = player.getPacketSender();
   sender.sendSubInterface(Shared.id("component", "SIDE_INVENTORY"), Shared.id("iface", "INVENTORY"), 1);
   sender.sendTabInterface(0, Shared.id("iface", "COMBAT"));
   Shared.core().WeaponInterfaceManager.assign(player);
   player.getInventory().refreshItems();
+}
+
+/** How far a spectator sees players and NPCs: the room, from its parking spot in the room's map square. */
+const WATCH_VIEW_DISTANCE = 64;
+
+/**
+ * A spectator's view, the dead's and outside watchers' (captured cam_target): the camera on the
+ * room's middle, or on the fighter they follow, with the room's players and NPCs in sight.
+ */
+function watchView(player, room, target = null) {
+  player.setFixedViewDistance?.(WATCH_VIEW_DISTANCE);
+  player.setNpcViewDistance?.(WATCH_VIEW_DISTANCE);
+  const sender = player.getPacketSender();
+  if (target) sender.sendCameraTarget({ player: target.getIndex() });
+  else if (room?.def.camera) sender.sendCameraTarget({ x: room.def.camera.x, y: room.def.camera.y, level: room.def.camera.z ?? 0 });
+}
+
+/** Back to their own view (captured cam_reset). */
+function endWatchView(player) {
+  player.setFixedViewDistance?.(null);
+  player.setNpcViewDistance?.(null);
+  player.getPacketSender().sendCameraReset();
 }
 
 /** The dead watch from the south-west corner of their room's map square (captured: local tile 1,1). */
@@ -1147,7 +1175,7 @@ function corner(mx, my, z = 0) {
 
 /**
  * The rooms, from the captures: where the party arrives, the corner the dead watch from, the
- * room's music, the Nexus section its boss belongs to, and where the Alliance Navigator appears
+ * tile a spectator's camera looks at (cam_target), the room's music, the Nexus section its boss belongs to, and where the Alliance Navigator appears
  * once it falls. Bosses whose arrival isn't captured carry an estimate.
  */
 const ROOMS = {
@@ -1156,11 +1184,13 @@ const ROOMS = {
     music: MUSIC.ARCHIVE_GUARDIAN,
     arrival: TILE.RAID_ARRIVAL,
     spectate: TILE.SPECTATE,
+    camera: { x: 4127, y: 5599, z: 0 },
   },
   HUB: {
     key: "HUB", name: "The Nexus",
     arrival: { x: 4127, y: 5590, z: 2 },
     spectate: corner(64, 87, 2),
+    camera: { x: 4127, y: 5599, z: 2 },
   },
   BORK: {
     key: "BORK", name: "Bork", section: 1,
@@ -1169,6 +1199,7 @@ const ROOMS = {
     /** The Archive transporter's landing tile in the arena (captured: where fighters first stand). */
     transporter: { x: 4184, y: 5599, z: 0 },
     spectate: corner(65, 87),
+    camera: { x: 4191, y: 5599, z: 0 },
     navigator: { x: 4184, y: 5599, z: 0 },
   },
   EZEKIEL: {
@@ -1178,6 +1209,8 @@ const ROOMS = {
     /** The Archive transporter's landing tile in the arena (captured: where fighters first stand). */
     transporter: { x: 4067, y: 5535, z: 0 },
     spectate: corner(63, 86),
+    // Estimate: as Bork's, Dreadnoth's and Xarth's (their square + 31,31); not captured.
+    camera: { x: 4063, y: 5535, z: 0 },
     navigator: { x: 4067, y: 5535, z: 0 },
   },
   DREADNOTH: {
@@ -1187,6 +1220,7 @@ const ROOMS = {
     /** The Archive transporter's landing tile in the arena (captured: where fighters first stand). */
     transporter: { x: 4184, y: 5663, z: 0 },
     spectate: corner(65, 88),
+    camera: { x: 4191, y: 5663, z: 0 },
     navigator: { x: 4184, y: 5663, z: 0 },
   },
   XARTH: {
@@ -1196,6 +1230,7 @@ const ROOMS = {
     /** The Archive transporter's landing tile in the arena (captured: where fighters first stand). */
     transporter: { x: 4184, y: 5535, z: 0 },
     spectate: corner(65, 86),
+    camera: { x: 4191, y: 5535, z: 0 },
     navigator: { x: 4184, y: 5535, z: 0 },
   },
   OCELLUS: {
@@ -1204,11 +1239,13 @@ const ROOMS = {
     /** Estimate: the spectator only saw the room; this is south of its entrance. */
     arrival: { x: 4127, y: 5656, z: 1 },
     spectate: corner(64, 88, 1),
+    camera: { x: 4127, y: 5673, z: 1 },
   },
   VAULT: {
     key: "VAULT", name: "The Vault",
     arrival: { x: 4127, y: 5779, z: 2 },
     spectate: corner(64, 90, 2),
+    camera: { x: 4127, y: 5798, z: 2 },
   },
 };
 
