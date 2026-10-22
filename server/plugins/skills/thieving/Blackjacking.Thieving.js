@@ -10,6 +10,7 @@ const UNCONSCIOUS_PICKPOCKET_ANIMATION = 827;
 // shortcut: Wiki gives two pickpockets but no exact window, calibrate these timings from an OSRS capture.
 const KNOCKOUT_TICKS = 6;
 const FEUD_BLACKJACK_STAGE = 9;
+const FEUD_QUEST_KEY = "the_feud";
 const TARGET_NAMES = ["Bandit", "Menaphite Thug"];
 
 function targetFor(npcId) {
@@ -25,7 +26,9 @@ function ready(event) {
   if (!supported(event.npcId)) return false;
   event.handled = true;
   const { player } = event;
-  if ((Number(player.getAttribute("quest.the_feud.stage")) || 0) < FEUD_BLACKJACK_STAGE) {
+  const quest = { player, key: FEUD_QUEST_KEY, stage: 0 };
+  api.emitCustomEvent("quest:get-stage", quest);
+  if (quest.stage < FEUD_BLACKJACK_STAGE) {
     player.sendMessage("You need to learn how to use a blackjack during The Feud first.");
     return false;
   }

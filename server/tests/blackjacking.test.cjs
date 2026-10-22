@@ -8,12 +8,15 @@ const attach = require('../plugins/skills/thieving/Blackjacking.Thieving');
 const base = PluginManager.getCoreApi();
 const tasks = [], log = [], listeners = new Map();
 const core = { ...base, World: { getNpcs: () => [] }, CombatFactory: { inCombat: () => false }, TaskManager: { submit: (task) => tasks.push(task) }, ItemDefinition: { forId: () => ({ getName: () => 'Maple blackjack(o)' }) } };
-const api = { core, onNpcsInteraction() {}, onNpcInteraction() {}, onCustomEvent: (name, handler) => listeners.set(name, handler), emitCustomEvent: (name, event) => listeners.get(name)?.(event), getCombatFactory: () => core.CombatFactory, getTaskManager: () => core.TaskManager };
+const api = { core, onNpcsInteraction() {}, onNpcInteraction() {}, onCustomEvent: (name, handler) => listeners.set(name, handler), emitCustomEvent: (name, event) => {
+  if (name === 'quest:get-stage') event.stage = event.player.questStage;
+  else listeners.get(name)?.(event);
+} };
 Pickpocket.register(api); attach(api);
 const B = attach._test;
 function event({ level = 65, stage = 9, id = core.NpcIdentifiers.MENAPHITE_THUG } = {}) {
   const player = {
-    getAttribute: () => stage, getEquipment: () => ({ get: () => ({ getId: () => core.ItemIdentifiers.MAPLE_BLACKJACK_O_ }) }),
+    questStage: stage, getEquipment: () => ({ get: () => ({ getId: () => core.ItemIdentifiers.MAPLE_BLACKJACK_O_ }) }),
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }), getSkillManager: () => ({ getCurrentLevel: () => level, addExperiences: (_skill, amount) => log.push(['xp', amount]) }),
     getInventory: () => ({ isFull: () => true, getAmount: () => 100 }),
     performAnimation: (animation) => log.push(['player anim', animation.getId()]), sendMessage: (message) => log.push(message), isRegistered: () => true,

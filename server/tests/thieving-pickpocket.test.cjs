@@ -22,11 +22,9 @@ const combat = {
 };
 const { PluginManager } = require("../dist/plugins/PluginManager");
 Thieving.register({
-    core: PluginManager.getCoreApi(),
+    core: { ...PluginManager.getCoreApi(), CombatFactory: combat, TaskManager: { submit: (task) => { task.setRunning(true); submitted.push(task); } } },
     onCustomEvent: () => {},
     onNpcsInteraction: (names, actions) => names.forEach((name) => Object.keys(actions).forEach((action) => interactions.push([name, action]))),
-    getTaskManager: () => ({ submit: (task) => { task.setRunning(true); submitted.push(task); } }),
-    getCombatFactory: () => combat,
     onNpcInteraction: (name, actions) => interactions.push([name, Object.keys(actions)[0]]),
     onObjectInteraction: () => {},
     onItemAction: () => {},

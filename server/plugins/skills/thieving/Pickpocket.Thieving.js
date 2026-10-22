@@ -67,8 +67,6 @@ const CAUGHT_HOLD_MS = 1800;
 
 let core;
 let pluginApi;
-let TaskManager;
-let CombatFactory;
 
 /** "5/128", "1/5.65", "Always" or "0" as a probability. */
 function rateOf(rate) {
@@ -256,7 +254,7 @@ function fail(player, npc, target, name) {
   npc.forceChat(target.catchLine ?? DEFAULT_CATCH_LINE);
   wearOutGloves(player);
   caughtAt.set(player, Date.now());
-  TaskManager.submit(caughtTask(player, npc, target));
+  core.TaskManager.submit(caughtTask(player, npc, target));
 }
 
 /**
@@ -299,7 +297,7 @@ function caughtTask(player, npc, target) { return new (class extends core.Task {
     }
     player.performAnimation(new core.Animation(player.getBlockAnim()));
     core.Sounds.sendSound(player, core.Sound.THIEVING_STUNNED);
-    CombatFactory.stunTicks(player, PICKPOCKET_STUN_TICKS, true, { graphic: new core.Graphic(STUN_GRAPHIC_ID, 0, 124), message: false });
+    core.CombatFactory.stunTicks(player, PICKPOCKET_STUN_TICKS, true, { graphic: new core.Graphic(STUN_GRAPHIC_ID, 0, 124), message: false });
     this.stunned = true;
   }
 })(player, npc, target); }
@@ -350,11 +348,11 @@ function pickpocket(event) {
   }
   // The stun's last tick still holds the player in place but no longer stops a pickpocket.
   if (Date.now() - (caughtAt.get(player) ?? 0) < CAUGHT_HOLD_MS || player.getTimers().getTicks(core.TimerKey.STUN) > PICKPOCKET_STUN_TICKS - PICKPOCKET_STUN_LOCK_TICKS) return;
-  if (CombatFactory.inCombat(player)) {
+  if (core.CombatFactory.inCombat(player)) {
     player.sendMessage("You must wait a few seconds after being in combat to do this.");
     return;
   }
-  if (CombatFactory.inCombat(npc)) {
+  if (core.CombatFactory.inCombat(npc)) {
     player.sendMessage("That npc is currently in combat and cannot be pickpocketed.");
     return;
   }
@@ -375,7 +373,7 @@ function pickpocket(event) {
   player.sendMessage(`You attempt to pick ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, 10);
-  TaskManager.submit(pickpocketTask(player, npc, request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : target, name));
+  core.TaskManager.submit(pickpocketTask(player, npc, request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : target, name));
 }
 
 /** Coins in one pouch of this kind (a range rolls per pouch). */
@@ -387,8 +385,6 @@ function pouchCoins(pouchId, random = Math.random) {
 function register(api) {
   core = api.core;
   pluginApi = api;
-  TaskManager = api.getTaskManager();
-  CombatFactory = api.getCombatFactory();
   api.onNpcsInteraction([...new Set(TARGETS.filter((t) => !t.option).flatMap((t) => t.npcs))], { Pickpocket: pickpocket });
   api.onNpcInteraction("Digsite workman", { "Steal-from": pickpocket });
 }
