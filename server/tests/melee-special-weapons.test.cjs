@@ -29,10 +29,11 @@ const items = JSON.parse(
 );
 
 before(() => {
-  require("../plugins/combat/SpecialAttacks.plugin").register({
-    core: PluginManager.getCoreApi(),
-    registerCombatSpecial: CombatSpecial.register,
-  });
+  // Only the specials registry matters here; other hooks the specials register are no-ops.
+  const api = { core: PluginManager.getCoreApi(), registerCombatSpecial: CombatSpecial.register };
+  require("../plugins/combat/SpecialAttacks.plugin").register(
+    new Proxy(api, { get: (target, key) => (key in target ? target[key] : () => {}) }),
+  );
 });
 
 /** A player-shaped attacker that records what the specials do to it. */
