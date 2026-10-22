@@ -229,8 +229,10 @@ export class WeaponProfiles {
             projectiles: [{ delay: 32, lengthAdjustment: 0, stepMultiplier: 5, startHeight: 43, endHeight: 31 }],
             fireSound: Sound.THROW_DART,
         });
-        this.register({
-            itemIds: [ItemIdentifiers.RUNE_THROWNAXE, ItemIdentifiers.RUNE_THROWNAXE_2, ItemIdentifiers.DRAGON_THROWNAXE, ItemIdentifiers.MORRIGANS_THROWING_AXE, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_],
+        this.add(WeaponInterfaces.THROWNAXE, {
+            attackDistance: 4,
+            longRangeDistance: 6,
+            longRangeFightType: FightType.THROWNAXE_LONGRANGE,
             rangedDefenceType: "light",
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [THROWN_PROJECTILE],

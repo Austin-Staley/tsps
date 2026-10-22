@@ -50,6 +50,9 @@ function wielding(weaponId, fightType, ammo = new Item(-1, 0)) {
     getFightType: () => fightType,
     getSkillManager: () => ({ getCurrentLevel: () => 99, addExperience: (skill, amount) => experience.push([skill.getName?.() ?? skill, amount]) }),
     sendMessage() {},
+    performGraphicInSlot() {},
+    performAnimation() {},
+    getAttackAnim: () => 5247,
     experience,
   };
   player.getBaseAttackSpeed = () => Player.prototype.getBaseAttackSpeed.call(player);
@@ -123,7 +126,7 @@ test("reach is one tile and speed is 5, 4 for Flare", () => {
   }
 });
 
-test("every style plays the salamander attack animation", () => {
+test("salamander style data retains the melee animation, overridden by Flare and Blaze", () => {
   for (const style of ["SALAMANDER_SCORCH", "SALAMANDER_FLARE", "SALAMANDER_BLAZE"]) {
     assert.equal(FightType[style].getAnimation(), 5247, `${style}`);
   }
@@ -150,6 +153,7 @@ test("a Flare burns exactly one tar and drops nothing", () => {
 test("Scorch and Blaze require the matching tar and burn exactly one each", (t) => {
   const { MeleeCombatMethod } = PluginManager.getCoreApi();
   const { MagicCombatMethod } = PluginManager.getCoreApi();
+  t.mock.method(PluginManager.getCoreApi().Sounds, "sendSound", () => {});
   t.mock.method(MeleeCombatMethod.prototype, "start", () => {});
   t.mock.method(MagicCombatMethod.prototype, "start", () => {});
   for (const style of [FightType.SALAMANDER_SCORCH, FightType.SALAMANDER_BLAZE]) {
@@ -178,4 +182,35 @@ test("Blaze applies equipment magic damage after its hidden salamander bonus", (
   player.getBonusManager = () => ({ getOtherBonus: () => [0, 0, 15] });
   assert.equal(spell.maximumHit(), 24);
   assert.equal(DamageFormulas.getMagicMaxhit(player), 27);
+});
+
+test("captured salamander attacks use an attacker flame, with no projectile or impact", (t) => {
+  const core = PluginManager.getCoreApi();
+  const sounds = [];
+  t.mock.method(core.Sounds, "sendSound", (_player, sound) => sounds.push([sound.getId(), sound.getLoopType()]));
+  t.mock.method(core.MagicCombatMethod.prototype, "start", () => {});
+  for (const [style, sound, animation] of [
+    [FightType.SALAMANDER_SCORCH, 738, 5247],
+    [FightType.SALAMANDER_FLARE, 736, 65535],
+    [FightType.SALAMANDER_BLAZE, 740, 65535],
+  ]) {
+    const player = wielding(I.RED_SALAMANDER, style, new Item(I.TARROMIN_TAR, 2));
+    const graphics = [], animations = [];
+    player.performGraphicInSlot = (slot, graphic) => graphics.push([slot, graphic.getId(), graphic.getDelay(), graphic.getHeight()]);
+    player.performAnimation = (value) => animations.push(value.getId());
+    const method = registered.resolvers[0].resolve(player);
+    method.start(player, { getLocation: () => null });
+    assert.deepEqual(graphics, [[1, 952, 0, 104]]);
+    assert.deepEqual(sounds.at(-1), [sound, 1]);
+    if (style !== FightType.SALAMANDER_BLAZE) {
+      assert.deepEqual(animations, [animation]);
+      assert.deepEqual(sounds.at(-1), [sound, 1]);
+    } else {
+      const spell = Salamanders._test.blazeSpell(player);
+      assert.equal(spell.castAnimation().getId(), animation);
+      assert.equal(spell.castProjectile(), undefined);
+      assert.equal(spell.endGraphic(), undefined);
+    }
+    assert.equal(player.getEquipment().get(Equipment.AMMUNITION_SLOT).getAmount(), 1);
+  }
 });

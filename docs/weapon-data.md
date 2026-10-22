@@ -110,7 +110,11 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
   cap; BH rolls minimum to maximum, with minima 7/10. Seeking dragon arrows use Descent of
   Dragons and their successful ordinary hits have a minimum of 3. Painted, LMS, BH,
   corrupted and Deadman bows share ammunition and special registration. The dark bow's
-  ordinary range is 10 tiles.
+  ordinary range is 10 tiles. The BH bow now refuses attacks outside approved contexts.
+  Castle Wars, the Fight Pit and the actual combat ring inside a player-owned house
+  answer a shared custom-event query using their own area/room data. Daimon's Crater,
+  Clan Wars, Soul Wars and Clan Hall rings have no implementation to approve them yet;
+  unrestricted wilderness, lobby, ordinary POH tiles and unrelated PvP areas stay blocked.
 - [Hit delay](https://oldschool.runescape.wiki/w/Hit_delay?action=raw): Snapshot now creates
   two single-arrow hits a tick apart. Chainhit uses the shared thrown projectile profile's
   distance-based flight for each leg; its hits land at each leg's arrival. Its five-target
@@ -149,7 +153,15 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
   explicitly defines Bonus as the hidden salamander bonus (92), with equipment magic
   damage applied afterwards. The existing shared formula already does this; a regression
   verifies that +15% gear takes the level-99 Blaze base of 24 to 27. Gear is not added to
-  the hidden Bonus term. Exact Blaze projectile/impact mapping is still unverified: cache
-  FIREBREATH/POISONBREATH/EXPLODE names alone do not establish which this attack uses.
+  the hidden Bonus term. Actual OSRS [rsprox recording 1607](https://rsprox.net/download/1607)
+  (13 October 2024, revision 225) establishes the visuals: red salamander 10147, combat-style
+  varp 43 set to 2 at tick 506, then Blaze at ticks 508/513 sends attacker spotanim **952**
+  in slot **1**, height **104**, delay 0, sequence reset **65535**, and sound **740**.
+  Target hits arrive at 509/514 with no projectile, map animation or target spotanim.
+  Adding projectile and impact effects would contradict this capture. Scorch uses the same
+  attacker flame with animation 5247/sound 738; Flare uses the flame with reset 65535/sound
+  736. Tar 10144 decrements for every captured attack: 1000 to 996 across four Scorches, 995
+  after Flare, then 994/993 after two Blazes. Raw recording logs contain account information
+  and are intentionally excluded from the repository.
 - The wand of the praesul is a RuneScape 3 item; neither the OSRS Wiki wand list nor this
   cache has one. No unrelated item or invented identifier was added.

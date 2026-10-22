@@ -12,6 +12,12 @@ const BLAZE_MAGIC_BONUS_BY_ITEM = {
   BLACK_SALAMANDER: 92,
 };
 const TAR_PER_ATTACK = 1;
+const ATTACK_GRAPHIC = 952; // cache: firebreath; rsprox 1607
+const ATTACK_GRAPHIC_SLOT = 1;
+const ATTACK_GRAPHIC_HEIGHT = 104;
+const SCORCH_SOUND = 738;
+const FLARE_SOUND = 736;
+const BLAZE_SOUND = 740;
 const ATTACK_SLASH = 1; // BonusManager.ATTACK_SLASH, the Scorch style's attack type
 const ATTACK_MAGIC = 3; // BonusManager.ATTACK_MAGIC, the Blaze style's attack type
 const BLAZE_ATTACK_RANGE = 1;
@@ -45,7 +51,7 @@ function blazeSpell(player) {
     spellId: () => weaponOf(player).getId(),
     maximumHit: () =>
       blazeBaseMaxHit(player.getSkillManager().getCurrentLevel(core.Skill.MAGIC), hiddenBonus(player) ?? 0),
-    castAnimation: () => new core.Animation(player.getAttackAnim()),
+    castAnimation: () => core.Animation.DEFAULT_RESET_ANIMATION,
     startGraphic: () => undefined,
     castProjectile: () => undefined,
     endGraphic: () => undefined,
@@ -73,6 +79,7 @@ function blazeMethod() {
 
     start(character, target) {
       super.start(character, target);
+      playFlame(character, BLAZE_SOUND);
       decrementAmmo(character.getAsPlayer(), target.getLocation(), 1);
     }
 
@@ -123,13 +130,19 @@ function hasTar(player, silent = false) {
   return false;
 }
 
+function playFlame(character, soundId) {
+  character.performGraphicInSlot(ATTACK_GRAPHIC_SLOT, new core.Graphic(ATTACK_GRAPHIC, 0, ATTACK_GRAPHIC_HEIGHT));
+  core.Sounds.sendSound(character, new core.Sound(soundId, 1, 0, 1));
+}
+
 function scorchMethod() {
   if (scorchCombatMethod) return scorchCombatMethod;
   scorchCombatMethod = new (class extends core.MeleeCombatMethod {
     canAttack(character) { return hasTar(character.getAsPlayer()); }
     canPursue(character) { return hasTar(character.getAsPlayer(), true); }
     start(character, target) {
-      super.start(character, target);
+      character.performAnimation(new core.Animation(character.getAttackAnim(target)));
+      playFlame(character, SCORCH_SOUND);
       decrementAmmo(character.getAsPlayer(), target.getLocation(), 1);
     }
   })();
@@ -139,6 +152,11 @@ function scorchMethod() {
 function flareMethod() {
   if (flareCombatMethod) return flareCombatMethod;
   flareCombatMethod = new (class extends core.RangedCombatMethod {
+    start(character, target) {
+      character.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
+      playFlame(character, FLARE_SOUND);
+      decrementAmmo(character.getAsPlayer(), target.getLocation(), 1);
+    }
     hits(character, target) { return [new core.PendingHit(character, target, this, 0)]; }
   })();
   return flareCombatMethod;
