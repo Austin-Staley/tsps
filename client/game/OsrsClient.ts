@@ -7174,8 +7174,14 @@ export class OsrsClient {
     }
 
     /** Display an item's cache-defined Examine text in game chat. */
-    examineWidgetItem(widget: { itemId?: number } | null | undefined): boolean {
-        const itemId = widget?.itemId ?? -1;
+    examineWidgetItem(widget: { itemId?: number; fileId?: number } | null | undefined): boolean {
+        // A worn-equipment slot (387, 84) keeps its ops on a static layer and draws the item in a
+        // CC_CREATE child (script 546), so a static widget without an item examines its child's.
+        const own = widget?.itemId ?? -1;
+        const itemId = own > 0 || widget?.fileId === -1
+            ? own
+            : this.widgetManager?.getDynamicChildrenByParent(widget as any)
+                .find((child) => (child.itemId ?? -1) > 0)?.itemId ?? -1;
         if (!(itemId > 0)) return false;
         try {
             const examine = this.objTypeLoader?.load?.(itemId)?.examine;

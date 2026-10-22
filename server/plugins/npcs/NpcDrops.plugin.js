@@ -580,13 +580,16 @@ function dropFor(player, npc, npcId, location, damagers = []) {
   return drops.length;
 }
 
-/** Puts rolled drops on the ground for `player` (noted where the table says), or coins in the pack. */
+/**
+ * Puts rolled drops on the ground for `player` (noted where the table says), or currency in the
+ * pack when a worn ring of wealth has Coin collection on.
+ */
 function placeDrops(player, drops, location) {
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) {
       continue;
     }
-    if (CURRENCY_IDS.has(drop.itemId) && autoCollectCurrencies(player)) {
+    if (CURRENCY_IDS.has(drop.itemId) && isWearingRingOfWealth(player) && autoCollectCurrencies(player)) {
       const inventory = player.getInventory();
       if (inventory.contains(drop.itemId) || inventory.getFreeSlots() > 0) {
         inventory.adds(drop.itemId, drop.amount);
@@ -690,5 +693,5 @@ module.exports = {
   _test: { loadDrops, tablesByNpc, sharedTables },
 
   // Exposed for the smoke test.
-  __internals: { loadDrops, rollTable, rollSharedTable, tablesByNpc, sharedTables },
+  __internals: { loadDrops, rollTable, rollSharedTable, placeDrops, tablesByNpc, sharedTables },
 };
