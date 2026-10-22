@@ -109,15 +109,16 @@ export class Ammunition {
         return new Ammunition(itemId, new Graphic(955, 0, GraphicHeight.HIGH), 27, 122)
     }
 
+    // Launch/travel spotanims from the cache (BLACK_DART_*, AMETHYST_DART_*, II_DRAGON_DART_*); strengths from the Wiki.
     public static readonly BRONZE_DART = new Ammunition(806, new Graphic(232, 0, GraphicHeight.HIGH), 226, 1)
-    public static readonly IRON_DART = new Ammunition(807, new Graphic(233, 0, GraphicHeight.HIGH), 227, 4)
-    public static readonly STEEL_DART = new Ammunition(808, new Graphic(234, 0, GraphicHeight.HIGH), 228, 6)
-    public static readonly MITHRIL_DART = new Ammunition(809, new Graphic(235, 0, GraphicHeight.HIGH), 229, 8)
-    public static readonly ADAMANT_DART = new Ammunition(810, new Graphic(236, 0, GraphicHeight.HIGH), 230, 13)
-    public static readonly RUNE_DART = new Ammunition(811, new Graphic(237, 0, GraphicHeight.HIGH), 231, 17)
-    public static readonly BLACK_DART = new Ammunition(ItemIdentifiers.BLACK_DART, new Graphic(237, 0, GraphicHeight.HIGH), 231, 6)
-    public static readonly AMETHYST_DART = new Ammunition(ItemIdentifiers.AMETHYST_DART, new Graphic(1123, 0, GraphicHeight.HIGH), 226, 28)
-    public static readonly DRAGON_DART = new Ammunition(11230, new Graphic(1123, 0, GraphicHeight.HIGH), 226, 24)
+    public static readonly IRON_DART = new Ammunition(807, new Graphic(233, 0, GraphicHeight.HIGH), 227, 2)
+    public static readonly STEEL_DART = new Ammunition(808, new Graphic(234, 0, GraphicHeight.HIGH), 228, 3)
+    public static readonly MITHRIL_DART = new Ammunition(809, new Graphic(235, 0, GraphicHeight.HIGH), 229, 9)
+    public static readonly ADAMANT_DART = new Ammunition(810, new Graphic(236, 0, GraphicHeight.HIGH), 230, 17)
+    public static readonly RUNE_DART = new Ammunition(811, new Graphic(237, 0, GraphicHeight.HIGH), 231, 26)
+    public static readonly BLACK_DART = new Ammunition(ItemIdentifiers.BLACK_DART, new Graphic(273, 0, GraphicHeight.HIGH), 34, 6)
+    public static readonly AMETHYST_DART = new Ammunition(ItemIdentifiers.AMETHYST_DART, new Graphic(1937, 0, GraphicHeight.HIGH), 1936, 28)
+    public static readonly DRAGON_DART = new Ammunition(11230, new Graphic(1123, 0, GraphicHeight.HIGH), 1122, 35)
     // RSProx capture of The Blood Moon Rises records the stake's cache launch and
     // travel graphics (3989/3987). The stake is its own stackable ammunition.
     public static readonly BLISTERWOOD_STAKE = new Ammunition(ItemIdentifiers.BLISTERWOOD_STAKE, new Graphic(3989, 0, GraphicHeight.HIGH), 3987, 14)
@@ -405,6 +406,8 @@ export class RangedWeapon {
     public static readonly MITHRIL_DART = new RangedWeapon([809], [Ammunition.MITHRIL_DART], RangedWeaponType.DART)
     public static readonly ADAMANT_DART = new RangedWeapon([810], [Ammunition.ADAMANT_DART], RangedWeaponType.DART)
     public static readonly RUNE_DART = new RangedWeapon([811], [Ammunition.RUNE_DART], RangedWeaponType.DART)
+    public static readonly BLACK_DART = new RangedWeapon([ItemIdentifiers.BLACK_DART], [Ammunition.BLACK_DART], RangedWeaponType.DART)
+    public static readonly AMETHYST_DART = new RangedWeapon([ItemIdentifiers.AMETHYST_DART], [Ammunition.AMETHYST_DART], RangedWeaponType.DART)
     public static readonly DRAGON_DART = new RangedWeapon([11230], [(Ammunition.DRAGON_DART)], RangedWeaponType.DART)
     public static readonly BLISTERWOOD_STAKE = new RangedWeapon([ItemIdentifiers.BLISTERWOOD_STAKE], [Ammunition.BLISTERWOOD_STAKE], RangedWeaponType.DART)
 

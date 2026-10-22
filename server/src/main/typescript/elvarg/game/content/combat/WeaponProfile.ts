@@ -351,11 +351,11 @@ export class WeaponProfiles {
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_BOW_QUIET,
         });
-        // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise, 9-tile range.
+        // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise, 9-tile range (10 on the long fuse).
         const chinchompa = {
             attackSpeed: 4,
             attackDistance: 9,
-            longRangeDistance: 9,
+            longRangeDistance: 10,
             longRangeFightType: FightType.CHINCHOMPA_LONG_FUSE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [THROWN_PROJECTILE],
