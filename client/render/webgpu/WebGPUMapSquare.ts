@@ -5,7 +5,7 @@ import { getMapSquareId } from "../../rs/map/MapFileIndex";
 import { Scene } from "../../rs/scene/Scene";
 import type { DrawRange } from "../DrawRange";
 import { sceneryRangeVisible } from "../SceneryVisibility";
-import { LocAnimated } from "../loc/LocAnimated";
+import { LocAnimated, type LocFrameSoundHandler } from "../loc/LocAnimated";
 import type { SeqFrameLoader } from "../../rs/model/seq/SeqFrameLoader";
 import type { SeqTypeLoader } from "../../rs/config/seqtype/SeqTypeLoader";
 import type { SdMapData } from "../loader/SdMapData";
@@ -711,12 +711,15 @@ export class WebGPUMapSquare implements MapSquare {
         LocAnimated.carryOver(previous, this.locsAnimated);
     }
 
-    /** Advances animated locs (Client.cycle timing) and points their ranges at the frame (draw2.ts). */
-    updateAnimatedLocs(seqFrameLoader: SeqFrameLoader, cycle: number): void {
+    /**
+     * Advances animated locs (Client.cycle timing) and points their ranges at the frame (draw2.ts).
+     * `onFrameSound` plays their frame sounds; the shadow pass advances them again without it.
+     */
+    updateAnimatedLocs(seqFrameLoader: SeqFrameLoader, cycle: number, onFrameSound?: LocFrameSoundHandler): void {
         const ranges = this.locRanges;
         if (!ranges) return;
         for (const loc of this.locsAnimated) {
-            loc.update(seqFrameLoader, cycle);
+            loc.update(seqFrameLoader, cycle, onFrameSound);
             for (const alpha of [false, true]) {
                 const frame = (alpha ? loc.anim.framesAlpha : loc.anim.frames)?.[loc.drawFrame()];
                 for (const lod of [false, true]) {

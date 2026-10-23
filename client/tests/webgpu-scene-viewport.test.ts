@@ -41,6 +41,7 @@ Object.assign(renderer, {
         inputManager: { wheelDeltaY: 0 },
         playerEcs: { size: () => 0 },
         worldViewManager: { interpolateEntities: noop },
+        ambientSounds: { frame: noop },
         widgetManager: { rootInterface: 548 },
         roofsHidden: true,
         renderDistance: 25,
