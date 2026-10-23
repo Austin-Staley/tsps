@@ -208,3 +208,101 @@ Raw latest artifacts: `/tmp/main-nextbatch-camera-{native,cpu6,scale2}.json`,
 `/tmp/tsps-nextbatch-main-comparison.json`,
 `/tmp/tsps-npc-cadence-two-*.json`, `/tmp/world-map-nextbatch-lan.json` and
 `/tmp/tsps-nextbatch-npc-gpu-readback.json`.
+
+## RLHD comparison follow-up (23 October)
+
+Four additional changes were based on the current RLHD zone renderer:
+
+- WebGPU actor preparation rejects previously measured CPU poses outside both the
+  camera and current HD shadow frusta. Bounds include opaque/alpha vertices,
+  fractional positions, yaw and terrain heights. Unknown/GPU-label poses and
+  deck-local coordinates stay visible. This does not remove simulation or GFX
+  ownership. The nearby benchmark NPCs were retained by the shadow volume: this
+  is not a claim that actor culling speeds up this particular crowd.
+- Evicted actor GPU buffers enter an exact-size/usage pool after the previous frame
+  has been submitted. Queue-ordered uploads preserve in-flight reads. The idle
+  pool is capped at 16 MiB and releases all buffers on disposal; existing live
+  geometry cache limits remain unchanged.
+- Scene construction yields between 8×8 terrain chunks, instance chunks and loc
+  groups, and cancels superseded WebGPU normal/instance/boat builds. Shared vars,
+  NPC snapshots and custom content update only after a foreground build settles,
+  so yielding cannot produce mixed-input geometry or poisoned persisted records.
+  Nearby scene publication remains atomic. This is granular construction and
+  cancellation, **not** a complete independently reusable RLHD zone cache.
+- WebGPU scenery replays stable command lists in render bundles. Lists are split
+  into at most 32-range sections, preserving order while limiting animation
+  invalidation. Visibility/roof/LOD/animation changes still take effect immediately;
+  resource and pipeline changes replace recordings. Continuously changing lists
+  use direct submission until a list repeats. The benchmark counts replayed draws
+  separately from draw calls encoded in JavaScript.
+
+The initial whole-batch bundle prototype regressed CPU time when a single animated
+loc invalidated a large shadow batch; it was replaced before the final captures.
+In six alternating CPU×6 panning windows on the same final build, bundle submission
+averaged **7.58 ms** versus **7.87 ms** for direct submission of the same command
+lists (about 3.6%). This isolates bundle replay, not every change in this batch.
+It is a small local result, not a physical-device FPS guarantee.
+
+Five paired warm Lumbridge builds produced identical complete `SdMapData`, including
+all geometry arrays, draw/LOD ranges, bridge/picking data and minimaps. Cooperative
+scheduling added approximately 0.4–1.9% mean elapsed time across the two local runs.
+The 8 ms yield target is not a hard cap: individual synchronous lighting/model
+operations still produced gaps up to 80.4 ms. The benefit is accepting cancellation
+between smaller units without exposing partially built nearby regions.
+
+### Fresh comparison with main
+
+Main was rebuilt at `f3ab3c172deb9fb96360198bc7ae32cff4052f3e`. Candidate rendering
+was `28f2788c9`; the subsequent worker input gate changes only build-time update
+ordering. The same driver SHA-256
+`662964c3c017c5fb6a838b7eea614a0e6cca147df2b73b381309e598b607ddfe`
+ran both clients: 3104,3508,0, the four requested plugins, distance 25, 4× MSAA,
+FPS limit 240, 16 seconds warm-up, four 4-second idle/drag/drag/idle windows,
+discarding 1.5 seconds per window. The following combines both drag windows.
+Only one benchmark client rendered at a time; builds/tests were stopped for the
+final captures. Both fresh browsers delivered 60 Hz; earlier exploratory captures
+had a 30 Hz callback ceiling and are not used in this table.
+
+| Render-thread metric | Main f3ab3c172 | Candidate |
+| --- | ---: | ---: |
+| Native CPU mean | 5.27 ms | 1.96 ms |
+| Native CPU p95 / p99 | 9.02 / 13.36 ms | 2.98 / 3.59 ms |
+| Native FPS | 60 | 60 |
+| CPU×6 CPU mean | 25.79 ms | 7.09 ms |
+| CPU×6 CPU p95 / p99 | 41.04 / 64.69 ms | 8.94 / 10.93 ms |
+| CPU×6 FPS | 33.4 | 60 |
+| CPU×6 frame gaps above 25 ms | 99 | 0 |
+| Four times pixels CPU mean / p95 | 4.14 / 5.31 ms | 1.35 / 1.65 ms |
+| Four times pixels FPS | 60 | 60 |
+| Native executed indexed draws/frame | 533.84 | 225.10 |
+| Native encoded indexed draw calls/frame | 533.84 | 125.37 |
+| Native submitted indices/frame | 534,632 | 420,635 |
+| Native GPU buffer creations/frame | 10.32 | 0.00 |
+| Native buffer upload bytes/frame | 203,783 | 97,939 |
+
+These are **whole-PR** differences, not gains attributable solely to the four new
+changes. GPU API counts and CPU submission time are not GPU execution timing or
+total system CPU (worker work is excluded). The candidate retained the user's local
+upstream-117HD texture preview; main used its committed texture pack. That preview
+remains uncommitted and is not part of this PR. Thus this is a comparison of the
+actual local test builds, not an isolated GPU texture-quality experiment. Live NPC
+populations and retained outer maps can differ. The 60 Hz ceiling limits FPS claims;
+CPU throttling and larger targets do not emulate the player's Windows GPU.
+
+The Android-UA LAN WebGL check used one worker, no shared buffers and 4× MSAA:
+16 panning frames produced 16 distinct images/yaws, with no GL errors. Its world-map
+check matched all 983,040 pixels and icon hashes across three runs. This is browser
+emulation, not testing on a physical Android tablet.
+
+Artifacts: `/tmp/{main,tsps}-rlhd-final-{native,cpu6,scale2}.json`,
+`/tmp/tsps-rlhd-main-comparison.json`, `/tmp/tsps-rlhd-bundle-ab.json`,
+`/tmp/zone-build-{benchmark,final}.log`, `/tmp/tsps-rlhd-android-camera.json`,
+`/tmp/tsps-rlhd-worldmap-webgl.json`.
+
+Final integration validation at `ce46cfb7a`: **229 client test files passed, zero
+failures/skips**, plus typecheck and production build. The 3102 preview serves
+`main.7c24090b.js` with the retained upstream texture preview. A live teleport away
+and back cancelled two obsolete builds and returned to 3104,3508 with scene ready,
+zero pending/loading jobs and zero GPU errors. Final-build WebGPU world-map pixels
+and icons also matched all three reference runs. Temporary benchmark servers and
+browsers were stopped; the user's 3102 stack stays running.
