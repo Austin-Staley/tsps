@@ -595,6 +595,18 @@ where possible. A fixture that injects `"Fire"` can pass while a real `"fire"` c
 nothing. Likewise, inventory `adds` returns a container: verify the resulting quantity
 rather than treating its return value as a successful receipt.
 
+For shared quest locations, run the real startup object installation before checking
+collision, menus and routes. Bare cache geometry can pass while another quest's duplicate
+object blocks the live route. Put the player on the actual approach tile before invoking
+location-sensitive handlers, and follow the entire connected leg through its next door,
+ladder and chest. Test both quests in registration order, including the completed quest
+yielding shared interactions. An owner-only visual overlay on existing scenery does not
+provide private collision for new geometry.
+
+For scene-group dialogue, bind the actual actors through the existing dialogue event and
+exercise the canonical runner through its final action. A group label need not be an NPC
+name. Missing actors or cancellation must preserve progress and unspent quest items.
+
 - Run focused tests once, from `server/`: build if the test loads `dist/`, then
   `node --test tests/<focused>.test.cjs`.
 - A meaningful regression test dispatches the real handler and asserts the user-visible

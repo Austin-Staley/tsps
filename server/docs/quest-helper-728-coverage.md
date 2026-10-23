@@ -47,18 +47,31 @@ Reviewed publications after the scope reduction include the scoped Secrets of th
 North actor cleanup (`98953eca7`), earned Horror/Zogre helper state (`19361d7b8`),
 Zanik's real follower (`ca2374379`), and the Tree Gnome Village warlord encounter
 and required maze railing (`fc5d81024`). Their combined lifecycle/quest checks pass
-493/493. Queen of Thieves wire stages and lost-letter search remain available in
-`b0df76772` (8/8 focused checks); NPC identity, lost memoir-page recovery, full-bag
-coin rewards and shared chest rendering remain open review findings. These are
-source publications, with no additional accepted natural-route count. The Hand in
-the Sand also corrects its canonical varbit, shares the bell/Zavistic with Zogre
-and consumes sandpit supplies once (27 combined checks, including both registered
-quests; the prior source fails all three focused regression cases). Its serum/counter
-helper auxiliaries, scene visuals and natural completion remain unverified.
+493/493. Later integration checks pass 461/461, including the real ceremony
+runner, shared mansion startup/collision, both quests' wall ownership, and the full
+wall/ladder/chest leg. The duplicate SOTN wall and relocated global chest were removed;
+its Inspect chest uses a personal visual over the actual cache footprint (`b4f889846`).
+Queen of Thieves now uses the actual transformed NPCs, a personal lock/search menu,
+canonical delayed page recovery and overflow-safe coins (`af9ceaf8e`); 16 focused checks
+pass against both the isolated published AKD dependency and the current worktree. Only
+AKD's seven-line shared appearance fix was published; its deferred implementation
+remains preserved. Memoir charges/teleports, graceful recolour and letter-reading remain unimplemented.
+Natural Queen of Thieves completion remains unverified. Elemental Workshop I corrects entered-wall
+state, slashed-book requirements, valves, recoverable supplies and the real elemental's
+normal floor loot (`7685ba52c`; 20 combined EW1/EW2 checks).
 
-The saved Hazeel Cult stage5, Tree Gnome Village stage7 and fresh Lost City stage1
-checkpoints resumed under the captured epoch23 runtime. The test server loaded all
-11 frozen plugin hashes in the release manifest exactly; generated data was unchanged.
+The Hand in the Sand also corrects its canonical varbit, shares the bell/Zavistic with
+Zogre and consumes sandpit supplies once (`f1b93eef0`; 27 combined checks, including
+both registered quests). Its serum/counter helper auxiliaries are under separate review;
+scene visuals and natural completion remain unverified. These are source publications,
+with no additional accepted natural-route count.
+
+Latest normal saved checkpoints are Hazeel Cult stage6 (mark and chest key), Tree Gnome
+Village stage8 (real recovered orbs, before ceremony completion), and Lost City stage2
+(Shamus and the natural ferry completed, on Entrana). Resume those accounts without reset
+under the captured epoch24 runtime. Integration independently matched all 16 frozen
+plugin hashes against its actual loaded-module capture. All raw evidence and prior
+checkpoints are retained.
 
 ## Historical cumulative status checkpoint — 2026-10-22
 
