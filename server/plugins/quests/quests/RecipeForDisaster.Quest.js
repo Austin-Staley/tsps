@@ -2613,7 +2613,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       if (hasSpace(player)) player.getInventory().adds(ItemIdentifiers.EVIL_CHICKENS_EGG, 1);
       else {
         const { ItemOnGroundManager, Item, Location } = api.core;
-        ItemOnGroundManager.register(player, new Item(ItemIdentifiers.EVIL_CHICKENS_EGG, 1), player.getLocation());
+        ItemOnGroundManager.registerLocation(player, new Item(ItemIdentifiers.EVIL_CHICKENS_EGG, 1), player.getLocation());
       }
     } else if (BLACK_DRAGON_IDS.has(event.npcId) && Number(player.getAttribute(AMIK_STATE_ATTRIBUTE)) === 1
       && inZone(player, EVIL_CHICKEN_LAIR_ZONE) && !has(player, ItemIdentifiers.DRAGON_TOKEN)) {
@@ -2622,7 +2622,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       if (hasSpace(player)) player.getInventory().adds(ItemIdentifiers.DRAGON_TOKEN, 1);
       else {
         const { ItemOnGroundManager, Item, Location } = api.core;
-        ItemOnGroundManager.register(player, new Item(ItemIdentifiers.DRAGON_TOKEN, 1),
+        ItemOnGroundManager.registerLocation(player, new Item(ItemIdentifiers.DRAGON_TOKEN, 1),
           new Location(player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()));
       }
     }
@@ -2963,7 +2963,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     if (hasSpace(player)) player.getInventory().adds(ItemIdentifiers.SNAKE_CORPSE, 1);
     else {
       const { ItemOnGroundManager, Item } = api.core;
-      ItemOnGroundManager.register(player, new Item(ItemIdentifiers.SNAKE_CORPSE, 1), player.getLocation());
+      ItemOnGroundManager.registerLocation(player, new Item(ItemIdentifiers.SNAKE_CORPSE, 1), player.getLocation());
     }
     if (awowogeiQuestStage(player) >= 15) setAwowogeiStage(player, 20);
   }
@@ -2996,7 +2996,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     if (hasSpace(player)) player.getInventory().adds(ItemIdentifiers.RAW_JUBBLY, 1);
     else {
       const { ItemOnGroundManager, Item, Location } = api.core;
-      ItemOnGroundManager.register(player, new Item(ItemIdentifiers.RAW_JUBBLY, 1),
+      ItemOnGroundManager.registerLocation(player, new Item(ItemIdentifiers.RAW_JUBBLY, 1),
         new Location(player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()));
     }
     player.sendMessage("You pluck the raw jubbly from the bird.");

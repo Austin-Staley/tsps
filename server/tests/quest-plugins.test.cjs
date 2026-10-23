@@ -10,6 +10,7 @@ before(async () => {
 
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const apiMethods = new Set(Object.keys(PluginManager.createApi('QuestTest')));
+const noopPacketSender = new Proxy({}, { get: (_target, key) => key === 'getVarbit' ? () => 0 : () => noopPacketSender });
 
 test('quest event names register and dispatch through the production API', () => {
   const fs = require('node:fs');
@@ -8680,8 +8681,10 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     const aftermathSteps = require('../data/definitions/npc-dialogues.json')['Desert Treasure II - The Fallen Empire']
       .variants['the-desert-treasure-aftermath'];
     const selectedAftermath = transcripts.at(-1).select(aftermathSteps);
-    assert.ok(selectedAftermath.findIndex(step => step.id === 'xGIiPZ') < selectedAftermath.findIndex(step => step.type === 'end'),
-      'the quest-complete action remains reachable at the end of the exported outro');
+    const completionIndex = selectedAftermath.findIndex(step => step.id === 'xGIiPZ');
+    const endIndex = selectedAftermath.findIndex(step => step.type === 'end');
+    assert.ok(completionIndex >= 0 && (endIndex < 0 || completionIndex < endIndex),
+      'the quest-complete action exists and is reachable before any explicit end');
     transcripts.length = 0; // A logout clears the active conversation, not the earned wight checkpoint.
     talkSmith({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
     assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-aftermath',
@@ -14228,7 +14231,7 @@ test('Regicide leaves completed Well of Voyage crossings to the shared loc route
 
 test('completed Underground Pass leaves Iban temple doors to normal door handling', () => {
   const { api, handlers, quest, player } = questScene('UndergroundPass');
-  quest.setStage(player, 10);
+  quest.setStage(player, quest.completionValue);
   const event = { player, objectId: api.core.ObjectIdentifiers.DOOR_109, handled: false };
 
   handlers.custom.get('door:toggle').forEach((handler) => handler(event));
@@ -14238,7 +14241,7 @@ test('completed Underground Pass leaves Iban temple doors to normal door handlin
 
 test('Underground Pass bridge jumps move to the far bank', () => {
   const { api, handlers, quest, player, tile } = questScene('UndergroundPass');
-  quest.setStage(player, 3);
+  quest.setStage(player, 4);
   player.getSkillManager = () => ({ getCurrentLevel: () => 99 });
   const bridge = (id, x, y, start, face = 0) => {
     player.moveTo(tile(...start));
@@ -17601,7 +17604,7 @@ test('Night at the Theatre obtains and hands in the head once, and scopes shared
   assert.equal(quest.getStage(player), 14, 'another NPC cannot advance a memory');
   customs.get('npc-dialogue:action')({ player, npcId: 10875, stepId: 'evA_XO' });
   assert.equal(quest.getStage(player), 20);
-  const memoryEnd = { player, npcId: 10875, text: "I'm not sure why I asked. I'll be back once I've explored this nest." };
+  const memoryEnd = { player, npcId: 10875, pages: [{ page: "A Night at the Theatre", variants: ["talking-to-the-mysterious-stranger-after-getting-ranis-head-after-finishing-the-first-memory-cutscene"] }], text: "My associates would prefer I remain here." };
   customs.get('npc-dialogue:line')(memoryEnd);
   assert.equal(quest.getStage(player), 20, 'the briefing stays replayable until the last line is continued');
   memoryEnd.after();
@@ -18945,7 +18948,7 @@ test('RFD K\'klik flambe consumes the token and creme brulee after the protected
   quest.setStage(player, 4);
 
   const line = { player, npcId: api.core.NpcIdentifiers.KKLIK, text: "Sure, that's easy." };
-  handlers.custom.get('npc-dialogue:line').at(-1)(line);
+  api.emitCustomEvent('npc-dialogue:line', line);
   assert.equal(typeof line.after, 'function');
   line.after();
 
@@ -19284,7 +19287,7 @@ test('RFD ogre boat charges the correct chompies and herbs for each route', () =
     getPacketSender: () => ({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }),
     moveTo: (location) => { destination = location; },
   };
-  const choice = handlers.custom.get('npc-dialogue:choice').find((handler) => handler.toString().includes('SKRACH_STATE_ATTRIBUTE'));
+  const choice = (event) => api.emitCustomEvent('npc-dialogue:choice', event);
   assert.ok(choice);
   choice({ player, npcId: api.core.NpcIdentifiers.RANTZ, option: "Ok, I'll do it." });
   assert.equal(attributes.get('recipe-for-disaster:skrach-state') & 1, 1);
@@ -19335,6 +19338,7 @@ test("RFD Skrach's cooked chompy summons the free return boat and arrival frees 
     ['recipe-for-disaster:skrach-state', 7],
   ]);
   const player = {
+    getPacketSender: () => noopPacketSender,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getLocation: () => new api.core.Location(2790, 3077, 0),
@@ -19395,6 +19399,7 @@ test("RFD Skrach's second bellows inflation consumes the toad, rock and wool tog
   ]);
   const messages = [];
   const player = {
+    getPacketSender: () => noopPacketSender,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({
@@ -19453,6 +19458,7 @@ test('RFD recognizes the live White Wolf spawn as the Old Dwarf', () => {
   const attributes = new Map([['quest.recipe_for_disaster.stage', 4]]);
   const inventory = new Map();
   const player = {
+    getPacketSender: () => noopPacketSender,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({
@@ -19506,7 +19512,7 @@ test('Biohazard does not swallow RFD ingredient conditions', () => {
   const { api: base, handlers } = mockApi();
   require('../plugins/quests/quests/Biohazard.Quest')(base);
   const inventory = { getAmount: () => 0 };
-  const player = { getInventory: () => inventory, getEquipment: () => ({ get: () => null }) };
+  const player = { getAttribute: () => undefined, getInventory: () => inventory, getEquipment: () => ({ get: () => null }) };
   const condition = handlers.condition[0];
   assert.equal(condition({ player, npcId: 4810, stepId: 'Hk2Tfl',
     text: 'If the player has all the items',
@@ -19596,8 +19602,10 @@ test('RFD Jubbly hunting requires the Ogre bow and equipped Ogre arrows', () => 
   ]);
   const messages = [];
   const player = {
+    getPacketSender: () => noopPacketSender,
     isPlayer: () => true,
     getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
     getLocation: () => new api.core.Location(2648, 2963, 0),
     getEquipment: () => ({ get: (slot) => equipment.has(slot) ? { getId: () => equipment.get(slot) } : null }),
     getInventory: () => ({ deleteNumber() {} }),
@@ -19693,9 +19701,10 @@ test('RFD dive and finale actions move players with Location objects', () => {
   let destination;
   const attributes = new Map();
   const player = {
+    getPacketSender: () => noopPacketSender,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getInventory: () => ({ getItems: () => [], getFreeSlots: () => 27 }),
+    getInventory: () => ({ getAmount: () => 0, getItems: () => [], getFreeSlots: () => 27 }),
     getEquipment: () => ({ get: (slot) => ({ getId: () => equipment.get(slot) }) }),
     moveTo: (location) => { destination = location; },
   };
@@ -19829,7 +19838,7 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
     getSkillManager: () => ({ getCurrentLevel: () => 1 }),
     getPrayerActive: () => [],
     getEquipment: () => ({ getItems: () => equipment }),
-    getInventory: () => ({ adds: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount), isFull: () => false }),
+    getInventory: () => ({ getAmount: id => inventory.get(id) ?? 0, adds: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount), isFull: () => false }),
     getCombat: () => ({ getSelectedSpell: () => selectedSpell }),
     moveTo: (location) => { player.destination = location; },
     getPacketSender: () => new Proxy({}, { get: (_target, key) => key.startsWith('send') ? () => {} : undefined }),
@@ -21262,7 +21271,8 @@ test('Curator Haig belongs to the active Golem museum step, then The Dig Site, t
     require(`../plugins/quests/quests/${quest}.Quest`)(api);
   }
   const attributes = new Map();
-  const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value) };
+  const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: () => 0 }) };
   const select = () => {
     const context = { player, npcId: 5214, pages: [] };
     const owners = ['Bone Voyage', 'The Dig Site', 'The Golem'];
@@ -21280,13 +21290,13 @@ test('Curator Haig belongs to the active Golem museum step, then The Dig Site, t
   assert.equal(golem.choice.page, 'The Golem');
 
   attributes.set('quest.the_golem.stage', 0);
-  attributes.set('quest.the_dig_site.stage', 0);
-  assert.equal(select().owner, 'The Dig Site', 'The Dig Site still starts through the curator');
+  attributes.set('quest.the_dig_site.stage', 1);
+  assert.equal(select().owner, 'The Dig Site', 'The Dig Site approval remains available through the curator');
 
   attributes.set('quest.the_dig_site.stage', 9);
   assert.equal(select().owner, 'Bone Voyage', 'Bone Voyage still starts once The Dig Site is complete');
 
-  attributes.set('quest.the_dig_site.stage', 0);
+  attributes.set('quest.the_dig_site.stage', 1);
   attributes.set('quest.the_golem.stage', 10);
   assert.equal(select().owner, 'The Dig Site', 'a completed Golem does not hide The Dig Site approval');
 
@@ -21732,7 +21742,7 @@ test('ForgettableTale yields Blue Opal Director 5999 to Giant Dwarf and keeps it
     'an inactive Forgettable cart conductor falls back to the generic dialogue');
 });
 
-test('Giant Dwarf owns Veldaban only for its stage 40 meeting; completed Giant leaves Forgettable start alone', () => {
+test('Giant Dwarf owns its Veldaban meeting and repeats; completion releases Forgettable start', () => {
   const { api, handlers } = mockApi();
   const runtime = require('../plugins/quests/QuestRuntime');
   const originalStartTranscript = runtime.startTranscript;
@@ -21805,8 +21815,9 @@ test('Giant Dwarf owns Veldaban only for its stage 40 meeting; completed Giant l
     assert.equal(afterComplete.wanted, 'starting-out-without-fishing-contest-completed');
 
     attributes.set('quest.giant_dwarf.stage', 30);
-    assert.equal(firstVariant(npcId).wanted, 'starting-out-without-fishing-contest-completed',
-      `unrelated Veldaban ${npcId} dialogue is unchanged`);
+    assert.deepEqual(firstVariant(npcId), {
+      wanted: 'starting-off-talking-to-veldaban-again-after-agreeing-to-help', page: 'The Giant Dwarf',
+    }, `unfinished Giant Dwarf keeps its canonical repeat conversation on ${npcId}`);
 
     attributes.set('quest.forgettable_tale.stage', 11);
     attributes.set('quest.giant_dwarf.stage', 40);

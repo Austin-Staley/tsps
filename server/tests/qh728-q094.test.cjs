@@ -122,7 +122,13 @@ function harness() {
     isDestroyed() { return this.destroyed; }
     getTemplateObjects() { return []; }
   } });
-  Object.defineProperty(coreApi, 'ItemOnGroundManager', { value: { register: (...args) => ground.push(args) } });
+  Object.defineProperty(coreApi, 'ItemOnGroundManager', { value: class extends core.ItemOnGroundManager {
+    static registerLocation(player, item, position) {
+      const floorItem = super.registerLocation(player, item, position);
+      ground.push([player, item, position, floorItem]);
+      return floorItem;
+    }
+  } });
   Object.defineProperty(coreApi, 'PrayerHandler', { value: { deactivatePrayers: noop } });
   const api = new Proxy({
     core: coreApi,
@@ -176,7 +182,13 @@ function harness() {
   return { api, core: coreApi, quest, events, variants, conditions, npcInteraction,
     itemOnItem, itemOnNpc, itemOnObject, objectInteraction, npcDeath, custom, spawned, ground,
     transcripts, transcriptCalls, realStartTranscript: originalStartTranscript,
-    restoreTranscripts: () => { runtime.startTranscript = originalStartTranscript; } };
+    restoreTranscripts: () => {
+      runtime.startTranscript = originalStartTranscript;
+      for (const [, , , floorItem] of ground) {
+        const index = core.World.getItems().indexOf(floorItem);
+        if (index !== -1) core.World.getItems().splice(index, 1);
+      }
+    } };
 }
 
 function completeQuest(h, player, key) {
@@ -945,6 +957,7 @@ test('Amik black dragon yields the token before the brulee exists and never lose
     assert.equal(p.items.get(core.ItemIdentifiers.DRAGON_TOKEN) ?? 0, 0);
     assert.equal(h.ground.length, 1);
     assert.equal(h.ground[0][1].getId(), core.ItemIdentifiers.DRAGON_TOKEN);
+    assert.ok(core.World.getItems().includes(h.ground[0][3]), 'the real manager registers a recoverable ground item');
   } finally {
     h.restoreTranscripts();
   }

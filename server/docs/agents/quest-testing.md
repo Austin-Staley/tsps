@@ -172,6 +172,11 @@ Only continue visible NPC/player/item/statement dialogues. A `kind: "other"` ent
 an internal action waiting for its scheduled overhead or scene callback. Use bounded
 `wait_ticks` and re-read it; clicking Continue there can invalidate the pending callback.
 
+Before each travel leg, resolve the current Quest Helper conditional step from the actual
+stage and auxiliary flags, then use that step's destination. A later scout or boss marker
+is not the current destination. Reuse the cached live MCP schema for tool names and
+arguments; do not search for a developer command when the documented tool exists.
+
 For long walks or a failed direct path, use MCP `plan_route` before trying arbitrary
 intermediate tiles. It reuses the bot long-distance collision planner and returns short
 waypoints plus closed door/gate candidates at crossings. Walk each leg and open the
