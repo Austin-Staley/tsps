@@ -574,6 +574,23 @@ module.exports = function registerDepthsOfDespairQuest(api) {
     return player.getLocation().getX() > 1705 ? STONES_WEST_TILE : STONES_EAST_TILE;
   }
 
+  /**
+   * The stepping stones are a water crossing, not a floor object that can be
+   * reached by walking onto its clipped tile. Let the normal Cross action run
+   * from either authored bank; its transcript owns the actual crossing.
+   */
+  function routeSteppingStone(event) {
+    if (event.objectId !== STEPPING_STONE_OBJECT_ID || event.clickType !== 1) return;
+    const source = event.sourceLocation;
+    const target = event.object?.getLocation?.();
+    if (!source || !target || source.z !== 0 || target.getZ() !== 0) return;
+    const bank = source.x > 1705 ? STONES_EAST_TILE : STONES_WEST_TILE;
+    const atStone = target.getY() === 9800 && [1704, 1706].includes(target.getX());
+    if (atStone) {
+      event.destination = { x: bank.x, y: bank.y, z: bank.z ?? 0 };
+    }
+  }
+
   function rocksDestination(player, lower) {
     const x = player.getLocation().getX();
     if (lower) return x > 1687 ? LOWER_ROCKS_WEST_TILE : LOWER_ROCKS_EAST_TILE;
@@ -946,6 +963,7 @@ module.exports = function registerDepthsOfDespairQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeSteppingStone);
   api.onCustomEvent("ladders:climb", claimRopeClimb);
   api.onObjectInteraction("Bookshelf", { Search: searchBookshelf });
   api.onItemAction(handleItemAction);

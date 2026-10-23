@@ -12,6 +12,10 @@ const { PluginManager } = require(root + '/dist/plugins/PluginManager');
 const core = PluginManager.getCoreApi();
 const runtime = require(root + '/plugins/quests/QuestRuntime');
 const noop = () => {};
+const { MovementQueue } = require(root + '/dist/game/model/movement/MovementQueue');
+const { MapObjects } = require(root + '/dist/game/entity/impl/object/MapObjects');
+const { ObjectDefinition } = require(root + '/dist/game/definition/ObjectDefinition');
+const { RegionManager } = require(root + '/dist/game/collision/RegionManager');
 
 const I = core.ItemIdentifiers;
 const O = core.ObjectIdentifiers;
@@ -298,6 +302,133 @@ test('stage-0 handler graph reaches completion with the helper leg wire values',
 
   H.call('npc-dialogue:action', { player: p, npcId: N.LORD_KANDUR_HOSIDIUS, stepId: '2AuI1C', handled: false });
   assert.equal(questIdOf(p), 9); assert.equal(wire(), 11, 'final hand-in meets the cache threshold');
+});
+
+test('canonical stepping-stone banks dispatch the ordinary Cross action through MovementQueue', async (t) => {
+  const { CachePipeline } = require(root + '/dist/game/cache/CachePipeline');
+  const { TaskManager } = require(root + '/dist/game/task/TaskManager');
+  const { World } = require(root + '/dist/game/World');
+
+  await CachePipeline.initialize(root);
+  ObjectDefinition.init();
+  RegionManager.init();
+  RegionManager.loadMapFiles(1709, 9800, true);
+
+  const eastBank = new core.Location(1709, 9800, 0);
+  const stone = MapObjects.get(O.STEPPING_STONE_38, new core.Location(1706, 9800, 0), null);
+  assert.ok(stone, 'the real map places the east stepping stone at 1706,9800');
+  assert.equal(stone.getType(), 22);
+  assert.equal(ObjectDefinition.forId(O.STEPPING_STONE_38).getInteractions()[0], 'Cross');
+  assert.equal(RegionManager.canMovestart(new core.Location(1708, 9800, 0), eastBank, 1, 1, null), true,
+    'the actual east bank tile is reachable over cache collision');
+  assert.equal(RegionManager.canMovestart(new core.Location(1702, 9800, 0), new core.Location(1701, 9800, 0), 1, 1, null), true,
+    'the actual west bank tile is reachable over cache collision');
+
+  const H = harness();
+  const routeHandler = H.hooks.onObjectRoute.at(-1).fn;
+  const p = makePlayer();
+  p.setLocation(1708, 9800, 0);
+  const setPlayerLocation = p.setLocation.bind(p);
+  H.player = p;
+  H.quest.setStage(p, 4);
+  Object.assign(p, {
+    isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; },
+    getIndex: () => 19019, getSize: () => 1, getPrivateArea: () => null,
+    getHitpoints: () => 99, getRights: () => -1, isPlayerBot: () => false,
+    getInventory: () => ({ capacity: () => 28, getItems: () => [] }),
+    getFollowing: () => null, getTimers: () => ({ has: () => false }),
+    getCombat: () => ({ setCastSpell: noop, reset: noop }),
+    getSkillManager: () => ({ stopSkillable: noop }),
+    getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
+    getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
+    setPositionToFace: noop, setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
+    setLocation(location) { setPlayerLocation(location.getX(), location.getY(), location.getZ()); },
+    sendMessage: noop, isRunningReturn: () => false, setRunning: noop,
+  });
+
+  t.mock.method(PluginManager, 'emitObjectRoute', (event) => routeHandler(event));
+  const oldCycle = World.processCycle;
+  t.after(() => { World.processCycle = oldCycle; TaskManager.cancelTasks(p.getIndex()); });
+  const queue = new MovementQueue(p);
+  p.getMovementQueue = () => queue;
+  queue.getMobility = () => ({ canMove: () => true });
+  queue.checkDestination = () => true;
+  queue.walkToReset = noop;
+  queue.handleRegionChange = noop;
+  queue.syncWildernessStateForMovedPlayer = noop;
+  queue.drainRunEnergy = noop;
+
+  const dispatched = { player: p, objectId: stone.getId(), clickType: 1, option: 'cross', handled: false };
+  queue.walkToObject(stone, { execute: () => H.call('onObjectInteraction', dispatched) }, 1);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [1708, 9800],
+    'the one-tile bank approach is not teleported by the route hook');
+  assert.equal(queue.points.length > 0 || queue.hasPendingWork(), true,
+    'MovementQueue performs an ordinary collision-checked walk to the canonical bank');
+  const tick = () => {
+    World.processCycle++;
+    TaskManager.process();
+    queue.beginCycle();
+    if (queue.hasPendingWork()) queue.process();
+    TaskManager.processWalkTo(p.getIndex());
+  };
+  World.processCycle = 100;
+  for (let i = 0; i < 10 && !dispatched.handled; i++) tick();
+  assert.deepEqual(dispatched, { player: p, objectId: O.STEPPING_STONE_38, clickType: 1, option: 'cross', handled: true });
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [1709, 9800],
+    'the same action first reaches the actual east bank by ordinary movement');
+  assert.deepEqual(transcripts.at(-1), {
+    npcId: N.ARTUR_HOSIDIUS,
+    page: 'The Depths of Despair',
+    variant: 'the-envoy-to-varlamore-crossing-the-stepping-stone',
+  }, 'the ordinary Cross action starts the real obstacle transcript');
+
+  H.call('npc-dialogue:action', { player: p, npcId: N.ARTUR_HOSIDIUS, stepId: 'oY3wLB', handled: false });
+  assert.deepEqual(p.moves.at(-1), [1701, 9800, 0], 'the transcript crosses to the opposite bank normally');
+  assert.equal(p.varbits.get(VARBIT_STAGE), 6, 'the native wire still reflects the cave location');
+
+  // A click issued while already on the authored bank uses the same destination
+  // route but executes immediately, preserving the ordinary interaction path.
+  setPlayerLocation(1709, 9800, 0);
+  const alreadyAtBank = { player: p, objectId: stone.getId(), clickType: 1, option: 'cross', handled: false };
+  queue.walkToObject(stone, { execute: () => H.call('onObjectInteraction', alreadyAtBank) }, 1);
+  assert.equal(alreadyAtBank.handled, true);
+  H.call('npc-dialogue:action', { player: p, npcId: N.ARTUR_HOSIDIUS, stepId: 'oY3wLB', handled: false });
+  assert.deepEqual(p.moves.at(-1), [1701, 9800, 0]);
+
+  const distantRoute = {
+    objectId: O.STEPPING_STONE_38,
+    sourceLocation: { x: 1711, y: 9800, z: 0 },
+    clickType: 1,
+    object: stone,
+    destination: null,
+  };
+  routeHandler(distantRoute);
+  assert.deepEqual(distantRoute.destination, { x: 1709, y: 9800, z: 0 },
+    'a distant click still routes normally to the east bank; the tile path enforces collision');
+
+  for (const invalid of [
+    { sourceLocation: { x: 1709, y: 9800, z: 1 }, clickType: 1, objectX: 1706, objectY: 9800 },
+    { sourceLocation: { x: 1709, y: 9800, z: 0 }, clickType: 0, objectX: 1706, objectY: 9800 },
+    { sourceLocation: { x: 1709, y: 9800, z: 0 }, clickType: 1, objectX: 1705, objectY: 9800 },
+  ]) {
+    const event = {
+      objectId: O.STEPPING_STONE_38,
+      sourceLocation: invalid.sourceLocation,
+      clickType: invalid.clickType,
+      object: { getLocation: () => new core.Location(invalid.objectX, invalid.objectY, 0) },
+      destination: null,
+    };
+    routeHandler(event);
+    assert.equal(event.destination, null, 'nearby, wrong-plane, non-Cross, and wrong-placement routes remain blocked');
+  }
+  const itemUse = { objectId: O.STEPPING_STONE_38, sourceLocation: { x: 1709, y: 9800, z: 0 }, clickType: 0,
+    object: stone, destination: null };
+  routeHandler(itemUse);
+  assert.equal(itemUse.destination, null, 'item-on-object use does not acquire the route shortcut');
+  const unrelatedObject = { objectId: O.CREVICE_31, sourceLocation: { x: 1709, y: 9800, z: 0 }, clickType: 1,
+    object: stone, destination: null };
+  routeHandler(unrelatedObject);
+  assert.equal(unrelatedObject.destination, null, 'unrelated objects do not acquire the stepping-stone route');
 });
 
 test('the chest can be searched again after Artur goes home when the Accord was lost', () => {

@@ -234,7 +234,7 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Death on the Isle | `DeathOnTheIsle` | Captured item IDs, accusation bit and evidence recovery checkpoint reviewed; full parity review pending | 8 focused dispatch tests pass | Pending |
 | Death Plateau | `DeathPlateau` | Harold’s IOU recovery, ordered condition checks and missing-item handouts use the imported transcript; shared runner now continues explicitly true linear sibling conditions | 47 shared/runtime and quest regressions pass | Natural completion and native recovery remain pending |
 | Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Pending | Pending | Pending |
-| The Depths of Despair | `DepthsOfDespair` | Pending | Pending | Pending |
+| The Depths of Despair | `DepthsOfDespair` | Recovery/dialogue review and cache-backed stepping-stone approach fixed | 14 focused checks pass, including normal movement to the bank | Native route paused at stepping stones; corrected threshold awaits reload |
 | Desert Treasure I | `DesertTreasureI` | Pending | Pending | Pending |
 | Desert Treasure II - The Fallen Empire | `DesertTreasureII` | Pending | Pending | Pending |
 | Devious Minds | `DeviousMinds` | Pending | Pending | Pending |
