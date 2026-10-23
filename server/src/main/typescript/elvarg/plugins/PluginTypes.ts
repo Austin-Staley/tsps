@@ -399,6 +399,8 @@ export interface PluginPlayerDeathItemDropEvent {
   player: any;
   killer: any;
   item: any;
+  /** Whether the item is one the death keeps (protected), rather than one it loses. */
+  kept: boolean;
   location: any;
   shouldDropItems: boolean;
   /** Whether core would create a normal floor item for this item. */
@@ -1361,6 +1363,8 @@ export interface PluginCoreApi {
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
   CacheDefinitions: any;
+  CacheMaps: any;
+  MapRegionReplacementManager: any;
   readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
   Wilderness: any;
   PathFinder: any;

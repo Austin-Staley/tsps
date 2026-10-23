@@ -50,6 +50,7 @@ import {
     getDefaultServerSecure,
     getDefaultWsUrl,
     isDebugIdEnabled,
+    isMapEditorUrl,
 } from "../config/clientEnv";
 import {
     type BankServerUpdate,
@@ -1216,7 +1217,7 @@ export class OsrsClient {
         // Boots the RuneLite-shaped runtime: config, event bus, plugin manager,
         // core plugins (constructed inside the injector, enabled ones started).
         // Edit mode loads none, so the editor runs without their per-frame work.
-        const editMode = new URLSearchParams(window.location.search).has("edit");
+        const editMode = isMapEditorUrl();
         this.runeLite = RuneLite.start(this, !editMode);
         this.loginRenderer.loginStretch = () => this.clientPlugins.loginStretch();
         // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
