@@ -621,6 +621,7 @@ module.exports = function registerWaterfallQuest(api) {
   }
 
   function widenHudonTalkRange(request) {
+    if (request.clickType === 0) return;
     finishCrossingMove(request.player);
     if (request.npcId === HUDON_NPC_ID && stageOf(request.player) === STAGE_STARTED) request.range = 4;
   }

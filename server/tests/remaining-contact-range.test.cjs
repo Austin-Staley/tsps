@@ -27,6 +27,7 @@ const ROOT = path.resolve(__dirname, '..');
 const BLOCKED = 0x1280120;
 let contactQuest;
 let dialogueApi;
+let waterfallQuest;
 
 before(async () => {
   await CachePipeline.initialize(ROOT);
@@ -40,8 +41,14 @@ before(async () => {
   dialogueApi = api;
   require('../plugins/npcs/NpcDialogues.plugin').register(api);
   require('../plugins/quests/quests/Contact.Quest')(api);
+  const waterfallApi = PluginManager.createApi('remaining-contact-range-waterfall-test');
+  require('../plugins/quests/quests/WaterfallQuest.Quest')(waterfallApi);
+  const spiritsApi = PluginManager.createApi('remaining-contact-range-spirits-test');
+  require('../plugins/quests/quests/SpiritsOfTheElid.Quest')(spiritsApi);
   contactQuest = runtime.getRegisteredQuests().find((quest) => quest.key === 'contact');
+  waterfallQuest = runtime.getRegisteredQuests().find((quest) => quest.key === 'waterfall_quest');
   assert.ok(contactQuest, 'Contact quest registered through the real plugin API');
+  assert.ok(waterfallQuest, 'Waterfall Quest registered through the real plugin API');
 });
 
 function account(x = 2262, y = 4320) {
@@ -67,14 +74,14 @@ function maisaNpc() {
   return npc;
 }
 
-function routeEvent(player, npc, range = 1) {
+function routeEvent(player, npc, range = 1, clickType = 1) {
   return {
     player,
     npc,
     definition: npc.getCurrentDefinition(player),
     npcId: npc.getContentId(player),
     npcIndex: npc.getIndex(),
-    clickType: 1,
+    clickType,
     location: { x: npc.getLocation().getX(), y: npc.getLocation().getY(), z: npc.getLocation().getZ() },
     handled: false,
     range,
@@ -139,6 +146,33 @@ test('Contact: the route hook widens only real Maisa on stages 40-60', () => {
   } finally {
     World.getNpcs().remove(npc);
   }
+});
+
+test('item-on-NPC route events do not inherit legacy menu-only reach extensions', () => {
+  const player = account();
+  const { NpcIdentifiers } = require('../dist/util/NpcIdentifiers');
+  contactQuest.setStage(player, 50);
+  waterfallQuest.setStage(player, 1);
+
+  const makeNpc = (id) => ({
+    getContentId: () => id,
+    getIndex: () => -1,
+    getOwner: () => null,
+    getLocation: () => new Location(2258, 4317, 0),
+    getCurrentDefinition: () => ({ getActions: () => ['Talk-to'] }),
+  });
+  const assertRoute = (id, clickType, expected, label) => {
+    const event = routeEvent(player, makeNpc(id), 1, clickType);
+    PluginManager.emitNpcRoute(event);
+    assert.equal(event.range, expected, label);
+  };
+
+  assertRoute(3876, 0, 1, 'item use on Maisa keeps ordinary reach');
+  assertRoute(3876, 1, 10, 'Maisa menu option retains quiz reach');
+  assertRoute(NpcIdentifiers.HUDON, 0, 1, 'item use on Hudon keeps ordinary reach');
+  assertRoute(NpcIdentifiers.HUDON, 1, 4, 'Hudon menu option retains route reach');
+  assertRoute(4763, 0, 1, 'item use on Elid ranging target keeps ordinary reach');
+  assertRoute(4763, 1, 10, 'ranging target menu action retains channel reach');
 });
 
 function advanceToPromptOrEnd(player, seen) {

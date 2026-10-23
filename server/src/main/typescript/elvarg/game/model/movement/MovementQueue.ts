@@ -1282,7 +1282,7 @@ export class MovementQueue {
             return;
         }
 
-        PathFinder.calculateEntityRoute(this.player, entity);
+        PathFinder.calculateEntityRoute(this.player, entity, range);
         if (this.canInteractWithUnreachableNpc(entity)) {
             this.reset();
             this.player.setMobileInteraction(entity);
@@ -1340,7 +1340,7 @@ export class MovementQueue {
             }
             // A step the clipping map rejected invalidates the corridor wherever we stand.
             if (this.points.length <= 1 || this.wasRouteInvalidated()) {
-                PathFinder.calculateEntityRoute(this.player, entity);
+                PathFinder.calculateEntityRoute(this.player, entity, range);
             }
         };
         TaskManager.submit(task);

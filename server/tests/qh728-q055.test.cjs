@@ -146,6 +146,24 @@ function player() {
   return p;
 }
 
+test('Hazeel Cult exposes its saved side through the public quest query', () => {
+  const h = harness();
+  const p = player();
+  p.setAttribute('quest.hazeel_cult.side', 1);
+  const request = { player: p, side: null };
+  const eventName = 'hazeel-cult:get-side';
+  const hooks = PluginManager.customEventHooks.get(eventName) ?? [];
+  const handler = h.events[eventName][0];
+  PluginManager.customEventHooks.set(eventName, [...hooks, { pluginName: 'HazeelCultPublicQueryTest', handler }]);
+  try {
+    PluginManager.emitCustomEvent(eventName, request);
+    assert.equal(request.side, 1);
+  } finally {
+    if (hooks.length) PluginManager.customEventHooks.set(eventName, hooks);
+    else PluginManager.customEventHooks.delete(eventName);
+  }
+});
+
 function startQuest(h, p) {
   h.talk(p, N.CERIL_CARNILLEAN);
   h.toPrompt(p, "What's wrong?");
@@ -332,6 +350,21 @@ test('hidden ladders only act on the verified Hazeel tile and Hazeel-side quest 
   const cerilSide = h.object(p, 16683, 'Climb-up', { x: 2573, y: 3271, z: 1 });
   assert.equal(cerilSide.handled, undefined, 'the Hazeel ladder does not fire on the Ceril side');
   assert.deepEqual([p.loc.getX(), p.loc.getY(), p.loc.getZ()], [3200, 3200, 0]);
+});
+
+test('mansion doors 1540/46863 stay with the shared Doors plugin, not the quest handler', () => {
+  const h = harness();
+  const p = player();
+  p.attrs.set('quest.hazeel_cult.stage', 2);
+  p.loc = new core.Location(2569, 3272, 0);
+
+  const front = h.object(p, 1540, 'Open', { x: 2569, y: 3273, z: 0 });
+  assert.equal(front.handled, undefined, 'the quest does not claim the mansion front door');
+  assert.deepEqual([p.loc.getX(), p.loc.getY(), p.loc.getZ()], [2569, 3272, 0]);
+
+  const interior = h.object(p, 46863, 'Open', { x: 2567, y: 3271, z: 0 });
+  assert.equal(interior.handled, undefined, 'the quest does not claim the interior door');
+  assert.deepEqual([p.loc.getX(), p.loc.getY(), p.loc.getZ()], [2569, 3272, 0]);
 });
 
 test('post-quest Hazeel side: Ceril, Henryeta and the guard use their Hazeel transcript pages', () => {

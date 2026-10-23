@@ -153,6 +153,9 @@ module.exports = function registerHazeelCultQuest(api) {
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const setAttr = (player, key, value) => player.setAttribute(key, value);
   const side = (player) => attr(player, SIDE_ATTR);
+  function answerPublicSideQuery(request) {
+    if (request?.player) request.side = side(request.player);
+  }
   const has = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
   const give = (player, itemId, amount = 1) => player.getInventory().adds(itemId, amount);
@@ -806,6 +809,7 @@ module.exports = function registerHazeelCultQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleAlomoneLine);
   api.onCustomEvent("npc-dialogue:line", fillPlayerName);
+  api.onCustomEvent("hazeel-cult:get-side", answerPublicSideQuery);
   api.onCustomEvent("ladders:climb", claimMansionStairs);
   api.onCustomEvent("ladders:climb", claimMansionBasementLadder);
   api.onItemOnObject(handlePoisonRange, { noted: false });

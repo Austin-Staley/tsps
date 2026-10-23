@@ -136,6 +136,8 @@ export interface PluginNpcInteractionEvent {
 
 export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
+  /** Inventory item used when the route was requested by item-on-NPC. */
+  itemId?: number;
   /** A plugin-owned interaction that ignores the normal projectile clip within `range`. */
   ignoreProjectileClip?: boolean;
 }
