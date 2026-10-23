@@ -291,8 +291,8 @@ test("Smelt lists every bar, and smelts on the captured timing", () => {
   objects.get("Furnace").Smelt({ player });
   const menu = lastMenu(player);
   assert.equal(menu.getTitle(), "What would you like to smelt?");
-  assert.deepEqual(menu.getItems(), [I.BRONZE_BAR, I.BLURITE_BAR, I.IRON_BAR, I.SILVER_BAR, I.STEEL_BAR,
-    I.GOLD_BAR, I.MITHRIL_BAR, I.ADAMANTITE_BAR, I.RUNITE_BAR]);
+  assert.deepEqual(menu.getItems(), [I.BRONZE_BAR, I.BLURITE_BAR, I.IRON_BAR, I.SILVER_BAR, I.LEAD_BAR, I.STEEL_BAR,
+    I.GOLD_BAR, I.MITHRIL_BAR, I.ADAMANTITE_BAR, I.CUPRONICKEL_BAR, I.RUNITE_BAR]);
   menu.execute(I.BRONZE_BAR, 2);
   ticks(1);
   assert.equal(player.messages.at(-1), "You smelt the copper and tin together in the furnace.");
@@ -305,6 +305,21 @@ test("Smelt lists every bar, and smelts on the captured timing", () => {
   assert.equal(player.xp, 6.2);
   ticks(5);
   assert.equal(player.items.get(I.BRONZE_BAR), 2);
+});
+
+test("lead and cupronickel stay out of F2P furnace menus and direct starts", (t) => {
+  t.mock.method(PluginManager.getCoreApi().WorldDefinition, "isMembersWorld", () => false);
+  const player = furnaceWith([[I.LEAD_ORE, 2], [I.NICKEL_ORE, 1], [I.COPPER_ORE, 2]]);
+  objects.get("Furnace").Smelt({ player });
+  const listed = lastMenu(player).getItems();
+  assert.ok(!listed.includes(I.LEAD_BAR) && !listed.includes(I.CUPRONICKEL_BAR));
+  const Smelting = require("../plugins/skills/smithing/Smelting.Smithing");
+  const Data = require("../plugins/skills/smithing/Data.Smithing");
+  for (const id of [I.LEAD_BAR, I.CUPRONICKEL_BAR]) {
+    assert.equal(Smelting.startSmelting(player, Data.SMELTING_RECIPES.find((r) => r.barId === id), 1), false);
+  }
+  assert.equal(player.items.get(I.LEAD_ORE), 2);
+  assert.equal(player.xp, 0);
 });
 
 test("Smelt with no ore says so in a message box", () => {
