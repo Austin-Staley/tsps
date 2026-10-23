@@ -1,3 +1,4 @@
+import { LocAnimated } from "./loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -255,6 +256,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public pendingInstanceScene: SdMapData | null = null;
     /** The map square the drawn instance scene is built as; it owns every NPC in the scene. */
     public instanceSceneMap: { mapX: number; mapY: number } | null = null;
+    /**
+     * The animated locs of the scene an instance rebuild replaces, to carry their animations onto
+     * the new scene (a held loc animation would otherwise start again from frame 0).
+     */
+    public carriedLocAnimations: LocAnimated[] | null = null;
     /** Active world entity overlays (rendered on top of normal world). */
     public worldEntityOverlays: Map<
         number,
