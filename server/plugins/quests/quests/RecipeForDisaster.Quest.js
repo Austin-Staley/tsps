@@ -3118,7 +3118,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
-  api.onCustomEvent("quest:recipe-for-disaster:rescue-status", handleRescueStatusQuery);
+  api.onCustomEvent("recipe-for-disaster:rescue-status", handleRescueStatusQuery);
   api.onCustomEvent("npc-dialogue:choice", handlePirateChoice);
   api.onCustomEvent("npc-dialogue:choice", handleSkrachChoice);
   api.onCustomEvent("npc-dialogue:choice", handleDwarfBarChoice);

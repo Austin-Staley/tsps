@@ -846,7 +846,7 @@ test('all eight rescue hand-ins reach the Culinaromancer and complete once', () 
       [1878, 5], [1904, 170], [1910, 20], [1914, 50],
     ];
     const incomplete = { player: p, rescue: 'king-awowogei', complete: false };
-    h.api.emitCustomEvent('quest:recipe-for-disaster:rescue-status', incomplete);
+    h.api.emitCustomEvent('recipe-for-disaster:rescue-status', incomplete);
     assert.equal(incomplete.complete, false, 'unrescued member remains incomplete');
     for (const [npcId, itemId, flag] of legs) {
       p.items.set(itemId, 1);
@@ -861,7 +861,7 @@ test('all eight rescue hand-ins reach the Culinaromancer and complete once', () 
         && varbit === rescueVarbits[index][0] && value === rescueVarbits[index][1]),
       `QH rescue varbit for ${rescueKeys[index]} reaches its completion endpoint`);
       const query = { player: p, rescue: rescueKeys[index], complete: false };
-      h.api.emitCustomEvent('quest:recipe-for-disaster:rescue-status', query);
+      h.api.emitCustomEvent('recipe-for-disaster:rescue-status', query);
       assert.equal(query.complete, true, `public rescue query reports ${rescueKeys[index]}`);
     }
     assert.equal(flags, 255);

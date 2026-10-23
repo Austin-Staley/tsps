@@ -100,7 +100,7 @@ function setup({ mockRescueStatus = true, registerRecipeForDisaster = false } = 
     emitCustomEvent(name, payload) {
       if (name === 'xpreward:open') lastXpReward = payload;
       if (name === 'quest:is-complete' && completedQuests.has(payload.key)) payload.complete = true;
-      if (mockRescueStatus && name === 'quest:recipe-for-disaster:rescue-status'
+      if (mockRescueStatus && name === 'recipe-for-disaster:rescue-status'
         && payload.rescue === 'pirate-pete' && piratePeteRescueComplete) payload.complete = true;
       for (const handler of custom.get(name) ?? []) handler(payload);
     },

@@ -323,7 +323,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
 
   function isRescueComplete(player, rescue) {
     const request = { player, rescue, complete: false };
-    api.emitCustomEvent("quest:recipe-for-disaster:rescue-status", request);
+    api.emitCustomEvent("recipe-for-disaster:rescue-status", request);
     return request.complete === true;
   }
 
