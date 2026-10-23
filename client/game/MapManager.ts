@@ -79,8 +79,6 @@ export class MapManager<T extends MapSquare> {
     // Legacy resident budget knobs kept for compatibility with existing settings UI.
     // Top-level streaming retains maps inside the target scene window.
     maxResidentMaps: number = 128;
-    private _useCounter: number = 1;
-    private _lastUsed: Map<number, number> = new Map();
 
     // Current map square the player is in
     currentMapX: number = -1;
@@ -195,7 +193,6 @@ export class MapManager<T extends MapSquare> {
         this.loadingMapIds.clear();
         this.mapLoadFailureCounts.clear();
         this.mapLoadRetryAfter.clear();
-        this._lastUsed.clear();
         this.gridMapIdSet.clear();
         this.gridMinMapX = -1;
         this.gridMaxMapX = -1;
@@ -337,7 +334,6 @@ export class MapManager<T extends MapSquare> {
         for (const listener of this.preMapLoadListeners) listener(mapSquare, prev);
         this.mapSquares.set(mapId, mapSquare);
         for (const listener of this.mapAddedListeners) listener(mapSquare, prev);
-        this._lastUsed.set(mapId, this._useCounter++);
         if (prev && prev !== mapSquare) {
             try {
                 prev.delete();
@@ -367,7 +363,6 @@ export class MapManager<T extends MapSquare> {
             for (const listener of this.mapRemovedListeners) listener(map);
             map.delete();
             this.mapSquares.delete(mapId);
-            this._lastUsed.delete(mapId);
             try {
                 this.onMapRemoved?.(map.mapX | 0, map.mapY | 0);
             } catch (error) {
@@ -407,15 +402,15 @@ export class MapManager<T extends MapSquare> {
         streamGeneration: number = this.gridRevision,
     ): void {
         const mapId = getMapSquareId(mapX, mapY);
-        const retryAfter = this.mapLoadRetryAfter.get(mapId) ?? 0;
         if (
             (!forceReload && this.mapSquares.has(mapId)) ||
             this.invalidMapIds.has(mapId) ||
-            this.loadingMapIds.has(mapId) ||
-            Date.now() < retryAfter
+            this.loadingMapIds.has(mapId)
         ) {
             return;
         }
+        const retryAfter = this.mapLoadRetryAfter.get(mapId);
+        if (retryAfter !== undefined && Date.now() < retryAfter) return;
         this.mapLoadRetryAfter.delete(mapId);
         this.loadingMapIds.add(mapId);
         this.loadMapFunction(mapX, mapY, streamGeneration | 0);
@@ -448,7 +443,6 @@ export class MapManager<T extends MapSquare> {
                 });
             }
             this.mapSquares.delete(mapId);
-            this._lastUsed.delete(mapId);
             try {
                 this.onMapRemoved?.(map.mapX | 0, map.mapY | 0);
             } catch (error) {
@@ -817,7 +811,6 @@ export class MapManager<T extends MapSquare> {
                 const mapId = renderMapIds[i];
                 if (!this.isMapInView(mapId)) continue;
 
-                this._lastUsed.set(mapId, this._useCounter++);
                 const mapSquare = this.mapSquares.get(mapId);
                 if (!mapSquare) continue;
                 if (mapSquare.canRender(frameCount)) {
