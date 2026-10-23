@@ -46,7 +46,7 @@ export const GpuConfig = ConfigGroup("gpu", {
         position: 3,
         units: " fps",
         range: { min: 0, max: 1000 },
-        default: isLowEndDevice ? 60 : 240,
+        default: 240,
     }),
     colorBanding: ConfigItem({
         name: "Colour banding",

@@ -8,7 +8,7 @@ replace the renderer defaults, the browser quality profile and the dev panel's c
 | --- | --- | --- |
 | Anti-aliasing | Disabled, FXAA, MSAA x2, x4, x8, x16 | Disabled on handhelds; MSAA x4 on desktop |
 | Draw distance | 25–160 tiles (above 90 needs 117 HD) | 25 |
-| FPS limit | 0–1000, 0 for no cap | 60 on handhelds; 240 on desktop |
+| FPS limit | 0–1000, 0 for no cap | 240 |
 | Colour banding | 0–100% | 0 |
 
 ## How it works

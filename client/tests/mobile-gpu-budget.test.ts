@@ -33,7 +33,13 @@ async function main(): Promise<void> {
     const manager = new ConfigManager();
     const config = manager.getConfig(GpuConfig);
     assert.equal(config.antiAliasingMode(), AntiAliasingMode.DISABLED);
-    assert.equal(config.fpsLimit(), 60, "new handheld settings use a conservative display cap");
+    assert.equal(config.fpsLimit(), 240, "handheld defaults must not introduce a 60 FPS ceiling");
+    gpu = { fpsLimit: config.fpsLimit() };
+    host.osrsClient.targetFps = 240;
+    assert.equal(limit(), 240, "fresh handheld GPU settings retain the normal client FPS limit");
+    manager.setConfiguration("gpu", "fpsLimit", 60);
+    gpu.fpsLimit = config.fpsLimit();
+    assert.equal(limit(), 60, "an explicitly saved 60 FPS limit still applies");
     manager.setConfiguration("gpu", "antiAliasingMode", AntiAliasingMode.MSAA_4);
     manager.setConfiguration("gpu", "fpsLimit", 120);
     assert.equal(config.antiAliasingMode(), AntiAliasingMode.MSAA_4, "saved graphics choices stay selected");
