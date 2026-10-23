@@ -275,8 +275,8 @@ export class ClientPluginManager {
 
     playerHeadIcons(serverId: number): IndexedSprite[] {
         const icons: IndexedSprite[] = [];
-        for (const plugin of this.plugins) {
-            const sprites = plugin.getPlayerHeadIcons?.(serverId);
+        for (const plugin of this.implementing("getPlayerHeadIcons")) {
+            const sprites = plugin.getPlayerHeadIcons!(serverId);
             if (sprites) icons.push(...sprites);
         }
         return icons;
@@ -310,7 +310,7 @@ export class ClientPluginManager {
     }
 
     configureSceneDrawCall(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void {
-        for (const plugin of this.plugins) plugin.configureSceneDrawCall?.(renderer, drawCall);
+        for (const plugin of this.implementing("configureSceneDrawCall")) plugin.configureSceneDrawCall!(renderer, drawCall);
     }
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {
@@ -364,7 +364,7 @@ export class ClientPluginManager {
     }
 
     onScriptFinished(scriptId: number): void {
-        for (const plugin of this.plugins) plugin.onScriptFinished?.(scriptId);
+        for (const plugin of this.implementing("onScriptFinished")) plugin.onScriptFinished!(scriptId);
     }
 
     onScriptCallback(event: ScriptCallbackEvent): void {
@@ -390,7 +390,7 @@ export class ClientPluginManager {
 
     widgetOverlays(): WidgetOverlay[] {
         const overlays: WidgetOverlay[] = [];
-        for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
+        for (const plugin of this.implementing("widgetOverlay")) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
         return overlays;
     }
 
@@ -400,8 +400,8 @@ export class ClientPluginManager {
         height: number,
         canvas: { w: number; h: number },
     ): OverlayPlacement | undefined {
-        for (const plugin of this.plugins) {
-            if (plugin.placeOverlay) return plugin.placeOverlay(overlay, width, height, canvas);
+        for (const plugin of this.implementing("placeOverlay")) {
+            return plugin.placeOverlay!(overlay, width, height, canvas);
         }
         return undefined;
     }
@@ -542,7 +542,7 @@ export class ClientPluginManager {
     }
 
     updateWidgetLayout(): void {
-        for (const plugin of this.plugins) plugin.updateWidgetLayout?.();
+        for (const plugin of this.implementing("updateWidgetLayout")) plugin.updateWidgetLayout!();
     }
 
     renderHud(client: OsrsClient): ReactNode[] {
