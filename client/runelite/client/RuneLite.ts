@@ -60,15 +60,15 @@ export class RuneLite {
     }
 
     postClientTick(): void {
-        this.eventBus.post(new ClientTick());
+        if (this.eventBus.hasSubscribers(ClientTick)) this.eventBus.post(new ClientTick());
     }
 
     postPostClientTick(): void {
-        this.eventBus.post(new PostClientTick());
+        if (this.eventBus.hasSubscribers(PostClientTick)) this.eventBus.post(new PostClientTick());
     }
 
     postBeforeRender(): void {
-        this.eventBus.post(new BeforeRender());
+        if (this.eventBus.hasSubscribers(BeforeRender)) this.eventBus.post(new BeforeRender());
     }
 
     private load(): void {
