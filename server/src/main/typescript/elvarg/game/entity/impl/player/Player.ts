@@ -163,6 +163,8 @@ export class Player extends Mobile {
     private static readonly VIEW_DISTANCE_REGROW_CYCLES = 10;
     public skullType: SkullType;
     private skullIconOverride: number | null = null;
+    /** The override shows even without a skull timer (risk skulls); otherwise only while skulled. */
+    private skullIconOverrideAlways = false;
     public combatSpecial: CombatSpecial;
     private vengeanceTimer = new SecondsTimer();
     private wildernessLevel: number;
@@ -1210,14 +1212,24 @@ export class Player extends Mobile {
         return this.skullIconOverride ?? this.skullType.getIconId();
     }
 
-    public setSkullIconOverride(iconId: number | null): void {
+    public setSkullIconOverride(iconId: number | null, always = false): void {
         const normalizedIconId = Number.isInteger(iconId) && iconId >= 0 ? iconId : null;
-        if (this.skullIconOverride === normalizedIconId) {
+        const normalizedAlways = normalizedIconId !== null && always;
+        if (this.skullIconOverride === normalizedIconId && this.skullIconOverrideAlways === normalizedAlways) {
             return;
         }
 
         this.skullIconOverride = normalizedIconId;
+        this.skullIconOverrideAlways = normalizedAlways;
         this.getUpdateFlag().flag(Flag.APPEARANCE);
+    }
+
+    /** The skull drawn over the player's head, or -1 for none. */
+    public getHeadSkullIcon(): number {
+        if (this.skullIconOverrideAlways) {
+            return this.skullIconOverride;
+        }
+        return this.isSkulled() ? this.getSkullIconId() : -1;
     }
 
     public setSkullType(skullType: SkullType) {

@@ -246,6 +246,9 @@ function openAnvilGate({ player, objectId }) {
 // --- The coffer.
 
 function useCoffer({ player }) {
+  // Other minigames' "Coffer" locs (Bounty Hunter) fall through to their own handlers.
+  const x = player.getLocation().getX(), y = player.getLocation().getY();
+  if (x < ROOM.minX || x > ROOM.maxX || y < ROOM.minY || y > ROOM.maxY) return false;
   if (stateOf(player).coffer === 0 && coins(player) === 0) {
     coinsStatement(player, "There are no coins in the coffer or your inventory.");
     return;
