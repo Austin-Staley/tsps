@@ -18,6 +18,7 @@ import { OverlayRenderer } from "./ui/overlay/OverlayRenderer";
 import { CLIENT_TOKEN } from "./plugins/PluginInjector";
 import { CORE_PLUGINS, LEGACY_CONFIG_MIGRATIONS } from "./plugins";
 import { toRuneLiteGameState } from "../impl/GameStateMapping";
+import { bindNpcEvents } from "../impl/NpcEventSource";
 import { runLegacyConfigMigrations } from "../impl/LegacyConfigMigration";
 
 /**
@@ -71,6 +72,11 @@ export class RuneLite {
         if (this.eventBus.hasSubscribers(BeforeRender)) this.eventBus.post(new BeforeRender());
     }
 
+    /** NpcSpawned/NpcDespawned/NpcChanged from the NPC store (server NPCs). */
+    private postNpcEvents(): void {
+        if (this.client.npcEcs?.mutationListeners) bindNpcEvents(this.client.npcEcs, (event) => this.eventBus.post(event));
+    }
+
     private load(): void {
         const injector = this.pluginManager.getInjector();
         injector.provide(CLIENT_TOKEN, this.client);
@@ -90,6 +96,7 @@ export class RuneLite {
                 this.eventBus.post(new StatChanged(skill.id, skill.xp, skill.baseLevel, skill.currentLevel));
             }
         });
+        this.postNpcEvents();
 
         // state.tickListeners fire after the tick's packets are applied.
         subscribeTick(() => this.eventBus.post(new GameTick()));

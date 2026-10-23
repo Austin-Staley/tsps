@@ -6,6 +6,7 @@ import { ConfigChanged } from "./ConfigChanged";
 import { FocusChanged } from "./FocusChanged";
 import { GameStateChanged } from "./GameStateChanged";
 import { GameTick } from "./GameTick";
+import { NpcChanged, NpcDespawned, NpcSpawned } from "./NpcEvents";
 import { PluginMessage } from "./PluginMessage";
 import { PluginChanged } from "./PluginChanged";
 import { PostClientTick } from "./PostClientTick";
@@ -19,6 +20,7 @@ export { ConfigChanged } from "./ConfigChanged";
 export { FocusChanged } from "./FocusChanged";
 export { GameStateChanged } from "./GameStateChanged";
 export { GameTick } from "./GameTick";
+export { NpcChanged, NpcDespawned, NpcSpawned, type NpcRef } from "./NpcEvents";
 export { PluginMessage } from "./PluginMessage";
 export { PluginChanged } from "./PluginChanged";
 export { PostClientTick } from "./PostClientTick";
@@ -44,4 +46,7 @@ export const EVENT_CLASSES: Record<string, EventClass> = {
     CommandExecuted,
     FocusChanged,
     StatChanged,
+    NpcSpawned,
+    NpcDespawned,
+    NpcChanged,
 };
