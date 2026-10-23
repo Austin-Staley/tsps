@@ -28,6 +28,7 @@ import {
   PluginCanSpawnNpcEvent,
   PluginCanStockItemEvent,
   PluginPrayerDisabledEvent,
+  PluginSpecialAttackDisabledEvent,
   PluginFiremakingBlockedEvent,
   PluginCanTeleportEvent,
   PluginCanLogoutEvent,
@@ -302,6 +303,7 @@ export class PluginManager {
   private static canSpawnNpcHooks: PluginHook<PluginCanSpawnNpcEvent>[] = [];
   private static canStockItemHooks: PluginHook<PluginCanStockItemEvent>[] = [];
   private static prayerDisabledHooks: PluginHook<PluginPrayerDisabledEvent>[] = [];
+  private static specialAttackDisabledHooks: PluginHook<PluginSpecialAttackDisabledEvent>[] = [];
   private static canUnequipHooks: PluginHook<PluginCanUnequipEvent>[] = [];
   private static playerDeathHooks: PluginHook<PluginPlayerDeathEvent>[] = [];
   private static playerOptionHooks: PluginHook<PluginPlayerOptionEvent>[] = [];
@@ -1452,6 +1454,15 @@ export class PluginManager {
     const event: PluginPrayerDisabledEvent = { player, prayer, disabled: null };
     return PluginManager.firstAnswer(PluginManager.prayerDisabledHooks, event, "prayer_disabled", "disabled") === true
       ? event.message ?? "You cannot use that prayer here."
+      : null;
+  }
+
+  /** The plugin's refusal message when the special attack bar is disabled, or null when it is usable. */
+  public static emitSpecialAttackDisabled(player: any): string | null {
+    if (PluginManager.specialAttackDisabledHooks.length === 0) return null;
+    const event: PluginSpecialAttackDisabledEvent = { player, disabled: null };
+    return PluginManager.firstAnswer(PluginManager.specialAttackDisabledHooks, event, "special_attack_disabled", "disabled") === true
+      ? event.message ?? "You can't use special attacks here."
       : null;
   }
 
@@ -3268,6 +3279,9 @@ export class PluginManager {
       },
       onPrayerDisabled: (handler) => {
         if (typeof handler === "function") PluginManager.prayerDisabledHooks.push({ pluginName, handler });
+      },
+      onSpecialAttackDisabled: (handler) => {
+        if (typeof handler === "function") PluginManager.specialAttackDisabledHooks.push({ pluginName, handler });
       },
       onCanEquip: (handler) => {
         if (typeof handler !== "function") {

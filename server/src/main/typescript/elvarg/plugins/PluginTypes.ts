@@ -301,6 +301,13 @@ export interface PluginPrayerDisabledEvent {
   message?: string;
 }
 
+export interface PluginSpecialAttackDisabledEvent {
+  player: any;
+  disabled: boolean | null;
+  /** Shown to the player when disabled is true. */
+  message?: string;
+}
+
 export interface PluginCanLogoutEvent {
   player: any;
   allow: boolean | null;
@@ -935,6 +942,8 @@ export interface PluginApi {
   onCanSpawnNpc(handler: (event: PluginCanSpawnNpcEvent) => void): void;
   onCanStockItem(handler: (event: PluginCanStockItemEvent) => void): void;
   onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
+  /** Refuse turning the special attack bar on (a duel or minigame rule); set `disabled` and a `message`. */
+  onSpecialAttackDisabled(handler: (event: PluginSpecialAttackDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
   onPlayerBeforeDeath(handler: (event: PluginPlayerBeforeDeathEvent) => void): void;
