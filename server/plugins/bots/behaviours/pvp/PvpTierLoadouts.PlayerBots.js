@@ -77,16 +77,20 @@ function getArchetypeChoices() {
 /**
  * A deterministic loadout+archetype for `tier`: the `index`th of the eligible choices, sorted.
  * `style` ("range" / "magic") keeps a post's combat style; `band` overrides the tier's level
- * band (Bounty Hunter narrows it to the levels a player can be matched with). Returns null
- * for an unknown tier.
+ * band (Bounty Hunter narrows it to the levels a player can be matched with); `excludeF2p`
+ * leaves out the free-to-play presets (members-only minigames). Returns null for an unknown
+ * tier.
  */
-function pickTierChoice(tier, { index = 0, style = null, band = TIER_BANDS[tier] } = {}) {
+function pickTierChoice(tier, { index = 0, style = null, band = TIER_BANDS[tier], excludeF2p = false } = {}) {
   const profileId = TIER_PROFILE_IDS[tier];
   if (!profileId || !band) {
     return null;
   }
   const profile = getPvpProfile(profileId);
   const eligible = (choice) => {
+    if (excludeF2p && choice.tags.includes("f2p")) {
+      return false;
+    }
     const minimumProfiles = choice.entry.minimumProfileIds;
     if (Array.isArray(minimumProfiles) && minimumProfiles.length > 0 && !minimumProfiles.includes(profile.id)) {
       return false;

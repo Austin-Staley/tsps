@@ -76,9 +76,10 @@ function botLevelBand(player, tier) {
 
 /** The tier's profile and loadout replace the runtime's random pick, then the bot regears. */
 function applyTier(bot, state, tier, band, index) {
-  const choice = pickTierChoice(tier, { index, band });
+  // Bounty Hunter is members-only: no free-to-play presets.
+  const choice = pickTierChoice(tier, { index, band, excludeF2p: true });
   Object.assign(state.pvp, buildRoamingPvpMetadata({
-    excludeF2p: false,
+    excludeF2p: true,
     config: choice
       ? { pvp: { loadoutWeights: [{ value: choice.loadoutId, weight: 1 }], profileWeights: [{ value: TIER_PROFILE_IDS[tier], weight: 1 }] } }
       : {},

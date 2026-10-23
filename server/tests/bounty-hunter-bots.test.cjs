@@ -30,3 +30,12 @@ test('the shared tier picker still answers each tier', () => {
   for (const tier of Object.keys(TIER_BANDS)) assert.ok(pickTierChoice(tier), tier);
   assert.equal(pickTierChoice('unknown'), null);
 });
+
+test('members-only picks never draw a free-to-play preset', () => {
+  for (const tier of Object.keys(TIER_BANDS)) {
+    for (let index = 0; index < 20; index++) {
+      const choice = pickTierChoice(tier, { index, excludeF2p: true });
+      assert.ok(!choice || !choice.tags.includes('f2p'), `${tier} ${choice?.loadoutId}`);
+    }
+  }
+});
