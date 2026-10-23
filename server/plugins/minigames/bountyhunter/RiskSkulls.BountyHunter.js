@@ -8,8 +8,6 @@
  * headicons_pk: 21-25 plain, 28-32 golden-eyed (bronze, iron, green, blue, red).
  */
 
-const { CRATER } = require("./Fort.BountyHunter");
-
 const PLAIN_SKULLS = 21;
 const GOLDEN_SKULLS = 28;
 const TIER_LIMITS = [200_000, 800_000, 2_000_000, 8_000_000];
@@ -18,6 +16,7 @@ const KEPT_UNSKULLED = 3;
 const SWEEP_TICKS = 2;
 
 let core;
+let bh;
 let pluginApi;
 const inCrater = new Set();
 
@@ -61,24 +60,23 @@ function answerRisk(event) {
   event.value = riskOf(event.player);
 }
 
-function enterCrater({ player }) {
-  inCrater.add(player);
-  showSkull(player);
-}
-
-function leaveCrater({ player }) {
-  inCrater.delete(player);
-  player.setSkullIconOverride(null);
-}
-
 function forget({ player }) {
   inCrater.delete(player);
 }
 
+/**
+ * Crater membership comes from the Bounty Hunter areas (bots included: zone hooks only see
+ * real players' steps). Anyone who left since the last sweep loses the risk skull.
+ */
 function sweep() {
   for (const player of inCrater) {
-    if (player.isRegistered?.() === false) inCrater.delete(player);
-    else showSkull(player);
+    if (bh.inCrater(player)) continue;
+    inCrater.delete(player);
+    if (player.isRegistered?.() !== false) player.setSkullIconOverride(null);
+  }
+  for (const player of [...bh.lobby, ...bh.arena]) {
+    inCrater.add(player);
+    showSkull(player);
   }
 }
 
@@ -94,14 +92,13 @@ function startSweep() {
   })());
 }
 
-module.exports = function attachRiskSkulls(api) {
+module.exports = function attachRiskSkulls(api, state) {
   core = api.core;
   pluginApi = api;
-  api.onZoneEnter(CRATER, enterCrater);
-  api.onZoneExit(CRATER, leaveCrater);
+  bh = state;
   api.onPlayerLogout(forget);
   api.onServerStartup(startSweep);
   api.onCustomEvent("bounty-hunter:risk", answerRisk);
 };
 
-Object.assign(module.exports, { _test: { riskOf, skullIcon, keptOnDeath, enterCrater, leaveCrater, sweep, inCrater } });
+Object.assign(module.exports, { _test: { riskOf, skullIcon, keptOnDeath, sweep, inCrater } });

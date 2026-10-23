@@ -78,6 +78,11 @@ export abstract class Area {
         return null;
     }
 
+    /** true shows the Attack option on other players here (PvP ground outside the Wilderness). */
+    showsPlayerAttackOption(player: Player): boolean {
+        return false;
+    }
+
     /**
      * A walk click the engine would refuse because the player is mid forced move (or being placed
      * after one): true when the area takes it (a roll chained at once), false to refuse it.

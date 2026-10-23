@@ -195,6 +195,11 @@ function createAreas() {
       return canAttackInArena(attacker, target);
     }
 
+    /** Core re-sends the player Attack option on every step; the whole arena is PvP ground. */
+    showsPlayerAttackOption() {
+      return true;
+    }
+
     canTeleport(player) {
       return refuseTeleport(player);
     }

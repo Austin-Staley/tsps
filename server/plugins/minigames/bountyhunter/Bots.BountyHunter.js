@@ -9,8 +9,9 @@
  *
  *   - gear and profile from the chosen tier, at combat levels the player can be matched with;
  *   - the crater's matchmaking picks their fights: an assigned target becomes the bot's PvP
- *     target, a cleared one is dropped (the engine's own Wilderness seek finds nothing here);
- *   - with no target they roam the arena;
+ *     target and the bot runs across the arena to it (the engine's own Wilderness seek finds
+ *     nothing here);
+ *   - with no target they go rogue on the nearest player they may attack, bot or not;
  *   - they respawn at their sigil (the runtime's respawn resolver keeps the spawn tile) and
  *     log out a minute after the last real player leaves the crater.
  */
@@ -28,9 +29,11 @@ const BOT_COUNT = 12;
 const BOT_ATTRIBUTE = "bounty-hunter:bot";
 const PVP_ACTIVITY = "pvp";
 const TARGET_HOLD_MS = 30 * 60 * 1000; // the target is the crater's to clear, not the engine's timer
+const ROGUE_HOLD_MS = 2 * 60 * 1000; // the engine extends it while the fight goes on
+const DECIDE_MS = 1800;
+const ENGAGE_DISTANCE = 12; // closer than this, the engine's own combat pathing takes over
+const CHASE_STEP = 20; // tiles per walk order towards a far quarry
 const WANDER_RADIUS = 8;
-const WANDER_MIN_MS = 6000;
-const WANDER_JITTER_MS = 10000;
 const DESPAWN_AFTER_TICKS = 100; // a minute with no real player in the crater
 
 let api;
@@ -39,7 +42,7 @@ let bh;
 
 /** The live bot players. */
 const bots = new Set();
-const nextWanderAt = new WeakMap();
+const nextDecisionAt = new WeakMap();
 let emptyTicks = 0;
 
 function isBot(player) {
@@ -144,20 +147,90 @@ function dropTarget({ player }) {
   pvp.targetPlayer = null;
 }
 
-function idle(player) {
+function fighting(player) {
   const combat = player.getCombat();
-  return !combat.getTarget?.() && !combat.getAttacker?.() && !bh.targetOf(player) &&
-    player.getMovementQueue().size() === 0;
+  return alive(combat.getTarget?.()) || alive(combat.getAttacker?.());
 }
 
-/** The PvP engine only roams the Wilderness; a bot with no target roams the arena instead. */
-function wander(player, nowMs) {
-  if (nowMs < (nextWanderAt.get(player) ?? 0) || !idle(player)) return;
-  nextWanderAt.set(player, nowMs + WANDER_MIN_MS + Math.floor(Math.random() * WANDER_JITTER_MS));
-  const here = player.getLocation();
+function alive(mobile) {
+  return Boolean(mobile) && mobile.isRegistered?.() !== false && mobile.getHitpoints() > 0;
+}
+
+function distance(a, b) {
+  const p = a.getLocation();
+  const q = b.getLocation();
+  return Math.max(Math.abs(p.getX() - q.getX()), Math.abs(p.getY() - q.getY()));
+}
+
+/** Single-way arena: someone already fighting another player is not up for grabs. */
+function engagedElsewhere(other, bot) {
+  const combat = other.getCombat();
+  return [combat.getTarget?.(), combat.getAttacker?.()].some((mobile) => mobile !== bot && alive(mobile));
+}
+
+function mayAttack(bot, other) {
+  const method = core.CombatFactory.getMethod(bot);
+  return core.CombatFactory.canAttackPermission(bot, other, false, method) === core.CanAttackResponse.CAN_ATTACK;
+}
+
+/** The nearest arena player the bot may attack and who is free: a rogue fight. */
+function nearestRogueTarget(bot) {
+  let best = null;
+  for (const other of bh.arena) {
+    if (other === bot || !alive(other) || engagedElsewhere(other, bot)) continue;
+    if (best && distance(bot, other) >= distance(bot, best)) continue;
+    if (mayAttack(bot, other)) best = other;
+  }
+  return best;
+}
+
+/** Its Bounty Hunter target when it has one in the arena, else a rogue fight. */
+function quarryOf(bot) {
+  const target = bh.targetOf(bot);
+  return target && bh.inArena(target) && alive(target) ? target : nearestRogueTarget(bot);
+}
+
+/** One walk order up to CHASE_STEP tiles towards `to`; the engine's pathing does the last stretch. */
+function chase(bot, to) {
+  const from = bot.getLocation();
+  const dx = to.getLocation().getX() - from.getX();
+  const dy = to.getLocation().getY() - from.getY();
+  const scale = Math.min(1, CHASE_STEP / Math.max(Math.abs(dx), Math.abs(dy), 1));
+  bot.setRunning?.(true);
+  core.PathFinder.calculateWalkRoute(bot, from.getX() + Math.round(dx * scale), from.getY() + Math.round(dy * scale));
+}
+
+function wander(bot) {
+  const here = bot.getLocation();
   const x = here.getX() + core.Misc.random(WANDER_RADIUS * 2) - WANDER_RADIUS;
   const y = here.getY() + core.Misc.random(WANDER_RADIUS * 2) - WANDER_RADIUS;
-  if (bh.isArenaTile({ x, y, z: 0 })) core.PathFinder.calculateWalkRoute(player, x, y);
+  if (bh.isArenaTile({ x, y, z: 0 })) core.PathFinder.calculateWalkRoute(bot, x, y);
+}
+
+/**
+ * Out of a fight: hand the quarry to the PvP engine and close the distance; the engine
+ * attacks, specs, eats and switches once it is in reach.
+ */
+function hunt(bot, nowMs) {
+  if (nowMs < (nextDecisionAt.get(bot) ?? 0) || fighting(bot)) return;
+  nextDecisionAt.set(bot, nowMs + DECIDE_MS);
+  const state = stateOf(bot);
+  const quarry = quarryOf(bot);
+  if (!state?.pvp || !quarry) {
+    if (bot.getMovementQueue().size() === 0) wander(bot);
+    return;
+  }
+  if (state.pvp.targetPlayer !== quarry) {
+    const hold = bh.targetOf(bot) === quarry ? TARGET_HOLD_MS : ROGUE_HOLD_MS;
+    setModePvp(bot, state, quarry, nowMs, hold, getActiveBotRuntime().behaviorMode, { allowInCombatTransition: true });
+  }
+  if (distance(bot, quarry) > ENGAGE_DISTANCE) chase(bot, quarry);
+}
+
+/** Where the bot stands, not area membership: bots are area-processed every third tick. */
+function onCraterTile(bot) {
+  const location = bot.getLocation();
+  return bh.isArenaTile(location) || bh.isLobbyTile(location);
 }
 
 function tick() {
@@ -171,8 +244,8 @@ function tick() {
   const nowMs = Date.now();
   for (const player of bots) {
     if (player.getHitpoints() <= 0 || player.isDyingReturn?.() === true) continue;
-    if (!bh.inCrater(player)) player.moveTo(Entry.spawnTile());
-    else if (bh.inArena(player)) wander(player, nowMs);
+    if (!onCraterTile(player)) player.moveTo(Entry.spawnTile());
+    else if (bh.inArena(player)) hunt(player, nowMs);
   }
 }
 
