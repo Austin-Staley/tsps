@@ -744,8 +744,7 @@ export class MovementQueue {
 
         player.setWildernessLevel(0);
         player.setMultiIcon(0);
-        const attackOption = player.getArea()?.showsPlayerAttackOption(player) === true ? "Attack" : "null";
-        packetSender.sendInteractionOption(attackOption, 2, true);
+        packetSender.sendInteractionOption("null", 2, true);
     }
 
     public static runEnergyRestoreDelay(p: Player) {

@@ -23,6 +23,7 @@ const LOBBY_ALLOWANCE_TICKS = 200; // 2:00
 const LOBBY_REFUND_TICKS = 25; // 15 seconds
 const ROGUE_IMMUNITY_TICKS = 10; // 6 seconds
 const ROGUE_LEVEL_RANGE = 15;
+const ATTACK_OPTION_SLOT = 1; // the client's first player option, as Castle Wars and Ferox use it
 // Prayer head icons of Protect from Melee, Missiles and Magic.
 const PROTECTION_HEAD_ICONS = [0, 1, 2];
 const COMBAT_SKILLS = ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC", "HITPOINTS"];
@@ -101,7 +102,7 @@ function enterArena(player) {
   bh.lobbyTicks.set(player, ticks);
   Hud.sendLobbyTimer(player, ticks);
   for (const prayer of core.PrayerHandler.PROTECTION_PRAYERS) core.PrayerHandler.deactivatePrayer(player, prayer);
-  if (player.isPlayerBot?.() !== true) player.getPacketSender().sendInteractionOption("Attack", 2, true);
+  if (player.isPlayerBot?.() !== true) player.getPacketSender().sendPlayerOption(ATTACK_OPTION_SLOT, "Attack", true);
   Targets.remindPenalty(player);
   api.emitCustomEvent("bounty-hunter:entered-arena", { player });
   Hud.sync(player);
@@ -115,7 +116,7 @@ function leaveArena(player, logout) {
     leftCrater(player, true);
     return;
   }
-  if (player.isPlayerBot?.() !== true) player.getPacketSender().sendInteractionOption("null", 2, true);
+  if (player.isPlayerBot?.() !== true) player.getPacketSender().sendPlayerOption(ATTACK_OPTION_SLOT, "", false);
   Hud.sendImmunity(player, 0);
   Targets.remindPenalty(player);
   if (!bh.isLobbyTile(player.getLocation())) leftCrater(player, false);
@@ -193,11 +194,6 @@ function createAreas() {
 
     canAttack(attacker, target) {
       return canAttackInArena(attacker, target);
-    }
-
-    /** Core re-sends the player Attack option on every step; the whole arena is PvP ground. */
-    showsPlayerAttackOption() {
-      return true;
     }
 
     canTeleport(player) {
