@@ -346,7 +346,9 @@ test("repeated writer failures never fall back to synchronous game-thread writes
 // Exercise disk serialization and hydration used by login, not an in-memory snapshot.
 const { FightType } = require("../dist/game/content/combat/FightType");
 const { JsonPlayerPersistence } = require("../plugins/persistence/JsonPlayerPersistence.plugin");
+const { IndexedDbPlayerPersistence } = require("../plugins/persistence/IndexedDbPlayerPersistence.plugin");
 JsonPlayerPersistence.SAVE_DIRECTORY = path.join(directory, "json-characters");
+IndexedDbPlayerPersistence.SAVE_DIRECTORY = path.join(directory, "indexeddb-characters");
 let jsonPersistence;
 require("../plugins/persistence/JsonPlayerPersistence.plugin").register({
   getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
@@ -354,7 +356,13 @@ require("../plugins/persistence/JsonPlayerPersistence.plugin").register({
   log() {},
 });
 
-for (const [name, backend] of [["SQLite", persistence], ["JSON", jsonPersistence]]) {
+const persistenceBackends = [
+  ["SQLite", persistence],
+  ["JSON", jsonPersistence],
+  ["IndexedDB", new IndexedDbPlayerPersistence()],
+];
+
+for (const [name, backend] of persistenceBackends) {
   test(`${name}: non-default combat styles survive a committed save and login load`, async () => {
     for (const [index, fightType] of [FightType.UNARMED_BLOCK, FightType.UNARMED_PUNCH].entries()) {
       const original = player(`Style ${name} ${index}`);
@@ -378,7 +386,7 @@ for (const [name, backend] of [["SQLite", persistence], ["JSON", jsonPersistence
 }
 
 let combatStyleCache;
-for (const [name, backend] of [["SQLite", persistence], ["JSON", jsonPersistence]]) {
+for (const [name, backend] of persistenceBackends) {
   test(`${name}: equipped weapons keep colliding styles through login assignment`, async () => {
     const { CachePipeline } = require("../dist/game/cache/CachePipeline");
     combatStyleCache ??= CachePipeline.initialize(path.resolve(__dirname, "..")).then(() => {
