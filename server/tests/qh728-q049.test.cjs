@@ -29,7 +29,7 @@ const MARY = N.MARY_2; // 10502
 const BEAST = N.HEADLESS_BEAST_2; // 10506
 const VARBIT = 693;
 const STAGE = {
-  start: 2, mary: 4, pouring: 6, poured: 8, trail: 10, lair: 12, killed: 14,
+  start: 2, mary: 4, poured: 8, trail: 10, lair: 12, killed: 14,
   refused: 16, maryFake: 18, clayMade: 20, clayShown: 22, furMade: 24,
   furShown: 26, bloodyMade: 28, bloodyShown: 30, mounted: 32, complete: 34,
 };
@@ -178,7 +178,7 @@ function harness(extraPlugins = []) {
 
 function player() {
   const attrs = new Map(), items = new Map(), configs = new Map(), varbits = new Map();
-  const xp = [], messages = [], animations = [];
+  const xp = [], messages = [], animations = [], dialogueTexts = [];
   let location = new core.Location(1248, 3686, 0), area = null, text = '', prompt = null, full = false, offline = false;
   let manager;
   const inventory = {
@@ -217,11 +217,11 @@ function player() {
     sendVarbit(id, value) { varbits.set(id, value); return packet; },
     getVarbit: id => varbits.get(id) ?? 0,
     getVarp: id => configs.get(id) ?? 0,
-    sendString(value) { text = value; return packet; },
+    sendString(value) { text = value; dialogueTexts.push(value); return packet; },
     sendInterfaceRemoval() { manager.reset(); prompt = null; return packet; },
   }, { get: (target, key) => target[key] ?? ((...args) => packet) });
   const p = {
-    attrs, items, configs, varbits, xp, messages, animations, inventory, equipment,
+    attrs, items, configs, varbits, xp, messages, animations, dialogueTexts, inventory, equipment,
     getAttribute: key => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getInventory: () => inventory,
@@ -295,7 +295,7 @@ test('Getting Ahead wire contract and fresh stage 0 -> Mary', () => {
   });
 });
 
-test('Getting Ahead flour pour, overnight, relog and interrupted-save recovery', () => {
+test('Getting Ahead flour pour, overnight, and stage-8 login recovery', () => {
   const h = harness(), p = player();
   h.quest.setStage(p, STAGE.mary);
   p.inventory.adds(I.POT_OF_FLOUR, 1);
@@ -308,19 +308,22 @@ test('Getting Ahead flour pour, overnight, relog and interrupted-save recovery',
 
   h.action(p, GORDON, 'pL8hVR');
   assert.equal(h.quest.getStage(p), STAGE.poured);
-  h.action(p, GORDON, '7aXCpS');
+  const overnight = h.action(p, GORDON, '7aXCpS');
+  assert.equal(overnight.end, true, 'the timed overnight transition ends the current transcript');
   h.tick(2);
   assert.equal(h.quest.getStage(p), STAGE.trail);
   assert.equal(p.varbits.get(VARBIT), STAGE.trail);
   h.tick(4);
+  assert.equal(p.dialogueTexts.filter(text => text === 'You head off for the night and come back the next day.').length, 1,
+    'the night transition statement is displayed once');
   h.loginReplay(p);
   assert.equal(p.varbits.get(VARBIT), STAGE.trail, 'login replay sends the saved stage in varbit 693');
 
   const saved = harness(), q = player();
-  saved.quest.setStage(q, STAGE.pouring);
-  assert.equal(q.varbits.get(VARBIT), STAGE.pouring);
+  saved.quest.setStage(q, STAGE.poured);
+  assert.equal(q.varbits.get(VARBIT), STAGE.poured);
   saved.login(q);
-  assert.equal(saved.quest.getStage(q), STAGE.poured, 'an old stage-6 save resumes the overnight leg');
+  assert.equal(saved.quest.getStage(q), STAGE.poured, 'stage 8 is the durable interruption point');
   saved.tick(3);
   assert.equal(saved.quest.getStage(q), STAGE.trail);
   assert.equal(q.varbits.get(VARBIT), STAGE.trail);
@@ -483,6 +486,16 @@ test('Getting Ahead gives each head to Gordon at the helper stage window', () =>
   assert.notEqual(late.handled, true, 'a clay head outside its stage window does not advance');
 });
 
+test('Getting Ahead resumes an older flour-pouring save without another pot', () => {
+  const h = harness(), p = player();
+  h.quest.setStage(p, 6);
+  h.login(p);
+  assert.equal(h.quest.getStage(p), STAGE.poured);
+  assert.equal(p.inventory.getAmount(I.POT_OF_FLOUR), 0);
+  h.tick(3);
+  assert.equal(h.quest.getStage(p), STAGE.trail);
+});
+
 test('Getting Ahead mounts the bloody head and completes once with the canonical wire value', () => {
   const h = harness(), p = player();
   h.quest.setStage(p, STAGE.bloodyShown);
@@ -514,8 +527,18 @@ test('Getting Ahead mounts the bloody head and completes once with the canonical
   assert.equal(p.inventory.getAmount(I.COINS), 3000);
   assert.equal(p.attrs.get('quest.points'), 1);
   assert.ok(p.messages.some(message => /completed a quest: .*Getting Ahead/.test(message)));
-  h.loginReplay(p);
-  assert.equal(p.varbits.get(VARBIT), STAGE.complete);
+  p.varbits.delete(VARBIT);
+  p.varbits.delete(694);
+  h.login(p);
+  runtime.sendQuestVarps({ player: p });
+  assert.equal(p.varbits.get(VARBIT), STAGE.complete, 'registered player login replays completed stage 34');
+  assert.equal(p.varbits.get(694), 1, 'registered player login restores the claimed coin reward bit');
+  p.varbits.set(694, 0);
+  h.api.emitCustomEvent('player:bootstrap-complete', { player: p });
+  assert.equal(p.varbits.get(694), 1, 'bootstrap restores the earned reward bit after login defaults');
+  assert.equal(p.attrs.get('getting-ahead:coins-claimed'), 1);
+  assert.equal(h.answer(p, 'Ve-vo0'), true, 'Gordon selects the already-received reward branch after login');
+  assert.equal(h.answer(p, 'ybriIj'), false);
 
   const xpAfter = p.xp.length;
   const repeated = h.line(p, GORDON, rewardLine);
@@ -524,6 +547,19 @@ test('Getting Ahead mounts the bloody head and completes once with the canonical
   assert.equal(p.inventory.getAmount(I.COINS), 3000, 'the reward is not duplicated');
   assert.equal(p.xp.length, xpAfter);
   assert.equal(p.attrs.get('quest.points'), 1);
+});
+
+test('Getting Ahead migrates completed saves with no pending coins to the claimed state on login', () => {
+  const h = harness(), p = player();
+  h.quest.setStage(p, STAGE.complete);
+  p.attrs.delete('getting-ahead:coins-claimed');
+  p.attrs.delete('quest.getting_ahead.coins-pending');
+  p.varbits.delete(694);
+  h.login(p);
+  assert.equal(p.attrs.get('getting-ahead:coins-claimed'), 1);
+  assert.equal(p.varbits.get(694), 1);
+  assert.equal(h.answer(p, 'Ve-vo0'), true);
+  assert.equal(h.answer(p, 'ybriIj'), false);
 });
 
 test('Getting Ahead holds the coin reward when the bag is full and reclaims it from Gordon', () => {
@@ -536,11 +572,18 @@ test('Getting Ahead holds the coin reward when the bag is full and reclaims it f
   assert.equal(h.quest.getStage(p), STAGE.complete);
   assert.equal(p.inventory.getAmount(I.COINS), 0);
   assert.equal(p.attrs.get('quest.getting_ahead.coins-pending'), 1);
+  p.varbits.delete(694);
+  h.login(p);
+  assert.equal(p.varbits.get(694), 0, 'login leaves the claim bit clear while the coins are pending');
   assert.equal(h.answer(p, 'ybriIj'), true, 'Gordon offers the outstanding coins');
   p.inventory.setFull(false);
   h.action(p, GORDON, 'eJJth4');
   assert.equal(p.inventory.getAmount(I.COINS), 3000);
   assert.equal(p.attrs.get('quest.getting_ahead.coins-pending'), 0);
+  assert.equal(p.attrs.get('getting-ahead:coins-claimed'), 1);
+  p.varbits.delete(694);
+  h.login(p);
+  assert.equal(p.varbits.get(694), 1, 'the claimed bit survives a later registered login');
   assert.equal(h.answer(p, 'ybriIj'), false);
   assert.equal(h.answer(p, 'Ve-vo0'), true);
 });
