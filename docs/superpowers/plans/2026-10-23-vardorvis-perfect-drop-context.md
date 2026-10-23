@@ -13,7 +13,7 @@
 - [x] Answer the drop-context query only for the current fight, exact boss and killer.
 - [x] Regenerate canonical source twice, compare bytes, and import its complete output without JSON patches.
 - [x] Preserve Nex bundles and existing quest/Mimic reward ownership; keep pre-roll odds executable and exact.
-- [ ] Finish the final full-suite run and publish the reviewed PR.
+- [x] Finish the final full-suite run and prepare the reviewed PR for publication.
 
 ## Canonical import contract
 
@@ -30,3 +30,5 @@ Both complete release runs have SHA-256 `5fe1ca11fde74497fb3f6b0a50fa30fe00a60d3
 ## Verification
 
 Independent review caught and resolved a prayer-snapshot mismatch and canonical bundle eligibility/adjacency problems. Real cached NPC lethal damage verifies that the grade freezes before delayed loot. Canonical Coal resolves to 195 for a perfect kill and 130 otherwise. Tests cover specials, bleeds, zero/cancelled/immune damage, successive fights, quest ownership in both hook orders, Mimic payouts and the occult pre-roll boundary.
+
+Final release verification: TypeScript build passes; all 4,939 server tests pass on current upstream plus this feature, using test concurrency 4. Canonical source commits are 5493e563 and fed6d882; the exact release import hash is recorded above. No normal-world deployment was performed.
