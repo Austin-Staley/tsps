@@ -848,6 +848,61 @@ test('the Lassar vision overhead copies speak through the player actor on the ta
   }
 });
 
+test('an overhead NPC action owns its two-tick continuation; treating it as a dialogue drops the transcript tail', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { ActionDialogue } = require('../dist/game/model/dialogues/entries/impl/ActionDialogue');
+  const { PlayerDialogue } = require('../dist/game/model/dialogues/entries/impl/PlayerDialogue');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const area = {};
+  const chats = [];
+  const sender = new Proxy({}, { get: (_target, _key) => (..._args) => sender });
+  const location = { getZ: () => 0, getDistance: () => 1 };
+  const player = {
+    getUsername: () => 'Test', getAppearance: () => ({ isMale: () => true }),
+    isRegistered: () => true, getLocation: () => location, getPrivateArea: () => area,
+    getPacketSender: () => sender, getDialogueManager() { return this.manager; },
+    getLocalNpcs: () => [burntof],
+  };
+  const burntof = {
+    isRegistered: () => true, getPrivateArea: () => area, getLocation: () => location,
+    isOwnerOnly: () => true, getOwner: () => player, isVisible: () => true,
+    getIndex: () => 42, getCurrentDefinition: () => ({ getName: () => 'Burntof' }),
+    forceChat: (text) => chats.push(text),
+  };
+  player.manager = new DialogueManager(player);
+  const transcript = [
+    { type: 'line', speaker: 'Burntof', text: 'Yaaa*hic*aawn', presentation: 'overhead' },
+    { player: 'The transcript continues.' },
+  ];
+  const play = () => startDialogue({ core: PluginManager.getCoreApi(), emitCustomEvent() {} }, {
+    player, npc: null, npcId: 10661, definition: { getId: () => 10661, getName: () => 'Willow' },
+  }, transcript, {}, { player, npc: null, npcId: 10661, definition: { getId: () => 10661, getName: () => 'Willow' }, pages: [], speakerIdByName: new Map([['Burntof', 10664]]) });
+
+  try {
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+    play();
+    assert.deepEqual(chats, ['Yaaa*hic*aawn']);
+    assert.ok(player.manager.getCurrent() instanceof ActionDialogue);
+    TaskManager.process();
+    TaskManager.process();
+    assert.ok(player.manager.getCurrent() instanceof PlayerDialogue, 'the scheduled overhead continuation resumes the next line');
+
+    player.manager.reset();
+    play();
+    assert.ok(player.manager.getCurrent() instanceof ActionDialogue);
+    player.manager.advance(); // Mirrors clicking Continue while MCP reports kind "other".
+    TaskManager.process();
+    TaskManager.process();
+    assert.equal(player.manager.getCurrent(), undefined, 'advancing the internal action invalidates its guarded continuation');
+  } finally {
+    TaskManager.cancelTasks(player);
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+  }
+});
+
 test('ordinary typed player-placeholder lines still use the player chathead', () => {
   const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
   const { PluginManager } = require('../dist/plugins/PluginManager');

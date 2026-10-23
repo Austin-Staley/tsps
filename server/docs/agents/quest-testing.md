@@ -158,6 +158,17 @@ Prefer the named target form when it is unambiguous. Use the action the guide an
 menu actually specify: for example, a Swamp toad's `Inflate` option is a different dispatch
 from using bellows on the NPC. Validate the resulting item/stage change before proceeding.
 
+Only continue visible NPC/player/item/statement dialogues. A `kind: "other"` entry may be
+an internal action waiting for its scheduled overhead or scene callback. Use bounded
+`wait_ticks` and re-read it; clicking Continue there can invalidate the pending callback.
+
+For long walks or a failed direct path, use MCP `plan_route` before trying arbitrary
+intermediate tiles. It reuses the bot long-distance collision planner and returns short
+waypoints plus closed door/gate candidates at crossings. Walk each leg and open the
+observed door normally before crossing; the plan does not establish that a locked quest
+door is usable. It supports main-world, same-plane destinations within 319 tiles; split
+longer journeys at real intermediate destinations and use guide-required transports.
+
 Supply ordinary commodities such as beer, raw meat, nails, tools, food and travel items as
 declared setup aids when sourcing them would distract from the quest. Record optional shop
 or spawn failures separately. Earn quest-specific items and play mandatory doors, ladders,

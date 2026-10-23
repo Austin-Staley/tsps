@@ -1,10 +1,12 @@
 // Looking around, moving, and clicking things in the world or inventory.
+const { planRoute } = require("../../bots/behaviours/navigation/LongRoutePlanner.PlayerBots");
+
 module.exports = function registerWorldTools(ctx) {
   const {
     core, tool, z, player, find, send, items, tile, settle, status, sleepTicks, takeMessages, takeClient, area,
     nearby, nearest, npcClick, inventorySlot, MAX_WAIT_TICKS, movementBlocked,
   } = ctx;
-  const { World, Skill, BoatManager, BOAT_VIEW_DISTANCE } = core;
+  const { World, Skill, BoatManager, BOAT_VIEW_DISTANCE, RegionManager, MapObjects, ObjectDefinition } = core;
 
   /** Read-only mirror of WorldEntitySync's visibility/root-range/plane filter. */
   const worldEntities = (p) => {
@@ -77,6 +79,51 @@ module.exports = function registerWorldTools(ctx) {
         messages: takeMessages(p),
         client: takeClient(p),
       };
+    }
+  );
+
+  tool(
+    "plan_route",
+    "Read-only same-plane walking plan using the existing long-distance collision planner. Returns waypoints and closed door/gate candidates; follow with walk_to and normal object interactions. Door locks, quest requirements, ladders and transports are not solved. Main world only; destination within 319 tiles.",
+    { player, x: z.number().int().min(0).max(16383), y: z.number().int().min(0).max(16383) },
+    ({ player: username, x, y }) => {
+      const p = find(username);
+      if (p.getPrivateArea?.()) throw new Error("Plan main-world routes outside private areas.");
+      const from = tile(p.getLocation());
+      if (Math.max(Math.abs(x - from.x), Math.abs(y - from.y)) > 319) {
+        throw new Error("Choose an intermediate destination within 319 tiles.");
+      }
+      const doors = new Map();
+      const doorsAt = (x, y, z) => {
+        const key = `${x},${y},${z}`;
+        if (!doors.has(key)) {
+          // Load collision before reading map objects in this region.
+          RegionManager.getClipping(x, y, z, null);
+          const candidates = [];
+          for (const object of MapObjects.mapObjects.get(MapObjects.getHash(x, y, z)) ?? []) {
+            const at = tile(object.getLocation());
+            if (at.x !== x || at.y !== y || at.z !== z) continue;
+            const definition = ObjectDefinition.forPlayer(object.getId(), p);
+            const name = definition?.getName?.() ?? "";
+            const option = definition?.getInteractions?.()?.find((value) => /^(open|release|pay-toll\(\d+gp\))$/i.test(value ?? ""));
+            if (/door|gate/i.test(name) && option) candidates.push({ id: object.getId(), name, option, ...at });
+          }
+          doors.set(key, candidates);
+        }
+        return doors.get(key);
+      };
+      const plan = planRoute({
+        from, to: { x, y },
+        getFlag: (x, y, z) => RegionManager.getClipping(x, y, z, null),
+        isDoor: (x, y, z) => doorsAt(x, y, z).length > 0,
+      });
+      if (!plan) return { result: "no-route", from, destination: { x, y, z: from.z }, waypoints: [] };
+      const waypoints = plan.waypoints.map((point, index, points) => {
+        if (!point.door) return point;
+        const before = points[index - 1] ?? from;
+        return { ...point, doors: [...doorsAt(point.x, point.y, point.z), ...doorsAt(before.x, before.y, before.z)] };
+      });
+      return { result: "planned", from, destination: { x, y, z: from.z }, tiles: plan.tiles, waypoints };
     }
   );
 
