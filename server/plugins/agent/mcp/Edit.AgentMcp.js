@@ -50,6 +50,28 @@ module.exports = function registerEditTools(ctx) {
     }
   };
 
+  const rectSchema = {
+    x1: z.number().int().describe("Rectangle corner x"),
+    y1: z.number().int().describe("Rectangle corner y"),
+    x2: z.number().int().describe("Opposite corner x"),
+    y2: z.number().int().describe("Opposite corner y"),
+  };
+
+  const normalizeRect = (x1, y1, x2, y2) => {
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2);
+    const minY = Math.min(y1, y2);
+    const maxY = Math.max(y1, y2);
+    for (const [name, value] of [["x1", minX], ["x2", maxX], ["y1", minY], ["y2", maxY]]) {
+      if (!Number.isInteger(value) || value < 0 || value > 16383) {
+        throw new Error(`Tile ${name}=${value} is outside the world (0-16383)`);
+      }
+    }
+    const tiles = (maxX - minX + 1) * (maxY - minY + 1);
+    if (tiles > 4096) throw new Error(`Rectangle covers ${tiles} tiles; split it under 4096`);
+    return { minX, maxX, minY, maxY };
+  };
+
   tool(
     "search_objects",
     "Find placeable objects (locs) by name: walls, doors, trees, furniture, decorations. Matches substrings case-insensitively; a numeric query matches ids by prefix. Returns up to `limit` {id, name} pairs for place_object.",
@@ -121,12 +143,14 @@ module.exports = function registerEditTools(ctx) {
       // A razed tile keeps a removal marker for this object; clear it, or the marker
       // deletes the new placement on the next load.
       objectStore().dropRemoval(spawns, id, x, y, z, type);
+      // Registering replaced whatever stood in this tile's slot; drop its entry too.
+      const replaced = objectStore().dropReplaced(spawns, id, x, y, z, type, face);
       const already = objectStore().find(spawns, id, x, y, z, type, face) !== undefined;
       if (!already) {
         spawns.push({ id, position: { x, y, z }, type, face, source: "agent-mcp" });
       }
       writeSpawns(spawns);
-      return { placed: { id, name: definition.getName(), x, y, z, type, face }, persisted: !already };
+      return { placed: { id, name: definition.getName(), x, y, z, type, face }, persisted: !already, replaced };
     }
   );
 
@@ -178,26 +202,17 @@ module.exports = function registerEditTools(ctx) {
 
   tool(
     "clear_area",
-    "Raze a rectangle to bare ground: removes every live object on all planes in it and every NPC standing in it. Removals reach all players (present and late joiners) and persist: object removals go to object-spawns.json (the ?edit editor hides them after a sync), NPC removals drop their npc-spawns.json entries. Cache-map NPCs with no spawn-file entry return on restart and are reported. Collision goes with the objects. Combine with paint_ground/set_height for a building site.",
+    "Clear a rectangle on all planes. By default it removes only objects placed by object-spawns.json (agent or editor builds) and leaves the cache map's own scenery standing; includeCache:true razes everything, cache fences and ground decoration included, and persists removal markers for them (restore_area undoes those). It also drops spawn-file placements in the rectangle that no longer stand live, and removes NPCs standing in it unless includeNpcs is false. dryRun:true reports what would go without changing anything. Removals reach all players and persist; cache-map NPCs with no spawn-file entry return on restart and are reported. Collision goes with the objects.",
     {
-      x1: z.number().int().describe("Rectangle corner x"),
-      y1: z.number().int().describe("Rectangle corner y"),
-      x2: z.number().int().describe("Opposite corner x"),
-      y2: z.number().int().describe("Opposite corner y"),
+      ...rectSchema,
       includeNpcs: z.boolean().default(true).describe("Also remove NPCs standing in the rectangle"),
+      includeCache: z.boolean().default(false).describe("Also raze the cache map's own objects (persists removal markers)"),
+      dryRun: z.boolean().default(false).describe("Report what would be removed; change nothing"),
     },
-    ({ x1, y1, x2, y2, includeNpcs = true }) => {
-      const minX = Math.min(x1, x2);
-      const maxX = Math.max(x1, x2);
-      const minY = Math.min(y1, y2);
-      const maxY = Math.max(y1, y2);
-      for (const [name, value] of [["x1", minX], ["x2", maxX], ["y1", minY], ["y2", maxY]]) {
-        if (!Number.isInteger(value) || value < 0 || value > 16383) {
-          throw new Error(`Tile ${name}=${value} is outside the world (0-16383)`);
-        }
-      }
-      const tiles = (maxX - minX + 1) * (maxY - minY + 1);
-      if (tiles > 4096) throw new Error(`Rectangle covers ${tiles} tiles; split it under 4096`);
+    ({ x1, y1, x2, y2, includeNpcs = true, includeCache = false, dryRun = false }) => {
+      const { minX, maxX, minY, maxY } = normalizeRect(x1, y1, x2, y2);
+      const inRect = (entry) => entry?.position?.x >= minX && entry.position.x <= maxX
+        && entry.position.y >= minY && entry.position.y <= maxY;
 
       const spawns = readSpawns();
       let spawnsChanged = false;
@@ -221,6 +236,7 @@ module.exports = function registerEditTools(ctx) {
         }
       }
       const removedObjects = [];
+      const keptObjects = [];
       // A tile can hold the same loc twice (the cache's MapObjects and a registered
       // runtime object), so removals are keyed by object identity on the tile: a
       // second pass would otherwise find the placement entry already dropped and
@@ -235,13 +251,18 @@ module.exports = function registerEditTools(ctx) {
         const identity = `${object.getId()}:${type}:${x},${y},${z}`;
         if (removedKeys.has(identity)) continue;
         removedKeys.add(identity);
-        ObjectManager.deregister(object, true);
-        removedObjects.push({ id: object.getId(), type, x, y, z });
         // Compute coverage first: dropPlacement clears the placement entry, so asking
         // afterwards would report every object as "not from this file" and write a
         // removal marker even for objects this toolset placed itself.
         const covered = spawns.some((entry) => entry.id === object.getId()
           && sameTile(entry, x, y, z) && (entry.type ?? 10) === type && entry.remove !== true);
+        if (!covered && !includeCache) {
+          keptObjects.push({ id: object.getId(), type, x, y, z });
+          continue;
+        }
+        removedObjects.push({ id: object.getId(), type, x, y, z, cache: !covered });
+        if (dryRun) continue;
+        ObjectManager.deregister(object, true);
         if (objectStore().dropPlacement(spawns, object.getId(), x, y, z, type)) spawnsChanged = true;
         if (!covered) {
           spawns.push({
@@ -251,7 +272,18 @@ module.exports = function registerEditTools(ctx) {
           spawnsChanged = true;
         }
       }
-      if (spawnsChanged) writeSpawns(spawns);
+      // Placements with nothing standing live (e.g. one a later placement replaced on
+      // its tile) would come back on the next load; the rectangle is being cleared, so
+      // they go too.
+      const standing = new Set(removedObjects.filter((object) => !object.cache)
+        .map((object) => `${object.id}:${object.type}:${object.x},${object.y},${object.z}`));
+      const orphans = spawns.filter((entry) => entry.remove !== true && inRect(entry)
+        && !standing.has(`${entry.id}:${entry.type ?? 10}:${entry.position.x},${entry.position.y},${entry.position.z ?? 0}`));
+      if (!dryRun && orphans.length > 0) {
+        for (const orphan of orphans) spawns.splice(spawns.indexOf(orphan), 1);
+        spawnsChanged = true;
+      }
+      if (!dryRun && spawnsChanged) writeSpawns(spawns);
 
       const removedNpcs = [];
       const unpersistedCacheNpcs = [];
@@ -264,8 +296,9 @@ module.exports = function registerEditTools(ctx) {
           const at = npc.getLocation();
           if (at.getX() < minX || at.getX() > maxX || at.getY() < minY || at.getY() > maxY) continue;
           if (npc.getPrivateArea() || npc.isOwnerOnly?.()) continue;
-          World.getRemoveNPCQueue().push(npc);
           removedNpcs.push({ id: npc.getId(), x: at.getX(), y: at.getY(), z: at.getZ() });
+          if (dryRun) continue;
+          World.getRemoveNPCQueue().push(npc);
           let covered = false;
           for (let i = npcSpawns.length - 1; i >= 0; i--) {
             const entry = npcSpawns[i];
@@ -283,10 +316,43 @@ module.exports = function registerEditTools(ctx) {
 
       return {
         cleared: { x1: minX, y1: minY, x2: maxX, y2: maxY },
+        dryRun,
         removedObjects: removedObjects.length,
+        removedCacheObjects: removedObjects.filter((object) => object.cache).length,
         removedObjectSample: removedObjects.slice(0, 10),
+        droppedOrphanEntries: orphans.length,
+        keptObjects: keptObjects.length,
+        keptObjectSample: keptObjects.slice(0, 10),
         removedNpcs: removedNpcs.length,
         unpersistedCacheNpcs,
+      };
+    }
+  );
+
+  tool(
+    "restore_area",
+    "Undo cache-object removals in a rectangle on all planes: drops the removal markers clear_area (includeCache) or remove_object wrote to object-spawns.json and puts those cache objects back live for every player. Placements are left alone; clear_area removes those.",
+    { ...rectSchema },
+    ({ x1, y1, x2, y2 }) => {
+      const { minX, maxX, minY, maxY } = normalizeRect(x1, y1, x2, y2);
+      const spawns = readSpawns();
+      const markers = spawns.filter((entry) => entry.remove === true
+        && entry.position?.x >= minX && entry.position.x <= maxX
+        && entry.position?.y >= minY && entry.position.y <= maxY);
+      const restored = [];
+      for (const marker of markers) {
+        const { x, y, z = 0 } = marker.position;
+        const type = marker.type ?? 10;
+        const face = marker.face ?? 0;
+        // Registering takes the removed map object's place, so scene reloads stop hiding it.
+        ObjectManager.register(new GameObject(marker.id, new Location(x, y, z), type, face, null), true);
+        spawns.splice(spawns.indexOf(marker), 1);
+        restored.push({ id: marker.id, type, x, y, z });
+      }
+      if (restored.length > 0) writeSpawns(spawns);
+      return {
+        restored: restored.length,
+        restoredSample: restored.slice(0, 10),
       };
     }
   );

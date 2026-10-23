@@ -244,6 +244,8 @@ module.exports = function registerEditTerrainTools(ctx) {
 
   const toU8 = (data) => (data instanceof Uint8Array ? data : Uint8Array.from(data));
 
+  const sameBytes = (a, b) => a.length === b.length && a.every((value, index) => value === b[index]);
+
   // Streams one region's bytes to players and persists it so the server loads it on
   // startup. Terrain-only: clients keep the cache's objects, which keeps dense regions
   // under the replacement packet limit. A region that already carries replaced objects
@@ -269,6 +271,15 @@ module.exports = function registerEditTerrainTools(ctx) {
     // the replaced objects on the next restart.
     const packPath = path.join(dir, `${regionId}.pack`);
     const terrainPath = path.join(dir, `${regionId}.terrain.dat`);
+    // Back to the cache's own terrain with no replaced objects: nothing to persist, so
+    // the region stops loading as a replacement on restart. The live replacement stays
+    // for this session, so clients still holding the edited terrain get the cache's on
+    // their next scene rebuild.
+    const cache = CacheMaps.getRegion(regionId)?.terrainData;
+    if (!objectData && cache && sameBytes(terrain, toU8(cache))) {
+      for (const file of [packPath, terrainPath]) if (fs.existsSync(file)) fs.unlinkSync(file);
+      return { regionId, mapX, mapY, tiles, ...result, packFile, terrainFile, persisted: false, matchesCache: true };
+    }
     if (pack) {
       packFile = packPath;
       fs.writeFileSync(packFile, pack);
@@ -410,22 +421,29 @@ module.exports = function registerEditTerrainTools(ctx) {
         const current = toU8(baseBytes(regionId).terrainData);
         const cache = CacheMaps.getRegion(regionId);
         if (!cache?.terrainData) throw new Error(`Region ${regionId} is not in the cache`);
-        regions.push(commitRegion(regionId, restoreTiles(current, toU8(cache.terrainData), tiles, wide), tiles.size));
+        // `tiles` holds one key per plane; report world tiles, as the rectangle has them.
+        regions.push(commitRegion(regionId, restoreTiles(current, toU8(cache.terrainData), tiles, wide), tiles.size / PLANE_COUNT));
       }
-      return { change: `clear ${regions.reduce((n, r) => n + r.tiles, 0)} tiles`, regions };
+      return { change: `clear ${regions.reduce((n, r) => n + r.tiles, 0)} tiles on every plane`, regions };
     }
   );
 
   tool(
     "list_region_packs",
-    "Regions with active agent/editor replacements (regionId, map tile range). These persist as data/regions/<regionId>.pack and load on startup.",
+    "Regions with active agent/editor replacements (regionId, map tile range). These persist as data/regions/<regionId>.pack or .terrain.dat and load on startup; matchesCache marks one cleared back to the cache, which has no file and is gone after a restart.",
     {},
     () => ({
       count: MapRegionReplacementManager.getRegionIds().length,
       regions: MapRegionReplacementManager.getRegionIds().map((regionId) => {
         const mapX = regionId >> 8;
         const mapY = regionId & 0xff;
-        return { regionId, mapX, mapY, x1: mapX * 64, y1: mapY * 64, x2: mapX * 64 + 63, y2: mapY * 64 + 63 };
+        const replacement = MapRegionReplacementManager.getReplacementMapData(regionId);
+        const cache = CacheMaps.getRegion(regionId)?.terrainData;
+        const matchesCache = Boolean(replacement && !replacement.objectData && cache
+          && sameBytes(toU8(replacement.terrainData), toU8(cache)));
+        return {
+          regionId, mapX, mapY, x1: mapX * 64, y1: mapY * 64, x2: mapX * 64 + 63, y2: mapY * 64 + 63, matchesCache,
+        };
       }),
     })
   );

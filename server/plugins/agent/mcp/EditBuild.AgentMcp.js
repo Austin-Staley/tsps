@@ -135,6 +135,22 @@ function expandPart(part, originX, originY, params, rotation) {
   return tiles;
 }
 
+/**
+ * A tile holds one object per type, so two parts placing on the same tile and type
+ * leave only the later one standing. Collapse them here, keeping the later part, so
+ * the counts are true and the spawn file does not keep the hidden one to bring back
+ * on the next load.
+ */
+function collapseOverlaps(placements) {
+  const byTile = new Map();
+  for (const item of placements) {
+    const tile = `${item.x},${item.y},${item.z ?? 0},${item.type ?? 10}`;
+    byTile.delete(tile);
+    byTile.set(tile, item);
+  }
+  return { placements: [...byTile.values()], overlapped: placements.length - byTile.size };
+}
+
 module.exports = function registerEditBuildTools(ctx) {
   const { core, tool, z } = ctx;
   const { GameObject, ObjectManager, Location, ObjectDefinition, CacheDefinitions } = core;
@@ -166,11 +182,12 @@ module.exports = function registerEditBuildTools(ctx) {
    * tile partway through must not leave half a structure standing in the world with
    * nothing persisted, because that divergence lasts until the next restart.
    */
-  const applyPlacements = (placements) => {
-    if (placements.length === 0) return { placed: 0, skipped: [], persisted: 0 };
-    if (placements.length > MAX_BATCH) {
-      throw new Error(`Batch of ${placements.length} exceeds ${MAX_BATCH}; split the build`);
+  const applyPlacements = (requested) => {
+    if (requested.length > MAX_BATCH) {
+      throw new Error(`Batch of ${requested.length} exceeds ${MAX_BATCH}; split the build`);
     }
+    const { placements, overlapped } = collapseOverlaps(requested);
+    if (placements.length === 0) return { placed: 0, skipped: [], persisted: 0, overlapped, replaced: 0 };
     const problems = [];
     placements.forEach((item, index) => {
       const { id, x, y, z = 0, type = 10, face = 0 } = item;
@@ -192,6 +209,7 @@ module.exports = function registerEditBuildTools(ctx) {
     let placed = 0;
     const skipped = [];
     let persisted = 0;
+    let replaced = 0;
     for (const [index, item] of placements.entries()) {
       const { id, x, y, z = 0, type = 10, face = 0 } = item;
       try {
@@ -202,6 +220,8 @@ module.exports = function registerEditBuildTools(ctx) {
         if (skipped.length < 10) skipped.push({ index, x, y, reason: String(error?.message ?? error) });
         continue;
       }
+      // The live object it replaced must not come back from its old entry on reload.
+      replaced += spawnStore.dropReplaced(entries, id, x, y, z, type, face);
       const existing = spawnStore.find(entries, id, x, y, z, type, face);
       if (!existing) {
         // A razed tile still carries a removal marker for this object; clear it, or the
@@ -211,8 +231,8 @@ module.exports = function registerEditBuildTools(ctx) {
         persisted++;
       }
     }
-    if (persisted > 0) spawnStore.write(entries);
-    return { placed, skipped, persisted };
+    if (persisted > 0 || replaced > 0) spawnStore.write(entries);
+    return { placed, skipped, persisted, overlapped, replaced };
   };
 
   /** Builds a placement list from a preset/shape description without touching the world. */
@@ -344,8 +364,9 @@ module.exports = function registerEditBuildTools(ctx) {
         [{ shape, material: material ?? id, x: 0, y: 0, ...options, ...endRelative }],
         { originX: x, originY: y, params: {}, rotation, catalog },
       ).map((item) => ({ ...item, z }));
-      const result = applyPlacements(plan);
-      return { ...result, ...summarize(plan) };
+      const { placements, overlapped } = collapseOverlaps(plan);
+      const result = applyPlacements(placements);
+      return { ...result, overlapped, ...summarize(placements) };
     }
   );
 
@@ -364,10 +385,10 @@ module.exports = function registerEditBuildTools(ctx) {
       const catalog = readCatalog();
       const entry = catalog.presets[preset];
       if (!entry) throw new Error(`Unknown preset "${preset}"; known: ${Object.keys(catalog.presets).join(", ")}`);
-      const placements = planPreset(entry, x, y, rotation, params, catalog)
-        .map((item) => ({ ...item, z }));
+      const { placements, overlapped } = collapseOverlaps(planPreset(entry, x, y, rotation, params, catalog)
+        .map((item) => ({ ...item, z })));
       const result = applyPlacements(placements);
-      return { preset, ...result, ...summarize(placements) };
+      return { preset, ...result, overlapped, ...summarize(placements) };
     }
   );
 
@@ -385,8 +406,8 @@ module.exports = function registerEditBuildTools(ctx) {
       const catalog = readCatalog();
       const entry = catalog.presets[preset];
       if (!entry) throw new Error(`Unknown preset "${preset}"`);
-      const placements = planPreset(entry, x, y, rotation, params, catalog);
-      return { preset, ...summarize(placements) };
+      const { placements, overlapped } = collapseOverlaps(planPreset(entry, x, y, rotation, params, catalog));
+      return { preset, overlapped, ...summarize(placements) };
     }
   );
 
