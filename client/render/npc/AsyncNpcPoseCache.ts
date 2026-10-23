@@ -55,7 +55,7 @@ export class AsyncNpcPoseCache {
         this.syncContext();
         const pose = this.resolve(request);
         this.syncContext();
-        if (pose) this.claimActor(actorIdentity, pose);
+        if (pose) { this.claimActor(actorIdentity, pose); this.retainBase(pose); }
         const key = pose ? this.key(pose.key, pose.appearance) : undefined;
         if (key && actorIdentity !== undefined && this.gpuResident?.(key)) {
             const actor = this.actorRequests.get(actorIdentity);
@@ -86,6 +86,7 @@ export class AsyncNpcPoseCache {
         this.syncContext();
         if (!pose) return undefined;
         const key = this.key(pose.key, pose.appearance);
+        const base = this.retainBase(pose);
         this.firstRequestAt ??= performance.now();
         this.stats.requestedFrame = pose.request[2];
         this.claimActor(actorIdentity, pose);
@@ -101,7 +102,6 @@ export class AsyncNpcPoseCache {
             return cached;
         }
         const previous = this.previous.get(fallbackIdentity) ?? this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
-        const base = pose.request[1] >= 0 ? this.resolve([pose.request[0], -1, 0]) : undefined;
         const fallback = (previous ? this.loader.getCachedGeometry(previous) : undefined) ??
             (base ? this.loader.getCachedGeometry(this.key(base.key, base.appearance)) : undefined);
         if (fallback) {
@@ -134,6 +134,18 @@ export class AsyncNpcPoseCache {
     }
 
     private key(key: string, appearance: string): string { return `async-npc:${this.context}:${this.generation}:${key}:${appearance}`; }
+
+    private retainBase(pose: NonNullable<PoseRequest>): PoseRequest {
+        const base = pose.request[1] < 0 ? pose : this.resolve([pose.request[0], -1, 0]);
+        if (base) {
+            const key = this.key(base.key, base.appearance);
+            // Active actors need this neutral fallback across animation-family changes.
+            // Touch existing CPU/GPU entries (including known-empty alpha); never allocate or pin them.
+            this.loader.getCachedGeometry(key);
+            this.gpuResident?.(key);
+        }
+        return base;
+    }
 
     private fallbackIdentity(pose: NonNullable<PoseRequest>, actor?: number): string {
         return `${actor ?? "shared"}:${pose.appearance}:${pose.request[1]}:${pose.request[3] ?? -1}`;

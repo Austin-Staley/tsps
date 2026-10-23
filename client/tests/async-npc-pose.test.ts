@@ -8,6 +8,7 @@ import { runWithSparseRetry } from "../game/worker/SparseRetry";
 import { Model } from "../rs/model/Model";
 import { SeqType } from "../rs/config/seqtype/SeqType";
 import { CustomModelRegistry } from "../custom/items/CustomModelRegistry";
+import { ActorGeometryCache } from "../render/webgpu/actors/actorGpu";
 
 (globalThis as any).self = globalThis;
 const { RenderDataWorkerPool } = require("../game/worker/RenderDataWorkerPool");
@@ -357,4 +358,33 @@ test("missing animation config still schedules and displays an available base wi
         f.calls[0].resolve(base); await turn();
         assert.equal(f.queue.get([1, 1, 0], 7), base);
     } finally { f.queue.dispose(); }
+});
+
+test("active NPC base geometry and empty-pass metadata survive animated-pose LRU churn", async () => {
+    const f = fixture();
+    const gpu = new ActorGeometryCache({ createBuffer: () => ({ destroy() {} }), queue: { writeBuffer() {} } } as any, 3);
+    const resident = (key: string) => gpu.get(key + "|o") !== undefined && gpu.get(key + "|a") !== undefined;
+    const queue = new AsyncNpcPoseCache(f.loader, f.pool, resident);
+    const upload = (key: string) => {
+        gpu.getOrCreate(key + "|o", new Uint8Array(12), new Int32Array([0]));
+        gpu.getOrCreate(key + "|a", new Uint8Array(), new Int32Array());
+    };
+    try {
+        const base = queue.getKey([1, -1, 0], 7)!;
+        upload(base);
+        for (let frame = 0; frame < 8; frame++) {
+            const key = queue.getKey([1, 1, frame % 4], 7)!;
+            upload(key);
+            queue.getKey([1, 1, frame % 4], 7);
+        }
+        queue.getKey([1, 2, 0], 7);
+        const fallback = queue.getFallbackKey([1, 2, 0], 7)!;
+        assert.equal(fallback, base);
+        assert.equal(resident(fallback), true, "a movement/action change must retain a drawable neutral base");
+        queue.get([1, 2, 0], 7); await turn();
+        assert.equal(f.calls[0].input.request[1], 2, "a resident base must not require another base worker build");
+        queue.forgetActor(7);
+        for (let i = 0; i < 4; i++) upload(`unrelated-${i}`);
+        assert.equal(resident(base), false, "inactive actors do not pin entries outside the existing cache budget");
+    } finally { queue.dispose(); f.queue.dispose(); gpu.destroy(); }
 });
