@@ -713,6 +713,8 @@ module.exports = function registerARuffSituationQuest(api) {
   function talkGertrude(event) {
     const { player, npcId } = event;
     if (![GERTRUDE_NPC_ID, 7284].includes(npcId)) return false;
+    const tailStage = questStage(player, "a_tail_of_two_cats");
+    if (tailStage === 3 || tailStage === 4) return false;
     const gertrudesCatStage = questStage(player, GERTRUDES_CAT_KEY);
     if (gertrudesCatStage > 0 && gertrudesCatStage < 6) return false;
     const stage = quest.getStage(player);

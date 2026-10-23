@@ -532,6 +532,12 @@ module.exports = function registerBoneVoyageQuest(api) {
     return "talking-to-bar-patrons-talking-to-the-apothecary";
   }
 
+  function tailOfTwoCatsOwnsApothecary(player) {
+    const request = { player, key: "a_tail_of_two_cats", stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return request.stage === 30 || request.stage === 40;
+  }
+
   function selectOddOldManVariant(player, stage) {
     if (stage < STAGE_PLAN_AGREED || stage >= STAGE_COMPLETE) return null;
     if (held(player, BONE_CHARM_ITEM_ID)) {
@@ -869,6 +875,7 @@ module.exports = function registerBoneVoyageQuest(api) {
   function talkToApothecary(event) {
     const { player, npcId } = event;
     if (npcId !== APOTHECARY_NPC_ID) return false;
+    if (tailOfTwoCatsOwnsApothecary(player)) return false;
     const variant = selectApothecaryVariant(player, quest.getStage(player));
     if (!variant) return false;
     startTranscript(api, player, npcId, PAGE, variant);

@@ -303,15 +303,25 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   let quest;
   let transcriptData = null;
   const lampPending = new WeakMap();
+  const HILD_RECLAIM_VARIANT = "standard-dialogue-after-completing-a-tale-of-two-cats-and-losing-the-catspeak-amulet-e";
+  const BOB_RECLAIM_VARIANT = "reclaiming-mouse-toy";
 
   // ------------------------------------------------------------------ helpers
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
 
+  function ownsItem(player, itemId) {
+    return held(player, itemId)
+      || player.getEquipment().getItems().some((item) => item?.getId?.() === itemId)
+      || player.getBanks().some((bank) => bank?.getAmount(itemId) > 0);
+  }
+
   function giveItem(player, itemId) {
-    if (player.getInventory().getFreeSlots() <= 0) return false;
-    player.getInventory().adds(itemId, 1);
-    return true;
+    const inventory = player.getInventory();
+    if (inventory.getFreeSlots() <= 0) return false;
+    const previous = inventory.getAmount(itemId);
+    inventory.adds(itemId, 1);
+    return inventory.getAmount(itemId) === previous + 1;
   }
 
   function isQuestComplete(player, key) {
@@ -465,14 +475,17 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function growPotatoes(player) {
-    if (quest.getStage(player) !== STAGE_CHORES || tidyGarden(player) >= 8) return false;
+    const growAt = Number(player.getAttribute(PATCH_ATTRIBUTE)) || 0;
+    if (quest.getStage(player) !== STAGE_CHORES || tidyGarden(player) >= 8 || growAt <= 0 || Date.now() < growAt) return false;
     setTidyGarden(player, 8);
     player.setAttribute(PATCH_ATTRIBUTE, 0);
     return true;
   }
 
   function finishPotatoes(player) {
-    if (!growPotatoes(player)) return;
+    if (quest.getStage(player) !== STAGE_CHORES || tidyGarden(player) >= 8) return;
+    setTidyGarden(player, 8);
+    player.setAttribute(PATCH_ATTRIBUTE, 0);
     if (choresDone(player)) {
       // The cat's "all the chores finished" transcript carries the news.
       finishChore(player);
@@ -507,6 +520,7 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function selectBobVariant(player, stage) {
+    if (canReclaimMouseToy(player)) return { page: "Bob (cat)", variant: BOB_RECLAIM_VARIANT };
     if (stage === STAGE_AMULET_ENCHANTED) {
       quest.setStage(player, STAGE_FOUND_BOB);
       return "finding-bob";
@@ -530,6 +544,9 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function selectHildVariant(player, stage) {
+    if (stage >= STAGE_AMULET_ENCHANTED && !ownsItem(player, CATSPEAK_AMULET_E_ITEM_ID)) {
+      return { page: "Hild", variant: HILD_RECLAIM_VARIANT };
+    }
     if (stage !== STAGE_STARTED) return null; // Hild's own page after the enchantment
     if (hasFlag(player, BIT_HILD_MET)) {
       return "starting-out-talking-to-hild-again-before-enchanting-the-amulet";
@@ -622,6 +639,14 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
       case "Bl6-CX":
         return wearingCatspeak(player);
       // Hild's enchantment.
+      case "RL5b-i":
+        return !held(player, DEATH_RUNE_ITEM_ID, 5);
+      case "ocyd9v":
+        return held(player, DEATH_RUNE_ITEM_ID, 5) && !hasCatspeakAmulet(player);
+      case "WFnYdQ":
+        return held(player, DEATH_RUNE_ITEM_ID, 5) && hasCatspeakAmulet(player);
+      case "JrXnu4":
+        return player.getInventory().isFull();
       case "jJvdhF":
       case "lFgOmg":
         return !held(player, DEATH_RUNE_ITEM_ID, 5);
@@ -718,22 +743,35 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
     }
   }
 
+  function canReceiveEnchantedAmuletAfterOffer(player) {
+    const inventory = player.getInventory();
+    if (inventory.getFreeSlots() > 0) return true;
+    return inventory.getAmount(CATSPEAK_AMULET_ITEM_ID) >= 1
+      || inventory.getAmount(DEATH_RUNE_ITEM_ID) === 5;
+  }
+
   function consumeAmuletOffer(player) {
-    if (held(player, DEATH_RUNE_ITEM_ID, 5)) {
-      player.getInventory().deleteNumber(DEATH_RUNE_ITEM_ID, 5);
-    }
+    if (!held(player, DEATH_RUNE_ITEM_ID, 5) || !hasCatspeakAmulet(player)
+      || !canReceiveEnchantedAmuletAfterOffer(player)) return false;
+    player.getInventory().deleteNumber(DEATH_RUNE_ITEM_ID, 5);
     if (held(player, CATSPEAK_AMULET_ITEM_ID)) {
       player.getInventory().deleteNumber(CATSPEAK_AMULET_ITEM_ID, 1);
     } else {
       player.getEquipment().deleteNumber(CATSPEAK_AMULET_ITEM_ID, 1);
     }
+    return true;
   }
 
   function grantEnchantedAmulet(player) {
-    if (!held(player, CATSPEAK_AMULET_E_ITEM_ID)) giveItem(player, CATSPEAK_AMULET_E_ITEM_ID);
+    if (ownsItem(player, CATSPEAK_AMULET_E_ITEM_ID) || !consumeAmuletOffer(player)) return false;
+    if (!held(player, CATSPEAK_AMULET_E_ITEM_ID)) {
+      player.getInventory().forceAdd(player, new api.core.Item(CATSPEAK_AMULET_E_ITEM_ID, 1));
+    }
+    if (!held(player, CATSPEAK_AMULET_E_ITEM_ID)) return false;
     if (quest.getStage(player) < STAGE_AMULET_ENCHANTED) {
       quest.setStage(player, STAGE_AMULET_ENCHANTED);
     }
+    return true;
   }
 
   function startChores(player) {
@@ -784,10 +822,15 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
         }
         return;
       case "4OiD70":
-        consumeAmuletOffer(player);
+        if (!held(player, DEATH_RUNE_ITEM_ID, 5) || !hasCatspeakAmulet(player)
+          || !canReceiveEnchantedAmuletAfterOffer(player)) {
+          event.handled = true;
+          player.sendMessage("I need an open inventory slot before Hild can enchant the amulet.");
+          return;
+        }
         return;
       case "XfUKZ6":
-        grantEnchantedAmulet(player);
+        if (!grantEnchantedAmulet(player)) event.handled = true;
         return;
       case "5-sEgA":
       case "_Fpj9r":
@@ -814,6 +857,11 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
 
   function handleAction(event) {
     const { player, stepId, kind, text } = event;
+    if (stepId === "GPZQex" && event.npcId === HILD_NPC_ID && quest.getStage(player) >= STAGE_AMULET_ENCHANTED) {
+      event.handled = true;
+      if (!grantEnchantedAmulet(player)) player.sendMessage("You need the amulet, five death runes and room for the enchanted amulet.");
+      return;
+    }
     if (kind === "message") {
       handleMessage(event);
       return;
@@ -896,6 +944,25 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   // ==========================================================================
   // Talk-to interceptions (NPCs another plugin or the page fallback claims)
   // ==========================================================================
+
+  function canReclaimMouseToy(player) {
+    if (!quest.isComplete(player) || !wearingCatspeak(player)
+      || ownsItem(player, MOUSE_TOY_ITEM_ID) || ownsItem(player, PRESENT_ITEM_ID)) return false;
+    const request = { player, key: "dragon_slayer_ii", complete: false };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete !== true;
+  }
+
+  function handleReclaimLine(event) {
+    const { player, npcId, text } = event;
+    if (!BOB_NPC_IDS.has(npcId) || text !== "You're welcome!"
+      || !event.pages?.some((page) => page.page === "Bob (cat)" && page.variants?.includes(BOB_RECLAIM_VARIANT))) return;
+    event.after = () => {
+      if (canReclaimMouseToy(player) && !giveItem(player, MOUSE_TOY_ITEM_ID)) {
+        player.sendMessage("You need an open inventory slot before Bob can give you a mouse toy.");
+      }
+    };
+  }
 
   function talkToGertrude(event) {
     const { player } = event;
@@ -1308,6 +1375,7 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleReclaimLine);
   api.onCustomEvent("agent:advance-time", handleAdvanceTime);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   api.onPlayerLogin(handleLogin);

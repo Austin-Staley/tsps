@@ -36,6 +36,7 @@ function makePlayer() {
   const attrs = new Map();
   const items = new Map();
   const equipment = new Map();
+  const bank = new Map();
   const varbits = new Map();
   const configs = new Map();
   const messages = [];
@@ -56,7 +57,8 @@ function makePlayer() {
     forceAdd: (_player, item) => { items.set(item.getId(), (items.get(item.getId()) ?? 0) + item.getAmount()); return true; },
     deleteNumber: (id, amount = 1) => { items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)); return true; },
     deleteAtSlot: (slot, amount = 1) => { if (inventory.get(slot)) items.set(inventory.get(slot).getId(), Math.max(0, inventory.get(slot).getAmount() - amount)); return true; },
-    getFreeSlots: () => 28 - [...items.values()].filter((amount) => amount > 0).length,
+    getFreeSlots: () => 28 - [...items].reduce((slots, [id, amount]) =>
+      slots + (amount > 0 ? (core.ItemDefinition.forId(id).isStackable() ? 1 : amount) : 0), 0),
     isFull: () => inventory.getFreeSlots() <= 0,
     full: () => messages.push('Not enough space in your inventory.'),
     get: (slot) => {
@@ -66,12 +68,14 @@ function makePlayer() {
     getItems: () => [...items.entries()].filter(([, amount]) => amount > 0).map(([id, amount]) => ({ getId: () => id, getAmount: () => amount })),
   };
   const player = {
-    attrs, items, equipment, varbits, configs, messages, moves, xp,
+    attrs, items, equipment, bank, varbits, configs, messages, moves, xp,
+    getBanks: () => [{ getAmount: (id) => bank.get(id) ?? 0 }],
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getInventory: () => inventory,
     getEquipment: () => ({
       get: (slot) => equipment.has(slot) ? { getId: () => equipment.get(slot) } : null,
+      getItems: () => [...equipment.values()].filter((id) => id >= 0).map((id) => ({ getId: () => id })),
       deleteNumber: (id, amount = 1) => {
         for (const [slot, value] of equipment) if (value === id) { if (amount <= 0) equipment.delete(slot); else equipment.set(slot, -1); return true; }
         return false;
@@ -157,6 +161,10 @@ function harness() {
       fire('npc-dialogue:action', event);
       return event;
     },
+    line(event) {
+      fire('npc-dialogue:line', event);
+      return event;
+    },
     object(player, objectId) {
       const event = { player, objectId, handled: false };
       objectInteractions.forEach((handler) => handler(event));
@@ -178,6 +186,38 @@ function harness() {
       return event;
     },
     login(player) { logins.forEach((handler) => handler({ player })); },
+  };
+}
+
+function namedQuestCallbacks(...plugins) {
+  const custom = new Map();
+  const named = new Map();
+  const api = new Proxy({
+    core,
+    persistAttribute: noop,
+    onCustomEvent(name, handler) {
+      if (!custom.has(name)) custom.set(name, []);
+      custom.get(name).push(handler);
+    },
+    emitCustomEvent(name, event) {
+      for (const handler of custom.get(name) ?? []) handler(event);
+    },
+    onNpcInteraction(name, actions) {
+      if (!named.has(name)) named.set(name, []);
+      named.get(name).push(actions['Talk-to']);
+    },
+    getWorld: () => ({ getNpcs: () => [] }),
+  }, { get: (target, key) => key in target ? target[key] : noop });
+  for (const name of plugins) require(`../plugins/quests/quests/${name}.Quest`)(api);
+  return {
+    talk(name, event) {
+      for (const handler of named.get(name) ?? []) {
+        const result = handler(event);
+        if (result === false) continue;
+        return true;
+      }
+      return false;
+    },
   };
 }
 
@@ -329,6 +369,48 @@ test('Hild only enchants with five runes and a catspeak amulet; the lost-run bra
   assert.equal(h.condition(p, 'z6MmKU', N.HILD_2), false, 'unresolved wiki jump stays closed');
 });
 
+test('Hild does not consume an equipped amulet or runes when the enchanted reward has no slot', () => {
+  const h = harness();
+  const p = makePlayer();
+  setStage(p, 1);
+  p.items.set(I.DEATH_RUNE, 6);
+  p.equipment.set(core.Equipment.AMULET_SLOT, I.CATSPEAK_AMULET);
+  for (let index = 0; index < 27; index++) p.items.set(100000 + index, 1);
+
+  const refused = h.message(p, '4OiD70');
+  assert.equal(refused.handled, true, 'the false pass line is suppressed');
+  assert.equal(p.items.get(I.DEATH_RUNE), 6);
+  assert.equal(p.equipment.get(core.Equipment.AMULET_SLOT), I.CATSPEAK_AMULET);
+  assert.equal(stageOf(p), 1);
+  assert.equal(h.message(p, 'XfUKZ6').handled, true, 'the receipt is suppressed without a successful offer');
+
+  p.items.delete(100000);
+  h.message(p, '4OiD70');
+  assert.equal(p.items.get(I.DEATH_RUNE), 6, 'ingredients stay until the canonical receipt node');
+  h.message(p, 'XfUKZ6');
+  assert.equal(p.items.get(I.DEATH_RUNE), 1);
+  assert.equal(p.equipment.get(core.Equipment.AMULET_SLOT), -1);
+  assert.equal(p.items.get(I.CATSPEAK_AMULET_E_), 1);
+  assert.equal(stageOf(p), 2);
+});
+
+test('potatoes do not grow on login before their saved planting deadline', () => {
+  const h = harness();
+  const p = makePlayer();
+  setStage(p, 10);
+  h.login(p);
+  assert.equal(p.varbits.get(1033) ?? 0, 0, 'a stage-10 save without planted seeds stays unchanged');
+
+  p.attrs.set(PATCH_ATTR, Date.now() + 60_000);
+  h.login(p);
+  assert.equal(p.varbits.get(1033) ?? 0, 0, 'a future deadline does not grow the patch');
+
+  p.attrs.set(PATCH_ATTR, Date.now() - 1);
+  h.login(p);
+  assert.equal(p.varbits.get(1033), 8, 'only the expired saved deadline completes growth');
+  assert.equal(p.attrs.get(PATCH_ATTR), 0);
+});
+
 test('both Sphinx cutscene exits start the chore list; OxgFrB teleports to Burthorpe', () => {
   for (const stepId of ['5-sEgA', '_Fpj9r']) {
     const h = harness();
@@ -372,6 +454,26 @@ test('the Apothecary alternates a lost doctor/nurse hat and the cure requires th
   assert.equal(h.condition(p, 'De2r23', N.UNFERTH), true);
 });
 
+test('earlier Bone Voyage Apothecary hook yields to A Tail medical stages in registration order', () => {
+  const callbacks = namedQuestCallbacks('BoneVoyage', 'TailOfTwoCats');
+  const p = makePlayer();
+  setStage(p, 40);
+  p.attrs.set('quest.bone_voyage.stage', 9);
+  assert.equal(callbacks.talk('Apothecary', { player: p, npcId: N.APOTHECARY, handled: false }), true);
+  assert.equal(p.attrs.get(STAGE_ATTR), 40, 'the competing quest does not alter A Tail progress');
+});
+
+test('earlier Gertrude handler yields while A Tail is asking about Bob', () => {
+  const callbacks = namedQuestCallbacks('ARuffSituation', 'TailOfTwoCats');
+  for (const stage of [3, 4]) {
+    const p = makePlayer();
+    setStage(p, stage);
+    p.attrs.set('quest.a_ruff_situation.stage', 10);
+    assert.equal(callbacks.talk('Gertrude', { player: p, npcId: N.GERTRUDE, handled: false }), true);
+    assert.equal(p.attrs.get(STAGE_ATTR), stage, 'talking to Gertrude does not consume A Tail progress');
+  }
+});
+
 test('a full-bag completion still delivers the present through the runtime force-add path', () => {
   const h = harness();
   const p = makePlayer();
@@ -408,4 +510,109 @@ test('the start page gates on Icthlarin, cat ownership and the follower split', 
   assert.equal(h.condition(p, '1FzJGG'), false);
   assert.equal(h.condition(p, 'iSyLD_'), true, 'cat item is not a follower');
   assert.equal(h.condition(p, 'rTGaaG'), false);
+});
+
+test('Hild replaces a lost enchanted amulet once, including after completion and with bank ownership', () => {
+  const h = harness();
+  const p = makePlayer();
+  h.quest.setStage(p, 70);
+  p.items.set(I.CATSPEAK_AMULET, 1);
+  p.items.set(I.DEATH_RUNE, 5);
+  assert.deepEqual(h.select(p, N.HILD_2), {
+    page: 'Hild', variant: 'standard-dialogue-after-completing-a-tale-of-two-cats-and-losing-the-catspeak-amulet-e',
+  });
+  assert.equal(h.condition(p, 'WFnYdQ', N.HILD_2), true);
+  h.action(p, 'GPZQex', { npcId: N.HILD_2 });
+  assert.equal(p.items.get(I.CATSPEAK_AMULET_E_), 1);
+  assert.equal(p.items.get(I.CATSPEAK_AMULET), 0);
+  assert.equal(p.items.get(I.DEATH_RUNE), 0);
+  assert.equal(h.quest.getStage(p), 70, 'recovery never rewinds completion');
+  p.items.set(I.CATSPEAK_AMULET, 1);
+  p.items.set(I.DEATH_RUNE, 10);
+  p.bank.set(I.CATSPEAK_AMULET_E_, 1);
+  p.items.delete(I.CATSPEAK_AMULET_E_);
+  assert.equal(h.select(p, N.HILD_2), null, 'a banked enchanted copy is not lost');
+  h.action(p, 'GPZQex', { npcId: N.HILD_2 });
+  assert.equal(p.items.get(I.CATSPEAK_AMULET), 1);
+  assert.equal(p.items.get(I.DEATH_RUNE), 10, 'a stale receipt cannot charge for a second enchanted copy');
+});
+
+test('Bob reclaims the mouse toy through the canonical receipt and checks worn or banked copies', () => {
+  const h = harness();
+  const p = makePlayer();
+  h.quest.setStage(p, 70);
+  p.equipment.set(core.Equipment.AMULET_SLOT, I.CATSPEAK_AMULET);
+  assert.deepEqual(h.select(p, N.BOB), { page: 'Bob (cat)', variant: 'reclaiming-mouse-toy' });
+  const receipt = () => h.line({ player: p, npcId: N.BOB, text: "You're welcome!",
+    pages: [{ page: 'Bob (cat)', variants: ['reclaiming-mouse-toy'] }] });
+  const event = receipt();
+  assert.equal(typeof event.after, 'function');
+  assert.equal(p.items.get(I.MOUSE_TOY) ?? 0, 0, 'the item is not granted when the transcript is merely selected');
+  event.after();
+  assert.equal(p.items.get(I.MOUSE_TOY), 1);
+  event.after();
+  assert.equal(p.items.get(I.MOUSE_TOY), 1, 'repeated receipt remains idempotent');
+  p.items.delete(I.MOUSE_TOY);
+  p.equipment.set(core.Equipment.WEAPON_SLOT, I.MOUSE_TOY);
+  assert.equal(h.select(p, N.BOB), null, 'a wielded toy is still owned');
+  p.equipment.delete(core.Equipment.WEAPON_SLOT);
+  p.bank.set(I.MOUSE_TOY, 1);
+  assert.equal(h.select(p, N.BOB), null, 'a banked toy is still owned');
+  p.bank.clear();
+  p.items.set(I.PRESENT, 1);
+  assert.equal(h.select(p, N.BOB), null, 'the unopened reward already contains the toy');
+});
+
+test('Hild recovery retries a full worn-amulet exchange and counts each carried amulet slot', () => {
+  const h = harness();
+  const p = makePlayer();
+  h.quest.setStage(p, 30);
+  p.equipment.set(core.Equipment.AMULET_SLOT, I.CATSPEAK_AMULET);
+  p.items.set(I.DEATH_RUNE, 10);
+  for (let id = 10000; id < 10027; id++) p.items.set(id, 1);
+  assert.equal(p.getInventory().getFreeSlots(), 0);
+  h.action(p, 'GPZQex', { npcId: N.HILD_2 });
+  assert.equal(p.items.get(I.DEATH_RUNE), 10);
+  assert.equal(p.equipment.get(core.Equipment.AMULET_SLOT), I.CATSPEAK_AMULET);
+  assert.equal(p.items.get(I.CATSPEAK_AMULET_E_) ?? 0, 0);
+  p.items.delete(10000);
+  h.action(p, 'GPZQex', { npcId: N.HILD_2 });
+  assert.equal(p.items.get(I.CATSPEAK_AMULET_E_), 1);
+  assert.equal(p.items.get(I.DEATH_RUNE), 5);
+  assert.equal(h.quest.getStage(p), 30, 'mid-quest recovery preserves the current chapter');
+
+  const carried = makePlayer();
+  h.quest.setStage(carried, 70);
+  carried.items.set(I.CATSPEAK_AMULET, 2);
+  carried.items.set(I.DEATH_RUNE, 6);
+  for (let id = 10000; id < 10025; id++) carried.items.set(id, 1);
+  assert.equal(carried.getInventory().getFreeSlots(), 0);
+  h.action(carried, 'GPZQex', { npcId: N.HILD_2 });
+  assert.equal(carried.items.get(I.CATSPEAK_AMULET_E_), 1);
+  assert.equal(carried.items.get(I.CATSPEAK_AMULET), 1);
+  assert.equal(carried.items.get(I.DEATH_RUNE), 1);
+});
+
+test('Bob recovery honors the full-bag branch and yields after Dragon Slayer II', () => {
+  const h = harness();
+  const p = makePlayer();
+  h.quest.setStage(p, 70);
+  p.equipment.set(core.Equipment.AMULET_SLOT, I.CATSPEAK_AMULET);
+  for (let id = 10000; id < 10028; id++) p.items.set(id, 1);
+  assert.equal(h.condition(p, 'JrXnu4', N.BOB), true);
+  const wrongPage = h.line({ player: p, npcId: N.BOB, text: "You're welcome!",
+    pages: [{ page: 'Another quest', variants: ['reclaiming-mouse-toy'] }] });
+  assert.equal(wrongPage.after, undefined);
+  const receipt = h.line({ player: p, npcId: N.BOB, text: "You're welcome!",
+    pages: [{ page: 'Bob (cat)', variants: ['reclaiming-mouse-toy'] }] });
+  receipt.after();
+  assert.equal(p.items.get(I.MOUSE_TOY) ?? 0, 0);
+  p.items.delete(10000);
+  receipt.after();
+  assert.equal(p.items.get(I.MOUSE_TOY), 1);
+  p.items.delete(I.MOUSE_TOY);
+  h.events.set('quest:is-complete', [...(h.events.get('quest:is-complete') ?? []), (request) => {
+    if (request.key === 'dragon_slayer_ii') request.complete = true;
+  }]);
+  assert.equal(h.select(p, N.BOB), null, 'the dead Bob route belongs to the post-DS2 house chest');
 });
