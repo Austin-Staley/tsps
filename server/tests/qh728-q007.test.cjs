@@ -15,12 +15,13 @@ const BIOHAZARD_STAGE = 'quest.biohazard.stage';
 const PLAGUE_CITY_STAGE = 'quest.plague_city.stage';
 const FREE_GOWN_ATTRIBUTE = 'biohazard:free-gown-given';
 const GIVEN_VIALS_ATTRIBUTE = 'biohazard:given-vials';
-const CHANCY_REFUND_ATTRIBUTE = 'biohazard:chancy-wrong-vial-refund';
+const CHANCY_REFUND_ATTRIBUTE = 'biohazard:chancy-refunds';
 const COINS = I.COINS;
 const ELENA_CAPACITY_REFUSAL = "Elena tries to give you some items but you don't have enough room for them.";
 
 function setup({ stage = 0, completed = [], freeSlots = 28 } = {}) {
   const completedKeys = new Set(completed);
+  const questStages = new Map();
   const questRequests = [];
   const attributes = new Map([[BIOHAZARD_STAGE, stage]]);
   const items = new Map();
@@ -85,6 +86,7 @@ function setup({ stage = 0, completed = [], freeSlots = 28 } = {}) {
     zoneEnter: [],
     zoneExit: [],
     login: [],
+    npcDeath: null,
   };
   const api = {
     core: {
@@ -112,6 +114,10 @@ function setup({ stage = 0, completed = [], freeSlots = 28 } = {}) {
         questRequests.push({ key: event?.key });
         event.complete = completedKeys.has(event?.key);
       }
+      if (name === 'quest:get-stage') {
+        questRequests.push({ key: event?.key, stage: true });
+        event.stage = questStages.has(event?.key) ? questStages.get(event.key) : null;
+      }
       const action = name === 'npc-dialogue:action';
       if (action) actionDispatchDepth++;
       try {
@@ -138,6 +144,9 @@ function setup({ stage = 0, completed = [], freeSlots = 28 } = {}) {
     },
     onPlayerLogin(handler) {
       handlers.login.push(handler);
+    },
+    onNpcDeath(handler) {
+      handlers.npcDeath = handler;
     },
     sendMultiChatboxPrompt(player, title, ...pairs) {
       player.prompt = { title, options: pairs.filter((_, index) => index % 2 === 0), pairs };
@@ -192,6 +201,7 @@ function setup({ stage = 0, completed = [], freeSlots = 28 } = {}) {
     },
     zoneEnter: (index = 0) => handlers.zoneEnter[index].handler({ player }),
     zoneExit: (index = 0) => handlers.zoneExit[index].handler({ player }),
+    npcDeath: (event) => handlers.npcDeath(event),
   };
 
   return {
@@ -202,6 +212,9 @@ function setup({ stage = 0, completed = [], freeSlots = 28 } = {}) {
     setCompleted(key, value = true) {
       if (value) completedKeys.add(key);
       else completedKeys.delete(key);
+    },
+    setQuestStage(key, value) {
+      questStages.set(key, value);
     },
   };
 }
@@ -549,7 +562,7 @@ test('Biohazard recovery, full-bag and guard-search branches use the real handle
   const chancy = setup({ stage: 12, completed: ['plague_city'] });
   chancy.invoke.action(N.CHANCY_2, 'dzf0rc', '10 coins', 'receive');
   assert.equal(chancy.items.get(COINS), 10);
-  assert.equal(chancy.attributes.get(CHANCY_REFUND_ATTRIBUTE), 1);
+  assert.match(String(chancy.attributes.get(CHANCY_REFUND_ATTRIBUTE)), /^chancy:/);
   chancy.invoke.action(N.CHANCY_2, 'D3bNsS', '10 coins', 'receive');
   assert.equal(chancy.items.get(COINS), 10, 'the wrong-vial refund is only paid once');
   const chancyAlt = setup({ stage: 12, completed: ['plague_city'] });
@@ -581,7 +594,16 @@ test('Biohazard recovery, full-bag and guard-search branches use the real handle
   }
   guard.items.set(I.ETHENEA, 1);
   guard.invoke.zoneExit();
-  assert.ok(guard.messages.some((message) => message.includes('talk to Guidor before leaving')));
+  assert.deepEqual(guard.transcriptCalls.at(-1), {
+    npcId: N.GUARD_19,
+    page: 'Biohazard',
+    variant: 'visiting-south-east-varrock-exiting-south-east-varrock-while-holding-the-vials',
+    player: guard.player,
+  });
+  assert.ok(
+    !guard.messages.some((message) => message.includes('talk to Guidor before leaving')),
+    'the exit line is not copied into a system message'
+  );
 
   const voucher = setup({ stage: 12, completed: ['plague_city'], freeSlots: 0 });
   voucher.attributes.set(GIVEN_VIALS_ATTRIBUTE, 'hops:417');
@@ -642,6 +664,123 @@ test('a failed courier loan is cleared once Elena replaces that vial', () => {
     run.attributes.get(GIVEN_VIALS_ATTRIBUTE),
     `hops:${I.SULPHURIC_BROLINE},chancy:${I.LIQUID_HONEY}`
   );
+});
+
+test("Guidor's bedroom door plays the canonical entry conversation", () => {
+  const dialogues = require('../data/definitions/npc-dialogues.json');
+  const run = setup({ stage: 12, completed: ['plague_city'] });
+  run.setEquipment(REAL_CORE.Equipment.BODY_SLOT, I.PRIEST_GOWN);
+  run.setEquipment(REAL_CORE.Equipment.LEG_SLOT, I.PRIEST_GOWN_3);
+  assert.equal(run.invoke.object('Bedroom door', 'Open', {
+    objectId: 2032,
+    object: { ...cupboardObject(3282, 3382), getFace: () => 2 },
+  }), true);
+  assert.deepEqual(run.transcriptCalls.at(-1), {
+    npcId: N.JULIE,
+    page: 'Biohazard',
+    variant: 'visiting-south-east-varrock-talking-to-julie-while-wearing-priest-gown-top-and-bottom',
+    player: run.player,
+  });
+  // The played conversation is the canonical acceptance, not the refusal.
+  const acceptance = dialogues['Biohazard'].variants[
+    'visiting-south-east-varrock-talking-to-julie-while-wearing-priest-gown-top-and-bottom'
+  ];
+  assert.equal(
+    acceptance[0].text,
+    "A priest! thank goodness! My husband is very ill! Perhaps you could read him his last rites?",
+    'the imported conversation accepts the priest'
+  );
+  assert.equal(run.replacements.at(-1).id, 2033, 'the door still opens');
+  assert.equal(run.replacements.at(-1).face, 3);
+
+  // Without the priest gown Julie refuses, which is the other imported page.
+  const withoutGown = setup({ stage: 12, completed: ['plague_city'] });
+  assert.equal(withoutGown.invoke.object('Bedroom door', 'Open', {
+    objectId: 2032,
+    object: { ...cupboardObject(3282, 3382), getFace: () => 2 },
+  }), true);
+  assert.deepEqual(withoutGown.transcriptCalls.at(-1), {
+    npcId: N.JULIE,
+    page: 'Julie',
+    variant: 'opening-bedroom-door-without-priest-gown-equipped',
+    player: withoutGown.player,
+  });
+  assert.equal(
+    dialogues['Julie'].variants['opening-bedroom-door-without-priest-gown-equipped'][0].npc,
+    "Please leave my husband alone. He's very sick, and I don't want anyone bothering him."
+  );
+});
+
+test('the south-east Varrock exit offers the canonical "Leave anyway?" choice', async () => {
+  const { Server } = require('../dist/Server');
+  Server.installProductionPathResolver();
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const run = setup({ stage: 12, completed: ['plague_city'] });
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const manager = new DialogueManager(run.player);
+  run.player.getDialogueManager = () => manager;
+  assert.equal(
+    runtime.startTranscript(
+      run.api,
+      run.player,
+      N.GUARD_19,
+      'Biohazard',
+      'visiting-south-east-varrock-exiting-south-east-varrock-while-holding-the-vials'
+    ),
+    true
+  );
+  let guard = 50;
+  while (!run.player.prompt && manager.getCurrent?.() && guard-- > 0) manager.advance();
+  assert.ok(run.player.prompt, 'the exit conversation asks the canonical question');
+  assert.equal(run.player.prompt.title, 'Leave anyway?');
+  assert.deepEqual(run.player.prompt.options, ['Yes.', 'No.']);
+});
+
+test('the sickest mourner death plays the canonical key-drop message', () => {
+  const run = setup({ stage: 6, completed: ['plague_city'] });
+  run.invoke.npcDeath({ killer: run.player, npcId: N.MOURNER_14 });
+  assert.deepEqual(run.transcriptCalls.at(-1), {
+    npcId: N.MOURNER_14,
+    page: 'Biohazard',
+    variant: 'infiltrating-the-mourner-hq-talking-to-sickest-mourner-upstairs-when-the-sickest-mourner-dies',
+    player: run.player,
+  });
+
+  const otherMourner = setup({ stage: 6, completed: ['plague_city'] });
+  otherMourner.invoke.npcDeath({ killer: otherMourner.player, npcId: N.MOURNER_9 });
+  assert.equal(otherMourner.transcriptCalls.length, 0, 'other mourners stay silent');
+
+  const beforeTheHq = setup({ stage: 5, completed: ['plague_city'] });
+  beforeTheHq.invoke.npcDeath({ killer: beforeTheHq.player, npcId: N.MOURNER_14 });
+  assert.equal(beforeTheHq.transcriptCalls.length, 0, 'the message belongs to the Mourner HQ route');
+});
+
+test('the wrong-vial refund is retryable per failed courier transaction', () => {
+  const run = setup({ stage: 12, completed: ['plague_city'] });
+  run.items.set(I.PLAGUE_SAMPLE, 1);
+  run.items.set(I.ETHENEA, 1);
+  run.items.set(I.SULPHURIC_BROLINE, 1);
+
+  // Chancy gets the wrong vial; the Varrock Chancy refunds it once.
+  run.invoke.action(N.CHANCY, 'WpMYWa', 'You give him the vial of ethenea.');
+  assert.equal(run.attributes.get(GIVEN_VIALS_ATTRIBUTE), `chancy:${I.ETHENEA}`);
+  run.invoke.action(N.CHANCY_2, 'dzf0rc', '10 coins', 'receive');
+  assert.equal(run.items.get(COINS), 10);
+  run.invoke.action(N.CHANCY_2, 'dzf0rc', '10 coins', 'receive');
+  assert.equal(run.items.get(COINS), 10, 'one payment per failed transaction');
+
+  // Elena replaces the vials the failed hand-over swallowed.
+  run.invoke.action(N.ELENA_2, 'iL_fQb');
+  assert.equal(run.items.get(I.ETHENEA), 1);
+  assert.equal(run.items.get(I.LIQUID_HONEY), 1);
+  assert.equal(run.attributes.get(GIVEN_VIALS_ATTRIBUTE), '', 'the failed loan is resolved');
+
+  // A second failed hand-over is a new transaction and is paid again.
+  run.invoke.action(N.CHANCY, 'WpMYWa', 'You give him the vial of ethenea.');
+  run.invoke.action(N.CHANCY_2, 'dzf0rc', '10 coins', 'receive');
+  assert.equal(run.items.get(COINS), 20, 'the retry of a failed transaction pays again');
 });
 
 test('Bedroom door open leaf is passable in both directions against cache geometry', async () => {
@@ -753,6 +892,49 @@ function guidorReadyRun() {
   return run;
 }
 
+test('imported Chancy wrong-vial transcript pays each refund branch once', () => {
+  require('../dist/Server').Server.installProductionPathResolver();
+  const variant = 'visiting-south-east-varrock-talking-to-chancy-in-varrock-after-giving-him-the-wrong-vial';
+
+  const first = setup({ stage: 12, completed: ['plague_city'] });
+  runVariantWithChoice(first, N.CHANCY_2, variant, 'No! Nothing could be further from the truth!');
+  assert.equal(first.items.get(COINS), 10);
+  assert.match(String(first.attributes.get(CHANCY_REFUND_ATTRIBUTE)), /^chancy:/);
+  first.invoke.action(N.CHANCY_2, 'D3bNsS', '10 coins', 'receive');
+  assert.equal(first.items.get(COINS), 10, 'the sibling refund branch cannot pay twice');
+
+  const second = setup({ stage: 12, completed: ['plague_city'] });
+  runVariantWithChoice(second, N.CHANCY_2, variant, 'You have no idea what you have just done!');
+  assert.equal(second.items.get(COINS), 10);
+  assert.match(String(second.attributes.get(CHANCY_REFUND_ATTRIBUTE)), /^chancy:/);
+});
+
+test('imported mourner-death message renders without inventing the shared key drop', () => {
+  require('../dist/Server').Server.installProductionPathResolver();
+  const run = setup({ stage: 6, completed: ['plague_city'] });
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const manager = new DialogueManager(run.player);
+  run.player.getDialogueManager = () => manager;
+  assert.equal(
+    runtime.startTranscript(
+      run.api,
+      run.player,
+      N.MOURNER_14,
+      'Biohazard',
+      'infiltrating-the-mourner-hq-talking-to-sickest-mourner-upstairs-when-the-sickest-mourner-dies'
+    ),
+    true
+  );
+  let guard = 20;
+  while (manager.getCurrent?.() && guard-- > 0) manager.advance();
+  assert.equal(
+    run.messages.filter((message) => message === 'The mourner drops a key as he dies.').length,
+    1
+  );
+  assert.equal(run.items.get(I.KEY_2), undefined, 'the message does not duplicate the guaranteed drop');
+});
+
 test('Guidor revelation line advances stage 14; opening or blessing does not', () => {
   const cancelled = guidorReadyRun();
   assert.equal(cancelled.invoke.variant(N.GUIDOR), 'visiting-south-east-varrock-talking-to-guidor');
@@ -769,6 +951,9 @@ test('Guidor revelation line advances stage 14; opening or blessing does not', (
   assert.ok(revealed.lineEvents.some((event) => /This result can only mean one thing/.test(event.text)),
     JSON.stringify(revealed.lineEvents.map((event) => event.text)));
   assert.equal(revealed.attributes.get(BIOHAZARD_STAGE), 14, 'canonical revelation advances to 14');
+  for (const itemId of [I.PLAGUE_SAMPLE, I.ETHENEA, I.LIQUID_HONEY, I.SULPHURIC_BROLINE, I.TOUCH_PAPER]) {
+    assert.equal(revealed.items.get(itemId), undefined, `Guidor consumes reagent ${itemId} on analysis`);
+  }
   revealed.invoke.line(N.GUIDOR, 'This result can only mean one thing... there is no plague.');
   assert.equal(revealed.attributes.get(BIOHAZARD_STAGE), 14, 'revelation advance is idempotent');
 
@@ -897,4 +1082,108 @@ test('Biohazard only gives the free priest gown once', () => {
   run.invoke.action(N.ASYFF, 'K6WP1U');
   assert.equal(run.items.get(I.PRIEST_GOWN), 1);
   assert.equal(run.items.get(I.PRIEST_GOWN_3), 1);
+});
+
+test('Asyff is shared with Eagles\' Peak and yields while its costume is outstanding', () => {
+  const index = require('../data/definitions/npc-dialogue-index.json');
+  assert.ok(
+    index['2887'].some((entry) => entry.page === "Transcript:Eagles' Peak" && entry.variants.includes('getting-a-bird-costume')),
+    "the Eagles' Peak costume conversation is indexed for Asyff"
+  );
+
+  // Met Nikolaus (4) and disguise made (5): the eagle costume (or a spare) is
+  // still outstanding, so Eagles' Peak owns Asyff.
+  for (const stage of [4, 5]) {
+    const run = setup({ stage: 12, completed: ['plague_city'] });
+    run.setQuestStage('eagles_peak', stage);
+    assert.equal(
+      run.invoke.variant(N.ASYFF),
+      null,
+      `Eagles' Peak stage ${stage} keeps Asyff for its own conversation`
+    );
+    assert.ok(
+      run.questRequests.some((request) => request.key === 'eagles_peak' && request.stage),
+      "Biohazard asks the shared quest registry for Eagles' Peak's stage"
+    );
+  }
+
+  // The costume is obtained (6) or Eagles' Peak was never started: Biohazard
+  // may take Asyff for the free priest gown.
+  for (const stage of [0, 6, 7, 8]) {
+    const run = setup({ stage: 12, completed: ['plague_city'] });
+    run.setQuestStage('eagles_peak', stage);
+    assert.equal(
+      run.invoke.variant(N.ASYFF),
+      'visiting-south-east-varrock-talking-to-asyff',
+      `Eagles' Peak stage ${stage} leaves Asyff to Biohazard`
+    );
+  }
+
+  // Outside the gown window Biohazard does not claim Asyff at all.
+  const early = setup({ stage: 10, completed: ['plague_city'] });
+  assert.equal(early.invoke.variant(N.ASYFF), null);
+});
+
+test('the Combat Training Camp stays locked until Biohazard is complete', () => {
+  const dialogues = require('../data/definitions/npc-dialogues.json');
+  const refusal = 'standard-dialogue-attempting-to-enter-the-camp-before-biohazard';
+  assert.ok(dialogues['Guard (Combat Training Camp)'].variants[refusal], 'the refusal is imported');
+
+  const before = setup({ stage: 12, completed: ['plague_city'] });
+  for (const npcId of [1111, 1112, 1113]) {
+    assert.equal(before.invoke.variant(npcId), refusal, `camp guard ${npcId} refuses entry`);
+  }
+
+  const after = setup({ stage: 16, completed: ['plague_city'] });
+  for (const npcId of [1111, 1112, 1113]) {
+    assert.equal(after.invoke.variant(npcId), null, `camp guard ${npcId} lets the player in`);
+  }
+
+  // The camp entrance gate is locked until the quest is done.
+  const gate = before.invoke.doorToggle({ objectId: 2039, location: new Location(2517, 3356, 0) });
+  assert.equal(gate.handled, true);
+  assert.equal(before.messages.at(-1), 'The gates are locked.');
+  assert.equal(
+    before.invoke.doorToggle({ objectId: 2041, location: new Location(2518, 3356, 0) }).handled,
+    true
+  );
+  assert.equal(
+    after.invoke.doorToggle({ objectId: 2039, location: new Location(2517, 3356, 0) }).handled,
+    false,
+    'the gate opens once Biohazard is complete'
+  );
+  assert.equal(
+    before.invoke.doorToggle({ objectId: 2039, location: new Location(2517, 3356, 1) }).handled,
+    false,
+    'an unrelated placement of the gate id is untouched'
+  );
+});
+
+test('the camp guard refusal renders the canonical transcript', async () => {
+  const { Server } = require('../dist/Server');
+  Server.installProductionPathResolver();
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const run = setup({ stage: 12, completed: ['plague_city'] });
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const manager = new DialogueManager(run.player);
+  run.player.getDialogueManager = () => manager;
+  assert.equal(
+    runtime.startTranscript(
+      run.api,
+      run.player,
+      1111,
+      'Guard (Combat Training Camp)',
+      'standard-dialogue-attempting-to-enter-the-camp-before-biohazard'
+    ),
+    true
+  );
+  let guard = 50;
+  while (manager.getCurrent?.() && guard-- > 0) manager.advance();
+  assert.equal(
+    run.messages.filter((message) => message === 'The gates are locked.').length,
+    1,
+    'the canonical locked-gate message renders once'
+  );
 });

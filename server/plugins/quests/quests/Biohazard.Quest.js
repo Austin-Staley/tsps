@@ -98,10 +98,13 @@ module.exports = function registerBiohazardQuest(api) {
   const MOURNER_CRATE_ID = 2064;
   const BEDROOM_DOOR_CLOSED_ID = 2032;
   const BEDROOM_DOOR_OPEN_ID = 2033;
+  /** Guidor's bedroom door, the only "Bedroom door" in south-east Varrock. */
+  const GUIDOR_BEDROOM_DOOR = { x: 3282, y: 3382 };
 
   const FREE_GOWN_ATTRIBUTE = "biohazard:free-gown-given";
   const GIVEN_VIALS_ATTRIBUTE = "biohazard:given-vials";
-  const CHANCY_REFUND_ATTRIBUTE = "biohazard:chancy-wrong-vial-refund";
+  /** Refunded wrong-vial transactions, one entry per failed courier hand-over. */
+  const CHANCY_REFUND_ATTRIBUTE = "biohazard:chancy-refunds";
   // Imported Biohazard message EYYSjv from Elena's lost-items capacity branch.
   const ELENA_CAPACITY_MESSAGE = "Elena tries to give you some items but you don't have enough room for them.";
 
@@ -148,7 +151,25 @@ module.exports = function registerBiohazardQuest(api) {
   const COMPLETE_ACTION_ID = "vxKtyO";
 
   const ASYFF_NPC_ID = NpcIdentifiers.ASYFF; // 2887
+  /**
+   * The Combat Training Camp guards and its entrance gate in West Ardougne.
+   * King Lathas only opens the camp once Biohazard is done, so the guards use
+   * the imported refusal and the gate stays locked until then.
+   */
+  const CAMP_GUARD_NPC_IDS = new Set([1111, 1112, 1113]);
+  const CAMP_GATE_IDS = new Set([2039, 2041]);
+  /** The only placements of those gate ids: the camp entrance at 2517/2518,3356. */
+  const CAMP_GATE_TILES = new Set(["2517,3356", "2518,3356"]);
+  /** The imported message text of the camp's locked gate (ulBzsB). */
+  const CAMP_LOCKED_MESSAGE = "The gates are locked.";
+  /**
+   * Eagles' Peak stages where its eagle costume (or a spare) is still
+   * outstanding: met Nikolaus (4) and disguise made (5). Asyff is shared.
+   */
+  const EAGLES_PEAK_COSTUME_STAGES = new Set([4, 5]);
   const GUARD_NPC_ID = NpcIdentifiers.GUARD_19; // 1147, Guard (East Varrock)
+  /** The sickest mourner upstairs (spawned 9230, content id 9008); drops the key. */
+  const SICKEST_MOURNER_NPC_ID = NpcIdentifiers.MOURNER_14; // 9008
   const GUARD_VIAL_MESSAGE_IDS = new Map([
     ["FXDpRm", ETHENEA_ITEM_ID],
     ["vIH9dQ", LIQUID_HONEY_ITEM_ID],
@@ -190,6 +211,16 @@ module.exports = function registerBiohazardQuest(api) {
     const request = { player, key: "plague_city", complete: null };
     api.emitCustomEvent("quest:is-complete", request);
     return request.complete === true;
+  }
+
+  /**
+   * Eagles' Peak's internal stage, asked through the shared quest registry so
+   * the other quest keeps ownership of its own progress values.
+   */
+  function eaglesPeakStage(player) {
+    const request = { player, key: "eagles_peak", stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return Number(request.stage) || 0;
   }
 
   function hasElenaLoan(player) {
@@ -257,18 +288,33 @@ module.exports = function registerBiohazardQuest(api) {
    * its role record is no longer a pending hand-off. Once Elena's recovery has
    * supplied that role's real vial, drop only the failed record so the
    * Rimmington courier can accept the replacement; correct pending loans stay.
+   * The failed transaction ends with it, so its refund can be paid again.
    */
   function clearResolvedFailedReservations(player) {
     const given = givenVials(player);
+    const refunds = refundedTransactions(player);
     let changed = false;
     for (const [role, vial] of given) {
       const courier = [...RIMMINGTON_COURIERS.values()].find((entry) => entry.role === role);
       if (courier && vial !== courier.vial && held(player, courier.vial)) {
         given.delete(role);
+        refunds.delete(`${role}:${vial}`);
         changed = true;
       }
     }
-    if (changed) saveGivenVials(player, given);
+    if (changed) {
+      saveGivenVials(player, given);
+      saveRefundedTransactions(player, refunds);
+    }
+  }
+
+  /** Wrong-vial transactions already paid out, one "role:vial" entry each. */
+  function refundedTransactions(player) {
+    return new Set(String(player.getAttribute(CHANCY_REFUND_ATTRIBUTE) ?? "").split(",").filter(Boolean));
+  }
+
+  function saveRefundedTransactions(player, refunds) {
+    player.setAttribute(CHANCY_REFUND_ATTRIBUTE, [...refunds].join(","));
   }
 
   function giveCoins(player, amount) {
@@ -494,6 +540,10 @@ module.exports = function registerBiohazardQuest(api) {
     }
     if (npcId === ASYFF_NPC_ID) {
       if (stage < STAGE_SPOKEN_TO_CHEMIST || stage >= STAGE_FOUND_SECRET) return null;
+      // Asyff is shared with Eagles' Peak. While its eagle costume (or a
+      // spare) is still outstanding, that quest's own conversation answers so
+      // the other route is not blocked.
+      if (EAGLES_PEAK_COSTUME_STAGES.has(eaglesPeakStage(player))) return null;
       return Number(player.getAttribute(FREE_GOWN_ATTRIBUTE)) === 1
         ? null
         : "visiting-south-east-varrock-talking-to-asyff";
@@ -513,6 +563,12 @@ module.exports = function registerBiohazardQuest(api) {
         return "infiltrating-the-mourner-hq-talking-to-mourner-outside-mourner-headquarters-after-poisoning-the-stew";
       }
       return "infiltrating-the-mourner-hq-talking-to-mourner-outside-mourner-headquarters";
+    }
+    if (CAMP_GUARD_NPC_IDS.has(npcId)) {
+      // The camp is King Lathas' reward for exposing the plague hoax, so the
+      // guards use the imported refusal until Biohazard is complete.
+      if (!quest.isComplete(player)) return "standard-dialogue-attempting-to-enter-the-camp-before-biohazard";
+      return null;
     }
     return null;
   }
@@ -570,6 +626,10 @@ module.exports = function registerBiohazardQuest(api) {
     if (!wearingPriestGown(player) || !hasAllItems(player)) return;
     const value = String(text ?? "").toLowerCase();
     if (value.includes("this result can only mean one thing") && value.includes("there is no plague")) {
+      for (const itemId of [PLAGUE_SAMPLE_ITEM_ID, ETHENEA_ITEM_ID, LIQUID_HONEY_ITEM_ID,
+        SULPHURIC_BROLINE_ITEM_ID, TOUCH_PAPER_ITEM_ID]) {
+        player.getInventory().deleteNumber(itemId, 1);
+      }
       quest.setStage(player, STAGE_FOUND_SECRET);
     }
   }
@@ -641,9 +701,15 @@ module.exports = function registerBiohazardQuest(api) {
     }
     if (stepId === "dzf0rc" || stepId === "D3bNsS") {
       event.handled = true;
-      if (Number(player.getAttribute(CHANCY_REFUND_ATTRIBUTE)) === 1) return;
+      // One payment per failed courier transaction: the wrong vial that courier
+      // swallowed. A later failed hand-over is a new transaction and pays again.
+      const role = VARROCK_COURIERS.get(npcId)?.role ?? "chancy";
+      const transaction = `${role}:${givenVials(player).get(role) ?? 0}`;
+      const refunds = refundedTransactions(player);
+      if (refunds.has(transaction)) return;
       if (giveCoins(player, 10)) {
-        player.setAttribute(CHANCY_REFUND_ATTRIBUTE, 1);
+        refunds.add(transaction);
+        saveRefundedTransactions(player, refunds);
         player.sendMessage("You receive 10 coins.");
       }
       return;
@@ -864,10 +930,22 @@ module.exports = function registerBiohazardQuest(api) {
       startTranscript(api, player, JULIE_NPC_ID, "Julie", "opening-bedroom-door-without-priest-gown-equipped");
       return true;
     }
+    // Guidor's own entry conversation, then the door opens. In the priest gown
+    // Julie accepts the priest; without it she refuses.
+    if (isGuidorBedroomDoor(object)) {
+      startTranscript(api, player, JULIE_NPC_ID, "Biohazard", "visiting-south-east-varrock-talking-to-julie-while-wearing-priest-gown-top-and-bottom");
+    }
     // Open leaf swings one quarter turn from the closed wall face; copying the
     // closed face leaves the doorway clipped on its west->east approach.
     replaceObject(object, BEDROOM_DOOR_OPEN_ID, (object.getFace() + 1) & 3);
     return true;
+  }
+
+  function isGuidorBedroomDoor(object) {
+    const location = object?.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    return x === GUIDOR_BEDROOM_DOOR.x && y === GUIDOR_BEDROOM_DOOR.y;
   }
 
   function handleVarrockEnter({ player }) {
@@ -879,9 +957,18 @@ module.exports = function registerBiohazardQuest(api) {
   function handleVarrockExit({ player }) {
     const stage = quest.getStage(player);
     if (stage < STAGE_SPOKEN_TO_CHEMIST || stage >= STAGE_FOUND_SECRET) return;
-    if ([ETHENEA_ITEM_ID, LIQUID_HONEY_ITEM_ID, SULPHURIC_BROLINE_ITEM_ID].some((itemId) => held(player, itemId))) {
-      player.sendMessage("I should probably talk to Guidor before leaving the area. Otherwise I'll need to get my vials smuggled in again.");
-    }
+    if (![ETHENEA_ITEM_ID, LIQUID_HONEY_ITEM_ID, SULPHURIC_BROLINE_ITEM_ID].some((itemId) => held(player, itemId))) return;
+    // The canonical exit conversation, with its "Leave anyway?" choice.
+    startTranscript(api, player, GUARD_NPC_ID, "Biohazard", "visiting-south-east-varrock-exiting-south-east-varrock-while-holding-the-vials");
+  }
+
+  /** The sickest mourner upstairs dies and drops the key: the canonical message. */
+  function handleNpcDeath(event) {
+    const { killer, npcId } = event ?? {};
+    if (!killer || npcId !== SICKEST_MOURNER_NPC_ID) return;
+    const stage = quest.getStage(killer);
+    if (stage < STAGE_POISONED_STEW || stage >= STAGE_COMPLETE) return;
+    startTranscript(api, killer, SICKEST_MOURNER_NPC_ID, "Biohazard", "infiltrating-the-mourner-hq-talking-to-sickest-mourner-upstairs-when-the-sickest-mourner-dies");
   }
 
   function handleLogin({ player }) {
@@ -908,6 +995,17 @@ module.exports = function registerBiohazardQuest(api) {
     // event so the gown/key checks run before it opens them.
     if (openMournerDoor(event)) return true;
     if (openCageGate(event)) return true;
+    // The Combat Training Camp gate stays locked until Biohazard is complete.
+    if (CAMP_GATE_IDS.has(objectId) && location) {
+      const x = location.getX?.() ?? location.x;
+      const y = location.getY?.() ?? location.y;
+      const z = location.getZ?.() ?? location.z;
+      if (CAMP_GATE_TILES.has(`${x},${y}`) && z === 0 && !quest.isComplete(player)) {
+        event.handled = true;
+        player.sendMessage(CAMP_LOCKED_MESSAGE);
+        return true;
+      }
+    }
     return false;
   }
 
@@ -929,7 +1027,7 @@ module.exports = function registerBiohazardQuest(api) {
 
   api.persistAttribute(FREE_GOWN_ATTRIBUTE, 0);
   api.persistAttribute(GIVEN_VIALS_ATTRIBUTE, "");
-  api.persistAttribute(CHANCY_REFUND_ATTRIBUTE, 0);
+  api.persistAttribute(CHANCY_REFUND_ATTRIBUTE, "");
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
@@ -937,6 +1035,7 @@ module.exports = function registerBiohazardQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleGuidorLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("door:toggle", handleBiohazardDoorToggle);
+  api.onNpcDeath(handleNpcDeath);
   api.onObjectInteraction("Cupboard", { Open: openCupboard, Search: searchCupboard, Shut: shutCupboard });
   api.onObjectInteraction("Watchtower", { Investigate: investigateWatchtower });
   api.onObjectInteraction("Fence", { "Squeeze-through": squeezeFence });
