@@ -520,3 +520,26 @@ test('cave and sewer stairs pair real cache footprints with reachable standable 
     destX: 2587, destY: 3245, destWidth: 1, destLength: 1, locShape: -1,
     moveNear: false, privateArea: null }).success, true, 'normal walk from cave to the valve approach');
 });
+
+
+test('completed Hazeel Cult yields the canonical wall parent to Secrets of the North', () => {
+  const h=harness(),p=player();p.attrs.set('quest.hazeel_cult.stage',9);p.attrs.set('quest.hazeel_cult.side',1);
+  for(const id of [46707,46902]) {
+    const event=h.object(p,id,'Knock-at',{x:2572,y:3270,z:1});
+    assert.equal(event.handled,undefined);assert.equal(p.prompt,null);
+  }
+});
+
+
+test('canonical outside wall approaches offer Yes while the north room tile exits', () => {
+  const h=harness();
+  for(const x of [2571,2572]) {
+    const p=player();p.attrs.set('quest.hazeel_cult.stage',6);p.attrs.set('quest.hazeel_cult.side',1);
+    p.moveTo(new core.Location(x,3270,1));h.object(p,46902,'Knock-at',{x:2572,y:3270,z:1});
+    assert.ok(p.prompt?.options.includes('Yes.'),'corridor tile is outside, not the hidden-room exit');
+    h.choose(p,'Yes.');h.finish(p);
+    assert.deepEqual([p.loc.getX(),p.loc.getY(),p.loc.getZ()],[2572,3271,1]);
+    h.object(p,46902,'Knock-at',{x:2572,y:3270,z:1});
+    assert.deepEqual([p.loc.getX(),p.loc.getY(),p.loc.getZ()],[2571,3270,1]);
+  }
+});

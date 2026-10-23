@@ -491,16 +491,16 @@ module.exports = function registerHazeelCultQuest(api) {
     if (!SECRET_WALL_IDS.has(event.objectId)) return;
     if (!actionOf(event).includes("knock")) return;
     const { player } = event;
+    if (quest.isComplete(player)) return;
     event.handled = true;
-    if (side(player) !== SIDE_HAZEEL || quest.getStage(player) < STAGE_FINISHED_SIDE_TASK
-      || quest.isComplete(player)) {
+    if (side(player) !== SIDE_HAZEEL || quest.getStage(player) < STAGE_FINISHED_SIDE_TASK) {
       player.sendMessage("You knock on the wall but hear nothing unusual.");
       return;
     }
     const location = player.getLocation();
     const inHiddenRoom = location.getZ() === 1
       && Math.abs(location.getX() - HIDDEN_ROOM_TILE.x) <= 1
-      && Math.abs(location.getY() - HIDDEN_ROOM_TILE.y) <= 1;
+      && location.getY() === HIDDEN_ROOM_TILE.y;
     if (inHiddenRoom) {
       player.moveTo(new Location(HIDDEN_ROOM_EXIT_TILE.x, HIDDEN_ROOM_EXIT_TILE.y, HIDDEN_ROOM_EXIT_TILE.z));
       player.sendMessage("You push the wall aside and step back into the corridor.");
