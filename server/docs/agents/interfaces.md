@@ -26,6 +26,13 @@ Rules for both:
   `list.textOnly: true` for rows that are text rather than inventory items. Commands uses
   this mode to send only the current player's permitted commands, then prefills the query
   by sending text to `search.inputComponent`.
+- A list can be a menu of things to act on. `list.clickable: true` sends the clicked row's
+  `id` back as the action's `slot` (with the usual `opId`), however the list is scrolled or
+  filtered. `list.labelStart` gives each slot a separate text component, so the `iconStart`
+  slots show each row's `icon` item. Rows may also carry `detail` (plain text for the
+  label's `%detail`), `terms` (extra words the search matches) and `header: true` (a section
+  title drawn with `headerLabel`, not clickable, kept only while a row under it matches).
+  `plugins/interface/TeleportInterface.plugin.js` uses all of these.
 - Responses carry an ETag and revalidate to 304, so definitions are fetched once per build
   rather than pushed on every open.
 - The first open of a session waits on a fetch. Updates sent in the same batch are held by

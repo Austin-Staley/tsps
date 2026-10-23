@@ -112,6 +112,20 @@ export class WidgetActionRouter {
             return;
         }
 
+        // A row of a server-declared list: the slot component is reused while scrolling and
+        // filtering, so the row's own id goes back as the slot.
+        const customRowId = this.deps.getCustomInterfaces().rowIdAt(groupId | 0, childId | 0);
+        if (customRowId !== undefined) {
+            if (customRowId === null) return;
+            const payload = buildWidgetActionPayload(widgetManager, event);
+            const opId = payload?.opId ?? 0;
+            const flags = widgetManager?.getWidgetFlags?.(w) ?? w?.flags ?? 0;
+            if (!payload || (opId > 0 && !shouldTransmitAction(flags, opId - 1))) return;
+            payload.slot = customRowId;
+            sendWidgetAction(payload);
+            return;
+        }
+
         const skillPayload = buildWidgetActionPayload(widgetManager, event);
         if (skillPayload && isCombatSkillWidgetAction(skillPayload)) {
             sendWidgetActionMessage(skillPayload);

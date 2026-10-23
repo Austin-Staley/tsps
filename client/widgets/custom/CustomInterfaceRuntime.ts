@@ -48,8 +48,18 @@ export type CustomInterfaceDeclaration = {
         iconBaseY?: number;
         backgroundStart: number;
         backgroundBaseY?: number;
-        /** "%name" and "%id" are replaced per row. */
+        /**
+         * Text components drawn beside the icons. Without them the icon component carries
+         * the label too; with them the icons show each row's `icon` item instead of its id.
+         */
+        labelStart?: number;
+        labelBaseY?: number;
+        /** "%name", "%id" and "%detail" are replaced per row. */
         itemLabel?: string;
+        /** The label of a header row; "%name" is replaced. */
+        headerLabel?: string;
+        /** Clicking a row sends its id to the server as the action's slot. */
+        clickable?: boolean;
         /** Text lists have no inventory item associated with each row. */
         textOnly?: boolean;
     };
@@ -75,7 +85,50 @@ export type CustomInterfaceDeclaration = {
     hint?: { component: number; text: string };
 };
 
-export type CustomInterfaceRow = { id: number; name: string };
+export type CustomInterfaceRow = {
+    id: number;
+    name: string;
+    /** Item shown in the row's icon slot, for lists with separate labels. */
+    icon?: number;
+    /** Plain text for the label's "%detail". */
+    detail?: string;
+    /** Extra words the search matches, never shown. */
+    terms?: string;
+    /** A section title: not clickable, and kept only while a row under it matches. */
+    header?: boolean;
+};
+
+function toRow(row: any): CustomInterfaceRow {
+    return {
+        id: row.id | 0,
+        name: String(row.name ?? ""),
+        icon: Number.isInteger(row.icon) ? row.icon : undefined,
+        detail: typeof row.detail === "string" ? row.detail : undefined,
+        terms: typeof row.terms === "string" ? row.terms : undefined,
+        header: row.header === true,
+    };
+}
+
+/** Rows matching the query, with each header kept only while a row under it matches. */
+export function filterRows(rows: CustomInterfaceRow[], query: string): CustomInterfaceRow[] {
+    const term = query.trim().toLowerCase();
+    const result: CustomInterfaceRow[] = [];
+    let header: CustomInterfaceRow | undefined;
+    for (const row of rows) {
+        if (row.header) {
+            header = row;
+            continue;
+        }
+        const text = `${row.name} ${row.terms ?? ""}`.toLowerCase();
+        if (!text.includes(term)) continue;
+        if (header) {
+            result.push(header);
+            header = undefined;
+        }
+        result.push(row);
+    }
+    return result;
+}
 
 // Standard cache scrollbar scripts and sprites - the same ones cache interfaces use.
 const SCROLLBAR_INIT_SCRIPT_ID = 31;
@@ -124,6 +177,9 @@ export class CustomInterfaceRuntime {
     private renderedVersion = -1;
     private version = 0;
     private visibleStartRow = -1;
+    /** Row shown in each list slot, for clickable lists. */
+    private slotRows: (CustomInterfaceRow | undefined)[] = [];
+    private labelActions = new Map<number, unknown>();
     private scrollbarState = new Map<number, string>();
     private fetchTimer: ReturnType<typeof setTimeout> | undefined;
     private fetchSequence = 0;
@@ -164,7 +220,9 @@ export class CustomInterfaceRuntime {
             try {
                 const rows = JSON.parse(text);
                 this.sourceRows = Array.isArray(rows)
-                    ? rows.filter((row) => Number.isInteger(row?.id) && row.id > 0 && typeof row.name === "string")
+                    ? rows
+                          .filter((row) => Number.isInteger(row?.id) && row.id > 0 && typeof row.name === "string")
+                          .map(toRow)
                     : [];
             } catch {
                 this.sourceRows = [];
@@ -179,6 +237,27 @@ export class CustomInterfaceRuntime {
         this.syncInput();
         this.scheduleFetch();
         return true;
+    }
+
+    /**
+     * The id of the row a clickable list shows in the clicked slot: null for a header or an
+     * empty slot, undefined when the component is not one of the list's slots.
+     */
+    rowIdAt(groupId: number, childId: number): number | null | undefined {
+        const declaration = this.declaration;
+        const list = declaration?.list;
+        if (!list?.clickable || (groupId | 0) !== (declaration!.groupId | 0)) {
+            return undefined;
+        }
+        for (const start of [list.iconStart, list.labelStart, list.backgroundStart]) {
+            if (start === undefined) continue;
+            const slot = (childId | 0) - start;
+            if (slot >= 0 && slot < list.slotCount) {
+                const row = this.slotRows[slot];
+                return row && !row.header ? row.id : null;
+            }
+        }
+        return undefined;
     }
 
     handleWidgetClick(groupId: number, childId: number): boolean {
@@ -278,6 +357,8 @@ export class CustomInterfaceRuntime {
         this.version = 0;
         this.renderedVersion = -1;
         this.visibleStartRow = -1;
+        this.slotRows = [];
+        this.labelActions.clear();
         this.scrollbarState.clear();
     }
 
@@ -364,9 +445,8 @@ export class CustomInterfaceRuntime {
         }
         const query = this.query;
         if (search.dataComponent !== undefined) {
-            const term = query.trim().toLowerCase();
-            this.rows = this.sourceRows.filter((row) => row.name.toLowerCase().includes(term));
-            this.total = this.rows.length;
+            this.rows = filterRows(this.sourceRows, query);
+            this.total = this.rows.filter((row) => !row.header).length;
             this.version++;
             this.renderRows(true);
             return;
@@ -496,6 +576,7 @@ export class CustomInterfaceRuntime {
         this.renderedVersion = this.version;
 
         const label = list.itemLabel ?? "";
+        const headerLabel = list.headerLabel ?? "%name";
         for (let slot = 0; slot < list.slotCount; slot++) {
             const poolRow = Math.floor(slot / list.columns);
             const column = slot % list.columns;
@@ -503,9 +584,11 @@ export class CustomInterfaceRuntime {
             const row = this.rows[resultRow * list.columns + column];
             const background = this.widget(list.backgroundStart + slot);
             const icon = this.widget(list.iconStart + slot);
-            if (!background || !icon) {
+            const text = list.labelStart === undefined ? icon : this.widget(list.labelStart + slot);
+            if (!background || !icon || !text) {
                 continue;
             }
+            this.slotRows[slot] = row;
 
             const backgroundY = (list.backgroundBaseY ?? 0) + resultRow * list.rowHeight;
             const iconY = (list.iconBaseY ?? 0) + resultRow * list.rowHeight;
@@ -513,31 +596,54 @@ export class CustomInterfaceRuntime {
             background.y = backgroundY;
             icon.rawY = iconY;
             icon.y = iconY;
+            if (text !== icon) {
+                const labelY = (list.labelBaseY ?? 0) + resultRow * list.rowHeight;
+                text.rawY = labelY;
+                text.y = labelY;
+            }
 
             const hidden = !row;
-            background.hidden = hidden;
-            background.isHidden = hidden;
+            background.hidden = hidden || !!row?.header;
+            background.isHidden = background.hidden;
             icon.hidden = hidden;
             icon.isHidden = hidden;
+            text.hidden = hidden;
+            text.isHidden = hidden;
 
-            if (row) {
-                icon.itemId = list.textOnly ? -1 : row.id | 0;
-                icon.itemQuantity = list.textOnly ? 0 : 1;
-                icon.itemAmount = list.textOnly ? 0 : 1;
-                icon.text = label
-                    .replace("%name", sanitize(row.name))
-                    .replace("%id", String(row.id | 0));
-            } else {
-                icon.itemId = -1;
-                icon.itemQuantity = 0;
-                icon.itemAmount = 0;
-                icon.text = "";
+            const itemId = !row || row.header
+                ? -1
+                : text !== icon
+                  ? row.icon ?? -1
+                  : list.textOnly
+                    ? -1
+                    : row.id | 0;
+            icon.itemId = itemId;
+            icon.itemQuantity = itemId >= 0 ? 1 : 0;
+            icon.itemAmount = itemId >= 0 ? 1 : 0;
+            if (text !== icon) {
+                icon.hidden = hidden || itemId < 0;
+                icon.isHidden = icon.hidden;
+            }
+            text.text = !row
+                ? ""
+                : (row.header ? headerLabel : label)
+                      .replace("%name", sanitize(row.name))
+                      .replace("%id", String(row.id | 0))
+                      .replace("%detail", sanitize(row.detail));
+            if (list.clickable) {
+                // A header is a title, not a destination: it offers no ops.
+                if (!this.labelActions.has(slot)) this.labelActions.set(slot, text.actions);
+                text.actions = row?.header ? [] : this.labelActions.get(slot);
             }
 
             markWidgetInteractionDirty(background);
             markWidgetInteractionDirty(icon);
             this.deps.widgetManager.invalidateWidgetRender(background);
             this.deps.widgetManager.invalidateWidgetRender(icon);
+            if (text !== icon) {
+                markWidgetInteractionDirty(text);
+                this.deps.widgetManager.invalidateWidgetRender(text);
+            }
         }
 
         this.deps.widgetManager.invalidateScroll(view);

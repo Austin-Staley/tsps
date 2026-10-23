@@ -249,6 +249,63 @@ async function main(): Promise<void> {
     assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).hidden, true, "reopening awaits the new player's catalog");
     assert.equal(requestedUrl, "", "private command rows never use a public HTTP endpoint");
     runtime.onInterfaceClosed(commandsDefinition.groupId);
+    assert.equal(runtime.rowIdAt(commandsDefinition.groupId, COMPONENT.ROW_START), undefined,
+        "rows of a list that did not ask for clicks are not ours");
+
+    // A clickable list with separate icons and labels, section headers and hidden search terms.
+    const LIST_GROUP = 30009;
+    const listUid = (component: number) => (LIST_GROUP << 16) | component;
+    setCustomInterface({
+        groupId: LIST_GROUP,
+        widgets: [{ uid: listUid(0), parentUid: -1 }],
+        search: { inputComponent: 1, dataComponent: 2 },
+        list: {
+            viewComponent: 3, slotCount: 2, columns: 1, rowHeight: 20,
+            iconStart: 10, labelStart: 20, labelBaseY: 4, backgroundStart: 30,
+            itemLabel: "%name<col=ff0000>%detail</col>", headerLabel: "<col=ff981f>%name</col>",
+            clickable: true,
+        },
+    });
+    for (const component of [1, 2, 3, 10, 11, 20, 21, 30, 31]) {
+        widgets.set(listUid(component), { uid: listUid(component), width: 200, height: 40, scrollY: 0,
+            actions: component >= 20 && component < 30 ? ["Select", "Teleport"] : undefined });
+    }
+    runtime.onInterfaceOpened(LIST_GROUP);
+    runtime.handleSetText(listUid(2), JSON.stringify([
+        { id: 1, name: "Bosses", header: true },
+        { id: 2, name: "Nex", icon: 26348, terms: "godwars ancient" },
+        { id: 3, name: "Callisto", icon: 13178, detail: " Lvl 44" },
+        { id: 4, name: "Minigames", header: true },
+        { id: 5, name: "Barrows", icon: 4708 },
+    ]));
+    const listView = widgets.get(listUid(3));
+    assert.equal(listView.scrollHeight, 5 * 20, "headers take a row each");
+    assert.equal(widgets.get(listUid(20)).text, "<col=ff981f>Bosses</col>", "a header uses its own label");
+    assert.equal(widgets.get(listUid(10)).hidden, true, "a header has no icon");
+    assert.equal(widgets.get(listUid(30)).hidden, true, "a header has no hover background");
+    assert.deepEqual(widgets.get(listUid(20)).actions, [], "a header offers no ops");
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 20), null, "a header click sends nothing");
+    assert.equal(widgets.get(listUid(11)).itemId, 26348, "icons show the row's item, not its id");
+    assert.equal(widgets.get(listUid(21)).text, "Nex<col=ff0000></col>");
+    assert.equal(widgets.get(listUid(21)).rawY, 24, "labels follow their own base y");
+    assert.deepEqual(widgets.get(listUid(21)).actions, ["Select", "Teleport"]);
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 21), 2, "a label click carries its row id");
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 11), 2, "so does the icon");
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 31), 2, "and the background");
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 1), undefined, "other components are not rows");
+    listView.scrollY = 40;
+    runtime.tick();
+    assert.equal(widgets.get(listUid(20)).text, "Callisto<col=ff0000> Lvl 44</col>", "detail is plain text in the template");
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 20), 3, "scrolled slots carry the row they now show");
+    assert.deepEqual(widgets.get(listUid(20)).actions, ["Select", "Teleport"], "a reused header slot gets its ops back");
+    runtime.handleSetText(listUid(1), "ancient");
+    assert.equal(widgets.get(listUid(20)).text, "<col=ff981f>Bosses</col>", "a header stays while its rows match");
+    assert.equal(widgets.get(listUid(21)).text, "Nex<col=ff0000></col>", "hidden terms are searchable");
+    assert.equal(widgets.get(listUid(31)).hidden, false);
+    runtime.handleSetText(listUid(1), "barrows");
+    assert.equal(widgets.get(listUid(20)).text, "<col=ff981f>Minigames</col>", "headers without matches drop out");
+    assert.equal(runtime.rowIdAt(LIST_GROUP, 21), 5);
+    runtime.onInterfaceClosed(LIST_GROUP);
 
     console.log("custom-interface-runtime.test.ts: all tests passed");
 }
