@@ -1,7 +1,7 @@
 "use strict";
 
 // This is an imported exporter artifact, not a hand-maintained reward approximation.
-const TABLE = require("../../data/definitions/reward-caskets.json").beginner;
+const TABLE = require("../../../data/definitions/reward-caskets.json").beginner;
 const Runtime = require("./Runtime.BeginnerTreasureTrails");
 const OPENING_ATTRIBUTE = "treasure-trails:opening-beginner";
 let api;

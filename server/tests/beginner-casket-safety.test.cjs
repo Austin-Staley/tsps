@@ -5,8 +5,8 @@ Server.installProductionPathResolver();
 require("../dist/game/cache/CachePipeline").CachePipeline.initialize();
 const core = require("../dist/plugins/PluginManager").PluginManager.getCoreApi();
 const {Inventory} = require("../dist/game/model/container/impl/Inventory");
-const Rewards = require("../plugins/treasuretrails/Rewards.BeginnerTreasureTrails");
-const Runtime = require("../plugins/treasuretrails/Runtime.BeginnerTreasureTrails");
+const Rewards = require("../plugins/treasuretrails/beginner/Rewards.BeginnerTreasureTrails");
+const Runtime = require("../plugins/treasuretrails/beginner/Runtime.BeginnerTreasureTrails");
 
 function fixture(completed = 0) {
   const attributes = new Map([[Runtime.COMPLETED_ATTRIBUTE, completed]]), events = new Map(), messages = [], packets = [];
