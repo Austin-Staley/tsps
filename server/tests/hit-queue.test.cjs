@@ -47,3 +47,45 @@ test('hits after a lethal one take nothing more off', () => {
     assert.equal(target.hp, 0);
     assert.deepEqual(target.shown, [10, 5, 0]);
 });
+
+test('applied observers receive actual health lost, including overkill and zero hits', () => {
+    const target = buildTarget(15);
+    const queue = new HitQueue(target);
+    const taken = [];
+    queue.addPendingDamage(hits(10, 10, 10).map(hit => hit.onApplied(amount => taken.push(amount))));
+    queue.process(1);
+    queue.process(2);
+    assert.deepEqual(taken, [10, 5, 0]);
+});
+
+test('a displayed hit that takes no health reports zero and discarded hits never report', () => {
+    const target = buildTarget(100);
+    target.decrementHealth = hit => hit; // Damage immunity may preserve a positive hitsplat.
+    const queue = new HitQueue(target);
+    const taken = [];
+    queue.addPendingDamage([hits(25)[0].onApplied(amount => taken.push(amount))]);
+    queue.process(1);
+    assert.deepEqual(taken, [0]);
+    queue.addPendingDamage([hits(25)[0].onApplied(amount => taken.push(amount))]);
+    queue.clear();
+    queue.process(2);
+    assert.deepEqual(taken, [0]);
+});
+
+test('observers run once before reactive healing and cannot break the damage queue', t => {
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const target = buildTarget(100);
+    const seen = [];
+    t.mock.method(CombatFactory, 'handleRedemption', character => { character.hp += 20; });
+    t.mock.method(console, 'error', () => {});
+    const hit = hits(10)[0]
+        .onApplied(amount => { seen.push([amount, target.hp]); throw new Error('observer failure'); })
+        .onApplied(amount => seen.push([amount, target.hp]));
+    const queue = new HitQueue(target);
+    queue.addPendingDamage([hit, hit]);
+    queue.process(1);
+    assert.deepEqual(seen, [[10, 90], [10, 90]]);
+    assert.equal(target.hp, 120);
+    assert.equal(target.shown.length, 2);
+    assert.equal(console.error.mock.calls.length, 1);
+});
