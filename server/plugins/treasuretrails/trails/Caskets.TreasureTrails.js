@@ -42,6 +42,32 @@ function roll(tier, { entrana = false, random = Math.random } = {}) {
   return drops;
 }
 
+/**
+ * Milestone items that are not scroll cases (the easy Large spade at 500). ClueCapacity owns
+ * the cases and their recovery; anything else is given on the completion that reaches it.
+ */
+function itemMilestones(player, tier, completed) {
+  return (TABLES[tier.name]?.milestones ?? []).filter(row => Number.isSafeInteger(row.item_id) && row.completed === completed).filter(row => {
+    const request = { player, itemId: row.item_id, eligible: null };
+    api.emitCustomEvent("treasure-trails:case-eligible", request);
+    return request.eligible === null;
+  }).map(row => ({ itemId: row.item_id, amount: 1, noted: false }));
+}
+
+/** A rewarded clue (the master clue tertiary) obeys clue capacity and becomes a box after X Marks the Spot. */
+function clueRewards(player, drops) {
+  return drops.flatMap(drop => {
+    const tier = /^Clue scroll \((\w+)\)$/.exec(core.ItemDefinition.forId(drop.itemId)?.getName?.() ?? "")?.[1];
+    if (!tier) return [drop];
+    const receive = { player, tier, allowed: null };
+    api.emitCustomEvent("treasure-trails:can-receive", receive);
+    if (receive.allowed === false) return [];
+    const clue = { player, itemId: drop.itemId, box: false };
+    api.emitCustomEvent("treasure-trails:clue-item", clue);
+    return [{ ...drop, itemId: clue.itemId }];
+  });
+}
+
 function prepareDrops(drops, tier) {
   if (!Array.isArray(drops) || !drops.length) throw new Error(`Missing ${tier.name} rewards`);
   return drops.map(drop => {
@@ -89,7 +115,7 @@ function open(event) {
       const request = { player, completed: count, milestones: TABLES[tier.name]?.milestones ?? [], drops: roll(tier, { entrana: onEntrana(player) }), handled: false, error: null };
       api.emitCustomEvent("treasure-trails:milestone-rewards", request);
       if (!request.handled || request.error) throw request.error ?? new Error("Treasure Trails milestone service unavailable");
-      drops = prepareDrops(request.drops, tier);
+      drops = prepareDrops(clueRewards(player, [...request.drops, ...itemMilestones(player, tier, count)]), tier);
     } catch (error) {
       event.error = error;
       player.sendMessage("You can't open this casket right now.");
@@ -120,4 +146,4 @@ module.exports = function attachCaskets(pluginApi) {
   for (const tier of TIERS) api.onItemAction(`Reward casket (${tier.name})`, { Open: open });
 };
 
-Object.assign(module.exports, { roll, entranaTable, prepareDrops, give, open, onEntrana, tierOfCasket });
+Object.assign(module.exports, { roll, entranaTable, itemMilestones, clueRewards, prepareDrops, give, open, onEntrana, tierOfCasket });

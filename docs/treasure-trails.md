@@ -136,13 +136,24 @@ Not yet implemented:
 - shows the reward screen.
 
 **Entrana** (Wiki): armour and weapon rolls are removed, and non-shared clue uniques can't be
-obtained. This uses the exporter's section names.
+obtained. This uses the exporter's section names: easy keeps Food, Runes and Shared treasure trail
+items.
 
-**Requires the canonical easy table:** `clue-caskets.json` has only elite and master pools today.
-The easy, medium and hard pools and their structured milestones come from the
-`osrsreboxed-db` exporter (`scripts/drops/clue_caskets.py`). Until the easy table is imported, an
-easy casket says "You can't open this casket right now." and is kept. Generated JSON is never
-hand-edited.
+**Milestones:**
+- ClueCapacity owns the scroll cases (minor at 100, major at 200), including their recovery.
+- Any other milestone item, the easy Large spade at 500, comes with the casket whose completion
+  reaches it.
+
+**The rewarded 1/50 master clue** obeys clue capacity (`treasure-trails:can-receive`). After X Marks
+the Spot it becomes a scroll box (`treasure-trails:clue-item`).
+
+**The table:** `clue-caskets.json` is imported unedited from the `osrsreboxed-db` exporter
+(`scripts/drops/clue_caskets.py`, branch `feat/clue-casket-tiers` at `6b62f806`, SHA-256
+`87d26369d2408d11b19cb4bace5c741d628ac3283d29bcc2f6cc80b4df560c29`; two generations byte-identical).
+- It adds the easy, medium and hard pools and structured `milestones` for every tier.
+- The elite and master pools are unchanged apart from their new `milestones`.
+- Without a tier's table, its casket says "You can't open this casket right now." and is kept.
+- Generated JSON is never hand-edited.
 
 ## Verification
 
@@ -154,7 +165,11 @@ hand-edited.
     the wrong one;
   - stale advances;
   - STASH build, store and withdraw;
-  - the casket with and without a table, the Entrana filter and tertiaries.
+  - the imported easy table: every reward resolves, the casket opens once, and a missing table keeps it;
+  - the Entrana filter over 300 seeded caskets;
+  - the master clue's capacity and box rules;
+  - the Large spade on exactly the 500th casket.
+- Clue, casket and Mimic tests pass 128/128 with the imported tables.
 - Beginner, beginner-casket and clue-capacity tests still pass unchanged.
 - **Natural route:** on the isolated slot-8 world (game 43708, agent MCP 49808), a headless test
   account completed three full easy trails through real packets: 7 NPC, 5 search, 2 dig and 1 emote
@@ -162,6 +177,8 @@ hand-edited.
 - Two closed chests failed only because the test teleported onto their walled side. Both open
   normally from the open side.
 - A clue read before a logout resumed at the same step after logging in again.
+- With the table imported, two more trails ended in real casket openings. Each showed the reward
+  screen (group 73), new collection-log entries and "You have completed 2 easy Treasure Trails."
 
 Sources:
 - [Clue scroll (easy)](https://oldschool.runescape.wiki/w/Clue_scroll_(easy))

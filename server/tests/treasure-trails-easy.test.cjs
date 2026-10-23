@@ -50,7 +50,7 @@ function fixture() {
     position = new core.Location(step.location.x, step.location.y, step.location.z);
     return Runtime.trails(player).find(trail => trail.slot === slot);
   }
-  return { player, items, worn, skills, attributes, actions, sent, ground, spawned, place,
+  return { player, items, worn, skills, on: api.onCustomEvent, attributes, actions, sent, ground, spawned, place,
     event: (slot = 0) => ({ player, slot, item: items[slot], itemId: items[slot]?.getId() }),
     move: target => { position = new core.Location(target.x, target.y, target.z); },
     finish: () => { for (const d of chain.getDialogues().values()) if (d instanceof core.ActionDialogue) d.send(player); },
@@ -214,29 +214,76 @@ test("every music step needs its own track playing when Cecilia is spoken to", (
   }
 });
 
-test("an easy casket opens once with a canonical table and stays shut without one", () => {
+test("the imported easy table rolls 2-4 resolvable rewards and the casket opens once", () => {
+  const f = fixture();
+  const table = TABLES.easy;
+  assert.deepEqual(table.rolls, [2, 4]);
+  assert.equal(table.casket_item_id, I.REWARD_CASKET_EASY_);
+  assert.equal(table.entries.reduce((sum, entry) => sum + entry.weight, 0), table.out_of);
+  assert.doesNotThrow(() => Caskets.prepareDrops(table.entries.map(entry => ({ itemId: entry.item_id, amount: entry.quantity[0], noted: entry.noted })), EASY));
+  f.items[0] = new core.Item(I.REWARD_CASKET_EASY_, 1);
+  const event = f.event();
+  assert.equal(Caskets.open(event), true);
+  assert.notEqual(f.items[0]?.getId(), I.REWARD_CASKET_EASY_);
+  assert.equal(f.attributes.get(Runtime.completedAttribute(EASY)), 1);
+  const granted = f.items.filter(Boolean).length + f.ground.length;
+  assert.ok(granted >= 1, "rewards were given");
+  assert.equal(Caskets.open(event), false, "the opened casket cannot be opened again");
+});
+
+test("an easy casket stays shut, and is kept, without a canonical table", () => {
   const f = fixture();
   const saved = TABLES.easy;
   try {
     delete TABLES.easy;
     f.items[0] = new core.Item(I.REWARD_CASKET_EASY_, 1);
     assert.equal(Caskets.open(f.event()), true);
-    assert.equal(f.items[0].getId(), I.REWARD_CASKET_EASY_, "no table means the casket is kept");
-    TABLES.easy = { casket_item_id: I.REWARD_CASKET_EASY_, rolls: [2, 4], out_of: 2, entries: [
-      { item_id: I.COINS, name: "Coins", quantity: [10, 10], noted: false, section: "Shared treasure trail items", weight: 1 },
-      { item_id: I.BRONZE_FULL_HELM, name: "Bronze full helm", quantity: [1, 1], noted: false, section: "Weapons and armour", weight: 1 }],
-      tertiary: [{ item_id: I.CLUE_SCROLL_MASTER_, quantity: [1, 1], noted: false, probability: "1/50" }] };
-    const event = f.event();
-    assert.equal(Caskets.open(event), true);
-    assert.equal(f.items[0]?.getId() === I.REWARD_CASKET_EASY_, false);
-    assert.equal(f.attributes.get(Runtime.completedAttribute(EASY)), 1);
-    assert.equal(Caskets.open(event), false, "the opened casket cannot be opened again");
-    const entrana = Caskets.roll(EASY, { entrana: true, random: () => 0.99 });
-    assert.ok(entrana.every(drop => drop.itemId !== I.BRONZE_FULL_HELM));
-    assert.ok(Caskets.roll(EASY, { random: () => 0 }).some(drop => drop.itemId === I.CLUE_SCROLL_MASTER_));
+    assert.equal(f.items[0].getId(), I.REWARD_CASKET_EASY_);
+    assert.equal(f.attributes.get(Runtime.completedAttribute(EASY)), undefined);
   } finally {
-    if (saved) TABLES.easy = saved; else delete TABLES.easy;
+    TABLES.easy = saved;
   }
+});
+
+test("Entrana removes weapon, armour and easy-unique rolls but keeps shared rewards", () => {
+  fixture();
+  const sections = new Map(TABLES.easy.entries.map(entry => [entry.item_id, entry.section]));
+  const kept = new Set(Caskets.entranaTable(TABLES.easy).entries.map(entry => entry.section));
+  assert.deepEqual([...kept].sort(), ["Food", "Runes", "Shared treasure trail items"]);
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 300; i++)
+    for (const drop of Caskets.roll(EASY, { entrana: true, random }))
+      if (sections.has(drop.itemId)) assert.ok(!/Weapons and armour|Easy clue uniques/.test(sections.get(drop.itemId)), String(drop.itemId));
+});
+
+test("the 1/50 master clue obeys clue capacity and becomes a box after X Marks the Spot", () => {
+  const f = fixture();
+  assert.ok(Caskets.roll(EASY, { random: () => 0 }).some(drop => drop.itemId === I.CLUE_SCROLL_MASTER_));
+  assert.ok(!Caskets.roll(EASY, { random: () => 0.9999 }).some(drop => drop.itemId === I.CLUE_SCROLL_MASTER_));
+  const drop = { itemId: I.CLUE_SCROLL_MASTER_, amount: 1, noted: false };
+  let allowed = false, box = false;
+  // Stand-ins for ClueCapacity's answers.
+  f.on("treasure-trails:can-receive", request => { request.allowed = allowed; });
+  f.on("treasure-trails:clue-item", request => { if (box) request.itemId = I.SCROLL_BOX_MASTER_; });
+  assert.deepEqual(Caskets.clueRewards(f.player, [drop]), [], "at capacity the clue is not given");
+  allowed = true;
+  assert.deepEqual(Caskets.clueRewards(f.player, [drop]).map(entry => entry.itemId), [I.CLUE_SCROLL_MASTER_]);
+  box = true;
+  assert.deepEqual(Caskets.clueRewards(f.player, [drop]).map(entry => entry.itemId), [I.SCROLL_BOX_MASTER_]);
+});
+
+test("the Large spade comes with the 500th easy casket, while scroll cases stay with ClueCapacity", () => {
+  const f = fixture();
+  const ids = count => Caskets.itemMilestones(f.player, EASY, count).map(drop => drop.itemId);
+  assert.deepEqual(ids(500), [I.LARGE_SPADE]);
+  assert.deepEqual(ids(499), []);
+  assert.deepEqual(ids(501), []);
+  f.attributes.set(Runtime.completedAttribute(EASY), 499);
+  f.items[0] = new core.Item(I.REWARD_CASKET_EASY_, 1);
+  Caskets.open(f.event());
+  assert.equal(f.attributes.get(Runtime.completedAttribute(EASY)), 500);
+  assert.ok([...f.items, ...f.ground].some(item => item?.getId() === I.LARGE_SPADE));
 });
 
 test("an easy STASH unit is built with Construction 27, then stores and returns its full outfit", () => {
