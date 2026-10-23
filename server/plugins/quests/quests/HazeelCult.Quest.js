@@ -76,7 +76,8 @@ module.exports = function registerHazeelCultQuest(api) {
   // Capture 1694 tick [6564]: cave 2852 lands beside the raft at (2570,9682),
   // not the disconnected Clock Tower landing (2584,9633).
   const SEWER_LANDING = { x: 2570, y: 9682, z: 0 };
-  const SEWER_STAIRS_SURFACE = { x: 2570, y: 3283, z: 0 };
+  // Standable north edge of cave 2852's active-cache 4x4 footprint.
+  const SEWER_STAIRS_SURFACE = { x: 2587, y: 3237, z: 0 };
   const MANSION_BASEMENT = { x: 2544, y: 9695, z: 0 };
   const MANSION_FROM_BASEMENT = { x: 2570, y: 3268, z: 0 };
 
@@ -209,6 +210,36 @@ module.exports = function registerHazeelCultQuest(api) {
     give(player, COINS, 2000);
   }
 
+  // Semantic Gameval IDs in the active cache; QH's old numeric comments differ.
+  const VARBIT_CLIVET_LOCATION = 14769;
+  const VARBIT_ALOMONE_VIS = 14770;
+  const VARBIT_GIVEN_ARMOUR = 14772;
+  const VARBIT_JONES_CUTSCENE = 14773;
+  const VARBIT_POISON_SUCCESS = 14775;
+  const VARBIT_GIVEN_AMULET = 14776;
+  const VARBIT_GIVEN_SCROLL = 14780;
+  const MARK_GIVEN_ATTRIBUTE = "hazeel-cult:mark-given";
+  const ALOMONE_HOSTILE_ATTRIBUTE = "hazeel-cult:alomone-hostile";
+
+  function syncAuxiliaryState(player) {
+    const stage = quest.getStage(player);
+    const carnillean = side(player) === SIDE_CARNILLEAN;
+    const sender = player.getPacketSender();
+    sender.sendVarbit(VARBIT_CLIVET_LOCATION, carnillean && stage >= STAGE_CHOSEN_SIDE ? 1 : 0);
+    sender.sendVarbit(VARBIT_ALOMONE_VIS, carnillean && stage >= STAGE_FINISHED_SIDE_TASK ? 2
+      : carnillean && player.getAttribute(ALOMONE_HOSTILE_ATTRIBUTE) === true ? 1 : 0);
+    sender.sendVarbit(VARBIT_GIVEN_ARMOUR, carnillean && stage >= STAGE_RETURNED_ARMOUR ? 1 : 0);
+    sender.sendVarbit(VARBIT_JONES_CUTSCENE, carnillean && stage >= STAGE_COMPLETE ? 1 : 0);
+    sender.sendVarbit(VARBIT_POISON_SUCCESS, !carnillean && stage >= STAGE_POISONED_FOOD ? 1 : 0);
+    sender.sendVarbit(VARBIT_GIVEN_AMULET, player.getAttribute(MARK_GIVEN_ATTRIBUTE) === true || has(player, HAZEEL_MARK) ? 1 : 0);
+    sender.sendVarbit(VARBIT_GIVEN_SCROLL, !carnillean && stage >= STAGE_COMPLETE ? 1 : 0);
+  }
+
+  function setStage(player, stage) {
+    quest.setStage(player, stage);
+    syncAuxiliaryState(player);
+  }
+
   function cerilVariant(player) {
     const stage = quest.getStage(player);
     if (stage === STAGE_NOT_STARTED) return "starting-off";
@@ -224,7 +255,7 @@ module.exports = function registerHazeelCultQuest(api) {
     if (stage === STAGE_FINISHED_SIDE_TASK && has(player, ARMOUR)) {
       take(player, ARMOUR);
       give(player, COINS, 5);
-      quest.setStage(player, STAGE_RETURNED_ARMOUR);
+      setStage(player, STAGE_RETURNED_ARMOUR);
       return "joining-the-carnillean-side-returning-the-armour";
     }
     if (stage >= STAGE_FINISHED_SIDE_TASK) {
@@ -237,7 +268,7 @@ module.exports = function registerHazeelCultQuest(api) {
     const stage = quest.getStage(player);
     if (stage < STAGE_STARTED) return null;
     if (stage === STAGE_STARTED) {
-      quest.setStage(player, STAGE_SPOKEN_TO_CLIVET);
+      setStage(player, STAGE_SPOKEN_TO_CLIVET);
       return "confronting-the-hazeel-cult";
     }
     if (stage === STAGE_SPOKEN_TO_CLIVET) {
@@ -260,8 +291,8 @@ module.exports = function registerHazeelCultQuest(api) {
       if (stage >= STAGE_COMPLETE) return null;
       if (stage >= STAGE_RETURNED_ARMOUR) return "the-scroll-talking-to-alomone-after-obtaining-the-scroll";
       if (stage >= STAGE_FINISHED_SIDE_TASK) return "the-scroll-talking-to-alomone-again";
-      if (stage >= STAGE_CHOSEN_SIDE) {
-        quest.setStage(player, STAGE_FINISHED_SIDE_TASK);
+      if (stage >= STAGE_POISONED_FOOD) {
+        setStage(player, STAGE_FINISHED_SIDE_TASK);
         return "the-scroll-talking-to-alomone";
       }
       return null;
@@ -353,10 +384,10 @@ module.exports = function registerHazeelCultQuest(api) {
     const text = String(option ?? "").toLowerCase();
     if (text.includes("i'll help you") || text.includes("i will help") || text.includes("i'll help the cult")) {
       setAttr(player, SIDE_ATTR, SIDE_HAZEEL);
-      quest.setStage(player, STAGE_CHOSEN_SIDE);
+      setStage(player, STAGE_CHOSEN_SIDE);
     } else if (text.includes("won't help you") || text.includes("i will stop you") || text.includes("i won't help")) {
       setAttr(player, SIDE_ATTR, SIDE_CARNILLEAN);
-      quest.setStage(player, STAGE_CHOSEN_SIDE);
+      setStage(player, STAGE_CHOSEN_SIDE);
     }
   }
 
@@ -364,7 +395,7 @@ module.exports = function registerHazeelCultQuest(api) {
     if (!CERIL_IDS.has(npcId) || hook !== START_HOOK) return;
     if (quest.getStage(player) < STAGE_STARTED) {
       setAttr(player, SIDE_ATTR, SIDE_CARNILLEAN);
-      quest.setStage(player, STAGE_STARTED);
+      setStage(player, STAGE_STARTED);
     }
   }
 
@@ -373,9 +404,13 @@ module.exports = function registerHazeelCultQuest(api) {
       const itemId = MESSAGE_ITEMS.get(stepId);
       if (!has(player, itemId) && player.getInventory().isFull?.() !== true) {
         give(player, itemId);
+        if (itemId === HAZEEL_MARK && has(player, HAZEEL_MARK)) {
+          setAttr(player, MARK_GIVEN_ATTRIBUTE, true);
+          syncAuxiliaryState(player);
+        }
         if (itemId === HAZEEL_SCROLL && side(player) === SIDE_HAZEEL
           && !quest.isComplete(player) && quest.getStage(player) < STAGE_RETURNED_ARMOUR) {
-          quest.setStage(player, STAGE_RETURNED_ARMOUR);
+          setStage(player, STAGE_RETURNED_ARMOUR);
         }
       }
       return;
@@ -413,7 +448,7 @@ module.exports = function registerHazeelCultQuest(api) {
       return;
     }
     take(player, POISON);
-    quest.setStage(player, STAGE_POISONED_FOOD);
+    setStage(player, STAGE_POISONED_FOOD);
     player.sendMessage("You pour the poison into the bubbling food.");
     event.handled = true;
   }
@@ -502,7 +537,7 @@ module.exports = function registerHazeelCultQuest(api) {
       return;
     }
     give(player, HAZEEL_SCROLL);
-    quest.setStage(player, STAGE_RETURNED_ARMOUR);
+    setStage(player, STAGE_RETURNED_ARMOUR);
     player.sendMessage("You unlock the chest and find a scroll inside.");
   }
 
@@ -510,10 +545,11 @@ module.exports = function registerHazeelCultQuest(api) {
   function handleNpcDeath(event) {
     const player = event.killer ?? event.player;
     const { npcId } = event;
-    if (!player || !ALOMONE_IDS.has(npcId)) return;
+    if (!player || !ALOMONE_IDS.has(npcId) || !event.npc
+      || event.npc !== npcsByPlayer.get(player)?.alomone) return;
     const stage = quest.getStage(player);
     if (side(player) !== SIDE_CARNILLEAN || stage < STAGE_CHOSEN_SIDE || stage >= STAGE_FINISHED_SIDE_TASK) return;
-    quest.setStage(player, STAGE_FINISHED_SIDE_TASK);
+    setStage(player, STAGE_FINISHED_SIDE_TASK);
     player.sendMessage("Alomone falls. The Carnillean armour is now unguarded.");
   }
 
@@ -522,10 +558,14 @@ module.exports = function registerHazeelCultQuest(api) {
    * no transcript action to hang this off, so watch the line itself.
    */
   function handleAlomoneLine(request) {
-    const { npc, npcId, text } = request;
+    const { npc, npcId, text, player } = request;
     if (npcId !== NpcIdentifiers.ALOMONE || !npc?.setNpcTransformationId) return;
     if (!String(text ?? "").toLowerCase().includes("live long enough")) return;
     npc.setNpcTransformationId(NpcIdentifiers.ALOMONE_2);
+    if (player) {
+      setAttr(player, ALOMONE_HOSTILE_ATTRIBUTE, true);
+      syncAuxiliaryState(player);
+    }
   }
 
   /** Cave entrance, sewer stairs and the mansion basement ladder travel. */
@@ -722,6 +762,7 @@ module.exports = function registerHazeelCultQuest(api) {
   /** Completion drops the quest-state spawns (Jones, Alomone); Ceril and Clivet persist. */
   function completeQuest(player) {
     if (!quest.complete(player)) return;
+    syncAuxiliaryState(player);
     clearNpcs(player);
     ensureQuestNpcs(player);
   }
@@ -771,7 +812,13 @@ module.exports = function registerHazeelCultQuest(api) {
     );
   }
 
+  function handleBootstrapComplete({ player }) {
+    syncAuxiliaryState(player);
+  }
+
   function handleLogin({ player }) {
+    if (has(player, HAZEEL_MARK)) setAttr(player, MARK_GIVEN_ATTRIBUTE, true);
+    syncAuxiliaryState(player);
     ensureQuestNpcs(player);
     refreshQuestList(player);
   }
@@ -799,6 +846,9 @@ module.exports = function registerHazeelCultQuest(api) {
     onReward: grantReward,
   });
 
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrapComplete);
+  api.persistAttribute(MARK_GIVEN_ATTRIBUTE, false);
+  api.persistAttribute(ALOMONE_HOSTILE_ATTRIBUTE, false);
   api.persistAttribute(SIDE_ATTR);
   api.persistAttribute(VALVES_ATTR);
 

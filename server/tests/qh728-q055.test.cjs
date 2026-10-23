@@ -7,8 +7,14 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+const { RegionManager } = require('../dist/game/collision/RegionManager');
+const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers, O = core.ObjectIdentifiers;
@@ -18,6 +24,10 @@ const noop = () => {};
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   new NpcDefinitionLoader().load();
+  ObjectDefinition.init();
+  RegionManager.init();
+  RegionManager.loadMapFiles(2587, 3235);
+  RegionManager.loadMapFiles(2570, 9682);
 });
 
 function harness() {
@@ -121,7 +131,12 @@ function player() {
     },
   };
   const packet = new Proxy({
-    sendVarbit(id, value) { varbits.set(id, value); return packet; },
+    sendVarbit(id, value) {
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      const mask = (2 ** (endBit - startBit + 1) - 1) << startBit;
+      varps.set(baseVar, ((varps.get(baseVar) ?? 0) & ~mask) | ((value << startBit) & mask));
+      varbits.set(id, value); return packet;
+    },
     sendConfig(id, value) { varps.set(id, value); return packet; },
     getVarbit: id => varbits.get(id) ?? 0,
     sendString(text, uid) { p.text = text; log.push(['text', uid, text]); return packet; },
@@ -252,6 +267,9 @@ test('Hazeel side: poison, mark, raft, crate key, hidden wall, ladder, scroll ch
   assert.equal(p.items.get(I.HAZEEL_SCROLL) ?? 0, 0, 'the scroll is handed to Alomone');
   assert.equal(p.xp.at(-1)[1], 1500);
   assert.equal(p.items.get(I.COINS), 2000);
+  assert.equal(p.varbits.get(14780), 1);
+  assert.equal(p.varbits.get(14776), 1);
+  assert.equal(p.varbits.get(14775), 1);
 
   h.login(p);
   assert.equal(p.varps.get(223), 9, 'login resends the persisted completed stage');
@@ -289,13 +307,25 @@ test('Ceril side: Alomone death, armour chest, Ceril hand-in, cupboard accusatio
   const npc = { transformed: null, setNpcTransformationId(id) { this.transformed = id; } };
   h.emit('npc-dialogue:line', { player: p, npc, npcId: N.ALOMONE, text: 'Well you won\'t live long enough to tell anyone! Die!' });
   assert.equal(npc.transformed, N.ALOMONE_2);
+  assert.equal(p.varbits.get(14770), 1, 'threat line exposes the attackable Alomone');
+  p.varbits.clear();
+  h.login(p);
+  assert.equal(p.varbits.get(14770), 1, 'interrupted combat is replayed on login');
 
   solveValves(h, p);
   h.object(p, O.RAFT, 'Board');
   h.talk(p, N.ALOMONE); h.finish(p);
   assert.equal(h.quest.getStage(p), 4);
 
-  const death = { player: p, killer: p, npcId: N.ALOMONE };
+  const trackedAlomone = h.npcs.find(npc => npc.getId() === N.ALOMONE && npc.owner === p && !npc.removed);
+  assert.ok(trackedAlomone);
+  const other = player(); h.login(other);
+  const foreignAlomone = h.npcs.find(npc => npc.getId() === N.ALOMONE && npc.owner === other);
+  for (const npc of [undefined, foreignAlomone]) {
+    for (const fn of h.hooks.onNpcDeath ?? []) fn({ killer: p, npcId: N.ALOMONE_2, npc });
+    assert.equal(h.quest.getStage(p), 4, 'missing/foreign same-ID deaths cannot advance the quest');
+  }
+  const death = { player: p, killer: p, npcId: N.ALOMONE_2, npc: trackedAlomone };
   for (const fn of h.hooks.onNpcDeath ?? []) fn(death);
   assert.equal(h.quest.getStage(p), 6);
 
@@ -319,6 +349,13 @@ test('Ceril side: Alomone death, armour chest, Ceril hand-in, cupboard accusatio
   assert.equal(p.varps.get(223), 9);
   assert.equal(p.xp.at(-1)[1], 1500);
   assert.equal(p.items.get(I.COINS), 2005);
+  assert.equal(p.varbits.get(14769), 1);
+  assert.equal(p.varbits.get(14770), 2);
+  assert.equal(p.varbits.get(14772), 1);
+  assert.equal(p.varbits.get(14773), 1);
+  assert.equal(p.varbits.get(14775), 0);
+  h.login(p);
+  assert.equal(p.varbits.get(14770), 2);
 });
 
 test('hidden ladders only act on the verified Hazeel tile and Hazeel-side quest state', () => {
@@ -396,4 +433,90 @@ test('post-quest Hazeel side: Clivet reclaims a lost mark through the NPC transc
   h.talk(p, N.CLIVET);
   h.finish(p);
   assert.equal(p.items.get(I.HAZEELS_MARK), 1);
+});
+
+
+test('earned Hazeel auxiliary state replays native poison checkpoint and preserves varp siblings', () => {
+  const h = harness(), p = player();
+  const ids = { HAZEELCULT_CLIVET_LOCATION: 14769, HAZEELCULT_ALOMONE_VIS: 14770,
+    HAZEELCULT_GIVEN_ARMOUR: 14772, HAZEELCULT_JONES_CUTSCENE: 14773,
+    HAZEELCULT_POISON_SUCCESS: 14775, HAZEELCULT_GIVEN_AMULET: 14776, HAZEELCULT_GIVEN_SCROLL: 14780 };
+  for (const [name, id] of Object.entries(ids)) assert.equal(CacheDefinitions.getVarbitId(name.toLowerCase()), id);
+  p.attrs.set('quest.hazeel_cult.stage', 4);
+  p.attrs.set('quest.hazeel_cult.side', 1);
+  h.login(p);
+  assert.equal(p.varbits.get(14775), 0);
+  p.items.set(I.POISON, 1);
+  h.itemOnObject(p, O.RANGE, I.POISON);
+  assert.equal(p.varbits.get(14775), 1);
+  p.varbits.clear(); p.varps.clear();
+  const def = CacheDefinitions.getVarbit(14775);
+  let ownedMask = 0;
+  for (const id of Object.values(ids)) {
+    const d = CacheDefinitions.getVarbit(id);
+    if (d.baseVar === def.baseVar) ownedMask |= (2 ** (d.endBit - d.startBit + 1) - 1) << d.startBit;
+  }
+  const siblings = 0x5a5a5a5a & ~ownedMask;
+  p.varps.set(def.baseVar, siblings);
+  h.login(p);
+  assert.equal(p.varbits.get(14775), 1, 'existing stage-five save reconstructs earned poison');
+  assert.equal(p.varps.get(def.baseVar) & ~ownedMask, siblings);
+  assert.equal(p.varbits.get(14780), 0, 'no invented scroll hand-in');
+  p.varps.set(def.baseVar, siblings);
+  p.varbits.clear();
+  const stage = h.quest.getStage(p), xp = [...p.xp], coins = p.items.get(I.COINS);
+  h.emit('player:bootstrap-complete', { player: p });
+  assert.equal(p.varbits.get(14775), 1, 'bootstrap restores earned poison after its backing varp reset');
+  assert.equal(p.varbits.get(14769), 0, 'bootstrap preserves the Hazeel branch');
+  assert.equal(p.varps.get(def.baseVar) & ~ownedMask, siblings);
+  assert.equal(h.quest.getStage(p), stage);
+  assert.deepEqual(p.xp, xp);
+  assert.equal(p.items.get(I.COINS), coins);
+});
+
+
+test('mark flag is earned only by a successful handout and survives losing the mark and relogging', () => {
+  const h = harness(), p = player();
+  p.attrs.set('quest.hazeel_cult.stage', 5);
+  p.attrs.set('quest.hazeel_cult.side', 1);
+  p.freeSlots = 0;
+  h.emit('npc-dialogue:action', { player: p, npcId: N.CLIVET, stepId: '6FjnaM', kind: 'message' });
+  h.login(p);
+  assert.equal(p.varbits.get(14776), 0);
+  p.freeSlots = 1;
+  h.emit('npc-dialogue:action', { player: p, npcId: N.CLIVET, stepId: '6FjnaM', kind: 'message' });
+  assert.equal(p.varbits.get(14776), 1);
+  p.items.delete(I.HAZEELS_MARK);
+  p.varbits.clear();
+  h.login(p);
+  assert.equal(p.varbits.get(14776), 1);
+});
+
+
+test('cave and sewer stairs pair real cache footprints with reachable standable landings', () => {
+  const h = harness(), p = player();
+  const rf = new RsmodRouteFinding(RegionManager.getClipping.bind(RegionManager));
+  const mq = new MovementQueue({ ...p, isPlayer: () => true, isNpc: () => false,
+    getAsPlayer: () => p, getPrivateArea: () => null });
+  function verifyReach(id, x, y, fromX, fromY) {
+    const object = (MapObjects.mapObjects.get(MapObjects.getHash(x, y, 0)) ?? []).find(o => o.getId() === id);
+    assert.ok(object, `actual map object ${id}`);
+    const spec = mq.buildObjectRouteSpec(object);
+    assert.equal(rf.reachedAbsolute({ level: 0, srcX: fromX, srcY: fromY, srcSize: 1,
+      destX: x, destY: y, destWidth: spec.reachWidth, destLength: spec.reachLength,
+      locAngle: spec.reachAngle, locShape: spec.reachShape,
+      blockAccessFlags: spec.reachBlockAccessFlags, privateArea: null }), true);
+  }
+  p.loc = new core.Location(2587, 3237, 0);
+  verifyReach(O.CAVE_ENTRANCE_14, 2585, 3233, 2587, 3237);
+  h.object(p, O.CAVE_ENTRANCE_14, 'Enter', { x: 2585, y: 3233, z: 0 });
+  assert.deepEqual([p.loc.getX(), p.loc.getY(), p.loc.getZ()], [2570, 9682, 0]);
+  assert.equal(RegionManager.getClipping(2570, 9682, 0, null), 0);
+  verifyReach(O.STAIRS_14, 2570, 9683, 2570, 9682);
+  h.object(p, O.STAIRS_14, 'Climb-up', { x: 2570, y: 9683, z: 0 });
+  assert.deepEqual([p.loc.getX(), p.loc.getY(), p.loc.getZ()], [2587, 3237, 0]);
+  assert.equal(RegionManager.getClipping(2587, 3237, 0, null), 0);
+  assert.equal(rf.findRoute({ level: 0, srcX: 2587, srcY: 3237, srcSize: 1,
+    destX: 2587, destY: 3245, destWidth: 1, destLength: 1, locShape: -1,
+    moveNear: false, privateArea: null }).success, true, 'normal walk from cave to the valve approach');
 });
