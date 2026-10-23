@@ -80,6 +80,7 @@ function useItemOnLarxus(event) {
   const session = sessionOf(player);
   if (!session) return;
   event.handled = true;
+  session.voidScroll = null;
   const champion = Common.byScroll.get(itemId);
   if (!champion) {
     Common.larxusVariant(player, VARIANT.otherItem, target);

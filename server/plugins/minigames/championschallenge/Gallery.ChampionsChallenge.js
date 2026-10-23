@@ -89,6 +89,8 @@ class Session {
     this.challenge = null;
     /** The champion Larxus last offered (a scroll used on him, Leon's challenge). */
     this.offer = null;
+    /** A scroll for a champion already beaten, which Larxus's "void" line takes. */
+    this.voidScroll = null;
     this.champion = null;
     this.ended = false;
   }
@@ -176,7 +178,7 @@ class Session {
     if (this.ended) return;
     this.ended = true;
     sessions.delete(this.player);
-    this.player.setAttribute(Common.INSIDE_ATTRIBUTE, null);
+    this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
     if (!this.area.isDestroyed()) this.area.destroy();
   }
 }
@@ -272,7 +274,7 @@ function openPortcullis({ player, object, objectId }) {
 /** A player saved inside (the server stopped while they were there) comes back by the trapdoor. */
 function recoverOnLogin({ player }) {
   if (!player.getAttribute(Common.INSIDE_ATTRIBUTE) || sessionOf(player)) return;
-  player.setAttribute(Common.INSIDE_ATTRIBUTE, null);
+  player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
   player.moveTo(Common.toLocation(Common.DATA.tiles.outside));
 }
 
@@ -284,7 +286,7 @@ function graveByTrapdoor(request) {
 }
 
 function attachGallery(api) {
-  api.persistAttribute(Common.INSIDE_ATTRIBUTE);
+  api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
   api.onObjectInteraction("Trapdoor", { "Climb-down": climbDownTrapdoor });
   api.onObjectInteraction("Ladder", { "Climb-up": climbUpLadder });
   api.onObjectInteraction("Champion Statue", { Open: openStatue, "Climb-down": climbDownStatue });

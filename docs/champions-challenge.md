@@ -70,7 +70,7 @@ The transcript's "I'd like another one." branch ends after the second cape (the 
 | Zombies | No Magic | Magic is refused. |
 | Giant | Melee only | Other styles are refused. |
 | Hobgoblin | No Melee | Melee is refused. |
-| Ghoul | Weapons only | The statue refuses anything but weapons, worn or carried. Armour can't be put on in the fight. |
+| Ghoul | Weapons only | The statue refuses anything but weapons, worn or carried, the champion's scroll included: the Wiki says the inventory must hold no other items, and a scroll dropped before the fight and picked up after keeps working. Armour can't be put on in the fight. |
 | Earth Warrior | No Prayer | Prayers are turned off on the way down, and turning one on is refused. |
 | Jogre | No Ranged | Ranged is refused. |
 | Lesser Demon | No weapons or armour | The statue refuses anything worn or anything equippable carried. Equipping is refused ("You're not supposed to be using any weapons!" / "…armour!"). |
