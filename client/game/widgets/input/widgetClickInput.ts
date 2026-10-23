@@ -503,6 +503,11 @@ export function processWidgetClickInput(
                             ) {
                                 break;
                             }
+                            // A row of a server-declared clickable list sends the row it
+                            // shows, as the menu path does (WidgetActionRouter).
+                            const customRowId = deps.getCustomInterfaces().rowIdAt(groupId, childId);
+                            if (customRowId === null) break;
+                            if (customRowId !== undefined) payload.slot = customRowId;
                             sendWidgetAction(payload);
                         }
                     } catch (err) {

@@ -119,6 +119,8 @@ test("each tab sends its destinations under sorted headers, with Wilderness leve
     "reopening returns to the last tab");
   run(p, "god", "wars");
   assert.equal(p.texts.get(uid(COMPONENT.SEARCH_INPUT)), "god wars", "a search opens All with the query");
+  click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.BOSSES)]);
+  assert.equal(p.texts.get(uid(COMPONENT.SEARCH_INPUT)), "", "switching tabs clears the search");
 });
 
 test("selecting fills the panel; the panel and right-click both teleport", () => {

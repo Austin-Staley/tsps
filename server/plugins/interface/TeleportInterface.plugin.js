@@ -158,6 +158,8 @@ function openTeleports({ player, parts }) {
 function clickTab({ player, buttonId }) {
   if (!isOpen(player)) return false;
   showTab(player, TAB_ORDER[TAB_UIDS.indexOf(buttonId)]);
+  // A tab is a fresh list; searching every tab at once is what All is for.
+  player.getPacketSender().sendString("", uid(COMPONENT.SEARCH_INPUT));
   return true;
 }
 
