@@ -37,6 +37,46 @@ export interface PosedActorGeometry {
     poseKey?: string;
 }
 
+/** One unshared face corner per label: shared by player and NPC rest meshes. */
+export function buildLabelledActorRestMesh(
+    key: string,
+    baseModel: Model,
+    rig: LabelRig,
+    textureLoader: TextureLoader,
+    textureIdIndexMap: Map<number, number>,
+): PosedActorGeometry {
+    const vertexLabel = rig.vertexLabelOf();
+    const normals = buildActorNormals(baseModel);
+    const build = (alpha: boolean) => {
+        const faces = getModelFacesFiltered(baseModel, textureLoader, alpha);
+        const sceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, faces.length * 3 + 16, true);
+        if (faces.length > 0) sceneBuf.addModel(baseModel, faces, undefined, false, normals);
+        const labels = new Uint32Array(faces.length * 3);
+        for (let i = 0; i < faces.length; i++) {
+            const face = faces[i].index;
+            labels[i * 3] = vertexLabel[baseModel.indices1[face]] + 1;
+            labels[i * 3 + 1] = vertexLabel[baseModel.indices2[face]] + 1;
+            labels[i * 3 + 2] = vertexLabel[baseModel.indices3[face]] + 1;
+        }
+        return {
+            vertices: sceneBuf.vertexBuf.byteArray() as Uint8Array,
+            indices: Int32Array.from(sceneBuf.indices),
+            labels,
+        };
+    };
+    const opaque = build(false);
+    const alpha = build(true);
+    return {
+        key,
+        opaqueVertices: opaque.vertices,
+        opaqueIndices: opaque.indices,
+        opaqueLabels: opaque.labels,
+        alphaVertices: alpha.vertices,
+        alphaIndices: alpha.indices,
+        alphaLabels: alpha.labels,
+    };
+}
+
 interface BaseAppearance {
     baseModel: Model;
     baseCenterX: number;
@@ -246,36 +286,7 @@ export class PlayerPoseGeometry {
         const rig = this.rigFor(baseModel);
         if (!rig) return undefined;
         const textureLoader = this.client.textureLoader as TextureLoader;
-        const vertexLabel = rig.vertexLabelOf();
-        const normals = buildActorNormals(baseModel);
-        const build = (alpha: boolean) => {
-            const faces = getModelFacesFiltered(baseModel, textureLoader, alpha);
-            const sceneBuf = new SceneBuffer(textureLoader, this.textureIdIndexMap, faces.length * 3 + 16, true);
-            if (faces.length > 0) sceneBuf.addModel(baseModel, faces, undefined, false, normals);
-            const labels = new Uint32Array(faces.length * 3);
-            for (let i = 0; i < faces.length; i++) {
-                const face = faces[i].index;
-                labels[i * 3] = vertexLabel[baseModel.indices1[face]] + 1;
-                labels[i * 3 + 1] = vertexLabel[baseModel.indices2[face]] + 1;
-                labels[i * 3 + 2] = vertexLabel[baseModel.indices3[face]] + 1;
-            }
-            return {
-                vertices: sceneBuf.vertexBuf.byteArray() as Uint8Array,
-                indices: Int32Array.from(sceneBuf.indices),
-                labels,
-            };
-        };
-        const opaque = build(false);
-        const alpha = build(true);
-        const rest: PosedActorGeometry = {
-            key,
-            opaqueVertices: opaque.vertices,
-            opaqueIndices: opaque.indices,
-            opaqueLabels: opaque.labels,
-            alphaVertices: alpha.vertices,
-            alphaIndices: alpha.indices,
-            alphaLabels: alpha.labels,
-        };
+        const rest = buildLabelledActorRestMesh(key, baseModel, rig, textureLoader, this.textureIdIndexMap);
         this.restCache.set(key, rest);
         while (this.restCache.size > MAX_REST_MESH_ENTRIES) {
             this.restCache.delete(this.restCache.keys().next().value as string);

@@ -17,7 +17,7 @@ function harness(maps: any[]) {
     const actors = Object.create(WebGPUActors.prototype);
     Object.assign(actors, {
         world: { sceneBindGroup: {}, worldTextureBindGroup: {}, sampleCount: 1 },
-        actorData: { bindGroup: {} }, variants: new Map(), playerPipelines: new Set(), frameMaps: maps,
+        actorData: { bindGroup: {} }, variants: new Map(), posePipelines: new Set(), frameMaps: maps,
     });
     const counts = { pipeline: 0, vertex: 0, index: 0, actorGroup: 0 };
     let group: object, offset = 0, pipeline: any;
@@ -76,8 +76,8 @@ test("WebGPU batches keep extended, MSAA and depth player pipelines and label bi
     f.actors.world.extensionActive = true;
     f.actors.world.sampleCount = 4;
     f.actors.variants.set(base, { extended, depth });
-    f.actors.playerPipelines.add(extended);
-    f.actors.playerPipelines.add(depth);
+    f.actors.posePipelines.add(extended);
+    f.actors.posePipelines.add(depth);
     f.actors.drawOpaque(f.pass);
     assert.equal(f.draws[0].instances, 2);
     assert.equal(f.draws[0].pipeline.descriptor.multisample.count, 4);

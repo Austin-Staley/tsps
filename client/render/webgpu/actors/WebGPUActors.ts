@@ -1,6 +1,7 @@
 import { ACTOR_VERTEX_STRIDE } from "../../buffer/ActorNormals";
 import type { IProjectileManager } from "../../../game/interfaces/IProjectileManager";
 import type { OsrsClient } from "../../../game/OsrsClient";
+import type { ActorMutation } from "../../../game/ecs/ActorMutation";
 import { getClientCycle } from "../../../network/ServerConnection";
 import type { PlayerSpotAnimationEvent } from "../../../game/sync/PlayerSyncTypes";
 import type { NpcSpotAnimationEvent, WorldSpotAnimationEvent } from "../../../game/GameRenderer";
@@ -42,11 +43,12 @@ import {
     packPlayerActorData,
     packProjectileActorData,
     packWorldGfxActorData,
-    resolveUnbatchedNpcGeometry,
     updateNpcClientAnimations,
 } from "./actorPacking";
 import { PlayerPoseGeometry } from "./actorPlayers";
+import { NpcPoseGeometry } from "./actorNpcs";
 import { DynamicNpcAnimLoader } from "../../npc/DynamicNpcAnimLoader";
+import { AsyncNpcPoseCache } from "../../npc/AsyncNpcPoseCache";
 import type { GfxInstance, GfxManager } from "../../gfx/GfxManager";
 import type { GfxCache } from "../../gfx/GfxCache";
 
@@ -108,6 +110,11 @@ export class WebGPUActors {
     private gfx?: ActorGfxRuntime;
     private playerPose?: PlayerPoseGeometry;
     private dynamicNpcLoader?: DynamicNpcAnimLoader;
+    private npcPose?: NpcPoseGeometry;
+    private asyncNpcPoses?: AsyncNpcPoseCache;
+    private readonly npcPoseMutation = (event: ActorMutation) => {
+        if (event.kind === "despawn") this.asyncNpcPoses?.forgetActor(event.index);
+    };
     private lastUpdateTimeSec = -1;
     /** Client-cycle accounting, mirroring the WebGL frame's pendingClientTicks. */
     private hasClientTickBaseline = false;
@@ -123,8 +130,8 @@ export class WebGPUActors {
         GPURenderPipeline,
         { extended: GPURenderPipeline; depth?: GPURenderPipeline }
     >();
-    private playerPipelines = new Set<GPURenderPipeline>();
-    /** This frame's GPU player poses: pose key -> pose texture row, packed into poseUpload. */
+    private posePipelines = new Set<GPURenderPipeline>();
+    /** This frame's GPU actor poses: pose key -> pose texture row, packed into poseUpload. */
     private readonly poseRows = new Map<string, ActorPose>();
     private readonly poseUpload = new Float32Array(POSE_ROWS * POSE_WIDTH * 4);
     private poseTexels = 0;
@@ -280,7 +287,7 @@ export class WebGPUActors {
                         ],
                     },
                 ];
-                if (kind === "player") {
+                if (kind === "player" || kind === "npc") {
                     buffers.push({
                         arrayStride: 4,
                         attributes: [{ shaderLocation: 1, offset: 0, format: "uint32" }],
@@ -325,10 +332,10 @@ export class WebGPUActors {
                 pair[alpha ? 1 : 0] = pipeline;
                 this.pipelines.set(kind, pair);
                 if (extended) this.variants.set(pipeline, { extended: extended.get(kind)!, depth: depth?.get(kind) });
-                if (kind === "player") {
-                    this.playerPipelines.add(pipeline);
-                    if (extended) this.playerPipelines.add(extended.get(kind)!);
-                    if (depth) this.playerPipelines.add(depth.get(kind)!);
+                if (kind === "player" || kind === "npc") {
+                    this.posePipelines.add(pipeline);
+                    if (extended) this.posePipelines.add(extended.get(kind)!);
+                    if (depth) this.posePipelines.add(depth.get(kind)!);
                 }
             }
         }
@@ -344,6 +351,9 @@ export class WebGPUActors {
         );
         loader.setTextureIdIndexMap(this.textureIdIndexMap);
         this.dynamicNpcLoader = loader;
+        this.npcPose = new NpcPoseGeometry(client, loader, this.textureIdIndexMap);
+        this.asyncNpcPoses = new AsyncNpcPoseCache(loader, client.workerPool, key => this.hasResidentNpcPose(key));
+        client.npcEcs.mutationListeners.add(this.npcPoseMutation);
 
         this.gfx = new ActorGfxRuntime(
             renderer,
@@ -522,7 +532,7 @@ export class WebGPUActors {
                     pass.setIndexBuffer(item.geometry.indices, "uint32");
                     boundGeometry = item.geometry;
                 }
-                if (this.playerPipelines.has(pipeline)) {
+                if (this.posePipelines.has(pipeline)) {
                     const labels = item.geometry.labels ?? item.geometry.vertices;
                     if (labels !== boundLabels) {
                         pass.setVertexBuffer(1, labels);
@@ -642,6 +652,9 @@ export class WebGPUActors {
     }
 
     dispose(): void {
+        this.renderer.osrsClient.npcEcs.mutationListeners.delete(this.npcPoseMutation);
+        this.asyncNpcPoses?.dispose();
+        this.asyncNpcPoses = undefined;
         for (const state of this.mapStates.values()) {
             state.uniforms.destroy();
         }
@@ -655,6 +668,8 @@ export class WebGPUActors {
         this.geometry = undefined;
         this.actorData?.destroy();
         this.actorData = undefined;
+        this.npcPose?.clear();
+        this.npcPose = undefined;
         this.dynamicNpcLoader?.clear();
         this.dynamicNpcLoader = undefined;
     }
@@ -726,20 +741,36 @@ export class WebGPUActors {
         let request: Parameters<DynamicNpcAnimLoader["getFrameGeometry"]> | undefined;
         let opaque: GpuGeometry | null | undefined;
         let alpha: GpuGeometry | null | undefined;
+        let poseRow = -1;
         try {
             request = getNpcGeometryRequest(client, ecsId);
-            const key = loader.getFrameGeometryKey(...request);
-            if (key) {
-                opaque = this.geometry?.get(`${key}|o`);
-                alpha = this.geometry?.get(`${key}|a`);
+            const posed = this.npcPose?.resolve(request, !!this.world?.extensionActive);
+            if (posed?.matrices) poseRow = this.poseRowFor(posed.poseKey!, posed.matrices);
+            if (posed && poseRow >= 0) {
+                opaque = this.geometry?.getOrCreate(posed.key + "|o", posed.opaqueVertices, posed.opaqueIndices, posed.opaqueLabels) ?? null;
+                alpha = this.geometry?.getOrCreate(posed.key + "|a", posed.alphaVertices, posed.alphaIndices, posed.alphaLabels) ?? null;
+            } else {
+                const key = this.asyncNpcPoses?.getKey(request, ecsId);
+                if (key) {
+                    opaque = this.geometry?.get(`${key}|o`);
+                    alpha = this.geometry?.get(`${key}|a`);
+                }
             }
         } catch {}
         // The smaller CPU pose cache may evict a mesh whose two GPU passes are still resident.
         if (opaque === undefined || alpha === undefined || (!opaque && !alpha)) {
-            const geometry = resolveUnbatchedNpcGeometry(client, loader, ecsId, request);
-            if (!geometry) return;
-            opaque = this.geometry?.getOrCreate(`${geometry.key}|o`, geometry.opaqueVertices, geometry.opaqueIndices);
-            alpha = this.geometry?.getOrCreate(`${geometry.key}|a`, geometry.alphaVertices, geometry.alphaIndices);
+            poseRow = -1;
+            if (!request) return;
+            const geometry = this.asyncNpcPoses?.get(request, ecsId);
+            if (geometry) {
+                opaque = this.geometry?.getOrCreate(`${geometry.key}|o`, geometry.opaqueVertices, geometry.opaqueIndices);
+                alpha = this.geometry?.getOrCreate(`${geometry.key}|a`, geometry.alphaVertices, geometry.alphaIndices);
+            } else {
+                const key = this.asyncNpcPoses?.getFallbackKey(request, ecsId);
+                if (!key || !this.hasResidentNpcPose(key)) return;
+                opaque = this.geometry?.get(`${key}|o`);
+                alpha = this.geometry?.get(`${key}|a`);
+            }
         }
         const timeLoaded = map.timeLoaded;
         let entry: number | undefined;
@@ -756,6 +787,7 @@ export class WebGPUActors {
                     0,
                     0,
                     0,
+                    poseRow,
                 ),
             });
         }
@@ -772,9 +804,16 @@ export class WebGPUActors {
                     0,
                     0,
                     0,
+                    poseRow,
                 ),
             });
         }
+    }
+
+    private hasResidentNpcPose(key: string): boolean {
+        const opaque = this.geometry?.get(`${key}|o`);
+        const alpha = this.geometry?.get(`${key}|a`);
+        return opaque !== undefined && alpha !== undefined && !!(opaque || alpha);
     }
 
     private packMapPlayers(state: MapActorState, map: WebGPUMapSquare): void {
@@ -859,7 +898,7 @@ export class WebGPUActors {
         });
     }
 
-    /** The frame's pose texture row for a GPU pose, shared by players in the same pose; -1 when full. */
+    /** The frame's pose texture row for a GPU pose, shared by actors in the same pose; -1 when full. */
     private poseRowFor(poseKey: string, matrices: Float32Array): number {
         const existing = this.poseRows.get(poseKey);
         if (existing !== undefined) return existing.row;

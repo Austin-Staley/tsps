@@ -3,8 +3,8 @@ import fs from "node:fs";
 import { test } from "node:test";
 
 import { DynamicNpcAnimLoader } from "../render/npc/DynamicNpcAnimLoader";
-import { ActorGeometryCache } from "../render/webgpu/actors/actorGpu";
-import { ActorDataWriter } from "../render/webgpu/actors/actorPacking";
+import { ActorGeometryCache, POSE_ROWS, POSE_WIDTH } from "../render/webgpu/actors/actorGpu";
+import { ActorDataWriter, resolveUnbatchedNpcGeometry } from "../render/webgpu/actors/actorPacking";
 import { SeqType } from "../rs/config/seqtype/SeqType";
 import { Model } from "../rs/model/Model";
 
@@ -62,7 +62,10 @@ function fixture(alpha = true, capacity = 8) {
     };
     const actors: any = Object.create(WebGPUActors.prototype);
     Object.assign(actors, { renderer: { osrsClient: client }, dynamicNpcLoader: loader,
-        geometry: cache, writer: new ActorDataWriter(), pipelines: new Map([["npc", [{}, {}]]]),
+        geometry: cache,
+        asyncNpcPoses: { getKey: (request: any) => loader.getFrameGeometryKey(...request),
+            get: (request: any) => resolveUnbatchedNpcGeometry(client, loader, 5, request), getFallbackKey: () => undefined },
+        writer: new ActorDataWriter(), pipelines: new Map([["npc", [{}, {}]]]),
         actorEntry: () => 0 });
     const map = { getRenderBaseTileX: () => 0, getRenderBaseTileY: () => 0,
         getLocalTileSpan: () => 64, timeLoaded: -1 };
@@ -72,7 +75,7 @@ function fixture(alpha = true, capacity = 8) {
         return state as any;
     };
     const evictCpu = () => { (loader as any).geomCache.clear(); (loader as any).geomCacheBytes = 0; };
-    return { client, loader, cache, pack, evictCpu, ready, model,
+    return { actors, client, loader, cache, pack, evictCpu, ready, model,
         setType: (id: number) => { typeId = id; }, setVariant: (id: number) => { variant = id; },
         setSequence: (id: number) => { sequence = id; }, setFrame: (id: number) => { frame = id; },
         builds: () => builds, uploads: () => uploads };
@@ -152,6 +155,41 @@ test("empty-pass metadata is bounded, touched on lookup, and cleared with GPU re
     assert.ok(f.cache.get("a"), "a nonempty replacement supersedes an empty entry");
     f.cache.destroy();
     assert.equal(f.cache.get("a"), undefined); assert.equal(f.cache.get("c"), undefined);
+});
+
+test("NPC GPU labels share pose rows across both passes and preserve CPU fallback when rows fill", () => {
+    const f = fixture();
+    const source = f.loader.getFrameGeometry(1, 1, 0)!;
+    const posed = { ...source, key: "npc-rest:1", poseKey: "npc-pose:1", matrices: Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]),
+        opaqueLabels: new Uint32Array(source.opaqueIndices.length), alphaLabels: new Uint32Array(source.alphaIndices.length) };
+    Object.assign(f.actors, { npcPose: { resolve: () => posed }, actorData: { hasPose: () => false },
+        poseRows: new Map(), poseUpload: new Float32Array(POSE_ROWS * POSE_WIDTH * 4), poseTexels: 0 });
+    const rows: number[] = [];
+    f.actors.actorEntry = (...args: any[]) => { rows.push(args[8]); return 0; };
+    const first = f.pack();
+    assert.equal(f.builds(), 1, "a GPU label pose does not build another CPU mesh");
+    assert.ok(first.opaque[0].geometry.labels && first.alpha[0].geometry.labels);
+    assert.deepEqual(rows, [0], "opaque and alpha geometry share the same pose/actor row");
+    for (let row = 0; row < POSE_ROWS; row++) f.actors.poseRows.set(`full:${row}`, { row, matrices: posed.matrices });
+    f.actors.poseRows.delete(posed.poseKey);
+    const fallback = f.pack();
+    assert.equal(rows.at(-1), -1, "a full pose texture draws the CPU pose without applying it a second time");
+    assert.equal(fallback.opaque[0].geometry.labels, undefined);
+});
+
+test("alpha-only GPU NPC rest meshes keep their pose row and do not trigger CPU fallback", () => {
+    const f = fixture();
+    const source = f.loader.getFrameGeometry(1, 1, 0)!;
+    Object.assign(f.actors, { npcPose: { resolve: () => ({ ...source, key: "npc-alpha", poseKey: "npc-alpha-pose",
+        opaqueVertices: new Uint8Array(), opaqueIndices: new Int32Array(),
+        matrices: Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]), alphaLabels: new Uint32Array(source.alphaIndices.length) }) },
+        actorData: { hasPose: () => false }, poseRows: new Map(),
+        poseUpload: new Float32Array(POSE_ROWS * POSE_WIDTH * 4), poseTexels: 0 });
+    const packed = f.pack();
+    assert.equal(packed.opaque.length, 0);
+    assert.equal(packed.alpha.length, 1);
+    assert.ok(packed.alpha[0].geometry.labels);
+    assert.equal(f.builds(), 1);
 });
 
 test("NPC pose identity does not validate or build a CPU mesh", () => {

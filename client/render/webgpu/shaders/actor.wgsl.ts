@@ -465,7 +465,7 @@ function placement(kind: ActorKind): string {
     // rotation also turns their rest-pose normals (poseLinear).
     const fraction = WIDE_KINDS.has(kind)
         ? `vertex.pos += vec3<f32>(f32(a_positionFraction & 1023u), -f32((a_positionFraction >> 10u) & 1023u), f32((a_positionFraction >> 20u) & 1023u)) / 1024.0;` : "";
-    const pose = player
+    const pose = (player || kind === "npc")
         ? `
     var vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
     ${fraction}
@@ -517,7 +517,7 @@ ${info}${pose}
 
 function vertexParams(kind: ActorKind): string {
     const wide = WIDE_KINDS.has(kind);
-    return `@builtin(instance_index) a_instance: u32, @location(0) a_vertex: vec${wide ? 4 : 3}<u32>${wide ? ", @location(3) a_positionFraction: u32" : ""}${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
+    return `@builtin(instance_index) a_instance: u32, @location(0) a_vertex: vec${wide ? 4 : 3}<u32>${wide ? ", @location(3) a_positionFraction: u32" : ""}${kind === "player" || kind === "npc" ? ", @location(1) a_label: u32" : ""}`;
 }
 
 function sceneVertexEntry(kind: ActorKind, ext?: WebGPUSceneShaders): string {
