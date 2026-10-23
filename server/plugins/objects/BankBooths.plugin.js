@@ -13,7 +13,7 @@ const BANK_MAIN_BUTTON_IDS = new Set([
 ]);
 const BANK_TAB_SELECT_START = 50070;
 const BANK_SETTINGS_INTERFACE_ID = 32500;
-const BANK_OPEN_DEBOUNCE_MS = 250;
+const BANK_OPEN_DEBOUNCE_TICKS = 1;
 const lastBankOpenAt = new WeakMap();
 
 function isBankTabSelectButton(api, buttonId) {
@@ -41,13 +41,13 @@ function isBankButtonForInterface(api, interfaceId, buttonId) {
 }
 
 function openBank(api, player) {
-  const { Bank, PlayerStatus } = api.core;
+  const { Bank, PlayerStatus, World } = api.core;
   if (!player) {
     return false;
   }
-  const now = Date.now();
-  const lastOpenAt = lastBankOpenAt.get(player) ?? 0;
-  if (now - lastOpenAt < BANK_OPEN_DEBOUNCE_MS) {
+  const now = World.getProcessCycle();
+  const lastOpenAt = lastBankOpenAt.get(player) ?? -Infinity;
+  if (now - lastOpenAt < BANK_OPEN_DEBOUNCE_TICKS) {
     return true;
   }
   lastBankOpenAt.set(player, now);
