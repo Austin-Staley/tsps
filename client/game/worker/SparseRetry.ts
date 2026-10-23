@@ -10,7 +10,7 @@ const GROUP_WAIT_TIMEOUT_MS = 3000;
 
 /** Bound retries without discarding a completed final pass; never publish an incomplete build. */
 export async function runWithSparseRetry<T>(
-    workerState: { js5?: SparseCache },
+    workerState: { js5?: SparseCache; scenePasses?: number },
     task: () => Promise<T>,
     profileLabel?: string,
     outcome?: { complete: boolean },
@@ -18,9 +18,12 @@ export async function runWithSparseRetry<T>(
     if (outcome) outcome.complete = false;
     const js5 = workerState.js5;
     if (!js5) {
-        const result = await task();
-        if (outcome) outcome.complete = true;
-        return result;
+        workerState.scenePasses = (workerState.scenePasses ?? 0) + 1;
+        try {
+            const result = await task();
+            if (outcome) outcome.complete = true;
+            return result;
+        } finally { workerState.scenePasses--; }
     }
     const store = js5.store;
     const missing = new Map<string, Pick<GroupSpan, "indexId" | "archiveId">>();
@@ -34,7 +37,7 @@ export async function runWithSparseRetry<T>(
         return remaining;
     };
     const onMiss = store.onMiss;
-    store.onMiss = (span) => {
+    const onPassMiss = (span: GroupSpan) => {
         missing.set(`${span.indexId}:${span.archiveId}`, span);
         onMiss?.(span);
     };
@@ -48,12 +51,17 @@ export async function runWithSparseRetry<T>(
             const decompressBefore = { ...decompressStats };
             let result!: T;
             let blockingGroup: Pick<GroupSpan, "indexId" | "archiveId"> | undefined;
+            workerState.scenePasses = (workerState.scenePasses ?? 0) + 1;
+            store.onMiss = onPassMiss;
             try {
                 result = await task();
             } catch (error) {
                 if (!isGroupMissingError(error)) throw error;
                 blockingGroup = error;
                 missing.set(`${error.indexId}:${error.archiveId}`, error);
+            } finally {
+                store.onMiss = onMiss;
+                workerState.scenePasses--;
             }
             if (profileLabel) {
                 const gzip = `${Math.round(decompressStats.gzipMs - decompressBefore.gzipMs)}ms/${decompressStats.gzipCount - decompressBefore.gzipCount}`;

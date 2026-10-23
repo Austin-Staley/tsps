@@ -13,6 +13,7 @@ import type { RenderDataWorker } from "./RenderDataWorker";
 import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
 import type { MinimapData } from "./MinimapData";
 import type { WorldMapTileInput, WorldMapTileReply } from "./WorldMapTileJob";
+import type { NpcPoseInput, NpcPoseResult } from "./NpcPoseJob";
 
 type RenderDataWorkerThread = ModuleThread<RenderDataWorker>;
 
@@ -29,6 +30,10 @@ export class RenderDataWorkerPool {
     private worldMapEpoch = 0;
     private readonly worldMapRequests = new Set<() => void>();
     private disposed = false;
+    npcPoseGeneration = 0;
+    private npcPoseModelsRevision = -1;
+    private npcPoseContentReady: Promise<void> = Promise.resolve();
+    private readonly npcPoseRequests = new Set<() => void>();
 
     get pendingWorldMapTiles(): number { return this.worldMapRequests.size; }
     static create(size: number): RenderDataWorkerPool {
@@ -46,6 +51,9 @@ export class RenderDataWorkerPool {
     ) {}
 
     initCache(cache: LoadedCache, npcInstances: NpcInstance[]): void {
+        this.npcPoseGeneration++;
+        this.npcPoseModelsRevision = -1;
+        for (const cancel of this.npcPoseRequests) cancel();
         for (const worker of this.workers) {
             worker.init.then((w) => {
                 w.initCache(cache, npcInstances);
@@ -131,6 +139,35 @@ export class RenderDataWorkerPool {
         if (!this.disposed) void this.workers[0].init.then(worker => worker.cancelWorldMapTiles(epoch, clearCache)).catch(() => {});
     }
 
+    loadNpcPose(input: NpcPoseInput, signal?: AbortSignal): Promise<NpcPoseResult | undefined> {
+        if (this.disposed || signal?.aborted || this.npcPoseRequests.size >= 8) return Promise.resolve(undefined);
+        const generation = this.npcPoseGeneration;
+        if (this.npcPoseModelsRevision !== CustomModelRegistry.revision) {
+            this.npcPoseModelsRevision = CustomModelRegistry.revision;
+            const payload = { gamemodeId: "custom-items", datasets: [
+                { key: "customItems", rows: Array.from(CustomItemRegistry.getAll(), item => item.definition) },
+                { key: "customModels", rows: CustomModelRegistry.getAll() },
+            ] };
+            this.npcPoseContentReady = this.runAll(worker => worker.setCustomContent(payload))
+                .catch(error => { this.npcPoseModelsRevision = -1; throw error; });
+        }
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (geometry?: NpcPoseResult) => { if (settled) return; settled = true; cleanup(); resolve(geometry); };
+            const cancel = () => finish();
+            const timeout = setTimeout(() => finish(), 3000);
+            const cleanup = () => { clearTimeout(timeout); signal?.removeEventListener("abort", cancel); this.npcPoseRequests.delete(cancel); };
+            this.npcPoseRequests.add(cancel);
+            signal?.addEventListener("abort", cancel, { once: true });
+            void this.npcPoseContentReady.then(() =>
+                (this.workers.find(worker => !worker.runningTasks?.length) ?? this.workers[0]).init).then(worker => {
+                if (settled || this.disposed || signal?.aborted || generation !== this.npcPoseGeneration) return undefined;
+                return worker.loadNpcPose(input);
+            }).then(geometry => finish(generation === this.npcPoseGeneration && !signal?.aborted ? geometry : undefined),
+                error => { if (!settled) { settled = true; cleanup(); reject(error); } });
+        });
+    }
+
     queueLoadTexture(
         id: number,
         size: number,
@@ -155,6 +192,8 @@ export class RenderDataWorkerPool {
     }
 
     terminate(): Promise<void> {
+        this.npcPoseGeneration++;
+        for (const cancel of this.npcPoseRequests) cancel();
         this.cancelWorldMapTiles(true);
         this.disposed = true;
         return this.pool.terminate();

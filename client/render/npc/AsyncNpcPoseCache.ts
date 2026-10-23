@@ -1,0 +1,236 @@
+import type { RenderDataWorkerPool } from "../../game/worker/RenderDataWorkerPool";
+import type { NpcPoseInput } from "../../game/worker/NpcPoseJob";
+import { DynamicNpcAnimLoader, type DynamicNpcFrameGeometry, type NpcFrameRequest } from "./DynamicNpcAnimLoader";
+
+type PoseRequest = ReturnType<DynamicNpcAnimLoader["getAsyncPoseRequest"]>;
+type Job = { input: NpcPoseInput; priority: number; touched: number; created: number; owners: Set<number> };
+type ActorRequest = { key: string; appearance: string; sequence: number; overlay: number; waitingSince: number };
+
+/** Bounded current-first CPU fallback. No model lighting, animation or geometry packing runs here. */
+export class AsyncNpcPoseCache {
+    private readonly queued = new Map<string, Job>();
+    private readonly previous = new Map<string, string>();
+    private readonly retryAt = new Map<string, number>();
+    private context = "";
+    private generation = 0;
+    private textures: Array<[number, number]> = [];
+    private active?: AbortController;
+    private activeKey?: string;
+    private activeJob?: Job;
+    private readonly actorRequests = new Map<number, ActorRequest>();
+    private timer?: ReturnType<typeof setTimeout>;
+    private disposed = false;
+    private readonly requestedAt = new WeakMap<DynamicNpcFrameGeometry, number>();
+    readonly stats = { completed: 0, fallbacks: 0, absent: 0, maxWorkerLatencyMs: 0,
+        firstUsableLatencyMs: 0, requestedFrame: -1, displayedFrame: -1, poseAgeMs: 0, maxPoseAgeMs: 0 };
+    private firstRequestAt?: number;
+
+    constructor(private readonly loader: DynamicNpcAnimLoader,
+        private readonly pool: Pick<RenderDataWorkerPool, "loadNpcPose" | "npcPoseGeneration">,
+        private readonly gpuResident?: (key: string) => boolean) {}
+
+    private syncContext(): void {
+        const context = `${this.loader.getContextKey()}:${this.pool.npcPoseGeneration}`;
+        if (context !== this.context) {
+            this.cancel();
+            this.context = context;
+            this.textures = Array.from(this.loader.getTextureIdIndexMap() ?? []);
+        }
+    }
+
+    private resolve(request: NpcFrameRequest): PoseRequest {
+        try { return this.loader.getAsyncPoseRequest(...request); }
+        catch { return undefined; } // Sparse configuration data queues a retry through JS5.
+    }
+
+    getKey(request: NpcFrameRequest, actorIdentity?: number): string | undefined {
+        if (this.disposed) return undefined;
+        this.syncContext();
+        const pose = this.resolve(request);
+        this.syncContext();
+        if (pose) this.claimActor(actorIdentity, pose);
+        const key = pose ? this.key(pose.key, pose.appearance) : undefined;
+        if (key && actorIdentity !== undefined && this.gpuResident?.(key)) {
+            const actor = this.actorRequests.get(actorIdentity);
+            if (actor) actor.waitingSince = performance.now();
+        }
+        return key;
+    }
+
+    getFallbackKey(request: NpcFrameRequest, actorIdentity?: number): string | undefined {
+        if (this.disposed) return undefined;
+        this.syncContext();
+        const pose = this.resolve(request);
+        this.syncContext();
+        if (!pose) return undefined;
+        const previous = this.previous.get(this.fallbackIdentity(pose, actorIdentity)) ??
+            this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
+        if (previous) return previous;
+        const base = this.resolve([pose.request[0], -1, 0]);
+        return base ? this.key(base.key, base.appearance) : undefined;
+    }
+
+    get(request: NpcFrameRequest, actorIdentity?: number): DynamicNpcFrameGeometry | undefined {
+        if (this.disposed) return undefined;
+        this.syncContext();
+        const pose = this.resolve(request);
+        this.syncContext();
+        if (!pose) return undefined;
+        const key = this.key(pose.key, pose.appearance);
+        this.firstRequestAt ??= performance.now();
+        this.stats.requestedFrame = pose.request[2];
+        this.claimActor(actorIdentity, pose);
+        const fallbackIdentity = this.fallbackIdentity(pose, actorIdentity);
+        const cached = this.loader.getCachedGeometry(key);
+        if (cached) {
+            const actor = actorIdentity === undefined ? undefined : this.actorRequests.get(actorIdentity);
+            if (actor) actor.waitingSince = performance.now();
+            this.stats.displayedFrame = cached.frameId;
+            this.stats.poseAgeMs = 0;
+            this.remember(fallbackIdentity, key);
+            this.prefetch(pose);
+            return cached;
+        }
+        const previous = this.previous.get(fallbackIdentity) ?? this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
+        const base = pose.request[1] >= 0 ? this.resolve([pose.request[0], -1, 0]) : undefined;
+        const fallback = (previous ? this.loader.getCachedGeometry(previous) : undefined) ??
+            (base ? this.loader.getCachedGeometry(this.key(base.key, base.appearance)) : undefined);
+        if (fallback) {
+            this.stats.fallbacks++;
+            this.stats.displayedFrame = fallback.frameId;
+            this.stats.poseAgeMs = performance.now() - (this.requestedAt.get(fallback) ?? performance.now());
+            this.stats.maxPoseAgeMs = Math.max(this.stats.maxPoseAgeMs, this.stats.poseAgeMs);
+        } else this.stats.absent++;
+        if (!fallback && pose.request[1] >= 0) {
+            if (base) this.enqueue(base, -1, actorIdentity);
+        }
+        this.enqueue(pose, 0, actorIdentity);
+        this.prefetch(pose);
+        return fallback;
+    }
+
+    private claimActor(actorIdentity: number | undefined, pose: NonNullable<PoseRequest>): void {
+        const key = this.key(pose.key, pose.appearance);
+        const previous = actorIdentity === undefined ? undefined : this.actorRequests.get(actorIdentity);
+        if (actorIdentity !== undefined && previous?.key !== key) {
+            for (const [queuedKey, job] of this.queued) {
+                if (job.owners.delete(actorIdentity) && !job.owners.size && job.priority <= 0) this.queued.delete(queuedKey);
+            }
+            this.actorRequests.delete(actorIdentity);
+            this.actorRequests.set(actorIdentity, { key, appearance: pose.appearance, sequence: pose.request[1],
+                overlay: pose.request[3] ?? -1, waitingSince: previous?.waitingSince ?? performance.now() });
+            if (this.actorRequests.size > 256) this.actorRequests.delete(this.actorRequests.keys().next().value!);
+        }
+    }
+
+    private key(key: string, appearance: string): string { return `async-npc:${this.context}:${this.generation}:${key}:${appearance}`; }
+
+    private fallbackIdentity(pose: NonNullable<PoseRequest>, actor?: number): string {
+        return `${actor ?? "shared"}:${pose.appearance}:${pose.request[1]}:${pose.request[3] ?? -1}`;
+    }
+
+    private remember(identity: string, key: string): void {
+        this.previous.delete(identity);
+        this.previous.set(identity, key);
+        if (this.previous.size > 512) this.previous.delete(this.previous.keys().next().value!);
+    }
+
+    private prefetch(pose: NonNullable<PoseRequest>): void {
+        // Without an overlay/interpolated timeline the next in-range frame is known exactly.
+        if (pose.request[1] < 0 || (pose.request[3] ?? -1) >= 0 || pose.request[5] || pose.request[2] + 1 >= pose.frameCount) return;
+        const next = this.resolve([pose.request[0], pose.request[1], pose.request[2] + 1]);
+        if (next) this.enqueue(next, 1);
+    }
+
+    private enqueue(pose: NonNullable<PoseRequest>, priority: number, owner?: number): void {
+        const key = this.key(pose.key, pose.appearance), now = performance.now();
+        if (key === this.activeKey) { if (owner !== undefined) this.activeJob?.owners.add(owner); return; }
+        if (this.gpuResident?.(key) || this.loader.getCachedGeometry(key) || (this.retryAt.get(key) ?? 0) > now) return;
+        const queued = this.queued.get(key);
+        if (queued) { queued.priority = Math.min(queued.priority, priority); queued.touched = now;
+            if (owner !== undefined) queued.owners.add(owner); return; }
+        this.queued.set(key, { input: { context: this.context, key, appearance: pose.appearance,
+            request: pose.request, textures: this.textures }, priority, touched: now, created: now,
+            owners: new Set(owner === undefined ? [] : [owner]) });
+        if (this.queued.size > 24) {
+            const newest = [...this.queued].reverse().sort((a, b) => b[1].priority - a[1].priority || b[1].created - a[1].created)[0];
+            this.queued.delete(newest[0]);
+        }
+        if (!this.active && this.timer === undefined) this.timer = setTimeout(() => { this.timer = undefined; void this.pump(); }, 0);
+    }
+
+    private async pump(): Promise<void> {
+        if (this.disposed || this.active) return;
+        for (const [key, job] of this.queued) if (performance.now() - job.touched > 500) this.queued.delete(key);
+        const waitingSince = (job: Job) => job.owners.size
+            ? Math.min(...[...job.owners].map(owner => this.actorRequests.get(owner)?.waitingSince ?? job.created)) : job.created;
+        const next = [...this.queued].sort((a, b) => a[1].priority - b[1].priority || waitingSince(a[1]) - waitingSince(b[1]))[0];
+        if (!next) return;
+        const [key, job] = next;
+        this.queued.delete(key);
+        const generation = this.generation, controller = new AbortController();
+        this.active = controller;
+        this.activeKey = key;
+        this.activeJob = job;
+        const started = performance.now();
+        try {
+            const result = await this.pool.loadNpcPose(job.input, controller.signal);
+            if (this.disposed || generation !== this.generation || controller.signal.aborted) return;
+            if (result && "busy" in result) {
+                this.retryAt.set(key, performance.now() + 8);
+            } else if (result) {
+                this.stats.completed++;
+                this.stats.maxWorkerLatencyMs = Math.max(this.stats.maxWorkerLatencyMs, performance.now() - started);
+                if (this.stats.completed === 1) this.stats.firstUsableLatencyMs = performance.now() - this.firstRequestAt!;
+                this.requestedAt.set(result, job.touched);
+                this.loader.adoptGeometry(result);
+                if (job.priority <= 0) {
+                    for (const owner of job.owners) {
+                        const current = this.actorRequests.get(owner);
+                        if (!current || current.appearance !== job.input.appearance ||
+                            (job.input.request[1] >= 0 && (current.sequence !== job.input.request[1] || current.overlay !== (job.input.request[3] ?? -1)))) continue;
+                        const identity = `${owner}:${current.appearance}:${current.sequence}:${current.overlay}`;
+                        if (job.input.request[1] < 0) this.remember(`${owner}:${current.appearance}:base`, result.key);
+                        if (job.input.request[1] >= 0 || !this.previous.has(identity)) this.remember(identity, result.key);
+                        if (job.input.request[1] >= 0) current.waitingSince = performance.now();
+                    }
+                    if (!job.owners.size) {
+                        this.remember(`shared:${job.input.appearance}:${job.input.request[1]}:${job.input.request[3] ?? -1}`, result.key);
+                        if (job.input.request[1] < 0) this.remember(`shared:${job.input.appearance}:base`, result.key);
+                    }
+                }
+            } else this.retryAt.set(key, performance.now() + 250);
+        } catch {
+            // Downloads, lost RPCs and transient worker errors stay retryable on a later frame.
+            if (!controller.signal.aborted) this.retryAt.set(key, performance.now() + 250);
+        } finally {
+            if (this.active === controller) { this.active = undefined; this.activeKey = undefined; this.activeJob = undefined; }
+            while (this.retryAt.size > 128) this.retryAt.delete(this.retryAt.keys().next().value!);
+            if (!this.disposed && this.queued.size && !this.active) {
+                this.timer = setTimeout(() => { this.timer = undefined; void this.pump(); }, 0);
+            }
+        }
+    }
+
+    private cancel(): void {
+        this.generation++;
+        this.active?.abort();
+        this.active = undefined;
+        this.activeKey = undefined;
+        this.activeJob = undefined;
+        clearTimeout(this.timer);
+        this.timer = undefined;
+        this.queued.clear(); this.previous.clear(); this.retryAt.clear(); this.actorRequests.clear();
+    }
+
+    forgetActor(actorIdentity: number): void {
+        this.actorRequests.delete(actorIdentity);
+        this.activeJob?.owners.delete(actorIdentity);
+        for (const [key, job] of this.queued) {
+            if (job.owners.delete(actorIdentity) && !job.owners.size && job.priority <= 0) this.queued.delete(key);
+        }
+        for (const key of this.previous.keys()) if (key.startsWith(`${actorIdentity}:`)) this.previous.delete(key);
+    }
+
+    dispose(): void { this.disposed = true; this.cancel(); }
+}

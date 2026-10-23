@@ -19,6 +19,7 @@ import { SkeletalSeqLoader } from "../../rs/model/skeletal/SkeletalSeqLoader";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
 import { SceneBuffer } from "../buffer/SceneBuffer";
 import { buildActorNormals } from "../buffer/ActorNormals";
+import { CustomModelRegistry } from "../../custom/items/CustomModelRegistry";
 
 export interface DynamicNpcSequenceMeta {
     key: string;
@@ -45,19 +46,29 @@ export interface DynamicNpcFrameGeometry {
 
 export type NpcFrameRequest = Parameters<DynamicNpcAnimLoader["getFrameGeometry"]>;
 
+export function npcAppearanceKey(type: NpcType): string {
+    return JSON.stringify([type.modelIds, type.recolorFrom, type.recolorTo,
+        type.retextureFrom, type.retextureTo, type.ambient, type.contrast,
+        type.widthScale, type.heightScale]);
+}
+
 const CACHE_CONFIG = {
     /** Cap dynamic current-frame geometry cache to a bounded CPU budget. */
     MAX_GEOMETRY_BYTES: 16 * 1024 * 1024,
 } as const;
 
 export class DynamicNpcAnimLoader {
+    revision = 0;
     private npcModelLoader: NpcModelLoader | undefined;
     private textureIdIndexMap: Map<number, number> | undefined;
     private seqMetaCache = new Map<string, DynamicNpcSequenceMeta>();
     private geomCache = new Map<string, DynamicNpcFrameGeometry>();
     private geomCacheBytes = 0;
     private geometryTypes = new Map<string, number>();
+    private nextGeometryTypeId = 0;
     private geometryTypeCache = new WeakMap<NpcType, number>();
+    private readonly modelAppearances = new Map<number, string>();
+    private contentContext?: string;
     private opaqueSceneBuf: SceneBuffer | undefined;
     private alphaSceneBuf: SceneBuffer | undefined;
 
@@ -98,7 +109,50 @@ export class DynamicNpcAnimLoader {
     }
 
     setTextureIdIndexMap(map: Map<number, number>): void {
+        this.clear();
         this.textureIdIndexMap = map;
+    }
+
+    getTextureIdIndexMap(): Map<number, number> | undefined { return this.textureIdIndexMap; }
+
+    getContextKey(): string {
+        const content = `${this.textureIdIndexMap?.size ?? 0}:${CustomModelRegistry.revision}:${(this.modelLoader ?? this.npcModelLoader?.modelLoader)?.revision ?? 0}`;
+        if (this.contentContext !== undefined && this.contentContext !== content) this.clear();
+        this.contentContext = content;
+        return `${this.revision}:${content}`;
+    }
+
+    getCachedGeometry(key: string): DynamicNpcFrameGeometry | undefined {
+        const geometry = this.geomCache.get(key);
+        if (geometry) this.promoteGeometryEntry(key, geometry);
+        return geometry;
+    }
+
+    adoptGeometry(geometry: DynamicNpcFrameGeometry): void {
+        this.geomCacheBytes -= this.geomCache.get(geometry.key)?.approxBytes ?? 0;
+        this.geomCache.set(geometry.key, geometry);
+        this.geomCacheBytes += geometry.approxBytes;
+        this.evictGeometryEntriesIfNeeded();
+    }
+
+    /** Transfer ownership out of a worker cache without leaving detached buffers cached. */
+    takeGeometry(key: string): DynamicNpcFrameGeometry | undefined {
+        const geometry = this.geomCache.get(key);
+        if (geometry) { this.geomCache.delete(key); this.geomCacheBytes -= geometry.approxBytes; }
+        return geometry;
+    }
+
+    getAsyncPoseRequest(...request: NpcFrameRequest) {
+        this.getContextKey();
+        if (!this.isReady()) return undefined;
+        const resolved = this.resolveFrameRequest(...request);
+        const type = resolved?.resolvedNpcType ?? this.getResolvedNpcType(request[0]);
+        if (!type) return undefined;
+        const sequence = resolved ? this.seqTypeLoader?.load(request[1]) : undefined;
+        return { key: resolved?.key ?? `${this.getGeometryTypeId(type)}:base`, appearance: npcAppearanceKey(type),
+            frameCount: sequence ? this.getFrameCount(sequence) : 0,
+            request: (resolved ? [type.id, request[1], resolved.normalizedFrame, request[3] ?? -1,
+                resolved.normalizedOverlayFrame, resolved.interpolation] : [type.id, -1, 0]) as NpcFrameRequest };
     }
 
     isReady(): boolean {
@@ -106,6 +160,7 @@ export class DynamicNpcAnimLoader {
     }
 
     getSequenceMeta(npcTypeId: number, seqId: number): DynamicNpcSequenceMeta | undefined {
+        this.getContextKey();
         if (seqId < 0 || !this.isReady()) {
             return undefined;
         }
@@ -209,7 +264,9 @@ export class DynamicNpcAnimLoader {
     getModelLoader(): NpcModelLoader | undefined { return this.npcModelLoader; }
 
     peekBaseModel(npcTypeId: number): Model | undefined {
+        this.getContextKey();
         const type = this.getResolvedNpcType(npcTypeId);
+        if (type) this.getGeometryTypeId(type);
         return type ? this.npcModelLoader?.modelCache.get(type.id) : undefined;
     }
 
@@ -222,7 +279,7 @@ export class DynamicNpcAnimLoader {
         if (!models?.has(npcType.id) && !this.npcModelLoader?.getModel(npcType, -1, -1)) return undefined;
         const baseModel = models?.get(npcType.id);
         if (!baseModel) return undefined;
-        return { key: resolved.key, baseKey: `${this.getGeometryTypeId(npcType)}:base`, npcType, baseModel,
+        return { key: `${this.getContextKey()}:${resolved.key}`, baseKey: `${this.getContextKey()}:${this.getGeometryTypeId(npcType)}:base`, npcType, baseModel,
             interpolation: resolved.interpolation, frameId: resolved.normalizedFrame,
             overlayFrameId: resolved.normalizedOverlayFrame };
     }
@@ -235,6 +292,7 @@ export class DynamicNpcAnimLoader {
         overlayFrameId = -1,
         interpolation?: ActorInterpolation,
     ) {
+        this.getContextKey();
         if (!this.isReady()) {
             return undefined;
         }
@@ -277,6 +335,7 @@ export class DynamicNpcAnimLoader {
     }
 
     getBaseGeometry(npcTypeId: number): DynamicNpcFrameGeometry | undefined {
+        this.getContextKey();
         if (!this.isReady()) return undefined;
 
         const resolvedNpcType = this.getResolvedNpcType(npcTypeId);
@@ -333,6 +392,9 @@ export class DynamicNpcAnimLoader {
     }
 
     clear(): void {
+        this.revision++;
+        this.npcModelLoader?.modelCache.clear();
+        this.modelAppearances.clear();
         this.seqMetaCache.clear();
         this.geomCache.clear();
         this.geomCacheBytes = 0;
@@ -376,17 +438,16 @@ export class DynamicNpcAnimLoader {
 
     /** Identical appearances share poses and GPU keys, while NPC identity stays per instance. */
     getGeometryTypeId(type: NpcType): number {
+        // These are all NPC properties used by NpcModelLoader to build the body model.
+        const key = npcAppearanceKey(type);
+        const previous = this.modelAppearances.get(type.id);
+        if (previous !== undefined && previous !== key) this.clear();
+        this.modelAppearances.set(type.id, key);
         const cached = this.geometryTypeCache.get(type);
         if (cached !== undefined) return cached;
-        // These are all NPC properties used by NpcModelLoader to build the body model.
-        const key = JSON.stringify([
-            type.modelIds, type.recolorFrom, type.recolorTo,
-            type.retextureFrom, type.retextureTo, type.ambient, type.contrast,
-            type.widthScale, type.heightScale,
-        ]);
         let id = this.geometryTypes.get(key);
         if (id === undefined) {
-            id = type.id;
+            id = ++this.nextGeometryTypeId;
             this.geometryTypes.set(key, id);
         }
         this.geometryTypeCache.set(type, id);
@@ -394,14 +455,11 @@ export class DynamicNpcAnimLoader {
     }
 
     getResolvedNpcType(npcTypeId: number): NpcType | undefined {
-        const npcType = this.npcTypeLoader?.load(npcTypeId);
-        if (!npcType) {
-            return undefined;
+        let type = this.npcTypeLoader?.load(npcTypeId);
+        for (let remaining = 32; type?.transforms && remaining > 0; remaining--) {
+            type = type.transform(this.varManager!, this.npcTypeLoader!) ?? undefined;
         }
-        if (!npcType.transforms) {
-            return npcType;
-        }
-        return npcType.transform(this.varManager!, this.npcTypeLoader!) ?? npcType;
+        return type?.transforms ? undefined : type;
     }
 
     private getFrameCount(seqType: SeqType): number {

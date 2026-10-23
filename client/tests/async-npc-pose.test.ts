@@ -1,0 +1,316 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
+import { AsyncNpcPoseCache } from "../render/npc/AsyncNpcPoseCache";
+import { DynamicNpcAnimLoader, npcAppearanceKey } from "../render/npc/DynamicNpcAnimLoader";
+import { NpcPoseJob } from "../game/worker/NpcPoseJob";
+import { runWithSparseRetry } from "../game/worker/SparseRetry";
+import { Model } from "../rs/model/Model";
+import { SeqType } from "../rs/config/seqtype/SeqType";
+import { CustomModelRegistry } from "../custom/items/CustomModelRegistry";
+
+(globalThis as any).self = globalThis;
+const { RenderDataWorkerPool } = require("../game/worker/RenderDataWorkerPool");
+
+const turn = () => sleep(5);
+function fixture() {
+    const type: any = { id: 1, modelIds: [1], widthScale: 128, heightScale: 128, ambient: 0, contrast: 0 };
+    const seq = new SeqType(1, { game: "oldschool", revision: 241 } as any);
+    seq.frameIds = [1, 2, 3, 4]; seq.frameLengths = [2, 2, 2, 2];
+    const cache = new Map();
+    const models: any = { modelCache: cache, modelLoader: {},
+        clearCache: () => cache.clear(), getModel: () => { throw Error("Main-thread pose build"); } };
+    const loader = new DynamicNpcAnimLoader({ load: () => type } as any, undefined, {} as any,
+        { load: () => seq } as any, { load: () => ({}) } as any, undefined, {} as any, models);
+    loader.setTextureIdIndexMap(new Map([[10, 1]]));
+    const calls: Array<{ input: any; resolve: (result: any) => void; reject: (error: any) => void; signal: AbortSignal }> = [];
+    const pool = { npcPoseGeneration: 0, loadNpcPose: (input: any, signal: AbortSignal) =>
+        new Promise<any>((resolve, reject) => calls.push({ input, resolve, reject, signal })) };
+    const queue = new AsyncNpcPoseCache(loader, pool);
+    const geometry = (input: any) => ({ key: input.key, npcTypeId: input.request[0], seqId: input.request[1], frameId: input.request[2],
+        opaqueVertices: new Uint8Array(12), opaqueIndices: new Int32Array([0]),
+        alphaVertices: new Uint8Array(), alphaIndices: new Int32Array(), approxBytes: 16 });
+    return { type, loader, pool, calls, queue, geometry };
+}
+
+test("first spawn schedules a worker base, retains it until the current pose arrives, then hits synchronously", async () => {
+    const f = fixture();
+    try {
+        assert.equal(f.queue.getKey([1, 1, 0])?.includes("async-npc:"), true);
+        await turn(); assert.equal(f.calls.length, 0, "resident GPU key checks must never queue work");
+        assert.equal(f.queue.get([1, 1, 0], 7), undefined);
+        await turn();
+        assert.equal(f.calls.length, 1);
+        assert.equal(f.calls[0].input.request[1], -1, "first spawn gets a usable base before animated work");
+        const base = f.geometry(f.calls[0].input);
+        f.calls[0].resolve(base); await turn();
+        assert.equal(f.queue.get([1, 1, 0], 7), base);
+        assert.equal(f.calls[1].input.request[1], 1);
+        const pose = f.geometry(f.calls[1].input);
+        f.calls[1].resolve(pose); await turn();
+        assert.equal(f.queue.get([1, 1, 0], 7), pose);
+        assert.equal(f.queue.getFallbackKey([1, 1, 3], 7), pose.key);
+        const queued = f.calls.length;
+        f.queue.get([1, 1, 0], 7); f.queue.get([1, 1, 0], 8);
+        await turn(); assert.equal(f.calls.length, queued, "an active next-pose request is deduplicated too");
+        assert.ok(f.queue.stats.firstUsableLatencyMs > 0);
+    } finally { f.queue.dispose(); }
+});
+
+test("queued current poses replace an actor's older work and stay ahead of bounded prefetch", async () => {
+    const f = fixture();
+    try {
+        f.queue.get([1, 1, 0], 7); await turn();
+        f.queue.get([1, 1, 1], 7); f.queue.get([1, 1, 2], 7);
+        const jobs = [...(f.queue as any).queued.values()] as any[];
+        assert.ok(!jobs.some(j => j.priority === 0 && j.input.request[1] === 1 && j.input.request[2] < 2));
+        f.calls[0].resolve(f.geometry(f.calls[0].input)); await turn();
+        assert.equal(f.calls[1].input.request[2], 2, "latest current pose runs before speculative next poses");
+        for (let id = 0; id < 100; id++) {
+            f.type.id = id + 1; f.type.modelIds = [id + 1]; f.queue.get([id + 1, 1, id % 3], id + 50);
+        }
+        assert.ok((f.queue as any).queued.size <= 24);
+    } finally { f.queue.dispose(); }
+});
+
+test("renderer reset, texture replacement, custom appearance and pool generation cannot publish stale poses", async () => {
+    const f = fixture();
+    try {
+        f.queue.get([1, 1, 0], 1); await turn();
+        const stale = f.calls[0], oldKey = stale.input.key;
+        f.loader.setTextureIdIndexMap(new Map([[10, 9]]));
+        const newKey = f.queue.getKey([1, 1, 0]);
+        assert.notEqual(newKey, oldKey);
+        assert.equal(stale.signal.aborted, true);
+        stale.resolve(f.geometry(stale.input)); await turn();
+        assert.equal(f.loader.getCachedGeometry(oldKey), undefined);
+        f.type.modelIds = [123];
+        assert.notEqual(f.queue.getKey([1, 1, 0]), newKey, "same-ID changed appearances cannot reuse old geometry");
+        const appearanceKey = f.queue.getKey([1, 1, 0]);
+        const textureMap = f.loader.getTextureIdIndexMap()!;
+        textureMap.set(10, 12);
+        f.loader.setTextureIdIndexMap(textureMap);
+        assert.notEqual(f.queue.getKey([1, 1, 0]), appearanceKey, "publishing a changed layer in the same Map invalidates poses");
+        const beforeAppend = f.queue.getKey([1, 1, 0]);
+        textureMap.set(11, 13);
+        assert.notEqual(f.queue.getKey([1, 1, 0]), beforeAppend, "stable-ID layer appends also invalidate the captured mapping");
+        f.pool.npcPoseGeneration++;
+        assert.notEqual(f.queue.getKey([1, 1, 0]), appearanceKey);
+        f.queue.get([1, 1, 0], 1); await turn();
+        const pending = f.calls[f.calls.length - 1];
+        f.queue.dispose(); pending.resolve(f.geometry(pending.input)); await turn();
+        assert.equal(f.loader.getCachedGeometry(pending.input.key), undefined);
+        assert.equal(f.queue.get([1, 1, 0], 1), undefined);
+    } finally { f.queue.dispose(); }
+});
+
+test("nested var-dependent NPC transforms identify the final body before sharing async geometry", () => {
+    const f = fixture();
+    try {
+        const second = { ...f.type, id: 2, modelIds: [2] };
+        let variant = f.type;
+        const nested = { id: 10, transforms: [1, 2], transform: () => variant };
+        const root = { id: 20, transforms: [10], transform: () => nested };
+        (f.loader as any).npcTypeLoader = { load: (id: number) => id === 20 ? root : id === 10 ? nested : id === 2 ? second : f.type };
+        const first = f.loader.getAsyncPoseRequest(20, 1, 0)!;
+        assert.equal(first.request[0], 1);
+        variant = second;
+        const changed = f.loader.getAsyncPoseRequest(20, 1, 0)!;
+        assert.equal(changed.request[0], 2);
+        assert.notEqual(changed.appearance, first.appearance);
+    } finally { f.queue.dispose(); }
+});
+
+test("shared NPC source contexts invalidate raw models and keys on content and same-type appearance changes", () => {
+    const f = fixture(), revision = CustomModelRegistry.revision;
+    const models = f.loader.getModelLoader()!.modelCache;
+    try {
+        const oldContext = f.loader.getContextKey();
+        const oldCanonical = f.loader.getFrameGeometryKey(1, 1, 0);
+        models.set(1, new Model());
+        f.type.widthScale = 160;
+        assert.equal(f.loader.peekBaseModel(1), undefined, "an in-place appearance change drops the stale raw model without rebuilding it");
+        assert.notEqual(f.loader.getContextKey(), oldContext);
+        assert.notEqual(f.loader.getFrameGeometryKey(1, 1, 0), oldCanonical, "canonical IDs never repeat for a changed same-ID appearance");
+        models.set(1, new Model());
+        const beforeCustom = f.loader.getContextKey();
+        CustomModelRegistry.revision++;
+        assert.notEqual(f.loader.getContextKey(), beforeCustom);
+        assert.equal(models.size, 0);
+        models.set(1, new Model());
+        const beforeLoader = f.loader.getContextKey();
+        (f.loader.getModelLoader()!.modelLoader as any).revision = 2;
+        assert.notEqual(f.loader.getContextKey(), beforeLoader);
+        assert.equal(models.size, 0);
+    } finally { CustomModelRegistry.revision = revision; f.queue.dispose(); }
+});
+
+test("transient worker failures remain retryable and missing configuration never falls back to synchronous baking", async t => {
+    const f = fixture();
+    let now = 100;
+    t.mock.method(performance, "now", () => now);
+    try {
+        f.queue.get([1, -1, 0], 1); await turn();
+        f.calls[0].reject(Error("Worker temporarily unavailable")); await turn();
+        f.queue.get([1, -1, 0], 1); await turn(); assert.equal(f.calls.length, 1);
+        now += 251; f.queue.get([1, -1, 0], 1); await turn(); assert.equal(f.calls.length, 2);
+        f.calls[1].resolve(f.geometry(f.calls[1].input)); await turn();
+        assert.ok(f.queue.get([1, -1, 0], 1));
+        (f.loader as any).getAsyncPoseRequest = () => { throw Error("Sparse config unavailable"); };
+        assert.equal(f.queue.get([1, 1, 0], 1), undefined);
+    } finally { f.queue.dispose(); }
+});
+
+test("worker poses preserve synchronous packing bytes, transfer ownership, defer to scenes and retry incomplete data", async () => {
+    const f = fixture();
+    const model = new Model();
+    model.verticesCount = 3; model.verticesX = new Int32Array([0, 128, 0]);
+    model.verticesY = new Int32Array([0, 0, -128]); model.verticesZ = new Int32Array(3);
+    model.faceCount = 1; model.indices1 = new Int32Array([0]); model.indices2 = new Int32Array([1]); model.indices3 = new Int32Array([2]);
+    model.faceColors1 = model.faceColors2 = model.faceColors3 = new Int32Array([100]);
+    let incomplete = false;
+    const state: any = { sceneJobs: 0, scenePasses: 0, npcTypeLoader: (f.loader as any).npcTypeLoader,
+        textureLoader: {}, seqTypeLoader: (f.loader as any).seqTypeLoader,
+        seqFrameLoader: (f.loader as any).seqFrameLoader, varManager: {},
+        js5: { store: { missCount: 0 } }, npcModelLoader: f.loader.getModelLoader() };
+    state.npcModelLoader.getModel = (type: any) => {
+        if (incomplete) state.js5.store.missCount++;
+        state.npcModelLoader.modelCache.set(type.id, model); return model;
+    };
+    const source = f.loader.getFrameGeometry(1, 1, 0)!;
+    const job = new NpcPoseJob(state);
+    const input = { context: "test", key: "expected-key", appearance: npcAppearanceKey(f.type),
+        request: f.loader.getAsyncPoseRequest(1, 1, 0)!.request, textures: [[10, 1] as [number, number]] };
+    try {
+        const output = (await job.load(input))! as any;
+        for (const name of ["opaqueVertices", "opaqueIndices", "alphaVertices", "alphaIndices"] as const) assert.deepEqual(output[name], source[name]);
+        const transferred = structuredClone(output, { transfer: [output.opaqueVertices.buffer, output.opaqueIndices.buffer,
+            output.alphaVertices.buffer, output.alphaIndices.buffer] });
+        assert.equal(output.opaqueVertices.byteLength, 0);
+        assert.deepEqual(((await job.load(input))! as any).opaqueVertices, transferred.opaqueVertices, "detached arrays never stay in the worker pose cache");
+        state.sceneJobs = 1; state.scenePasses = 1; assert.deepEqual(await job.load(input), { busy: true });
+        state.scenePasses = 0; assert.ok(await job.load(input), "foreground download waits must not starve visible NPCs");
+        state.sceneJobs = 0; incomplete = true;
+        assert.equal(await job.load(input), undefined, "a partial build is never transferred or cached");
+        incomplete = false; assert.ok(await job.load(input));
+        const interpolated = { ...input, request: f.loader.getAsyncPoseRequest(1, 1, 0, -1, -1,
+            { base: { next: 1, alpha: 0.5 } })!.request };
+        const frameLoad = state.seqFrameLoader.load;
+        state.seqFrameLoader.load = (id: number) => id === 2 ? undefined : {};
+        assert.equal(await job.load(interpolated), undefined,
+            "a worker missing the next frame cannot relabel an unblended mesh as the requested interpolated pose");
+        state.seqFrameLoader.load = frameLoad;
+        assert.ok(await job.load(interpolated), "the original request recovers once its next frame arrives");
+        model.faceCount = 0;
+        assert.equal(await job.load(input), undefined, "empty animated geometry must leave the usable base fallback in place");
+        model.faceCount = 1;
+        assert.ok(await job.load(input), "an empty pass must not poison later usable geometry");
+        job.dispose(); assert.equal(await job.load(input), undefined);
+    } finally { f.queue.dispose(); }
+});
+
+test("pool bounds lost replies and cancellation prevents late dispatch after relogin", async t => {
+    let workerReady!: (worker: any) => void, calls = 0;
+    const worker = { setCustomContent: async () => {}, loadNpcPose: async () => { calls++; return undefined; } };
+    const pool = new RenderDataWorkerPool({}, [{ init: new Promise(resolve => { workerReady = resolve; }) }], 1);
+    const input: any = { context: "test", key: "test", appearance: "[]", request: [1, -1, 0], textures: [] };
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const promise = pool.loadNpcPose(input);
+    t.mock.timers.tick(3000);
+    assert.equal(await promise, undefined);
+    workerReady(worker); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    assert.equal(calls, 0, "a timed-out request cannot dispatch later when worker initialization completes");
+    const cancel = new AbortController();
+    const cancelled = pool.loadNpcPose(input, cancel.signal); cancel.abort();
+    assert.equal(await cancelled, undefined);
+    await Promise.resolve(); await Promise.resolve(); assert.equal(calls, 0);
+});
+
+test("foreground download waits release the pass counter and miss listener without collecting background NPC misses", async () => {
+    const seen: number[] = [], checked: number[] = [];
+    let release!: () => void, pass = 0;
+    const original = (span: any) => seen.push(span.archiveId);
+    const store = { missCount: 0, onMiss: original,
+        isGroupPresent: (_index: number, id: number) => { checked.push(id); return true; } };
+    const state = { sceneJobs: 1, scenePasses: 0, js5: { store,
+        settled: () => new Promise<void>(resolve => { release = resolve; }) } } as any;
+    const outcome = { complete: false };
+    const build = runWithSparseRetry(state, async () => {
+        assert.equal(state.scenePasses, 1);
+        if (pass++ === 0) { store.missCount++; store.onMiss({ indexId: 1, archiveId: 10 }); }
+        return "complete";
+    }, undefined, outcome);
+    await turn();
+    assert.equal(state.sceneJobs, 1);
+    assert.equal(state.scenePasses, 0);
+    assert.equal(store.onMiss, original);
+    // This is a background NPC read while a foreground group is downloading.
+    store.missCount++; store.onMiss({ indexId: 1, archiveId: 99 });
+    release();
+    assert.equal(await build, "complete");
+    assert.equal(outcome.complete, true);
+    assert.deepEqual(checked, [10], "background dependencies must never enter the foreground retry collector");
+    assert.deepEqual(seen, [10, 99]);
+    assert.equal(store.onMiss, original);
+    assert.equal(state.scenePasses, 0);
+    await assert.rejects(runWithSparseRetry(state, async () => { throw Error("Build failed"); }), /Build failed/);
+    assert.equal(store.onMiss, original);
+    assert.equal(state.scenePasses, 0);
+    const resident = { scenePasses: 0 };
+    await assert.rejects(runWithSparseRetry(resident, async () => { throw Error("Resident build failed"); }), /Resident build failed/);
+    assert.equal(resident.scenePasses, 0, "non-sparse passes restore their priority counter too");
+});
+
+test("actor fallback ownership never substitutes a different actor's action pose", async () => {
+    const f = fixture();
+    try {
+        f.queue.get([1, 1, 0], 7); await turn();
+        f.calls[0].resolve(f.geometry(f.calls[0].input)); await turn();
+        f.calls[1].resolve(f.geometry(f.calls[1].input)); await turn();
+        const actor7 = f.queue.get([1, 1, 0], 7)!;
+        assert.notEqual(f.queue.get([1, 2, 0], 8)?.key, actor7.key, "actor8 cannot borrow actor7's ongoing action");
+        assert.notEqual(f.queue.getFallbackKey([1, 2, 0], 8), actor7.key);
+        assert.equal(f.queue.getFallbackKey([1, 1, 3], 7), actor7.key);
+        f.queue.get([1, 2, 2], 7);
+        assert.notEqual(f.queue.getFallbackKey([1, 2, 2], 7), actor7.key, "an obsolete action cannot become the new animation's fallback");
+    } finally { f.queue.dispose(); }
+});
+
+test("slow worker service gives every actor a base before repeatedly advancing earlier actors", async t => {
+    const f = fixture();
+    let now = 100;
+    t.mock.method(performance, "now", () => now);
+    const usable = new Set<number>();
+    try {
+        for (let step = 0; step < 9; step++) {
+            for (let id = 1; id <= 3; id++) {
+                f.type.id = id; f.type.modelIds = [id];
+                const displayed = f.queue.get([id, 1, step % 3], id);
+                if (displayed) usable.add(id);
+            }
+            await turn();
+            const call = f.calls[step];
+            assert.ok(call, `worker must keep making progress at step ${step}`);
+            call.resolve(f.geometry(call.input));
+            now += 40; // Two frames of latency while the camera keeps rendering new requests.
+            await turn();
+            if (step === 3) assert.equal(usable.size, 3, "all three first spawns get base geometry within three worker turns");
+        }
+        assert.equal(usable.size, 3);
+        assert.ok(f.queue.stats.maxPoseAgeMs <= 360, "finite service keeps displayed pose age bounded in this slow-worker workload");
+    } finally { f.queue.dispose(); }
+});
+
+test("despawned ECS indices cannot inherit previous poses or late animated callbacks", async () => {
+    const f = fixture();
+    try {
+        f.queue.get([1, 1, 0], 7); await turn();
+        f.calls[0].resolve(f.geometry(f.calls[0].input)); await turn();
+        const oldAnimated = f.calls[1], oldKey = oldAnimated.input.key;
+        f.queue.forgetActor(7);
+        const base = f.queue.get([1, 1, 3], 7);
+        assert.equal(base?.seqId, -1, "a new actor may reuse canonical base geometry, never the old actor's action state");
+        oldAnimated.resolve(f.geometry(oldAnimated.input)); await turn();
+        assert.notEqual(f.queue.getFallbackKey([1, 1, 3], 7), oldKey);
+    } finally { f.queue.dispose(); }
+});

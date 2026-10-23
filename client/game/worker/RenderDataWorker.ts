@@ -62,6 +62,7 @@ import { RenderDataLoader, renderDataLoaderSerializer } from "./RenderDataLoader
 import { runWithSparseRetry } from "./SparseRetry";
 import type { MinimapData } from "./MinimapData";
 import { WorldMapTileJob, type WorldMapTileInput, type WorldMapTileReply } from "./WorldMapTileJob";
+import { NpcPoseJob, type NpcPoseInput } from "./NpcPoseJob";
 
 registerSerializer(renderDataLoaderSerializer);
 
@@ -107,7 +108,9 @@ export type WorkerState = {
 
     npcInstances: NpcInstance[];
     sceneJobs: number;
+    scenePasses: number;
     worldMapTiles?: WorldMapTileJob;
+    npcPoses?: NpcPoseJob;
 };
 
 let workerStatePromise: Promise<WorkerState> | undefined;
@@ -289,6 +292,7 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
 
         npcInstances,
         sceneJobs: 0,
+        scenePasses: 0,
     };
 }
 
@@ -344,6 +348,7 @@ const worker = {
     initCache(cache: LoadedCache, npcInstances: NpcInstance[]) {
         registerInstanceModelOverrides(npcInstances);
         void workerStatePromise?.then(state => state.worldMapTiles?.dispose());
+        void workerStatePromise?.then(state => state.npcPoses?.dispose());
         workerStatePromise = initWorker(cache, npcInstances);
     },
     initDataLoader<I, D>(dataLoader: RenderDataLoader<I, D>) {
@@ -444,6 +449,15 @@ const worker = {
         const jobs = state.worldMapTiles ??= new WorldMapTileJob(state);
         const reply = await jobs.load(input);
         return Transfer(reply, reply.tile ? [reply.tile.pixels.buffer] : []);
+    },
+    async loadNpcPose(input: NpcPoseInput): Promise<TransferDescriptor<import("./NpcPoseJob").NpcPoseResult | undefined>> {
+        const state = await workerStatePromise;
+        if (!state) throw new Error("Worker not initialized");
+        const result = await (state.npcPoses ??= new NpcPoseJob(state)).load(input);
+        const geometry = result && !("busy" in result) ? result : undefined;
+        const transferables = geometry ? [geometry.opaqueVertices.buffer, geometry.opaqueIndices.buffer,
+            geometry.alphaVertices.buffer, geometry.alphaIndices.buffer] : [];
+        return Transfer(result, transferables);
     },
     async cancelWorldMapTiles(epoch: number, clearCache: boolean): Promise<void> {
         const state = await workerStatePromise;
