@@ -4,6 +4,8 @@ import { CREATION_MENU_LAST_ITEM_ATTRIBUTE } from "../../../../../net/packet/Pac
 import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../../net/login/LoginTokens";
 import { normalizeSailingState, type SailingState } from "../../../../content/sailing/SailingState";
 import { FightType } from "../../../../content/combat/FightType";
+import { WeaponInterfaces } from "../../../../content/combat/WeaponInterfaces";
+import { Equipment } from "../../../../model/container/impl/Equipment";
 import { CombatSpells } from "../../../../content/combat/magic/CombatSpells";
 import { SkillManager, Skills } from "../../../../content/skill/SkillManager";
 import { Player } from "../Player";
@@ -127,6 +129,8 @@ export class PlayerSave {
         [0, 5],  // feet
         [0, 7],  // skin
     ];
+    /** The name as the player first typed it, capitals included; later logins keep it. */
+    private displayName: string;
     private passwordHashWithSalt: string;
     private isDiscordLogin: boolean;
     private cachedDiscordAccessToken: string;
@@ -169,6 +173,9 @@ export class PlayerSave {
     private flags: string[];
     public sailing?: SailingState;
 
+    public getDisplayName(): string {
+        return this.displayName;
+    }
     public getPasswordHashWithSalt(): string {
         return this.passwordHashWithSalt;
     }
@@ -202,6 +209,14 @@ export class PlayerSave {
 
     public setSpellBook(spellBook: MagicSpellbook): void {
         this.spellBook = spellBook;
+    }
+
+    /** Legacy saves contain style fields shared by several weapon families. Resolve in the saved weapon's family. */
+    public static resolveSavedFightType(value: unknown, equipment: Item[]): FightType {
+        const item = equipment[Equipment.WEAPON_SLOT];
+        const weapon = item?.getId() > 0 ? item.getDefinition()?.getWeaponInterface() : null;
+        const availableTypes = (weapon ?? WeaponInterfaces.UNARMED).getFightType();
+        return FightType.resolve(value, availableTypes) ?? FightType.UNARMED_KICK;
     }
 
     public getFightType(): FightType {
@@ -657,6 +672,7 @@ export class PlayerSave {
         }
         let playerSave = new PlayerSave();
 
+        playerSave.displayName = player.getUsername();
         playerSave.passwordHashWithSalt = (player.getPasswordHashWithSalt() || "").trim();
         playerSave.isDiscordLogin = player.isDiscordLoginReturn();
         playerSave.cachedDiscordAccessToken = player.getCachedDiscordAccessToken();

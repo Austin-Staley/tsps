@@ -385,6 +385,8 @@ export class Player extends Mobile {
         const timed = <T>(phase: string, fn: () => T): T =>
             ServerPerf.measurePhase(`player.process.${phase}`, fn);
 
+        // Client input first: packets received since the last turn act now, on the tick.
+        timed("client_input", () => this.getSession()?.processPackets());
         // Queued impacts land before this player acts, matching LostCity's
         // processQueues-then-processInteraction order. A hit that kills them here
         // stops the rest of this turn via the isDying/hitpoints guards below.
@@ -812,7 +814,15 @@ export class Player extends Mobile {
     private viewDistanceQuietCycles = 0;
 
     public getViewDistance(): number {
-        return this.viewDistance;
+        return this.fixedViewDistance ?? this.viewDistance;
+    }
+
+    /** A view distance kept regardless of the crowd (a spectator watching a room), or null. */
+    private fixedViewDistance: number | null = null;
+
+    /** Fixes how far other players are seen (up to 64), as for a spectator; null resizes again. */
+    public setFixedViewDistance(distance: number | null): void {
+        this.fixedViewDistance = distance == null ? null : Math.max(1, Math.min(64, Math.trunc(distance)));
     }
 
     /** How far away NPCs (and their projectiles) are seen; 15 unless an area widens it. */
