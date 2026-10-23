@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
@@ -41,6 +43,7 @@ const OFFER_ILLIQUID_MIN_MS = 60_000;
 const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
 const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
+const MARKET_DATA_FILE = path.join(__dirname, "data", "grand-exchange.json");
 // OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
 const usableSlots = () => (pluginApi.core.WorldDefinition.isMembersWorld() ? 8 : 3);
 const offers = new WeakMap();
@@ -48,6 +51,21 @@ const completionTimers = new WeakMap();
 const viewing = new WeakMap();
 const searching = new WeakSet();
 let pluginApi;
+let marketData;
+
+function loadMarketData() {
+  if (marketData) return marketData;
+  const { data } = JSON.parse(fs.readFileSync(MARKET_DATA_FILE, "utf8"));
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid grand-exchange.json: expected a data object");
+  }
+  return (marketData = data);
+}
+
+function marketQuote(itemId) {
+  const base = ItemDefinition.forId(itemId).unNote();
+  return loadMarketData()[base] ?? {};
+}
 
 function validItem(id) {
   if (!CacheDefinitions.hasItem(id)) return false;
@@ -77,8 +95,7 @@ function sellPrice(id) {
 }
 
 function fillDelayMs(offer, random = Math.random) {
-  const definition = ItemDefinition.forId(ItemDefinition.forId(offer.itemId).unNote());
-  const volume = definition.getGrandExchangeVolume?.() ?? 0;
+  const volume = Number(marketQuote(offer.itemId).volume);
   if (!Number.isFinite(volume) || volume <= 0) {
     return OFFER_ILLIQUID_MIN_MS + random() * (OFFER_ILLIQUID_MAX_MS - OFFER_ILLIQUID_MIN_MS);
   }
@@ -98,7 +115,7 @@ function limitEntry(player, itemId, now) {
 }
 
 function itemLimit(itemId) {
-  const limit = ItemDefinition.forId(limitKey(itemId)).getGrandExchangeBuyLimit?.() ?? 0;
+  const limit = Number(marketQuote(itemId).limit);
   return Number.isFinite(limit) && limit > 0 ? limit : Infinity;
 }
 
@@ -597,9 +614,13 @@ module.exports = {
     LIMITS_ATTRIBUTE,
     LIMIT_WINDOW_MS,
     OFFERS_ATTRIBUTE,
+    setMarketData: (data) => {
+      marketData = data;
+    },
   },
   register(api) {
     pluginApi = api;
+    loadMarketData();
     api.persistAttribute(OFFERS_ATTRIBUTE, {});
     api.persistAttribute(LIMITS_ATTRIBUTE, {});
     api.onPlayerLogin(({ player }) => {

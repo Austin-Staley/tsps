@@ -1,7 +1,9 @@
 import { writeFile, rename } from "node:fs/promises";
 
-const destination = new URL("../data/definitions/item-prices.json", import.meta.url);
-const temporary = new URL("../data/definitions/item-prices.json.tmp", import.meta.url);
+const pricesDestination = new URL("../data/definitions/item-prices.json", import.meta.url);
+const pricesTemporary = new URL("../data/definitions/item-prices.json.tmp", import.meta.url);
+const marketDestination = new URL("../plugins/interface/data/grand-exchange.json", import.meta.url);
+const marketTemporary = new URL("../plugins/interface/data/grand-exchange.json.tmp", import.meta.url);
 const headers = { "User-Agent": "elvarg-typescript item-price fetcher" };
 const signal = AbortSignal.timeout(30_000);
 
@@ -48,33 +50,43 @@ const ids = [...new Set([...Object.keys(latest).map(Number), ...mapped.keys()])]
   .filter((id) => Number.isSafeInteger(id) && id >= 0)
   .sort((a, b) => a - b);
 
-const data = {};
+const prices = {};
+const market = {};
 for (const id of ids) {
   const live = latest[id] ?? {};
   const recent = day[id] ?? {};
   const item = mapped.get(id);
-  const quote = {
-    high: safeInt(live.high),
-    highTime: safeInt(live.highTime),
-    low: safeInt(live.low),
-    lowTime: safeInt(live.lowTime),
-    highVolume: volume(recent.highPriceVolume),
-    lowVolume: volume(recent.lowPriceVolume),
-    limit: item ? safeInt(item.limit) : null,
-  };
-  // Only mapped ids get alch keys: the loader overrides its export alch values for these,
-  // and leaves items the mapping does not know untouched.
-  if (item) {
-    quote.highAlch = safeInt(item.highalch);
-    quote.lowAlch = safeInt(item.lowalch);
+
+  const high = safeInt(live.high);
+  const low = safeInt(live.low);
+  if (high != null || low != null) {
+    prices[id] = {
+      high,
+      highTime: safeInt(live.highTime),
+      low,
+      lowTime: safeInt(live.lowTime),
+    };
   }
-  data[id] = quote;
+
+  const traded = Math.min(
+    Number.MAX_SAFE_INTEGER,
+    volume(recent.highPriceVolume) + volume(recent.lowPriceVolume)
+  );
+  const limit = item && Number.isSafeInteger(item.limit) && item.limit > 0 ? item.limit : 0;
+  if (traded > 0 || limit > 0) {
+    market[id] = { volume: traded, limit };
+  }
 }
 
-const json = JSON.stringify({ data });
-await writeFile(temporary, json);
-await rename(temporary, destination);
+async function writeJson(destination, temporary, payload) {
+  await writeFile(temporary, JSON.stringify(payload));
+  await rename(temporary, destination);
+}
+
+await writeJson(pricesDestination, pricesTemporary, { data: prices });
+await writeJson(marketDestination, marketTemporary, { data: market });
 console.info(
-  `Saved ${ids.length} item prices to ${destination.pathname} ` +
+  `Saved ${Object.keys(prices).length} prices to ${pricesDestination.pathname} and ` +
+    `${Object.keys(market).length} GE quotes to ${marketDestination.pathname} ` +
     `(latest=${Object.keys(latest).length}, 24h=${Object.keys(day).length}, mapping=${mapped.size})`
 );

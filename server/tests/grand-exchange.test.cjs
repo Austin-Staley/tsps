@@ -12,12 +12,14 @@ const {
   fillDelayMs,
   remainingLimit,
   recordLimit,
+  setMarketData,
   LIMITS_ATTRIBUTE,
   LIMIT_WINDOW_MS,
   OFFERS_ATTRIBUTE,
 } = require('../plugins/interface/GrandExchange.plugin')._test;
 
 const definitions = new Map();
+const market = {};
 
 function define(id, values = {}) {
   const definition = {
@@ -27,8 +29,6 @@ function define(id, values = {}) {
     getName: () => `Item ${id}`,
     getGrandExchangeValue: () => 1,
     getGrandExchangeSellValue: () => 1,
-    getGrandExchangeVolume: () => 0,
-    getGrandExchangeBuyLimit: () => 0,
     ...values,
   };
   definitions.set(id, definition);
@@ -51,14 +51,18 @@ test('buy offers pay the high price and sell offers receive the low price', () =
 });
 
 const HIGH_VOLUME = 2001;
-define(HIGH_VOLUME, { getGrandExchangeVolume: () => 20_000_000 });
+define(HIGH_VOLUME);
+market[HIGH_VOLUME] = { volume: 20_000_000 };
 const SLOW = 2002;
-define(SLOW, { getGrandExchangeVolume: () => 900 });
+define(SLOW);
+market[SLOW] = { volume: 900 };
 const ILLIQUID = 2003;
 const BROKEN_VOLUME = 2004;
-define(BROKEN_VOLUME, { getGrandExchangeVolume: () => NaN });
+define(BROKEN_VOLUME);
+market[BROKEN_VOLUME] = { volume: NaN };
 const NEGATIVE_VOLUME = 2005;
-define(NEGATIVE_VOLUME, { getGrandExchangeVolume: () => -10 });
+define(NEGATIVE_VOLUME);
+market[NEGATIVE_VOLUME] = { volume: -10 };
 const half = () => 0.5;
 
 test('fill delay follows volume and quantity', () => {
@@ -85,11 +89,13 @@ test('unknown, zero, broken and negative volume is illiquid', () => {
 });
 
 const LIMITED = 3001;
-define(LIMITED, { getGrandExchangeBuyLimit: () => 150 });
+define(LIMITED);
+market[LIMITED] = { limit: 150 };
 const UNLIMITED = 3002;
-define(UNLIMITED, { getGrandExchangeBuyLimit: () => 0 });
+define(UNLIMITED);
+market[UNLIMITED] = { limit: 0 };
 const NO_LIMIT_GETTER = 3003;
-define(NO_LIMIT_GETTER, { getGrandExchangeBuyLimit: undefined });
+define(NO_LIMIT_GETTER);
 
 function player() {
   const attributes = new Map();
@@ -143,3 +149,5 @@ test('register persists both attributes', () => {
   assert.deepEqual(persisted.get(OFFERS_ATTRIBUTE), {});
   assert.deepEqual(persisted.get(LIMITS_ATTRIBUTE), {});
 });
+
+setMarketData(market);

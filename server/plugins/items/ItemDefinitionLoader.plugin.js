@@ -83,59 +83,70 @@ function loadItemPrices() {
     "item-prices.json"
   );
   if (!fs.existsSync(filePath)) {
-    return { filePath, loaded: 0, alchOverrides: 0 };
+    return { filePath, loaded: 0 };
   }
   const { data } = JSON.parse(fs.readFileSync(filePath, "utf8"));
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid item-prices.json: expected a data object");
   }
-  const count = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
   let loaded = 0;
-  let alchOverrides = 0;
   for (const [key, quote] of Object.entries(data)) {
     const id = Number(key);
     if (!Number.isInteger(id) || id < 0) continue;
     const definition = ItemDefinition.forId(id);
     if (definition === ItemDefinition.DEFAULT) continue;
 
-    const limit = count(quote?.limit);
-    definition.buyLimit = limit;
-
     const prices = [quote?.high, quote?.low].filter(
       (value) => Number.isSafeInteger(value) && value > 0
     );
-    if (prices.length) {
-      // Some live quotes are inverted (high below low). Charge the higher guide price
-      // as the buy and the lower as the sell so the spread cannot be arbitraged.
-      const buy = Math.max(...prices);
-      const sell = Math.min(...prices);
-      const volume = Math.min(
-        Number.MAX_SAFE_INTEGER,
-        count(quote.highVolume) + count(quote.lowVolume)
-      );
-      definition.grandExchangeValue = buy;
-      definition.grandExchangeSellValue = sell;
-      definition.grandExchangeVolume = volume;
-      const noteId = definition.getNoteId();
-      if (!definition.isNoted() && noteId >= 0) {
-        const note = ItemDefinition.forId(noteId);
-        if (note.isNoted() && note.getNoteId() === id) {
-          note.grandExchangeValue = buy;
-          note.grandExchangeSellValue = sell;
-          note.grandExchangeVolume = volume;
-          note.buyLimit = limit;
-        }
-      }
-      loaded += 1;
-    }
+    if (!prices.length) continue;
 
-    if (quote && typeof quote === "object" && ("highAlch" in quote || "lowAlch" in quote)) {
-      definition.highAlch = count(quote.highAlch);
-      definition.lowAlch = count(quote.lowAlch);
-      alchOverrides += 1;
+    // Some live quotes are inverted (high below low). Charge the higher guide price
+    // as the buy and the lower as the sell so the spread cannot be arbitraged.
+    const buy = Math.max(...prices);
+    const sell = Math.min(...prices);
+    definition.grandExchangeValue = buy;
+    definition.grandExchangeSellValue = sell;
+    const noteId = definition.getNoteId();
+    if (!definition.isNoted() && noteId >= 0) {
+      const note = ItemDefinition.forId(noteId);
+      if (note.isNoted() && note.getNoteId() === id) {
+        note.grandExchangeValue = buy;
+        note.grandExchangeSellValue = sell;
+      }
     }
+    loaded += 1;
   }
-  return { filePath, loaded, alchOverrides };
+  return { filePath, loaded };
+}
+
+// High/low alchemy values from the osrsreboxed item dump (import-osrs-item-alch.mjs).
+// Applied after item-gameplay.json so the cache-derived values win over the old export.
+function loadItemAlch() {
+  const ItemDefinition = getItemDefinition();
+  const filePath = path.resolve(
+    process.cwd(),
+    getGameConstants().DEFINITIONS_DIRECTORY,
+    "item-alch.json"
+  );
+  if (!fs.existsSync(filePath)) {
+    return { filePath, loaded: 0 };
+  }
+  const { data } = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid item-alch.json: expected a data object");
+  }
+  let loaded = 0;
+  for (const [key, values] of Object.entries(data)) {
+    const id = Number(key);
+    if (!Number.isInteger(id) || id < 0) continue;
+    const definition = ItemDefinition.forId(id);
+    if (definition === ItemDefinition.DEFAULT) continue;
+    definition.highAlch = Number.isSafeInteger(values?.highAlch) ? values.highAlch : 0;
+    definition.lowAlch = Number.isSafeInteger(values?.lowAlch) ? values.lowAlch : 0;
+    loaded += 1;
+  }
+  return { filePath, loaded };
 }
 
 function loadItemDefinitions() {
@@ -274,6 +285,7 @@ function loadItemDefinitions() {
     unresolvedWeaponInterfaces,
     mismatched,
     prices: loadItemPrices(),
+    alch: loadItemAlch(),
   };
 }
 
@@ -295,7 +307,7 @@ function sendCustomItems({ player }) {
 
 module.exports = {
   name: "ItemDefinitionLoader",
-  _test: { loadItemPrices },
+  _test: { loadItemPrices, loadItemAlch },
   register(api) {
     const startedAt = Date.now();
     const result = loadItemDefinitions();
@@ -306,6 +318,7 @@ module.exports = {
       unresolvedWeaponInterfaces: result.unresolvedWeaponInterfaces,
       mismatched: result.mismatched,
       prices: result.prices.loaded,
+      alch: result.alch.loaded,
       elapsedMs: Date.now() - startedAt,
     });
     api.registerContentEndpoint("custom-items", customItemsResource);

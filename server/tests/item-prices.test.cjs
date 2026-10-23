@@ -10,9 +10,11 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const ItemDefinitionLoader = require("../plugins/items/ItemDefinitionLoader.plugin");
 const PRICES = require("../data/definitions/item-prices.json").data;
+const ALCH = require("../data/definitions/item-alch.json").data;
 
 const TEAM_6 = 4325;
 const WHIP = 4151;
+const BONES = 526;
 
 function quote(id) {
   const value = PRICES[String(id)];
@@ -25,6 +27,7 @@ function quote(id) {
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   ItemDefinitionLoader._test.loadItemPrices();
+  ItemDefinitionLoader._test.loadItemAlch();
 });
 
 test("buy is the higher guide price and sell the lower", () => {
@@ -35,30 +38,20 @@ test("buy is the higher guide price and sell the lower", () => {
   assert.ok(definition.getGrandExchangeValue() >= definition.getGrandExchangeSellValue());
 });
 
-test("24h volume and 4h buy limit come from the live data", () => {
-  const live = quote(TEAM_6);
-  const definition = ItemDefinition.forId(TEAM_6);
-  assert.equal(definition.getGrandExchangeVolume(), live.highVolume + live.lowVolume);
-  assert.equal(definition.getGrandExchangeBuyLimit(), live.limit ?? 0);
-});
-
-test("mapping alch values override the export", () => {
-  const live = quote(WHIP);
-  assert.ok(Number.isSafeInteger(live.highAlch) && live.highAlch > 0);
+test("alch values come from the osrsreboxed item dump", () => {
   const definition = ItemDefinition.forId(WHIP);
-  assert.equal(definition.getHighAlchValue(), live.highAlch);
-  assert.equal(definition.getLowAlchValue(), live.lowAlch);
+  assert.equal(definition.getHighAlchValue(), ALCH[WHIP].highAlch);
+  assert.equal(definition.getLowAlchValue(), ALCH[WHIP].lowAlch);
 });
 
-test("mapping alch fills items the old export skipped", () => {
-  const live = quote(2);
-  assert.ok(Number.isSafeInteger(live.highAlch) && live.highAlch > 0);
-  const definition = ItemDefinition.forId(2);
-  assert.equal(definition.getHighAlchValue(), live.highAlch);
-  assert.equal(definition.getLowAlchValue(), live.lowAlch);
+test("items the item dump marks unalchable stay at zero", () => {
+  const definition = ItemDefinition.forId(BONES);
+  assert.equal(ALCH[BONES].highAlch, 0);
+  assert.equal(definition.getHighAlchValue(), 0);
+  assert.equal(definition.getLowAlchValue(), 0);
 });
 
-test("the noted copy mirrors buy, sell, volume and limit", () => {
+test("the noted copy mirrors buy and sell", () => {
   const live = quote(WHIP);
   const definition = ItemDefinition.forId(WHIP);
   assert.equal(definition.isNoted(), false);
@@ -67,6 +60,4 @@ test("the noted copy mirrors buy, sell, volume and limit", () => {
   assert.equal(note.getNoteId(), WHIP);
   assert.equal(note.getGrandExchangeValue(), live.buy);
   assert.equal(note.getGrandExchangeSellValue(), live.sell);
-  assert.equal(note.getGrandExchangeVolume(), live.highVolume + live.lowVolume);
-  assert.equal(note.getGrandExchangeBuyLimit(), live.limit ?? 0);
 });

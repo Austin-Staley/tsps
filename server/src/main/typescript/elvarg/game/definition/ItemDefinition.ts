@@ -54,7 +54,7 @@ export class ItemDefinition {
         definition.requirements = [...(base.requirements ?? new Array(23).fill(0))];
         for (const key of ["equipmentType", "weaponInterface", "doubleHanded", "stackable",
             "tradeable", "dropable", "sellable", "value", "grandExchangeValue", "grandExchangeSellValue",
-            "grandExchangeVolume", "buyLimit", "highAlch", "lowAlch", "dropValue",
+            "highAlch", "lowAlch", "dropValue",
             "bloodMoneyValue", "blockAnim", "standAnim", "walkAnim", "runAnim", "standTurnAnim",
             "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "attackAnim", "equipSound", "bonuses",
             "requirements", "combatRequirement"]) {
@@ -81,8 +81,6 @@ export class ItemDefinition {
     private value: number;
     private grandExchangeValue: number;
     private grandExchangeSellValue: number;
-    private grandExchangeVolume: number = 0;
-    private buyLimit: number = 0;
     private bloodMoneyValue: number;
     private highAlch: number;
     private lowAlch: number;
@@ -182,16 +180,6 @@ export class ItemDefinition {
     /** The guide sell quote, falling back to the buy quote when there is none. */
     public getGrandExchangeSellValue(): number {
         return this.grandExchangeSellValue > 0 ? this.grandExchangeSellValue : this.getGrandExchangeValue();
-    }
-
-    /** Trades over the last 24 hours (buy and sell volume). */
-    public getGrandExchangeVolume(): number {
-        return this.grandExchangeVolume;
-    }
-
-    /** The 4-hour buy limit; 0 means unlimited. */
-    public getGrandExchangeBuyLimit(): number {
-        return this.buyLimit;
     }
 
     public getBloodMoneyValue(): number {
