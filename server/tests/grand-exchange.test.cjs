@@ -9,6 +9,7 @@ const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
 const {
   price,
   sellPrice,
+  changePrice,
   fillDelayMs,
   remainingLimit,
   recordLimit,
@@ -48,6 +49,25 @@ test('buy offers pay the high price and sell offers receive the low price', () =
   assert.ok(price(INVERTED) > sellPrice(INVERTED));
   assert.ok(price(INVERTED) - sellPrice(INVERTED) > 0);
   assert.equal(sellPrice(NO_SELL_QUOTE), 42);
+});
+
+test('price controls step by one, five percent and the guide', () => {
+  const offer = { itemId: INVERTED, sell: true, price: 100 };
+  assert.equal(changePrice(offer, 8), 99);
+  assert.equal(changePrice(offer, 9), 101);
+  assert.equal(changePrice(offer, 10), 95);
+  assert.equal(changePrice(offer, 13), 105);
+  assert.equal(changePrice(offer, 11), sellPrice(INVERTED));
+  assert.equal(changePrice({ ...offer, sell: false }, 11), price(INVERTED));
+  // Offers saved before adjustable prices fall back to the guide.
+  assert.equal(changePrice({ itemId: INVERTED, sell: true }, 9), sellPrice(INVERTED) + 1);
+});
+
+test('price controls stay within one coin and the maximum', () => {
+  assert.equal(changePrice({ itemId: INVERTED, price: 1 }, 8), 1);
+  assert.equal(changePrice({ itemId: INVERTED, price: 1 }, 10), 1);
+  assert.equal(changePrice({ itemId: INVERTED, price: 0x7ffffffe }, 9), 0x7fffffff);
+  assert.equal(changePrice({ itemId: INVERTED, price: 0x7fffffff }, 13), 0x7fffffff);
 });
 
 const HIGH_VOLUME = 2001;

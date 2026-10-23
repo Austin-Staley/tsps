@@ -94,6 +94,27 @@ function sellPrice(id) {
   return Math.max(1, Math.min(MAX, Math.floor(value) || 1));
 }
 
+function guidePrice(offer) {
+  if (!(offer?.itemId > 0)) return 1;
+  return offer.sell ? sellPrice(offer.itemId) : price(offer.itemId);
+}
+
+/** The price stored on the offer, or the guide for offers saved before prices were adjustable. */
+function offerPrice(offer) {
+  return Number.isInteger(offer?.price) && offer.price > 0 ? Math.min(MAX, offer.price) : guidePrice(offer);
+}
+
+/** Scripts 773/779 price controls: -1, +1, -5%, guide, +5% (custom entry is handled separately). */
+function changePrice(offer, slot) {
+  const current = offerPrice(offer);
+  if (slot === 8) return Math.max(1, current - 1);
+  if (slot === 9) return Math.min(MAX, current + 1);
+  if (slot === 10) return Math.max(1, Math.floor(current * 0.95));
+  if (slot === 11) return guidePrice(offer);
+  if (slot === 13) return Math.min(MAX, Math.ceil(current * 1.05));
+  return current;
+}
+
 function fillDelayMs(offer, random = Math.random) {
   const volume = Number(marketQuote(offer.itemId).volume);
   if (!Number.isFinite(volume) || volume <= 0) {
@@ -196,7 +217,7 @@ function marketVarps(slot, offer) {
   return {
     [OFFER_ITEMS[slot]]: -1,
     [base + 6]: offer?.itemId ?? -1,
-    [base]: offer ? (offer.sell ? sellPrice(offer.itemId) : price(offer.itemId)) : 0,
+    [base]: offer ? offerPrice(offer) : 0,
     [base + 1]: offer?.quantity ?? 0,
     // An aborted offer traded nothing (the client draws its bar red).
     [base + 2]: offer?.finished && !offer.aborted ? offer.quantity : 0,
@@ -246,7 +267,7 @@ function refresh(player, offer) {
     .sendConfig(SELECTED_ITEM, offer.itemId)
     .sendVarbit(SELL, offer.sell ? 1 : 0)
     .sendVarbit(QUANTITY, offer.quantity)
-    .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? (offer.sell ? sellPrice(offer.itemId) : price(offer.itemId)) : 1)
+    .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? offerPrice(offer) : 1)
     .sendVarbit(SELECTED_SLOT, offer.slot + 1)
     .sendString(examine(offer.itemId), SETUP_DESC);
 }
@@ -301,6 +322,7 @@ function chooseItem(player, offer) {
     closeSearch(player);
     offer.itemId = id;
     offer.quantity = 1;
+    offer.price = price(id);
     refresh(player, offer);
   } });
   searching.add(player);
@@ -321,7 +343,13 @@ function start(player, sell, slot = 0, itemId = -1) {
     }
     slot = free;
   }
-  const offer = { sell, slot, itemId, quantity: 1 };
+  const offer = {
+    sell,
+    slot,
+    itemId,
+    quantity: 1,
+    price: itemId > 0 ? (sell ? sellPrice(itemId) : price(itemId)) : 1,
+  };
   offers.set(player, offer);
   player.setEnteredAmountAction(null);
   player.setEnteredSyntaxAction(null);
@@ -332,9 +360,13 @@ function start(player, sell, slot = 0, itemId = -1) {
 function confirm(player, offer) {
   if (!active(player, offer) || !exchangeable(offer.itemId)) return;
   const amount = offer.quantity;
-  const total = amount * (offer.sell ? sellPrice(offer.itemId) : price(offer.itemId));
+  const unitPrice = offerPrice(offer);
+  offer.price = unitPrice;
+  const total = amount * unitPrice;
   const sender = player.getPacketSender();
-  if (!Number.isInteger(amount) || amount < 1 || amount > MAX || !Number.isSafeInteger(total) || total > MAX) {
+  if (!Number.isInteger(unitPrice) || unitPrice < 1 || unitPrice > MAX ||
+      !Number.isInteger(amount) || amount < 1 || amount > MAX ||
+      !Number.isSafeInteger(total) || total > MAX) {
     sender.sendMessage("Choose a smaller quantity (maximum trade value is 2,147,483,647 coins).");
     return;
   }
@@ -498,7 +530,7 @@ function openGrandExchange({ player }) {
     .sendInterfaceFlagsRange(uid(23), 0, 1, 2)
     // Same item operations as the normal inventory panel.
     .sendInterfaceFlagsRange(SIDE_ITEMS, 0, 27, 1086);
-  sender.sendMessage("Grand Exchange: live guide prices. Buy offers pay the high quote, sells receive the low; fills depend on trade volume and each item has a four-hour limit.");
+  sender.sendMessage("Grand Exchange: live guide prices. Adjust the price if you like; fills depend on trade volume and each item has a four-hour limit.");
   return true;
 }
 
@@ -593,21 +625,34 @@ function handleExchangeButton({ player, buttonId, slot, action }) {
       refresh(player, offer);
     } });
     player.getPacketSender().sendEnterAmountPrompt("How many would you like to trade?");
-  } else if (slot >= 8 && slot <= 16) {
-    player.sendMessage("This exchange uses fixed guide prices.");
+  } else if (slot >= 8 && slot <= 13) {
+    if (slot === 12) {
+      player.setEnteredAmountAction({ execute: function handleOfferPrice(amount) {
+        if (!active(player, offer) || !Number.isInteger(amount) || amount < 1 || amount > MAX) return;
+        offer.price = amount;
+        refresh(player, offer);
+      } });
+      player.getPacketSender().sendEnterAmountPrompt(
+        offer.sell ? "How much would you like to sell each item for?" : "How much would you like to pay for each item?",
+      );
+    } else {
+      offer.price = changePrice(offer, slot);
+    }
   }
   refresh(player, offer);
   return true;
 }
 
 const COLLECTION_BUTTONS = Array.from({ length: 10 }, (_, i) => collectUid(i + 3));
-const EXCHANGE_BUTTONS = [uid(4), uid(6), uid(23), uid(24), uid(26), uid(30), ...Array.from({ length: 8 }, (_, i) => uid(i + 7))];
+// Child 34 is the offer setup panel; its quantity and price controls are dynamic children (slot 1-13).
+const EXCHANGE_BUTTONS = [uid(4), uid(6), uid(23), uid(24), uid(26), uid(30), uid(34), ...Array.from({ length: 8 }, (_, i) => uid(i + 7))];
 
 module.exports = {
   name: "GrandExchange",
   _test: {
     price,
     sellPrice,
+    changePrice,
     fillDelayMs,
     remainingLimit,
     recordLimit,
