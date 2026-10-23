@@ -1,3 +1,4 @@
+import { processWidgetScrollWheelInput } from "../game/widgets/input/widgetScrollWheelInput";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
@@ -204,4 +205,40 @@ renderer.osrsClient.scenePreviewEnabled = false;
 render();
 assert.equal(streamed, 1, "leaving the editor stops logged-out map streaming");
 assert.equal(worldDraws, 1, "leaving the editor restores the login surface");
+// Exercise the actual WebGPU render ordering: Settings consumes wheel during handleInput,
+// before HD follows the player. Capturing raw wheel before this boundary zooms through modals.
+loggedIn = true;
+renderer.mapManager.visibleMaps = [];
+renderer.osrsClient.followPlayerCamera = true;
+renderer.osrsClient.camera.setViewPitchOverride(undefined);
+renderer.osrsClient.clientPlugins.hdEnabled = () => true;
+const wheelInput: any = { wheelDeltaY: 120, viewportWheelDeltaY: 0, mouseX: 100, mouseY: 100 };
+renderer.osrsClient.inputManager = wheelInput;
+let handler = 36;
+renderer.handleInput = () => processWidgetScrollWheelInput(
+    { getCs2Vm: () => ({ invokeEventHandler: noop }) } as any,
+    { input: wheelInput, mx: 100, hits: [{ uid: 2, eventHandlers: { onScroll: { scriptId: handler } } }] } as any,
+    { isEffectivelyHidden: () => false } as any,
+    { isDraggingWidget: false } as any,
+);
+renderer.followCamWheel = 0;
+render();
+assert.equal(wheelInput.wheelDeltaY, 0, "Settings owns the native wheel");
+assert.equal(renderer.followCamWheel, 0, "WebGPU HD must not capture wheel before Settings consumes it");
+handler = 39;
+wheelInput.wheelDeltaY = 120;
+render();
+assert.equal(renderer.followCamWheel, 120, "native viewport zoom still forwards the original delta to HD");
+renderer.followCamWheel = 0;
+renderer.osrsClient.camera.setViewPitchOverride(200);
+wheelInput.wheelDeltaY = 120;
+wheelInput.viewportWheelDeltaY = 0;
+render();
+assert.equal(renderer.followCamWheel, 0, "close camera never accumulates a stale HD wheel delta");
+renderer.osrsClient.camera.setViewPitchOverride(undefined);
+renderer.handleInput = noop;
+wheelInput.wheelDeltaY = 120;
+wheelInput.viewportWheelDeltaY = 0;
+render();
+assert.equal(renderer.followCamWheel, 120, "unclaimed world wheel still zooms when the HUD has no viewport listener");
 console.log("WebGPU scene viewport and editor preview tests passed");
