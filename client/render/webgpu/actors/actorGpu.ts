@@ -296,46 +296,23 @@ export interface GpuGeometry {
     labels?: GPUBuffer;
 }
 
-function createGeometryBuffer(device: GPUDevice, data: Uint8Array, usage: GPUBufferUsageFlags): GPUBuffer {
-    const size = Math.max(4, Math.ceil(data.byteLength / 4) * 4);
-    const buffer = device.createBuffer({ size, usage });
-    if (data.byteLength > 0) {
-        if (data.byteLength % 4 === 0) {
-            device.queue.writeBuffer(buffer, 0, data);
-        } else {
-            const padded = new Uint8Array(size);
-            padded.set(data);
-            device.queue.writeBuffer(buffer, 0, padded);
-        }
-    }
-    return buffer;
-}
-
-function createIndexBuffer(device: GPUDevice, data: Int32Array): GPUBuffer {
-    const size = Math.max(4, data.byteLength);
-    const buffer = device.createBuffer({ size, usage: GPU_BUFFER_USAGE.INDEX | GPU_BUFFER_USAGE.COPY_DST });
-    if (data.length > 0) {
-        device.queue.writeBuffer(buffer, 0, data);
-    }
-    return buffer;
-}
-
 /**
- * GPU mirror of the CPU geometry caches (DynamicNpcAnimLoader / GfxCache). Evicted buffers
- * are destroyed at the start of the next frame, after the draws that reference them have
- * been submitted.
+ * GPU mirror of the CPU geometry caches (DynamicNpcAnimLoader / GfxCache). Evictions
+ * stay untouched until the next frame's uploads, after their draws have been submitted.
+ * Queue-ordered writes can then reuse the buffers even while those draws are in flight.
  */
 export class ActorGeometryCache {
-    private readonly device: GPUDevice;
     private readonly entries = new Map<string, GpuGeometry>();
     private readonly emptyEntries = new Set<string>();
     private retired: GPUBuffer[] = [];
-    private readonly maxEntries: number;
+    private readonly pooled = new Map<string, GPUBuffer[]>();
+    private pooledBytes = 0;
 
-    constructor(device: GPUDevice, maxEntries: number = 1024) {
-        this.device = device;
-        this.maxEntries = maxEntries;
-    }
+    constructor(
+        private readonly device: GPUDevice,
+        private readonly maxEntries: number = 1024,
+        private readonly maxPooledBytes: number = 16 * 1024 * 1024,
+    ) {}
 
     /** Undefined means evicted/unbuilt; null means this pass was built and has no faces. */
     get(key: string): GpuGeometry | null | undefined {
@@ -370,16 +347,14 @@ export class ActorGeometryCache {
         if (existing) return existing;
         this.emptyEntries.delete(key);
         const geometry: GpuGeometry = {
-            vertices: createGeometryBuffer(
-                this.device,
+            vertices: this.createBuffer(
                 vertices,
                 GPU_BUFFER_USAGE.VERTEX | GPU_BUFFER_USAGE.COPY_DST,
             ),
-            indices: createIndexBuffer(this.device, indices),
+            indices: this.createBuffer(indices, GPU_BUFFER_USAGE.INDEX | GPU_BUFFER_USAGE.COPY_DST),
             indexCount: indices.length,
             labels: labels
-                ? createGeometryBuffer(
-                      this.device,
+                ? this.createBuffer(
                       new Uint8Array(labels.buffer, labels.byteOffset, labels.byteLength),
                       GPU_BUFFER_USAGE.VERTEX | GPU_BUFFER_USAGE.COPY_DST,
                   )
@@ -390,9 +365,19 @@ export class ActorGeometryCache {
         return geometry;
     }
 
-    /** Call once per frame before uploading new geometry. */
+    /** Call after submitting the previous frame, before uploading this frame's geometry. */
     beginFrame(): void {
-        for (const buffer of this.retired) buffer.destroy();
+        for (const buffer of this.retired) {
+            if (this.pooledBytes + buffer.size > this.maxPooledBytes) {
+                buffer.destroy();
+                continue;
+            }
+            const key = `${buffer.usage}:${buffer.size}`;
+            let buffers = this.pooled.get(key);
+            if (!buffers) this.pooled.set(key, buffers = []);
+            buffers.push(buffer);
+            this.pooledBytes += buffer.size;
+        }
         this.retired.length = 0;
     }
 
@@ -404,7 +389,36 @@ export class ActorGeometryCache {
         }
         this.entries.clear();
         this.emptyEntries.clear();
-        this.beginFrame();
+        for (const buffer of this.retired) buffer.destroy();
+        this.retired.length = 0;
+        for (const buffers of this.pooled.values()) {
+            for (const buffer of buffers) buffer.destroy();
+        }
+        this.pooled.clear();
+        this.pooledBytes = 0;
+    }
+
+    private createBuffer(data: Uint8Array | Int32Array, usage: GPUBufferUsageFlags): GPUBuffer {
+        const size = Math.max(4, Math.ceil(data.byteLength / 4) * 4);
+        // Animated poses keep their topology, so exact sizes reuse storage without over-allocation.
+        const key = `${usage}:${size}`;
+        const buffers = this.pooled.get(key);
+        const pooled = buffers?.pop();
+        if (pooled) {
+            this.pooledBytes -= pooled.size;
+            if (!buffers!.length) this.pooled.delete(key);
+        }
+        const buffer = pooled ?? this.device.createBuffer({ size, usage });
+        if (data.byteLength > 0) {
+            if (data.byteLength % 4 === 0) {
+                this.device.queue.writeBuffer(buffer, 0, data);
+            } else {
+                const padded = new Uint8Array(size);
+                padded.set(data);
+                this.device.queue.writeBuffer(buffer, 0, padded);
+            }
+        }
+        return buffer;
     }
 
     private evictIfNeeded(): void {
