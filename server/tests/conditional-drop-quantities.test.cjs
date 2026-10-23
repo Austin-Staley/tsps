@@ -75,3 +75,28 @@ test('legacy ranges continue to roll their inclusive bounds', t => {
     value = 0.999999;
     assert.equal(rollTable(table, player, null, {})[0].amount, 5);
 });
+
+test('items already owned by an encounter reward handler are not rolled a second time', () => {
+    const table = { entries: [
+        { item_id: 526, quantity: [1, 1], always: true,
+            bonus_drops: [{ item_id: 4600, quantity: [1, 1] }] },
+        { item_id: 4600, quantity: [1, 1], always: true,
+            notes: ['Only if the player does not have a willow blackjack in their inventory.'] },
+        { item_id: 1331, quantity: [1, 1], always: true,
+            notes: ['Only if the player already has a willow blackjack in their inventory.'] },
+    ] };
+    assert.deepEqual(rollTable(table, player, null, { handledItemIds: new Set([4600, 1331]) })
+        .map(drop => drop.itemId), [526]);
+});
+
+test('the imported occult pre-roll remains executable at its exact 1/350 boundary', t => {
+    const dump = require('../data/definitions/npc-drops.json');
+    const occult = dump.tables.thermonuclear_smoke_devil.entries.find(entry => entry.item_id === 12002);
+    assert.equal(occult.pre_roll, true);
+    assert.deepEqual([occult.weight, occult.out_of], [1, 350]);
+    let value = 1 / 350 - Number.EPSILON;
+    t.mock.method(Math, 'random', () => value);
+    assert.equal(rollTable({ entries: [occult] }, player, null, {}).length, 1);
+    value = 1 / 350;
+    assert.equal(rollTable({ entries: [occult] }, player, null, {}).length, 0);
+});

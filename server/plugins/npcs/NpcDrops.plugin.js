@@ -572,9 +572,12 @@ function rollOnce(table, entries, player, first = true, context = null) {
   return drops;
 }
 
-/** Boss and skill plugins can fill source-stated conditions for this kill. */
+/**
+ * Plugins fill source-stated conditions for this kill. `handledItemIds` contains
+ * rewards already owned by a quest/encounter handler, including bundled/shared loot.
+ */
 function killContext(player, npc) {
-  const context = { perfectKill: false, bountyTask: null, preferredMethodLocation: null };
+  const context = { perfectKill: false, bountyTask: null, preferredMethodLocation: null, handledItemIds: new Set() };
   pluginApi?.emitCustomEvent("npc-drops:context", { player, npc, npcId: npc?.getId?.() ?? null, context });
   return context;
 }
@@ -614,7 +617,9 @@ function rollTable(table, player, npc, context = killContext(player, npc)) {
     }
   }
 
-  return drops;
+  return context?.handledItemIds?.size
+    ? drops.filter(drop => !context.handledItemIds.has(drop.itemId))
+    : drops;
 }
 
 /**
