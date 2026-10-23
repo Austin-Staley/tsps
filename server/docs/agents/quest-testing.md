@@ -144,6 +144,25 @@ sleeps. `interact`/`walk_to` settle on arrival, a dialogue/interface, or two idl
 assert the resulting position/state before the next action. Climbing or scene task completion
 is not "three ticks later": wait bounded and verify the new plane/area/object.
 
+Keep one persistent driver per account through the quest. Do not log out after each leg:
+logout can cancel a live scene or timer. Use separate drivers and logs when one worker owns
+several accounts, and overlap their walking or scene waits only while each account has one actor.
+
+After `walk_to`, check the actual tile and `busy` before clicking. A response can still contain
+`moving`; wait bounded ticks until movement settles, then send the interaction. A click sent
+while moving can be silently rejected. Check that a supposed missing fence or ladder handler
+is not an unfinished approach before changing server code.
+
+For raw `use_item` with `on: "npc"`, `id` is the observed NPC **index**, not its cache type id.
+Prefer the named target form when it is unambiguous. Use the action the guide and observed
+menu actually specify: for example, a Swamp toad's `Inflate` option is a different dispatch
+from using bellows on the NPC. Validate the resulting item/stage change before proceeding.
+
+Supply ordinary commodities such as beer, raw meat, nails, tools, food and travel items as
+declared setup aids when sourcing them would distract from the quest. Record optional shop
+or spawn failures separately. Earn quest-specific items and play mandatory doors, ladders,
+scenes, transport handoffs and puzzles through their real interactions.
+
 `observe.client` is a one-shot map of what the server told the client *since the last observe*
 (varbits, varps, interfaces, graphics, interaction modes). It is the recorded PacketSender
 stream, not a saved-state read; use `varbitValues`/`varpValues` for current values. Messages are
