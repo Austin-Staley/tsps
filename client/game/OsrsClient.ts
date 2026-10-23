@@ -5352,17 +5352,17 @@ export class OsrsClient {
                 setTimeout(() => {
                     if (this.gameState === GameState.LOADING_GAME) {
                         this.updateGameState(GameState.LOGGED_IN);
-                        this.startSparsePrefetchWhenMapStreamingIdle();
+                        this.startSparsePrefetchWhenSceneReady();
                     }
                 }, remaining);
             });
         }
     }
 
-    private startSparsePrefetchWhenMapStreamingIdle(): void {
+    private startSparsePrefetchWhenSceneReady(): void {
         const waitForIdle = () => {
             if (this.gameState !== GameState.LOGGED_IN) return;
-            if (this.renderer.hasPendingMapStreamingWork()) {
+            if (!this.renderer.mapManager.isSceneReady(this.renderer.stats.frameCount)) {
                 setTimeout(waitForIdle, 100);
                 return;
             }

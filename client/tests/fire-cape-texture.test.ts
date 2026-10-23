@@ -100,3 +100,28 @@ test("texture preloads leave missing and empty sparse textures available for lat
     initTextureArray(host);
     assert.deepEqual([...host.loadedTextureIds], [1, 2, 3]);
 });
+
+test("quiet mipmap regeneration does not wait for off-screen preload or retry backoff", async () => {
+    (globalThis as any).self = globalThis;
+    const pico = require("picogl");
+    pico.PicoGL = pico;
+    const { maybeRegenerateTextureMipmaps } = await import("../render/render/textures/array");
+    const { TextureFilterMode } = await import("../render/render/constants");
+    let ready = false, generated = 0;
+    const host: any = {
+        textureMipmapsDirty: true, textureMipmapsDirtyAtMs: 0,
+        textureMipmapsLastGenAtMs: 0, textureMipmapsDirtyUpdates: 1,
+        textureFilterMode: TextureFilterMode.BILINEAR,
+        textureArray: { bind() {} },
+        gl: { generateMipmap: () => generated++ },
+        mapManager: { isSceneReady: () => ready }, stats: { frameCount: 10 },
+        hasPendingMapStreamingWork: () => true,
+    };
+    maybeRegenerateTextureMipmaps(host, 300);
+    assert.equal(generated, 0, "foreground streaming still defers the quiet path");
+    ready = true;
+    maybeRegenerateTextureMipmaps(host, 300);
+    assert.equal(generated, 1, "even a single remaining texture gets mipmaps during background work");
+    assert.equal(host.textureMipmapsDirty, false);
+    assert.equal(host.textureMipmapsDirtyUpdates, 0);
+});
