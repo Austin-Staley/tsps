@@ -14,16 +14,55 @@ mandatory routes, exact reward deltas once, repeat checks, relog, offline persis
 post-quest behaviour and applicable canonical recovery. Target quest-state/item injection
 and transport/scene bypasses do not count.
 
-Implementation uses parallel DeepSeek V4.1 Flash 1017 sessions via OpenCode in one
-worktree, with one owner per quest/test file. The integration owner reviews changes,
-handles shared files and generated-source fixes, freezes batches, tests and reloads.
-Generated JSON is never hand-edited or repaired through copied output overrides.
-The PR stays draft until all required checks are complete. Unverified cases stay explicit.
+Implementation began in parallel OpenCode sessions with one owner per quest/test file.
+The initial free DeepSeek endpoint exhausted its quota; work later continued on the
+user-approved paid DeepSeek V4.1 Flash 1017 endpoint. After that quota was exhausted, the
+root selected MiniMax M3.1 Flash Free for continued source and peer work. Provider pauses
+preserve the original sessions, reports, tests and changes; no paid fallback is used after
+the MiniMax switch. The integration owner reviews changes, handles shared files and
+generated-source fixes, freezes batches, tests and reloads. Generated JSON is never
+hand-edited or repaired through copied output overrides. The PR stays draft until all
+required checks are complete. Unverified cases stay explicit.
 
-The initial free endpoint exhausted its quota before any quest was accepted. The user
-authorized the paid `deepseek/deepseek-flash` endpoint, whose OpenCode metadata identifies
-it as **DeepSeek V4.1 Flash 1017**. Existing session histories and partial changes are
-retained for continuation and review.
+## Current checkpoint — 2026-10-23
+
+Work now uses three parallel Codex workers: two native route workers and one source
+implementation/review worker, with integration review and publication alongside them.
+Each native worker may interleave two independently logged accounts. Eligible workers
+handle routine setup, focused tests and checkpoint administration without waiting for
+integration approval. Ordinary commodities may be supplied as declared setup aids;
+mandatory quest interactions, quest items, puzzles and transports are played naturally.
+MCP `plan_route` reuses the existing long-distance collision planner to identify walking
+waypoints and closed doors. Internal timed dialogue actions must finish automatically.
+
+The [native verification ledger](quest-helper-728-verification.md) is the current source
+of accepted route counts: **8/128 scoped main routes**. Supplemental issue-809 evidence
+is recorded separately. Source fixes and passing regression tests do not count as native
+completion. The draft PR is updated in reviewed batches; historical figures below remain
+checkpoints rather than current totals.
+
+## Historical cumulative status checkpoint — 2026-10-22
+
+The original issue scope is **128 quests**. All 128 have source reports and scoped test
+files; 127 quest plugin files differ from the task baseline (q046 is test-only). Source
+reports are labeled 71 `done`, 54 `partial`, and three other/nonterminal statuses; these
+labels describe source work and do not certify route parity. Thirteen plugin deltas are
+committed on the draft branch; the rest remain in the shared worktree for review and
+integration.
+
+Peer review is cumulative across sessions. **98/128 quests (76.6%) have at least one
+final peer report** at some hash. At the current source/test/dialogue-data hashes, 55/128
+(43.0%) have final reviews: four clean and 51 with findings. Another 38 have older final
+reports that need focused rechecks; eight reviews are active, and 27 quests have no final
+review history. A stale-hash report remains useful evidence but does not validate current
+source.
+
+Four original quests have accepted natural completion evidence across saved-checkpoint
+runs: The Ascent of Arceuus, Bone Voyage, Fishing Contest and Monk's Friend. At First
+Light has accepted bounded pickup evidence, not a full completion. The supplemental
+Waterfall route has accepted natural evidence outside the original 128. Other native
+runs remain incomplete or pending; the separate native ledger records their route,
+reward, persistence and recovery limits. No visual Quest Helper overlay is installed.
 
 Initial baseline: server build passed; 4,238 tests, 4,232 passed, six existing failures,
 zero skipped. The failure names are: bot activity tier allocation; deployed bot-site
@@ -140,6 +179,36 @@ and replay at 0/99/100. Bone Voyage's owner is integrating the synchronous `muse
 contract. Natural Museum testing remains pending. The quiz, fossils, pendant teaching and other
 Museum activities remain outside this bounded route; a missing Hazeel report transcript
 branch remains blocked at its source.
+
+Zogre Flesh Eaters needed no source change for the canonical dialogue import. The three
+nodes the old dump marked `unavailable` — `6kbf4F`, `IOrqNS` and `YrmIgh` — are now real
+message nodes with new ids: `luhaXl` ("Grish hands you some food and two potions."),
+`uZirGH` ("Grish gives you a crudely crafted key.") and `_QKSlE` ("Zavistic hands you a
+bottle of strange potion."). The plugin already references the new ids, every id it
+references exists in the current page, and the eleven focused tests pass.
+
+Its native run stopped at stage 3 with 25 identical "I can't reach that!" replies while
+using the Dragon Inn tankard on NPC 1320 (the Dragon Inn bartender). The cause is core
+reach, not the quest plugin: `MovementQueue.walkToEntity` (`MovementQueue.ts:1231,1287`)
+never reached the NPC, so no plugin dispatch ran. A registered-dispatch repro confirms the
+quest side is sound — the plugin's item-on-NPC handler fires for NPC 1320 with the tankard
+and starts the generated variant
+`investigating-b-vahn-using-the-dragon-inn-tankard-on-the-dragon-inn-bartender`, whose
+message `OG1g5U` sets the tankard-shown flag. Two shared causes block the walk: NPC 1320's
+spawn entry carries no `wanderRadius`, so the loader's default 5 applies
+(`NpcSpawnDefinitionLoader.ts:31,123-125,151`) and `NPCMovementCoordinator.wander()` moves
+the bartender up to five tiles — the raw log's observed positions
+(2556,3077 / 2556,3078 / 2556,3079 / 2557,3080 / 2555,3077 / 2554,3077 / 2553,3079 /
+2552,3081 / 2554,3082) all sit within that radius of the spawn (2556,3078) — and the
+collision map splits the inn: the bar room is one 56-tile component (x 2549-2558,
+y 3078-3083) holding both the spawn tile and the driver's tile 2553,3083, while every
+counter-row tile (row 3077, e.g. 2556,3077 clipping `0x4020`, north-east corner blocked)
+is an isolated two-tile pocket with no reachable neighbour, so `reachedAbsolute` fails
+from every side and the entity route returns zero waypoints. Request to the shared owners:
+give the Dragon Inn bartender a bounded (zero) wander radius, or derive the radius from the
+cache walk sequence instead of the blanket default. The plugin is left unchanged and no
+quest shim was added. The tankard step is proven by dispatch and cache repro plus
+collision analysis only, not by a live interaction; natural completion stays pending.
 
 ## Quest status
 
@@ -262,7 +331,7 @@ branch remains blocked at its source.
 | Tears of Guthix | `TearsOfGuthix` | Pending | Pending | Pending |
 | Temple of Ikov | `TempleOfIkov` | Pending | Pending | Pending |
 | The Tourist Trap | `TouristTrap` | Pending | Pending | Pending |
-| Tower of Life | `TowerOfLife` | Pending | Pending | Pending |
+| Tower of Life | `TowerOfLife` | Pressure plug rule, pipe piece model/position mirroring, renewable costume pieces, the basement wire step 17 and the mind-meter threshold repaired against the cache and the Quest Helper solver | 22 focused source-contract tests pass | No native playthrough; no completion claimed |
 | Tree Gnome Village | `TreeGnomeVillage` | Pending | Pending | Pending |
 | Tribal Totem | `TribalTotem` | Pending | Pending | Pending |
 | Troll Romance | `TrollRomance` | Pending | Pending | Pending |
@@ -274,7 +343,7 @@ branch remains blocked at its source.
 | What Lies Below | `WhatLiesBelow` | Pending | Pending | Pending |
 | While Guthix Sleeps | `WhileGuthixSleeps` | Pending | Pending | Pending |
 | Witch's House | `WitchsHouse` | Pending | Pending | Pending |
-| Zogre Flesh Eaters | `ZogreFleshEaters` | Pending | Pending | Pending |
+| Zogre Flesh Eaters | `ZogreFleshEaters` | Canonical import needs no source change; the three formerly `unavailable` nodes are now real messages the plugin already references; the Dragon Inn tankard dispatch is verified against the generated page | 11 focused tests pass | Stopped at stage 3 with 25 identical "I can't reach that!" on NPC 1320; cause is core reach (wandering NPC on unreachable counter-row tiles), not the quest plugin; natural completion pending |
 | Learning the Ropes | `LearningTheRopes` | Pending | Pending | Pending |
 
 ## Separate tutorial
