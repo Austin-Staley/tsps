@@ -27,5 +27,6 @@ module.exports = {
     require("./bountyhunter/Coffer.BountyHunter")(api, bh);
     require("./bountyhunter/EmblemTrader.BountyHunter")(api, bh);
     require("./bountyhunter/CorruptedWarrior.BountyHunter")(api, bh);
+    require("./bountyhunter/Bots.BountyHunter")(api, bh);
   },
 };

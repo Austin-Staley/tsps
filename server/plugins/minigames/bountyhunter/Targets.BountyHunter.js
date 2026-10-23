@@ -280,6 +280,7 @@ module.exports = function attachTargets(pluginApi, state) {
 };
 
 Object.assign(module.exports, {
+  bandOf,
   clearTarget,
   remindPenalty,
   _test: { inRange, canPair, matchPairs, recentSkips, skipOutcome, matchTick, defeated, skip, SKIP_WINDOW_MS, FREE_SKULLED_SKIPS },

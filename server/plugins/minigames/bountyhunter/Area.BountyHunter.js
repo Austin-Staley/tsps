@@ -68,6 +68,7 @@ function leftCrater(player, logout) {
 function enterLobby(player) {
   bh.lobby.add(player);
   Hud.sendLobbyTimer(player, bh.lobbyTicks.get(player) ?? 0);
+  api.emitCustomEvent("bounty-hunter:entered-lobby", { player });
   Hud.sync(player);
 }
 

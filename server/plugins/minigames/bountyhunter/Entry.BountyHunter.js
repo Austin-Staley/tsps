@@ -165,4 +165,4 @@ module.exports = function attachEntry(pluginApi, state) {
   api.onObjectInteraction("Arena", { Enter: enterArena, Exit: exitArena });
 };
 
-Object.assign(module.exports, { _test: { portalRefusal, arenaRefusal, spawnTile, RULES_ATTRIBUTE } });
+Object.assign(module.exports, { spawnTile, _test: { portalRefusal, arenaRefusal, spawnTile, RULES_ATTRIBUTE } });
