@@ -140,22 +140,114 @@ test("permanently missing groups fail instead of publishing a partial scene", as
     assert.equal(cache.js5.store.onMiss, listener);
 });
 
-test("lost coordinator replies cannot leave a build waiting forever", async (t) => {
+test("lost coordinator replies yield the worker within the total retry budget", async (t) => {
     t.mock.method(console, "warn", () => {});
     t.mock.timers.enable({ apis: ["setTimeout"] });
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    const advance = async (ms: number) => {
+        now += ms;
+        t.mock.timers.tick(ms);
+        await setImmediate();
+    };
     const cache = sparseCache();
     cache.js5.settled = () => new Promise(() => {});
-    const rejected = assert.rejects(runWithSparseRetry(cache.state, async () => {
+    const listener = cache.js5.store.onMiss;
+    const outcome = { complete: true };
+    let attempts = 0, failure: Error | undefined;
+    const result = runWithSparseRetry(cache.state, async () => {
+        attempts++;
         cache.missing(1);
         return "incomplete";
-    }), /Incomplete build: no download progress/);
-    for (let attempt = 0; attempt < 8; attempt++) {
+    }, undefined, outcome);
+    void result.catch(error => { failure = error; });
+    await setImmediate();
+    await advance(3000);
+    await advance(250);
+    assert.equal(attempts, 2, "a lost reply must not monopolize one 30-second wait");
+    while (now < 15000) await advance(Math.min(250, 15000 - now));
+    assert.match(failure?.message ?? "", /Incomplete build: retry deadline/);
+    await assert.rejects(result, /Incomplete build: retry deadline/);
+    assert.equal(outcome.complete, false);
+    assert.equal(cache.js5.store.onMiss, listener);
+});
+
+test("new dependency progress cannot extend the worker's total retry deadline", async (t) => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    const cache = sparseCache();
+    const settled = cache.js5.settled;
+    cache.js5.settled = async () => { await settled(); now += 1000; };
+    const listener = cache.js5.store.onMiss;
+    const outcome = { complete: true };
+    let attempts = 0;
+    await assert.rejects(runWithSparseRetry(cache.state, async () => {
+        if (++attempts <= 20) cache.missing(attempts);
+        return attempts <= 20 ? "incomplete" : "complete";
+    }, undefined, outcome), /Incomplete build: retry deadline/);
+    assert.equal(attempts, 15, "advancing groups must not reset the total budget");
+    assert.equal(outcome.complete, false);
+    assert.equal(cache.js5.store.onMiss, listener);
+
+    let followUpAttempts = 0;
+    const result = await runWithSparseRetry(cache.state, async () => {
+        followUpAttempts++;
+        for (let group = 1; group <= 20; group++) if (cache.missing(group)) return "incomplete";
+        return "complete";
+    }, undefined, outcome);
+    assert.equal(result, "complete", "renderer rescheduling can finish using the bytes already downloaded");
+    assert.equal(followUpAttempts, 6, "a failed budget must not discard downloaded groups or poison later work");
+    assert.equal(outcome.complete, true);
+    assert.equal(cache.js5.store.onMiss, listener);
+});
+
+test("cache waits and backoff use only the retry time left after building geometry", async (t) => {
+    t.mock.method(console, "warn", () => {});
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    for (const [buildMs, lostReply] of [[14000, true], [14900, false]] as const) {
+        now = 0;
+        const cache = sparseCache();
+        cache.js5.settled = () => lostReply ? new Promise(() => {}) : Promise.resolve();
+        let failure: Error | undefined;
+        const result = runWithSparseRetry(cache.state, async () => {
+            now += buildMs;
+            cache.missing(1);
+            return "incomplete";
+        });
+        void result.catch(error => { failure = error; });
         await setImmediate();
-        t.mock.timers.tick(30000);
+        const remaining = 15000 - now;
+        now += remaining - 1;
+        t.mock.timers.tick(remaining - 1);
         await setImmediate();
-        t.mock.timers.tick(250);
+        assert.equal(failure, undefined, "the final wait still has time to finish");
+        now++;
+        t.mock.timers.tick(1);
+        await setImmediate();
+        assert.match(failure?.message ?? "", /Incomplete build: retry deadline/);
+        await assert.rejects(result, /Incomplete build: retry deadline/);
     }
-    await rejected;
+});
+
+test("an asynchronous pass beyond the deadline is accepted only when its geometry is complete", async (t) => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    for (const complete of [false, true]) {
+        now = 0;
+        const cache = sparseCache();
+        const outcome = { complete: false };
+        const result = runWithSparseRetry(cache.state, async () => {
+            await setImmediate();
+            now = 16000;
+            if (!complete) cache.missing(1);
+            return complete ? "complete" : "incomplete";
+        }, undefined, outcome);
+        if (complete) assert.equal(await result, "complete", "finished geometry needs no retry or deadline rejection");
+        else await assert.rejects(result, /Incomplete build: retry deadline/);
+        assert.equal(outcome.complete, complete);
+    }
 });
 
 test("ordinary build errors propagate and restore the sparse miss listener", async () => {

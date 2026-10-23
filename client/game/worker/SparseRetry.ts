@@ -5,7 +5,10 @@ import type { GroupSpan } from "../../rs/cache/store/SparseMemoryStore";
 
 type SparseCache = Pick<Js5RangeClient, "store" | "requestGroup" | "settled">;
 
-/** Publish only a complete build; new dependency downloads may take more than eight passes. */
+const RETRY_TIMEOUT_MS = 15000;
+const GROUP_WAIT_TIMEOUT_MS = 3000;
+
+/** Bound retries without discarding a completed final pass; never publish an incomplete build. */
 export async function runWithSparseRetry<T>(
     workerState: { js5?: SparseCache },
     task: () => Promise<T>,
@@ -22,6 +25,14 @@ export async function runWithSparseRetry<T>(
     const store = js5.store;
     const missing = new Map<string, Pick<GroupSpan, "indexId" | "archiveId">>();
     const downloaded = new Set<string>();
+    const deadline = performance.now() + RETRY_TIMEOUT_MS;
+    const timeLeft = () => {
+        const remaining = deadline - performance.now();
+        if (remaining <= 0) {
+            throw new Error(`[js5] Incomplete build: retry deadline reached after ${RETRY_TIMEOUT_MS}ms (${[...missing.keys()].join(", ")})`);
+        }
+        return remaining;
+    };
     const onMiss = store.onMiss;
     store.onMiss = (span) => {
         missing.set(`${span.indexId}:${span.archiveId}`, span);
@@ -30,6 +41,7 @@ export async function runWithSparseRetry<T>(
     let stalled = 0;
     try {
         for (let attempt = 1; ; attempt++) {
+            timeLeft();
             missing.clear();
             const missesBefore = store.missCount;
             const passStarted = performance.now();
@@ -54,6 +66,7 @@ export async function runWithSparseRetry<T>(
             }
 
             const waitStarted = performance.now();
+            const waitMs = Math.min(GROUP_WAIT_TIMEOUT_MS, timeLeft());
             let timeout: ReturnType<typeof setTimeout> | undefined;
             try {
                 // Worker coordinator replies can be lost; keep that wait bounded too.
@@ -62,7 +75,7 @@ export async function runWithSparseRetry<T>(
                         ? js5.requestGroup(blockingGroup.indexId, blockingGroup.archiveId, true)
                         : js5.settled(),
                     new Promise<never>((_, reject) => {
-                        timeout = setTimeout(() => reject(new Error("Cache group download timed out")), 30000);
+                        timeout = setTimeout(() => reject(new Error("Cache group download timed out")), waitMs);
                     }),
                 ]);
             } catch (fetchError) {
@@ -71,6 +84,7 @@ export async function runWithSparseRetry<T>(
                 clearTimeout(timeout);
             }
             if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
+            timeLeft();
 
             let progress = false;
             for (const [key, group] of missing) {
@@ -84,7 +98,8 @@ export async function runWithSparseRetry<T>(
                 if (++stalled >= 8) {
                     throw new Error(`[js5] Incomplete build: no download progress after ${stalled} attempts (${[...missing.keys()].join(", ")})`);
                 }
-                await new Promise((resolve) => setTimeout(resolve, 250));
+                const delay = Math.min(250, timeLeft());
+                await new Promise((resolve) => setTimeout(resolve, delay));
             }
         }
     } finally {
