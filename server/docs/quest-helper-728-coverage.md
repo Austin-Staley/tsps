@@ -43,6 +43,19 @@ is recorded separately. Source fixes and passing regression tests do not count a
 completion. The draft PR is updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
 
+Reviewed publications after the scope reduction include the scoped Secrets of the
+North actor cleanup (`98953eca7`), earned Horror/Zogre helper state (`19361d7b8`),
+Zanik's real follower (`ca2374379`), and the Tree Gnome Village warlord encounter
+and required maze railing (`fc5d81024`). Their combined lifecycle/quest checks pass
+493/493. Queen of Thieves wire stages and lost-letter search remain available in
+`b0df76772` (8/8 focused checks); NPC identity, lost memoir-page recovery, full-bag
+coin rewards and shared chest rendering remain open review findings. These are
+source publications, with no additional accepted natural-route count.
+
+The saved Hazeel Cult stage5, Tree Gnome Village stage7 and fresh Lost City stage1
+checkpoints resumed under the captured epoch23 runtime. The test server loaded all
+11 frozen plugin hashes in the release manifest exactly; generated data was unchanged.
+
 ## Historical cumulative status checkpoint — 2026-10-22
 
 The original issue scope is **128 quests**. All 128 have source reports and scoped test
