@@ -120,7 +120,7 @@ function loadItemPrices() {
   return { filePath, loaded };
 }
 
-// High/low alchemy values from the osrsreboxed item dump (import-osrs-item-alch.mjs).
+// High/low alchemy values from osrsreboxed-db's item-alch.json.
 // Applied after item-gameplay.json so the cache-derived values win over the old export.
 function loadItemAlch() {
   const ItemDefinition = getItemDefinition();
@@ -132,9 +132,9 @@ function loadItemAlch() {
   if (!fs.existsSync(filePath)) {
     return { filePath, loaded: 0 };
   }
-  const { data } = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new Error("Invalid item-alch.json: expected a data object");
+    throw new Error("Invalid item-alch.json: expected an object keyed by item id");
   }
   let loaded = 0;
   for (const [key, values] of Object.entries(data)) {
@@ -142,8 +142,8 @@ function loadItemAlch() {
     if (!Number.isInteger(id) || id < 0) continue;
     const definition = ItemDefinition.forId(id);
     if (definition === ItemDefinition.DEFAULT) continue;
-    definition.highAlch = Number.isSafeInteger(values?.highAlch) ? values.highAlch : 0;
-    definition.lowAlch = Number.isSafeInteger(values?.lowAlch) ? values.lowAlch : 0;
+    definition.highAlch = Number.isSafeInteger(values?.highalch) ? values.highalch : 0;
+    definition.lowAlch = Number.isSafeInteger(values?.lowalch) ? values.lowalch : 0;
     loaded += 1;
   }
   return { filePath, loaded };

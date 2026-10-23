@@ -10,7 +10,7 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const ItemDefinitionLoader = require("../plugins/items/ItemDefinitionLoader.plugin");
 const PRICES = require("../data/definitions/item-prices.json").data;
-const ALCH = require("../data/definitions/item-alch.json").data;
+const ALCH = require("../data/definitions/item-alch.json");
 
 const TEAM_6 = 4325;
 const WHIP = 4151;
@@ -40,13 +40,13 @@ test("buy is the higher guide price and sell the lower", () => {
 
 test("alch values come from the osrsreboxed item dump", () => {
   const definition = ItemDefinition.forId(WHIP);
-  assert.equal(definition.getHighAlchValue(), ALCH[WHIP].highAlch);
-  assert.equal(definition.getLowAlchValue(), ALCH[WHIP].lowAlch);
+  assert.equal(definition.getHighAlchValue(), ALCH[WHIP].highalch);
+  assert.equal(definition.getLowAlchValue(), ALCH[WHIP].lowalch);
 });
 
 test("items the item dump marks unalchable stay at zero", () => {
   const definition = ItemDefinition.forId(BONES);
-  assert.equal(ALCH[BONES].highAlch, 0);
+  assert.equal(ALCH[BONES].highalch, 0);
   assert.equal(definition.getHighAlchValue(), 0);
   assert.equal(definition.getLowAlchValue(), 0);
 });
