@@ -288,7 +288,7 @@ module.exports = function registerRovingElvesQuest(api) {
   function canProceedToMourningsEnd(player) {
     if (!quest.isComplete(player)) return false;
     const request = { player, started: false, meetsRequirements: false };
-    api.emitCustomEvent("quest:mournings-end-part-i:start-requirements", request);
+    api.emitCustomEvent("mournings-end-part-i:start-requirements", request);
     return request.started === true || request.meetsRequirements === true;
   }
 

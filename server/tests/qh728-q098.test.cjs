@@ -12,19 +12,19 @@
 // action, choice, completion). This proves the handler/stage/wire contract, not
 // a live playthrough or the visual Quest Helper overlay.
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { test, before } = require('node:test');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 require(root + '/dist/Server').Server.installProductionPathResolver();
-
-require('node:test').before(async () => {
-  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
-    require('node:path').resolve(__dirname, '..'));
-});
+const { CachePipeline } = require(root + '/dist/game/cache/CachePipeline');
 const { PluginManager } = require(root + '/dist/plugins/PluginManager');
 const runtime = require(root + '/plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const noop = () => {};
+
+before(async () => {
+  await CachePipeline.initialize(root);
+});
 
 const I = core.ItemIdentifiers;
 const N = core.NpcIdentifiers;
@@ -344,7 +344,7 @@ test('MEP1 handoff: actual MEP1 requirements select the start branch and reach i
   ] });
   h.roving.setStage(h.player, 6);
   assert.equal(h.mep1Stage(), 0);
-  const requirements = h.fire('quest:mournings-end-part-i:start-requirements');
+  const requirements = h.fire('mournings-end-part-i:start-requirements');
   assert.equal(requirements.meetsRequirements, true, 'the MEP1 owner reports its own actual prerequisites');
   assert.equal(requirements.started, false);
 

@@ -167,7 +167,7 @@ function harness() {
   (events['quest:is-complete'] ??= []).push((event) => {
     event.complete = completedQuests.has(event.key);
   });
-  (events['quest:taste-of-hope:needs-veliaf-rod'] ??= []).push((request) => {
+  (events['taste-of-hope:needs-veliaf-rod'] ??= []).push((request) => {
     tasteRodQueryCount += 1;
     request.needsRod = tasteNeedsRod;
   });

@@ -564,7 +564,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
   // in this window. Darkness yields rather than starting its own conversation.
   function tasteNeedsVeliafRod(player) {
     const request = { player, needsRod: false };
-    api.emitCustomEvent("quest:taste-of-hope:needs-veliaf-rod", request);
+    api.emitCustomEvent("taste-of-hope:needs-veliaf-rod", request);
     return request.needsRod === true;
   }
 

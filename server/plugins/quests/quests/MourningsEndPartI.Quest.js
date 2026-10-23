@@ -1442,7 +1442,7 @@ module.exports = function registerMourningsEndPartIQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:hook", handleDialogueHook);
-  api.onCustomEvent("quest:mournings-end-part-i:start-requirements", answerStartRequirementQuery);
+  api.onCustomEvent("mournings-end-part-i:start-requirements", answerStartRequirementQuery);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });

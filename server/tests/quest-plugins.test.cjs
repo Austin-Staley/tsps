@@ -11,6 +11,41 @@ before(async () => {
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const apiMethods = new Set(Object.keys(PluginManager.createApi('QuestTest')));
 
+test('quest event literals register and dispatch through the production API', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.resolve(__dirname, '../plugins/quests');
+  const events = new Map();
+  function scan(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) scan(file);
+      else if (entry.name.endsWith('.js')) {
+        const source = fs.readFileSync(file, 'utf8');
+        for (const match of source.matchAll(/\b(?:onCustomEvent|emitCustomEvent)(?:\?\.)?\s*\(\s*(['"])([^'"]+)\1/g)) {
+          events.set(match[2], file);
+        }
+      }
+    }
+  }
+  scan(root);
+  const api = PluginManager.createApi('QuestEventContract');
+  for (const [name, file] of events) {
+    const previous = PluginManager.customEventHooks.get(name);
+    let received = null;
+    const payload = {};
+    try {
+      PluginManager.customEventHooks.delete(name);
+      api.onCustomEvent(name, (event) => { received = event; });
+      api.emitCustomEvent(name, payload);
+      assert.equal(received, payload, `${path.relative(root, file)}: rejected event ${name}`);
+    } finally {
+      if (previous) PluginManager.customEventHooks.set(name, previous);
+      else PluginManager.customEventHooks.delete(name);
+    }
+  }
+});
+
 // A stand-in for the live PluginApi: real core, every hook a no-op. Quests must
 // register cleanly through it and hand back their variant/condition resolvers.
 function mockApi() {

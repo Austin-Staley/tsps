@@ -862,7 +862,7 @@ test('Darkness yields Veliaf only when Taste of Hope will handle the requested r
 
   const query = () => {
     const request = { player: h.player, needsRod: false };
-    h.api.emitCustomEvent('quest:taste-of-hope:needs-veliaf-rod', request);
+    h.api.emitCustomEvent('taste-of-hope:needs-veliaf-rod', request);
     return request.needsRod;
   };
   assert.equal(query(), false, 'the other quest does not own Veliaf until the rod was requested');

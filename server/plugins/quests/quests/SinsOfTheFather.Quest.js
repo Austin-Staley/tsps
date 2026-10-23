@@ -874,14 +874,14 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
 
   /**
    * A Taste of Hope owns the old-base Vertida's post-quest flail reclaim, and
-   * it answers this question through "quest:taste-of-hope:flail-reclaim". Sins
+   * it answers this question through "taste-of-hope:flail-reclaim". Sins
    * keeps its own Vertida conversation while the crafting steps (the logs and
    * the flail handover) still need it, then yields the talk so a completed
    * Taste player can still buy a replacement flail during the quest.
    */
   function tasteFlailReclaimDue(player, npc) {
     const request = { player, npc, needed: false };
-    api.emitCustomEvent("quest:taste-of-hope:flail-reclaim", request);
+    api.emitCustomEvent("taste-of-hope:flail-reclaim", request);
     if (!request.needed) return false;
     if (quest.getStage(player) < STAGE_SAFALAAN_WALK) return false;
     const spot = npc?.getLocation?.() ?? player.getLocation?.();

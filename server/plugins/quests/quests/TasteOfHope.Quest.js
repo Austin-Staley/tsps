@@ -1975,8 +1975,8 @@ module.exports = function registerTasteOfHopeQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:condition", handleDialogueCondition);
-  api.onCustomEvent("quest:taste-of-hope:needs-veliaf-rod", answerVeliafRodNeed);
-  api.onCustomEvent("quest:taste-of-hope:flail-reclaim", handleFlailReclaimRequest);
+  api.onCustomEvent("taste-of-hope:needs-veliaf-rod", answerVeliafRodNeed);
+  api.onCustomEvent("taste-of-hope:flail-reclaim", handleFlailReclaimRequest);
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkVeliafRod });
   api.onNpcInteraction("Harpert", { "Talk-to": talkHarpert });
   api.onNpcInteraction("Kael Forshaw", { "Talk-to": restartRanisSpeech });

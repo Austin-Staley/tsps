@@ -244,7 +244,7 @@ test('fresh stage 0 starts through Eluned and the Roving Elves start hook', () =
 test('MEP1 owner start hook checks all prerequisites and exposes its public requirement query', () => {
   const missingQuest = makeHarness({ completed: ['roving_elves', 'sheep_herder'] });
   const noChompy = { player: missingQuest.player };
-  const missingQuestRequirements = missingQuest.fire('quest:mournings-end-part-i:start-requirements', noChompy);
+  const missingQuestRequirements = missingQuest.fire('mournings-end-part-i:start-requirements', noChompy);
   assert.equal(missingQuestRequirements.meetsRequirements, false);
   missingQuest.hook('quest:mourning-s-end-part-i:start');
   assert.equal(missingQuest.quest.getStage(missingQuest.player), 0);
@@ -259,7 +259,7 @@ test('MEP1 owner start hook checks all prerequisites and exposes its public requ
 
   const lowRanged = makeHarness({ levels: { RANGED: 59 } });
   const missingLevel = { player: lowRanged.player };
-  const lowRangedRequirements = lowRanged.fire('quest:mournings-end-part-i:start-requirements', missingLevel);
+  const lowRangedRequirements = lowRanged.fire('mournings-end-part-i:start-requirements', missingLevel);
   assert.equal(lowRangedRequirements.meetsRequirements, false);
   lowRanged.hook('quest:mourning-s-end-part-i:start');
   assert.equal(lowRanged.quest.getStage(lowRanged.player), 0);

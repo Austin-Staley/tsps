@@ -1377,7 +1377,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
   /** True while A Taste of Hope needs its canonical Veliaf rod hand-over. */
   function tasteNeedsVeliafRod(player) {
     const request = { player, needsRod: false };
-    api.emitCustomEvent("quest:taste-of-hope:needs-veliaf-rod", request);
+    api.emitCustomEvent("taste-of-hope:needs-veliaf-rod", request);
     return request.needsRod === true;
   }
 
