@@ -123,6 +123,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     private mapsToLoad = new Denque<QueuedMap>();
     private pendingMapBuilds = 0;
     private mapLoadEpoch = 0;
+    private readonly sceneBuilds = new Map<AbortController, { current: () => boolean; mapId?: number }>();
 
     private skyColor = new Float32Array([0, 0, 0]);
     private sceneHslOverride = new Float32Array([-1, -1, -1, 0]);
@@ -367,7 +368,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             locOnly: partial === "loc",
         });
         try {
-            const mapData = await this.loadSceneData(input);
+            const mapData = await this.loadSceneData(input, () => epoch === this.mapLoadEpoch &&
+                !this.instanceActive && (streamGeneration === undefined || this.mapManager.isMapInTargetGrid(mapX, mapY)));
             if (epoch !== this.mapLoadEpoch || this.instanceActive) return;
             if (streamGeneration !== undefined && !this.mapManager.isMapInTargetGrid(mapX, mapY)) {
                 this.mapManager.loadingMapIds.delete(getMapSquareId(mapX, mapY));
@@ -380,7 +382,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             mapData.minimapInput = input;
             this.mapsToLoad.push({ mapData, streamGeneration, locVersion });
         } catch (error) {
-            if (epoch !== this.mapLoadEpoch || this.instanceActive) return;
+            if ((error as Error)?.name === "AbortError" || epoch !== this.mapLoadEpoch || this.instanceActive) return;
             console.error(`[webgpu] map load failed for (${mapX}, ${mapY})`, error);
             this.mapManager.deferFailedMapLoad(mapX, mapY);
         }
@@ -401,6 +403,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     override clearInstance(): void {
         this.mapLoadEpoch++;
+        this.cancelObsoleteSceneBuilds();
         this.instances.clear();
         WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.mapsToLoad.clear();
@@ -500,15 +503,38 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     }
 
     /** Builds a scene in the map worker (instances build theirs through here). */
-    async loadSceneData(input: Omit<SdMapLoaderInput, "loadedTextureIds">): Promise<SdMapData | undefined> {
+    async loadSceneData(
+        input: Omit<SdMapLoaderInput, "loadedTextureIds">,
+        current?: () => boolean,
+    ): Promise<SdMapData | undefined> {
+        const epoch = this.mapLoadEpoch;
+        const controller = new AbortController();
+        this.cancelObsoleteSceneBuilds();
+        this.sceneBuilds.set(controller, {
+            current: () => epoch === this.mapLoadEpoch && (!current || current()),
+            mapId: input.instance ? undefined : getMapSquareId(input.mapX, input.mapY),
+        });
         this.pendingMapBuilds++;
         try {
             return await this.osrsClient.workerPool.queueLoad<SdMapLoaderInput, SdMapData | undefined, SdMapDataLoader>(
                 this.dataLoader,
                 { ...input, loadedTextureIds: this.world?.loadedTextureIds ?? new Set<number>() },
+                controller.signal,
             );
+        } catch (error) {
+            if (controller.signal.aborted) throw new DOMException("Scene build cancelled", "AbortError");
+            throw error;
         } finally {
+            this.sceneBuilds.delete(controller);
             this.pendingMapBuilds--;
+        }
+    }
+
+    private cancelObsoleteSceneBuilds(): void {
+        for (const [controller, build] of this.sceneBuilds) {
+            if (controller.signal.aborted || build.current()) continue;
+            controller.abort();
+            if (build.mapId !== undefined) this.mapManager.loadingMapIds.delete(build.mapId);
         }
     }
 
@@ -725,6 +751,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             if (this.instanceActive) this.applyInstanceScene(this.stats.frameCount);
             else this.applyReadyMaps(this.stats.frameCount);
             updateWebGPUMapStreaming(this, this.stats.frameCount);
+            this.cancelObsoleteSceneBuilds();
             this.updateSkyColor();
             this.syncLocAnimationSmoothing();
             for (const map of this.mapManager.visibleMaps) {
@@ -1087,6 +1114,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
      */
     override clearSessionCaches(): void {
         this.mapLoadEpoch++;
+        this.cancelObsoleteSceneBuilds();
         WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.locUpdates.dispose();
         this.locOverrides.clear();
@@ -1108,6 +1136,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     override cleanUp(): void {
         this.mapLoadEpoch++;
+        this.cancelObsoleteSceneBuilds();
         WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.locUpdates.dispose();
         this.actors?.dispose();

@@ -118,9 +118,9 @@ export class WebGPUInstances {
                     mapRegionReplacements: r.mapRegionReplacements,
                     // The scene builder keeps the ones inside the instance's bounds.
                     extraLocs: r.getExtraLocs(),
-                })
+                }, () => build === this.buildSeq && r.instanceActive)
                 .catch((error) => {
-                    console.error("[webgpu] instance scene build failed", error);
+                    if ((error as Error)?.name !== "AbortError") console.error("[webgpu] instance scene build failed", error);
                     return undefined;
                 });
             if (build !== this.buildSeq || !r.instanceActive) return;

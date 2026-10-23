@@ -1,3 +1,4 @@
+import { BuildSteps } from "../../common/utils/BuildSteps";
 import { nextSequenceFrame } from "../../rs/model/seq/FrameInterpolation";
 import { ConfigType } from "../../rs/cache/ConfigType";
 import { IndexType } from "../../rs/cache/IndexType";
@@ -651,14 +652,14 @@ function onlySingleCopyGroups(models: SceneModel[]): boolean {
     return true;
 }
 
-function addSceneModels(
+function* addSceneModels(
     modelHashBuf: ModelHashBuffer,
     textureLoader: TextureLoader,
     sceneBuf: SceneBuffer,
     sceneModels: SceneModel[],
     minimizeDrawCalls: boolean,
     far: boolean = false,
-): void {
+): Generator<void> {
     const groupedModels = new Map<string, SceneModel[]>();
     for (const sceneModel of sceneModels) {
         const model = sceneModel.model;
@@ -674,6 +675,7 @@ function addSceneModels(
 
     const modelGroupMap: Map<string, ModelMergeGroup> = new Map();
     for (const sceneModels of groupedModels.values()) {
+        yield;
         const model = sceneModels[0].model;
         const doubleSided = sceneModels[0].doubleSided;
         const faces = getModelFaces(model);
@@ -835,6 +837,7 @@ function addSceneModels(
     }
 
     for (const group of modelGroupMap.values()) {
+        yield;
         sceneBuf.addModelGroup(group);
     }
     if (!far) {
@@ -847,7 +850,7 @@ function addSceneModels(
             return { ...model, model: mesh, forceMerge: true };
         });
         const farBuffer = new SceneBuffer(textureLoader, sceneBuf.textureIdIndexMap, 1024);
-        addSceneModels(modelHashBuf, textureLoader, farBuffer, farModels, true, true);
+        yield* addSceneModels(modelHashBuf, textureLoader, farBuffer, farModels, true, true);
         sceneBuf.appendFarScenery(farBuffer);
     }
 }
@@ -1366,8 +1369,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         }
     }
 
-    async load(state: WorkerState, input: SdMapLoaderInput & { minimapOnly: true }): Promise<RenderDataResult<MinimapData | undefined>>;
-    async load(state: WorkerState, input: SdMapLoaderInput): Promise<RenderDataResult<SdMapData | undefined>>;
+    async load(state: WorkerState, input: SdMapLoaderInput & { minimapOnly: true }, build?: BuildSteps): Promise<RenderDataResult<MinimapData | undefined>>;
+    async load(state: WorkerState, input: SdMapLoaderInput, build?: BuildSteps): Promise<RenderDataResult<SdMapData | undefined>>;
     async load(
         state: WorkerState,
         {
@@ -1394,6 +1397,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             extraNpcs: extraNpcsInput,
             overrideRenderPos,
         }: SdMapLoaderInput,
+        build = new BuildSteps(),
     ): Promise<RenderDataResult<SdMapData | MinimapData | undefined>> {
         if (mapProfileEnabled) console.time(`load map ${mapX},${mapY}`);
         const sparseMissesBefore = state.js5?.store.missCount;
@@ -1598,7 +1602,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         let scene: Scene;
         const locLoadType = shouldLoadPartial || minimapOnly ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
         if (instanceInput) {
-            scene = state.sceneBuilder.buildInstanceScene(
+            scene = await build.run(state.sceneBuilder.buildInstanceSceneSteps(
                 instanceInput.templateChunks,
                 baseX,
                 baseY,
@@ -1606,16 +1610,16 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                 INSTANCE_SIZE,
                 smoothTerrain,
                 locLoadType,
-            );
+            ));
         } else {
-            scene = state.sceneBuilder.buildScene(
+            scene = await build.run(state.sceneBuilder.buildSceneSteps(
                 baseX,
                 baseY,
                 mapSize,
                 mapSize,
                 smoothTerrain,
                 locLoadType,
-            );
+            ));
         }
         // Inject extra locs (from LOC_ADD_CHANGE) into the built scene
         if (extraLocsInput && extraLocsInput.length > 0) {
@@ -1766,26 +1770,26 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         }
 
         if (!shouldLoadPartial) {
-            sceneBuf.addTerrain(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
+            await build.run(sceneBuf.addTerrainSteps(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize));
         }
 
         if (!shouldLoadDoorOnly) {
-            addSceneModels(
+            await build.run(addSceneModels(
                 this.modelHashBuf!,
                 textureLoader,
                 locSceneBuf,
                 sceneModels,
                 minimizeDrawCalls,
-            );
+            ));
         }
         if (!shouldLoadLocOnly) {
-            addSceneModels(
+            await build.run(addSceneModels(
                 this.modelHashBuf!,
                 textureLoader,
                 doorSceneBuf,
                 doorSceneModels,
                 minimizeDrawCalls,
-            );
+            ));
         }
 
         // Animated locs

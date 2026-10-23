@@ -1,3 +1,4 @@
+import { finishBuild } from "../../common/utils/BuildSteps";
 import {
     CHUNK_SIZE,
     INSTANCE_CHUNK_COUNT,
@@ -234,6 +235,17 @@ export class SceneBuilder {
         smoothUnderlays: boolean = false,
         locLoadType: LocLoadType = LocLoadType.MODELS,
     ): Scene {
+        return finishBuild(this.buildSceneSteps(baseX, baseY, sizeX, sizeY, smoothUnderlays, locLoadType));
+    }
+
+    *buildSceneSteps(
+        baseX: number,
+        baseY: number,
+        sizeX: number,
+        sizeY: number,
+        smoothUnderlays: boolean = false,
+        locLoadType: LocLoadType = LocLoadType.MODELS,
+    ): Generator<void, Scene> {
         const scene = new Scene(Scene.MAX_LEVELS, sizeX, sizeY);
 
         const mapStartX = Math.floor(baseX / Scene.MAP_SQUARE_SIZE);
@@ -246,6 +258,7 @@ export class SceneBuilder {
 
         for (let mx = mapStartX; mx < mapEndX; mx++) {
             for (let my = mapStartY; my < mapEndY; my++) {
+                yield;
                 const terrainData = this.getTerrainData(mx, my);
                 if (terrainData) {
                     const offsetX = mx * Scene.MAP_SQUARE_SIZE - baseX;
@@ -259,6 +272,7 @@ export class SceneBuilder {
 
         for (let mx = mapStartX; mx < mapEndX; mx++) {
             for (let my = mapStartY; my < mapEndY; my++) {
+                yield;
                 if (!emptyTerrainIds.has(getMapSquareId(mx, my))) {
                     continue;
                 }
@@ -278,6 +292,7 @@ export class SceneBuilder {
 
         for (let mx = mapStartX; mx < mapEndX; mx++) {
             for (let my = mapStartY; my < mapEndY; my++) {
+                yield;
                 const locData = this.getLocData(mx, my);
                 if (!locData) {
                     continue;
@@ -289,7 +304,9 @@ export class SceneBuilder {
         }
 
         this.applyTerrainOverrides(scene);
+        yield;
         this.addTileModels(scene, smoothUnderlays);
+        yield;
         scene.setTileMinLevels();
 
         // Set floor collision BEFORE bridge demotion (matches OSRS client order)
@@ -304,6 +321,7 @@ export class SceneBuilder {
             scene.light(this.locModelLoader.textureLoader, -50, -10, -50);
         }
 
+        yield;
         return scene;
     }
 
@@ -1785,6 +1803,18 @@ export class SceneBuilder {
         smoothUnderlays: boolean = false,
         locLoadType: LocLoadType = LocLoadType.MODELS,
     ): Scene {
+        return finishBuild(this.buildInstanceSceneSteps(templateChunks, _baseX, _baseY, sizeX, sizeY, smoothUnderlays, locLoadType));
+    }
+
+    *buildInstanceSceneSteps(
+        templateChunks: number[][][],
+        _baseX: number,
+        _baseY: number,
+        sizeX: number,
+        sizeY: number,
+        smoothUnderlays: boolean = false,
+        locLoadType: LocLoadType = LocLoadType.MODELS,
+    ): Generator<void, Scene> {
         const scene = new Scene(Scene.MAX_LEVELS, INSTANCE_SIZE, INSTANCE_SIZE);
 
         // Phase 1: Load all source region archives referenced by the template grid
@@ -1795,6 +1825,7 @@ export class SceneBuilder {
         for (let plane = 0; plane < PLANE_COUNT; plane++) {
             for (let cx = 0; cx < INSTANCE_CHUNK_COUNT; cx++) {
                 for (let cy = 0; cy < INSTANCE_CHUNK_COUNT; cy++) {
+                    yield;
                     const packed = templateChunks[plane]?.[cx]?.[cy] ?? -1;
                     if (packed === -1) {
                         this.clearTerrainChunk(scene, plane, cx * CHUNK_SIZE, cy * CHUNK_SIZE);
@@ -1859,6 +1890,7 @@ export class SceneBuilder {
         for (let plane = 0; plane < PLANE_COUNT; plane++) {
             for (let cx = 0; cx < INSTANCE_CHUNK_COUNT; cx++) {
                 for (let cy = 0; cy < INSTANCE_CHUNK_COUNT; cy++) {
+                    yield;
                     const packed = templateChunks[plane]?.[cx]?.[cy] ?? -1;
                     if (packed === -1) continue;
                     const {
@@ -1889,7 +1921,9 @@ export class SceneBuilder {
         }
 
         // Phase 4: Post-processing (same as buildScene)
+        yield;
         this.addTileModels(scene, smoothUnderlays);
+        yield;
         scene.setTileMinLevels();
         this.setFloorCollision(scene);
         scene.applyBridgeLinks();
@@ -1898,6 +1932,7 @@ export class SceneBuilder {
             scene.light(this.locModelLoader.textureLoader, -50, -10, -50);
         }
 
+        yield;
         return scene;
     }
 

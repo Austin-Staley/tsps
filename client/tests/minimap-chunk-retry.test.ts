@@ -76,9 +76,9 @@ test("worker waits for every dependency beyond eight download waves", async () =
 test("sparse map loads wait for missing scene models before baking geometry and minimaps", async (t) => {
     const cache = sparseCache();
     let attempts = 0, terrainBakes = 0;
-    const addTerrain = SceneBuffer.prototype.addTerrain;
-    t.mock.method(SceneBuffer.prototype, "addTerrain", function (
-        this: SceneBuffer, ...args: Parameters<SceneBuffer["addTerrain"]>
+    const addTerrain = SceneBuffer.prototype.addTerrainSteps;
+    t.mock.method(SceneBuffer.prototype, "addTerrainSteps", function (
+        this: SceneBuffer, ...args: Parameters<SceneBuffer["addTerrainSteps"]>
     ) {
         terrainBakes++;
         return addTerrain.apply(this, args);
@@ -91,7 +91,7 @@ test("sparse map loads wait for missing scene models before baking geometry and 
         sceneBuilder: {
             mapFileLoader: { setRegionReplacements() {} },
             clearLocOverrides() {}, clearLocSpawns() {}, clearTerrainOverrides() {},
-            buildScene: () => {
+            *buildSceneSteps() {
                 attempts++;
                 for (const model of [1, 2]) if (cache.missing(model)) break;
                 return new Scene(4, 76, 76);
@@ -114,9 +114,9 @@ test("animation dependency retries do not repeatedly pack terrain", async (t) =>
     const cache = sparseCache();
     let terrainBakes = 0, attempts = 0;
     let blocking = true, group = 1, lateTexture = false;
-    const addTerrain = SceneBuffer.prototype.addTerrain;
-    t.mock.method(SceneBuffer.prototype, "addTerrain", function (
-        this: SceneBuffer, ...args: Parameters<SceneBuffer["addTerrain"]>
+    const addTerrain = SceneBuffer.prototype.addTerrainSteps;
+    t.mock.method(SceneBuffer.prototype, "addTerrainSteps", function (
+        this: SceneBuffer, ...args: Parameters<SceneBuffer["addTerrainSteps"]>
     ) {
         terrainBakes++;
         if (lateTexture) this.usedTextureIds.add(1);
@@ -146,7 +146,7 @@ test("animation dependency retries do not repeatedly pack terrain", async (t) =>
         sceneBuilder: {
             mapFileLoader: { setRegionReplacements() {} },
             clearLocOverrides() {}, clearLocSpawns() {}, clearTerrainOverrides() {},
-            buildScene: () => {
+            *buildSceneSteps() {
                 attempts++;
                 const scene = new Scene(4, 76, 76);
                 const entity = new LocEntity(1, LocModelType.FLOOR_DECORATION, 0, 0, 12, 12, 1, false);
@@ -331,4 +331,25 @@ test("ordinary build errors propagate and restore the sparse miss listener", asy
         throw new Error("invalid model data");
     }), /invalid model data/);
     assert.equal(cache.js5.store.onMiss, listener);
+});
+
+
+test("cancelled scene builds leave stalled JS5 waits without publishing incomplete data", async () => {
+    const cache = sparseCache();
+    const controller = new AbortController();
+    const previousMiss = cache.js5.store.onMiss;
+    let waiting!: () => void;
+    const started = new Promise<void>(resolve => { waiting = resolve; });
+    cache.js5.settled = () => { waiting(); return new Promise<void>(() => {}); };
+    const outcome = { complete: false };
+    const build = runWithSparseRetry(cache.state, async () => {
+        cache.missing(1);
+        return "incomplete";
+    }, undefined, outcome, controller.signal);
+    await started;
+    controller.abort();
+    await assert.rejects(build, { name: "AbortError" });
+    assert.equal(outcome.complete, false);
+    assert.equal(cache.state.scenePasses, 0);
+    assert.equal(cache.js5.store.onMiss, previousMiss);
 });

@@ -14,13 +14,16 @@ export async function runWithSparseRetry<T>(
     task: () => Promise<T>,
     profileLabel?: string,
     outcome?: { complete: boolean },
+    signal?: AbortSignal,
 ): Promise<T> {
+    signal?.throwIfAborted();
     if (outcome) outcome.complete = false;
     const js5 = workerState.js5;
     if (!js5) {
         workerState.scenePasses = (workerState.scenePasses ?? 0) + 1;
         try {
             const result = await task();
+            signal?.throwIfAborted();
             if (outcome) outcome.complete = true;
             return result;
         } finally { workerState.scenePasses--; }
@@ -30,6 +33,7 @@ export async function runWithSparseRetry<T>(
     const downloaded = new Set<string>();
     const deadline = performance.now() + RETRY_TIMEOUT_MS;
     const timeLeft = () => {
+        signal?.throwIfAborted();
         const remaining = deadline - performance.now();
         if (remaining <= 0) {
             throw new Error(`[js5] Incomplete build: retry deadline reached after ${RETRY_TIMEOUT_MS}ms (${[...missing.keys()].join(", ")})`);
@@ -68,6 +72,7 @@ export async function runWithSparseRetry<T>(
                 const bzip2 = `${Math.round(decompressStats.bzip2Ms - decompressBefore.bzip2Ms)}ms/${decompressStats.bzip2Count - decompressBefore.bzip2Count}`;
                 console.info(`[map-profile] ${profileLabel} pass=${attempt} build=${Math.round(performance.now() - passStarted)}ms misses=${store.missCount - missesBefore} gzip=${gzip} bzip2=${bzip2}`);
             }
+            signal?.throwIfAborted();
             if (!blockingGroup && store.missCount === missesBefore) {
                 if (outcome) outcome.complete = true;
                 return result;
@@ -76,9 +81,14 @@ export async function runWithSparseRetry<T>(
             const waitStarted = performance.now();
             const waitMs = Math.min(GROUP_WAIT_TIMEOUT_MS, timeLeft());
             let timeout: ReturnType<typeof setTimeout> | undefined;
+            let abort: (() => void) | undefined;
             try {
                 // Worker coordinator replies can be lost; keep that wait bounded too.
                 await Promise.race([
+                    new Promise<never>((_, reject) => {
+                        abort = () => reject(signal?.reason);
+                        signal?.addEventListener("abort", abort, { once: true });
+                    }),
                     blockingGroup
                         ? js5.requestGroup(blockingGroup.indexId, blockingGroup.archiveId, true)
                         : js5.settled(),
@@ -87,9 +97,11 @@ export async function runWithSparseRetry<T>(
                     }),
                 ]);
             } catch (fetchError) {
+                signal?.throwIfAborted();
                 console.warn("[js5] Group fetch failed, retrying task:", fetchError);
             } finally {
                 clearTimeout(timeout);
+                if (abort) signal?.removeEventListener("abort", abort);
             }
             if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
             timeLeft();

@@ -1,3 +1,4 @@
+import { BuildSteps } from "../../common/utils/BuildSteps";
 import JSZip from "jszip";
 import type { SdMapData } from "../../render/loader/SdMapData";
 import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
@@ -70,10 +71,10 @@ const compressionPromise = Promise.all([Bzip2.initWasm(), Gzip.initWasm()]);
 const hasherPromise = Hasher.init();
 const npcGeometryLoader = new SdMapDataLoader();
 
-async function loadMinimapFloor(state: WorkerState, input: SdMapLoaderInput, level: number): Promise<MinimapData | undefined> {
+async function loadMinimapFloor(state: WorkerState, input: SdMapLoaderInput, level: number, build?: BuildSteps): Promise<MinimapData | undefined> {
     const result = await runWithSparseRetry(state, () => npcGeometryLoader.load(state, {
         ...input, minimapOnly: true, minimapLevel: level,
-    }));
+    }, build), undefined, undefined, build?.signal);
     return result.data;
 }
 
@@ -331,7 +332,10 @@ let sparseCoordinator: WorkerJs5Coordinator | undefined;
 /** Chunks that arrived before the cache itself. */
 const earlyDat2Chunks = new Map<number, ArrayBuffer>();
 
+const mapBuilds = new Map<number, AbortController>();
+
 const worker = {
+    cancelLoad(id: number): void { mapBuilds.get(id)?.abort(); },
     addCacheChunk(index: number, chunk: ArrayBuffer): void {
         if (!sparseDat2) {
             earlyDat2Chunks.set(index, chunk);
@@ -346,6 +350,7 @@ const worker = {
         void workerStatePromise?.then((state) => state.objTypeLoader.clearCache());
     },
     initCache(cache: LoadedCache, npcInstances: NpcInstance[]) {
+        for (const build of mapBuilds.values()) build.abort();
         registerInstanceModelOverrides(npcInstances);
         void workerStatePromise?.then(state => state.worldMapTiles?.dispose());
         void workerStatePromise?.then(state => state.npcPoses?.dispose());
@@ -355,87 +360,100 @@ const worker = {
         dataLoader.init();
     },
     resetDataLoader<I, D>(dataLoader: RenderDataLoader<I, D>) {
+        for (const build of mapBuilds.values()) build.abort();
         dataLoader.reset();
     },
     async load<I, D>(
         dataLoader: RenderDataLoader<I, D>,
         input: I,
+        requestId?: number,
     ): Promise<TransferDescriptor<D> | undefined> {
-        const workerState = await workerStatePromise;
-        if (!workerState) {
-            throw new Error("Worker not initialized");
-        }
+        const controller = new AbortController();
+        if (requestId !== undefined) mapBuilds.set(requestId, controller);
+        const build = new BuildSteps(controller.signal);
+        try {
+            const workerState = await workerStatePromise;
+            if (!workerState) {
+                throw new Error("Worker not initialized");
+            }
 
-        const mapInput = input as { mapProfileEnabled?: boolean; mapX?: number; mapY?: number };
-        const sdInput = input as SdMapLoaderInput;
-        // Built map squares are kept in IndexedDB; see MapSquareCache for what is keyed.
-        const cacheable = dataLoader.__type === "sdMapDataLoader" && isCacheable(sdInput);
-        let key = "";
-        let squareNpcs: NpcInstance[] = [];
-        if (cacheable) {
-            trackVarReads(workerState.varManager);
-            // A square's geometry depends on which NPC types stand in it, not where: key on the
-            // types, and put the NPCs there now into a stored square (refreshNpcs).
-            squareNpcs = sdInput.loadNpcs
-                ? squareNpcInstances(workerState.npcInstances, sdInput.mapX, sdInput.mapY, sdInput.maxLevel)
-                : [];
-            const npcsHash = sdInput.loadNpcs
-                ? fnv(JSON.stringify([...new Set(squareNpcs.map((npc) => npc.typeId))].sort((a, b) => a - b)))
-                : "";
-            key = cacheKey(workerState.cache.info, sdInput, npcsHash);
-            const hit = await readSquare(key);
-            const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
-            if (sdInput.mapProfileEnabled) console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
-            if (hit && varsMatch) {
-                const level = sdInput.minimapLevel;
-                if (level !== undefined && !hit.data.minimapBlobs?.[level]) {
-                    try {
-                        const repaired = await loadMinimapFloor(workerState, sdInput, level);
-                        if (repaired?.minimapBlobs[level]) {
-                            hit.data.minimapBlobs ??= new Array(Scene.MAX_LEVELS);
-                            hit.data.minimapBlobs[level] = repaired.minimapBlobs[level];
-                        }
-                    } finally { clearCache(workerState); }
+            build.check();
+            const mapInput = input as { mapProfileEnabled?: boolean; mapX?: number; mapY?: number };
+            const sdInput = input as SdMapLoaderInput;
+            // Built map squares are kept in IndexedDB; see MapSquareCache for what is keyed.
+            const cacheable = dataLoader.__type === "sdMapDataLoader" && isCacheable(sdInput);
+            let key = "";
+            let squareNpcs: NpcInstance[] = [];
+            if (cacheable) {
+                trackVarReads(workerState.varManager);
+                // A square's geometry depends on which NPC types stand in it, not where: key on the
+                // types, and put the NPCs there now into a stored square (refreshNpcs).
+                squareNpcs = sdInput.loadNpcs
+                    ? squareNpcInstances(workerState.npcInstances, sdInput.mapX, sdInput.mapY, sdInput.maxLevel)
+                    : [];
+                const npcsHash = sdInput.loadNpcs
+                    ? fnv(JSON.stringify([...new Set(squareNpcs.map((npc) => npc.typeId))].sort((a, b) => a - b)))
+                    : "";
+                key = cacheKey(workerState.cache.info, sdInput, npcsHash);
+                const hit = await readSquare(key);
+                build.check();
+                const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
+                if (sdInput.mapProfileEnabled) console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
+                if (hit && varsMatch) {
+                    const level = sdInput.minimapLevel;
+                    if (level !== undefined && !hit.data.minimapBlobs?.[level]) {
+                        try {
+                            const repaired = await loadMinimapFloor(workerState, sdInput, level, build);
+                            if (repaired?.minimapBlobs[level]) {
+                                hit.data.minimapBlobs ??= new Array(Scene.MAX_LEVELS);
+                                hit.data.minimapBlobs[level] = repaired.minimapBlobs[level];
+                            }
+                        } finally { clearCache(workerState); }
+                    }
+                    build.check();
+                    if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
+                    dropLoadedTextures(hit.data, sdInput.loadedTextureIds);
+                    return Transfer<D>(hit.data as D, []);
                 }
-                if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
-                dropLoadedTextures(hit.data, sdInput.loadedTextureIds);
-                return Transfer<D>(hit.data as D, []);
             }
-        }
 
-        const outcome = { complete: false };
-        // A stored build must carry every texture, whatever this session has already uploaded.
-        const buildInput = cacheable ? { ...sdInput, loadedTextureIds: new Set<number>() } : input;
-        const run = async () => {
-            workerState.sceneJobs++;
-            try {
-                return await runWithSparseRetry(
-                    workerState,
-                    () => dataLoader.load(workerState, buildInput as I),
-                    mapInput?.mapProfileEnabled ? `${mapInput.mapX},${mapInput.mapY}` : undefined,
-                    outcome,
-                );
-            } finally {
-                workerState.sceneJobs--;
-                if (dataLoader.shouldClearWorkerCacheAfterLoad?.(input) ?? true) clearCache(workerState);
+            const outcome = { complete: false };
+            // A stored build must carry every texture, whatever this session has already uploaded.
+            const buildInput = cacheable ? { ...sdInput, loadedTextureIds: new Set<number>() } : input;
+            const run = async () => {
+                workerState.sceneJobs++;
+                try {
+                    return await runWithSparseRetry(
+                        workerState,
+                        () => dataLoader.load(workerState, buildInput as I, build),
+                        mapInput?.mapProfileEnabled ? `${mapInput.mapX},${mapInput.mapY}` : undefined,
+                        outcome,
+                        controller.signal,
+                    );
+                } finally {
+                    workerState.sceneJobs--;
+                    if (dataLoader.shouldClearWorkerCacheAfterLoad?.(input) ?? true) clearCache(workerState);
+                }
+            };
+            const { result: built, reads } = cacheable
+                ? await recordVarReads(run)
+                : { result: await run(), reads: [] };
+            build.check();
+            const { data, transferables } = built;
+            if (cacheable && shouldStore(outcome.complete, data)) {
+                await writeSquare(key, { data: data as unknown as SdMapData, reads });
             }
-        };
-        const { result: built, reads } = cacheable
-            ? await recordVarReads(run)
-            : { result: await run(), reads: [] };
-        const { data, transferables } = built;
-        if (cacheable && shouldStore(outcome.complete, data)) {
-            await writeSquare(key, { data: data as unknown as SdMapData, reads });
-        }
-        if (cacheable && sdInput.mapProfileEnabled) {
-            console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} store: ${shouldStore(outcome.complete, data) ? "written" : `skipped (complete=${outcome.complete})`} reads=${reads.length}`);
-        }
-        if (cacheable && data) dropLoadedTextures(data as unknown as SdMapData, sdInput.loadedTextureIds);
+            if (cacheable && sdInput.mapProfileEnabled) {
+                console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} store: ${shouldStore(outcome.complete, data) ? "written" : `skipped (complete=${outcome.complete})`} reads=${reads.length}`);
+            }
+            if (cacheable && data) dropLoadedTextures(data as unknown as SdMapData, sdInput.loadedTextureIds);
 
-        if (!data) {
-            return undefined;
-        }
-        return Transfer<D>(data, transferables);
+            if (!data) {
+                return undefined;
+            }
+            build.check();
+            return Transfer<D>(data, transferables);
+        } finally { if (requestId !== undefined) mapBuilds.delete(requestId); }
     },
     async loadMinimap(input: SdMapLoaderInput, level: number): Promise<MinimapData | undefined> {
         const state = await workerStatePromise;

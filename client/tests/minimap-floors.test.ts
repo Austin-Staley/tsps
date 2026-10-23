@@ -23,7 +23,7 @@ function emptyState(levels: number[], types: LocLoadType[]) {
         sceneBuilder: {
             mapFileLoader: { setRegionReplacements() {} },
             clearLocOverrides() {}, clearLocSpawns() {}, clearTerrainOverrides() {},
-            buildScene(_x: number, _y: number, _w: number, _h: number, _smooth: boolean, type: LocLoadType) {
+            *buildSceneSteps(_x: number, _y: number, _w: number, _h: number, _smooth: boolean, type: LocLoadType) {
                 types.push(type);
                 return new Scene(4, 76, 76);
             },
@@ -58,7 +58,7 @@ test("foreground maps rasterize only the requested floor; a later floor skips ge
     assert.ok(built.data?.minimapBlobs?.[2] instanceof Blob);
 
     levels.length = 0;
-    t.mock.method(SceneBuffer.prototype, "addTerrain", () => assert.fail("a minimap floor never repacks terrain"));
+    t.mock.method(SceneBuffer.prototype, "addTerrainSteps", () => assert.fail("a minimap floor never repacks terrain"));
     state.textureLoader.getTextureIds = () => assert.fail("a minimap floor never collects geometry textures");
     const floor = await loader.load(state, { ...input, minimapOnly: true, minimapLevel: 1 });
     assert.deepEqual(levels, [1]);

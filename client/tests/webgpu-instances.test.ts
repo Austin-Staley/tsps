@@ -6,11 +6,11 @@ import { WebGPUInstances } from "../render/webgpu/instances";
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
 
 function fixture() {
-    const builds: Array<{ resolve(data: any): void; reject(error: Error): void }> = [];
+    const builds: Array<{ resolve(data: any): void; reject(error: Error): void; current: () => boolean }> = [];
     const renderer: any = {
         osrsClient: { loadedCache: {}, clientPlugins: { objectSettings: () => ({}) }, clearMinimapImageUrls() {} },
         addedLocs: new Map(), locOverrides: new Map(), locSpawns: new Map(),
-        loadSceneData: () => new Promise((resolve, reject) => builds.push({ resolve, reject })),
+        loadSceneData: (_input: unknown, current: () => boolean) => new Promise((resolve, reject) => builds.push({ resolve, reject, current })),
         getExtraLocs: () => undefined,
     };
     return { renderer, builds, instances: new WebGPUInstances(renderer) };
@@ -73,6 +73,8 @@ test("superseded instance builds cannot hide newer work or replace the completed
     await settle();
     const second = instances.load([[[2]]], 100, 100);
     await settle();
+    assert.equal(builds[0].current(), false, "the worker can stop the superseded instance before it finishes");
+    assert.equal(builds[1].current(), true, "the replacement instance stays eligible");
     const latest = { mapX: 12, mapY: 12, version: "latest" } as any;
     builds[1].resolve(latest);
     await second;

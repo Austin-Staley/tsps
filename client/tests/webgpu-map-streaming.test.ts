@@ -143,7 +143,7 @@ function loaderFixture() {
     let target = true;
     maps.isMapInTargetGrid = () => target;
     const renderer: any = {
-        pendingMapBuilds: 0, mapLoadEpoch: 0, mapManager: maps, mapsToLoad: new Denque(),
+        pendingMapBuilds: 0, mapLoadEpoch: 0, sceneBuilds: new Map(), mapManager: maps, mapsToLoad: new Denque(),
         stats: { frameCount: 10 },
         instances: { hasPendingWork: () => false },
         instanceActive: false,
@@ -152,6 +152,7 @@ function loaderFixture() {
         getExtraLocs: () => undefined,
         getPlayerRawPlane: () => 0,
         loadSceneData: WebGPURenderer.prototype.loadSceneData,
+        cancelObsoleteSceneBuilds: WebGPURenderer.prototype.cancelObsoleteSceneBuilds,
     };
     return { renderer, resolve, reject, mapId, maps, leaveTarget: () => { target = false; } };
 }
@@ -283,4 +284,25 @@ test("both backends publish new squares without per-upload fades and preserve re
     }
     assert.deepEqual(glTimes, [-1, 0.25], "new WebGL squares appear with their group; replacements keep their timing");
     assert.deepEqual(gpuTimes, glTimes, "WebGPU uses the same publication policy");
+});
+
+
+test("obsolete builds cancel in the worker while overlapping target squares keep building", async () => {
+    const f = loaderFixture();
+    let signal!: AbortSignal;
+    f.renderer.osrsClient.workerPool.queueLoad = (_loader: unknown, _input: unknown, next: AbortSignal) => {
+        signal = next;
+        return new Promise((_resolve, reject) => next.addEventListener("abort", () => reject(next.reason), { once: true }));
+    };
+    const build = WebGPURenderer.prototype.loadMapData.call(f.renderer, 48, 55, 1);
+    WebGPURenderer.prototype.cancelObsoleteSceneBuilds.call(f.renderer);
+    assert.equal(signal.aborted, false, "current target work survives a new streaming generation");
+    f.leaveTarget();
+    WebGPURenderer.prototype.cancelObsoleteSceneBuilds.call(f.renderer);
+    await build;
+    assert.equal(signal.aborted, true);
+    assert.equal(f.maps.loadingMapIds.has(f.mapId), false, "the slot can load the new destination");
+    assert.equal(f.renderer.mapsToLoad.length, 0, "cancelled geometry is never published");
+    assert.equal(f.renderer.pendingMapBuilds, 0);
+    assert.equal(f.renderer.sceneBuilds.size, 0);
 });

@@ -1,3 +1,4 @@
+import { finishBuild } from "../../common/utils/BuildSteps";
 import { vec3 } from "gl-matrix";
 
 import { Model, computeTextureCoords } from "../../rs/model/Model";
@@ -265,6 +266,10 @@ export class SceneBuffer {
     }
 
     addTerrain(scene: Scene, borderSize: number, maxLevel: number, coreSize: number = Scene.MAP_SQUARE_SIZE, worldTileOffset: number = borderSize): number {
+        return finishBuild(this.addTerrainSteps(scene, borderSize, maxLevel, coreSize, worldTileOffset));
+    }
+
+    *addTerrainSteps(scene: Scene, borderSize: number, maxLevel: number, coreSize: number = Scene.MAP_SQUARE_SIZE, worldTileOffset: number = borderSize): Generator<void, number> {
         this.setHeightBounds(scene);
         // The grid covers the whole scene (border included), not just the meshed core, so
         // fragments at the edge of the visible core can still sample their border neighbours.
@@ -274,6 +279,7 @@ export class SceneBuffer {
         const endX = borderSize + coreSize, endY = borderSize + coreSize;
         for (let level = 0; level < scene.levels; level++) for (let detail = 0; detail < 2; detail++) {
             for (let cx = borderSize; cx < endX; cx += SCENERY_CHUNK_SIZE) for (let cy = borderSize; cy < endY; cy += SCENERY_CHUNK_SIZE) {
+                yield;
                 const ex = Math.min(cx + SCENERY_CHUNK_SIZE, endX), ey = Math.min(cy + SCENERY_CHUNK_SIZE, endY);
                 const instance: ModelInfo = { sceneX: 0, sceneZ: 0, heightOffset: 0, level,
                     contourGround: ContourGroundType.TERRAIN, priority: 0, interactType: InteractType.NONE, interactId: 0xffff };

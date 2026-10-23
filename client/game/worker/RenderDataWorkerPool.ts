@@ -29,6 +29,7 @@ function spawnWorker(): Promise<RenderDataWorkerThread> {
 
 export class RenderDataWorkerPool {
     private worldMapEpoch = 0;
+    private nextMapBuildId = 0;
     private readonly worldMapRequests = new Set<() => void>();
     private disposed = false;
     npcPoseGeneration = 0;
@@ -105,8 +106,16 @@ export class RenderDataWorkerPool {
     queueLoad<I, D, Loader extends RenderDataLoader<I, D>>(
         loader: Loader,
         input: I,
+        signal?: AbortSignal,
     ): QueuedTask<RenderDataWorkerThread, D> {
-        return this.pool.queue((w) => w.load(loader, input) as ObservablePromise<D>);
+        const id = ++this.nextMapBuildId;
+        return this.pool.queue(async (worker) => {
+            signal?.throwIfAborted();
+            const cancel = () => { void worker.cancelLoad(id).catch(() => {}); };
+            signal?.addEventListener("abort", cancel, { once: true });
+            try { return await worker.load(loader, input, id) as D; }
+            finally { signal?.removeEventListener("abort", cancel); }
+        });
     }
 
     queueNpcGeometry(
