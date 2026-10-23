@@ -185,7 +185,15 @@ assert.equal(new HdPlugin().isEnabled(), false, "Disabled by default");
 performance.now = originalNow;
 
 const { HdMaterials, HD_LOOKUP_WIDTH, HD_TEXTURE_SIZE } = require("../game/plugins/hd/HdMaterials");
-const { HD_MATERIALS, HD_GROUND_MATERIALS } = require("../game/plugins/hd/HdMaterialData");
+const { HD_MATERIALS, HD_GROUND_MATERIALS, HD_DETAIL_TEXTURES } = require("../game/plugins/hd/HdMaterialData");
+assert.equal(HD_DETAIL_TEXTURES.length, 0, "The upstream pack uses the normal 256px atlas");
+for (const material of [...HD_MATERIALS, ...HD_GROUND_MATERIALS]) {
+    for (const file of [material.file, material.normal]) {
+        if (file) assert.ok(!file.includes("/local/"), "Upstream materials must not retain photographic overrides");
+    }
+}
+assert.equal(new Set([13, 17, 18].map(id => HD_GROUND_MATERIALS.find((m: any) => m.id === id).file)).size, 3,
+    "Stone patterns, Falador paving and jagged tiles retain their distinct upstream textures");
 for (const id of [6, 16, 44, 45, 50, 55]) {
     assert.equal(HD_MATERIALS.find((m: any) => m.id === id).params[0], 0, "Roofs, including the wood-grain replacement, stay matte");
 }
@@ -214,8 +222,8 @@ assert.equal(metadata(5)[0], 0, "Use the cache texture until the HD image loads"
 const brick = HD_MATERIALS.find((m: any) => m.id === 2);
 images.find(image => image.src === brick.file).onload();
 materialState.update(layers);
-assert.ok(metadata(5)[0] < 0, "Select the 512px array for a successfully loaded detailed wall");
-assert.equal(metadata(5)[1], 2, "World mapping must not mark masonry as unlit");
+assert.ok(metadata(5)[0] > 0, "A loaded upstream wall selects the 256px array");
+assert.equal(metadata(5)[1], 0, "Upstream masonry retains cache UVs and normal lighting");
 assert.equal(metadata(5)[2], 0, "Keep geometric normals until the normal image loads");
 images.find(image => image.src === brick.normal).onload();
 materialState.update(layers);
@@ -224,7 +232,7 @@ const uploadsBeforeRemap = atlasUploads;
 layers.set(2, 9);
 materialState.update(layers);
 assert.equal(metadata(5)[0], 0);
-assert.ok(metadata(9)[0] < 0, "Follow cache-layer remaps without reuploading image pixels");
+assert.ok(metadata(9)[0] > 0, "Follow cache-layer remaps without reuploading image pixels");
 assert.equal(atlasUploads, uploadsBeforeRemap);
 materialState.dispose();
 images.find(image => image.src === brick.file).onload();

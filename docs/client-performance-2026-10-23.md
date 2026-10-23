@@ -283,8 +283,8 @@ had a 30 Hz callback ceiling and are not used in this table.
 These are **whole-PR** differences, not gains attributable solely to the four new
 changes. GPU API counts and CPU submission time are not GPU execution timing or
 total system CPU (worker work is excluded). The candidate retained the user's local
-upstream-117HD texture preview; main used its committed texture pack. That preview
-remains uncommitted and is not part of this PR. Thus this is a comparison of the
+upstream-117HD texture preview; main used its committed texture pack. That same texture pack is now included in this PR, replacing the custom
+photographic pack. Thus this is a comparison of the
 actual local test builds, not an isolated GPU texture-quality experiment. Live NPC
 populations and retained outer maps can differ. The 60 Hz ceiling limits FPS claims;
 CPU throttling and larger targets do not emulate the player's Windows GPU.
