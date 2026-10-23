@@ -17,10 +17,17 @@
  *   stew, 4 stew given (Warrens known), 5 Devan's task (kill Conrad King),
  *   6 Conrad killed, 7 queen impressed (go in), 8 queen revealed (search
  *   Hughes), 9 letter found, 10 letter handed to Tomas, 11 complete.
- * The OSRS Wiki does not publish this varp's stage values; the map above is
- * internal, while the varp/varbit ids are cache-confirmed. Varbit 6039
- * "piscquest_favour" is deliberately NOT set: the wiki's 10 January 2024 change
- * removed Kourend favour and the Piscarilius favour certificate from the rewards.
+ * The durable stages above keep their old saves' meaning, but they are not the
+ * values the cache reads: the varbit 6037 wire follows Quest Helper's
+ * loadSteps keys (the helper reads the same varbit), whose final active step is
+ * 12 (talk to Lady Shauna) and whose completion threshold is 13 (quest DB row
+ * 113, read by script 4029). stageWireValue below maps the durable stages:
+ * 5->6, 6->7, 7->8, 8->10, 9->11, 10->12, 11->13; 0-4 are unchanged. Helper
+ * keys 5 (inside the Warrens) and 9 (another talk-to-queen step) are duplicate
+ * guide states this plugin does not store separately, so they are not emitted.
+ * Varbit 6039 "piscquest_favour" is deliberately NOT set: the wiki's 10 January
+ * 2024 change removed Kourend favour and the Piscarilius favour certificate
+ * from the rewards.
  *
  * Requirements (wiki): Client of Kourend complete, 20 Thieving, required to
  * start (not boostable). Rewards (wiki): 1 Quest point, 2,000 Thieving XP,
@@ -41,10 +48,12 @@
  * without the quest's lead is refused, and its picklocked/searched state is kept
  * in a persisted per-player attribute ("quest.the_queen_of_thieves.chest") so the
  * world chest is rebuilt on every region load instead of relying on the base
- * nameless 10084 still being registered. The graceful recolour and the letter's
- * readable transcript are not implemented, and the tent NPC keeps the name "The
- * Queen of Thieves" after completion (her post-quest talk is Lady Shauna's
- * standard transcript). The manhole stays open until closed by hand.
+ * nameless 10084 still being registered. The searched chest keeps its Search
+ * option (41761) so a destroyed letter can be reobtained from it before the
+ * hand-in, matching the item's Destroy text. The graceful recolour and the
+ * letter's readable transcript are not implemented, and the tent NPC keeps the
+ * name "The Queen of Thieves" after completion (her post-quest talk is Lady
+ * Shauna's standard transcript). The manhole stays open until closed by hand.
  */
 module.exports = function registerQueenOfThievesQuest(api) {
   const {
@@ -85,6 +94,29 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const STAGE_LETTER_GIVEN = 10;
   const STAGE_COMPLETE = 11;
 
+  // Quest Helper loadSteps keys, which are varbit 6037 values: 5 is the
+  // in-the-Warrens duplicate of step 4 and 9 is a second talk-to-queen step.
+  // The cache's completion threshold is 13 (quest DB row 113, script 4029).
+  const WIRE_CONRAD_TASK = 6;
+  const WIRE_CONRAD_KILLED = 7;
+  const WIRE_QUEEN_VIS = 8;
+  const WIRE_QUEEN_REVEALED = 10;
+  const WIRE_LETTER_FOUND = 11;
+  const WIRE_LETTER_GIVEN = 12;
+  const WIRE_COMPLETE = 13;
+
+  /** Durable stage (old saves keep their meaning) -> canonical varbit value. */
+  function stageWireValue(stage) {
+    if (stage >= STAGE_COMPLETE) return WIRE_COMPLETE;
+    if (stage === STAGE_LETTER_GIVEN) return WIRE_LETTER_GIVEN;
+    if (stage === STAGE_LETTER_FOUND) return WIRE_LETTER_FOUND;
+    if (stage === STAGE_QUEEN_REVEALED) return WIRE_QUEEN_REVEALED;
+    if (stage === STAGE_QUEEN_VIS) return WIRE_QUEEN_VIS;
+    if (stage === STAGE_CONRAD_KILLED) return WIRE_CONRAD_KILLED;
+    if (stage === STAGE_CONRAD_TASK) return WIRE_CONRAD_TASK;
+    return stage; // 0-4 match the helper's wire values
+  }
+
   const TOMAS_LAWRY_NPC_ID = NpcIdentifiers.TOMAS_LAWRY; // 7904
   const ROBERT_OREILLY_NPC_ID = NpcIdentifiers.ROBERT_OREILLY; // 7905
   const DEVAN_RUTTER_NPC_ID = NpcIdentifiers.DEVAN_RUTTER; // 7906
@@ -108,13 +140,14 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const MANHOLE_OPEN_OBJECT_ID = ObjectIdentifiers.MANHOLE_8; // 31707 piscquest_manhole_open
   const MANHOLE_LADDER_OBJECT_ID = ObjectIdentifiers.LADDER_367; // 31708 piscquest_manhole_ladder
   const TENT_DOOR_OBJECT_ID = ObjectIdentifiers.DOORWAY_10; // 31709 piscquest_tentdoor
-  const CHEST_OPEN_OBJECT_ID = ObjectIdentifiers.CHEST_110; // 31711 piscquest_chest_open
   const CHEST_PICKLOCK_OBJECT_ID = ObjectIdentifiers.CHEST_136; // 41760 piscquest_chest_closed_picklock
   const CHEST_SEARCH_OBJECT_ID = ObjectIdentifiers.CHEST_137; // 41761 piscquest_chest_closed_search
 
   // The world places the nameless closed chest (dump: loc 10084 at 1681,3677,1);
-  // 41760/41761/31711 are the picklock/search/open states the cache defines but
-  // does not place. 10084 has no ObjectIdentifiers constant (null name in cache).
+  // 41760/41761 are the picklock/search states the cache defines but does not
+  // place. 10084 has no ObjectIdentifiers constant (null name in cache). The
+  // searched state stays on 41761 instead of the open 31711 (which has no menu),
+  // because the letter's Destroy text sends the player back to this chest.
   const CLOSED_CHEST_OBJECT_ID = 10084;
   const CHEST_TILE = { x: 1681, y: 3677, z: 1 };
   const CHEST_REGION_ID = ((CHEST_TILE.x >> 6) << 8) | (CHEST_TILE.y >> 6);
@@ -380,12 +413,9 @@ module.exports = function registerQueenOfThievesQuest(api) {
       player.sendMessage("You have no reason to search through this chest.");
       return;
     }
-    // A second invocation for the same click (the open chest is already there)
-    // must not emit anything again.
-    if (object.getId?.() === CHEST_OPEN_OBJECT_ID && chestState(player) >= CHEST_SEARCHED) return;
-    // One letter per missing letter: hasLetter guards a second copy, and the
-    // searched state below means the open-chest message can never repeat a handout.
-    if (hasLetter(player)) {
+    // Once the letter is handed in the quest no longer needs it; before that,
+    // an empty hand may search again after destroying or losing the letter.
+    if (stage >= STAGE_LETTER_GIVEN || hasLetter(player)) {
       player.sendMessage("The chest is empty.");
       return;
     }
@@ -395,7 +425,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
     }
     player.getInventory().adds(LETTER_ITEM_ID, 1);
     setChestState(player, CHEST_SEARCHED);
-    replaceObject(object, CHEST_OPEN_OBJECT_ID);
+    if (object.getId?.() !== CHEST_SEARCH_OBJECT_ID) replaceObject(object, CHEST_SEARCH_OBJECT_ID);
     player.sendMessage("You search the chest and find a letter.");
     advance(player, STAGE_LETTER_FOUND);
   }
@@ -437,11 +467,9 @@ module.exports = function registerQueenOfThievesQuest(api) {
   function dressChest(state) {
     const location = new Location(CHEST_TILE.x, CHEST_TILE.y, CHEST_TILE.z);
     for (const object of [...objectsAt(location)]) ObjectManager.deregister(object, true);
-    const objectId = state >= CHEST_SEARCHED
-      ? CHEST_OPEN_OBJECT_ID
-      : state >= CHEST_PICKLOCKED
-        ? CHEST_SEARCH_OBJECT_ID
-        : CHEST_PICKLOCK_OBJECT_ID;
+    const objectId = state >= CHEST_PICKLOCKED
+      ? CHEST_SEARCH_OBJECT_ID
+      : CHEST_PICKLOCK_OBJECT_ID;
     ObjectManager.register(
       new GameObject(objectId, location, CHEST_TYPE, CHEST_FACE, null),
       true
@@ -671,6 +699,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
     otherRewards: ["2,000 Coins"],
     buildJournal,
     onReward: grantReward,
+    varbitValue: stageWireValue,
   });
 
   api.onServerStartup(spawnStaticNpcs);
