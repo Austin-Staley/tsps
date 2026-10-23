@@ -840,6 +840,24 @@ export class OsrsClient {
     // Movement is always server-authoritative (OSRS-like)
     // Server-assigned ID of the player we control
     controlledPlayerServerId: number = -1;
+    /**
+     * OSRS's cam_target: what the follow camera, the scene's centre and the sound listener follow
+     * instead of the local player (a spectator's view of a tile or of another player), until
+     * cam_reset. A player out of view falls back to the local player.
+     */
+    cameraTarget: { x: number; y: number; level: number } | { playerServerId: number } | undefined;
+
+    /** The camera target's position in 1/128 tiles (tile centres), or undefined to follow the local player. */
+    getCameraTargetPosition(): { x: number; y: number; level: number } | undefined {
+        const target = this.cameraTarget;
+        if (!target) return undefined;
+        if ("playerServerId" in target) {
+            const index = this.playerEcs.getIndexForServerId(target.playerServerId);
+            if (index === undefined) return undefined;
+            return { x: this.playerEcs.getX(index) | 0, y: this.playerEcs.getY(index) | 0, level: this.playerEcs.getLevel(index) | 0 };
+        }
+        return { x: target.x * 128 + 64, y: target.y * 128 + 64, level: target.level };
+    }
     /** Per-tick active world entity IDs — maintained by WORLDENTITY_INFO packets. */
     private activeWorldEntityIds: number[] = [];
     /**
@@ -7644,6 +7662,15 @@ export class OsrsClient {
 
         if (Array.isArray(block.modelCustomisation)) {
             this.applyNpcModelCustomisation(serverId, block.modelCustomisation);
+        }
+
+        if (Array.isArray(block.baseAnimations) && ecsId !== undefined) {
+            this.npcEcs.setBaseAnimations(ecsId, block.baseAnimations);
+        }
+
+        if (block.transparency && ecsId !== undefined) {
+            const fade = block.transparency;
+            this.npcEcs.setTransparency(ecsId, fade.startCycle, fade.endCycle, fade.from, fade.to, getClientCycle() | 0);
         }
 
         if (block.say && ecsId !== undefined) {

@@ -1,3 +1,4 @@
+import { LocAnimated } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec3 } from "gl-matrix";
 
@@ -502,6 +503,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const world = this.world;
         const mapData = world ? this.instances.takeBuiltScene() : null;
         if (!world || !mapData) return;
+        // The scene's loc animations go on in the new one (LocAnimated.carryOver): a held one (a
+        // collapsed floor) would replay from frame 0 otherwise.
+        const carried: LocAnimated[] = [];
+        for (const previous of this.mapManager.mapSquares.values()) carried.push(...((previous as any).locsAnimated ?? []));
         this.mapManager.cleanUp();
         this.osrsClient.clearMinimapImageUrls();
         const { mapX, mapY } = mapData;
@@ -509,6 +514,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.instanceSceneMap = { mapX: mapX | 0, mapY: mapY | 0 };
         const square = WebGPUMapSquare.load(this.device, world, mapData, -1, frameCount);
         square.initAnimatedLocs(mapData, this.osrsClient.seqTypeLoader, getClientCycle() | 0);
+        LocAnimated.carryOver(carried, square.locsAnimated);
         world.uploadMapTextures(mapData.loadedTextures);
         this.mapManager.addMap(mapX, mapY, square);
         this.actors?.onMapAdded(square, mapData);
@@ -822,6 +828,14 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 if (visible[i].canRender(this.stats.frameCount)) {
                     visible[i].drawOpaque(pass, roofPlaneLimit, this.frameScenery);
                 }
+            }
+            // Locs seen below the floor (SunkenLocs): the depth under them reset, then drawn again.
+            const sunken = visible.filter((map) => map.canRender(this.stats.frameCount) && map.hasSunkenLocs());
+            if (sunken.length > 0) {
+                pass.setViewport(0, 0, width, height, 1, 1);
+                for (const map of sunken) map.drawSunkenLocs(pass, true, roofPlaneLimit, this.frameScenery);
+                pass.setViewport(0, 0, width, height, 0, 1);
+                for (const map of sunken) map.drawSunkenLocs(pass, false, roofPlaneLimit, this.frameScenery);
             }
             this.actors?.drawOpaque(pass);
             for (let i = visible.length - 1; i >= 0; i--) {
