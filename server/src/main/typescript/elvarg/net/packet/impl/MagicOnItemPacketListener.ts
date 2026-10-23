@@ -90,13 +90,8 @@ export class MagicOnItemPacketListener {
     if (missing.length) PluginManager.consumeSpellRuneSource(player, missing);
   }
 
-  private canReceiveGroundItem(player: any, itemId: number): boolean {
-    const inventory = player.getInventory();
-    if (inventory.getFreeSlots() > 0) {
-      return true;
-    }
-    const definition = ItemDefinition.forId(itemId);
-    return definition?.isStackable?.() && inventory.contains(itemId);
+  private canReceiveGroundItem(player: any, item: Item): boolean {
+    return ItemOnGroundManager.inventoryCapacity(player, item) > 0;
   }
 
   public castGroundItem(player: any, groundItemId: number, x: number, y: number, spellId: number): void {
@@ -142,7 +137,7 @@ export class MagicOnItemPacketListener {
       return;
     }
     if (!this.canGrabGroundItem(player, groundItem)) return;
-    if (!this.canReceiveGroundItem(player, groundItemId)) {
+    if (!this.canReceiveGroundItem(player, groundItem.getItem())) {
       player.getInventory().full();
       return;
     }
@@ -207,12 +202,7 @@ export class MagicOnItemPacketListener {
       return;
     }
     if (!this.canGrabGroundItem(player, groundItem)) return;
-    if (!this.canReceiveGroundItem(player, groundItemId)) {
-      player.getInventory().full();
-      return;
-    }
-    ItemOnGroundManager.deregister(groundItem);
-    player.getInventory().addItem(groundItem.getItem().clone());
+    if (ItemOnGroundManager.transferToInventory(player, groundItem) <= 0) return;
     PluginManager.emitCustomEvent("magic:telekinetic-grab", { player, itemId: groundItemId, position });
   }
 
@@ -274,7 +264,7 @@ export class MagicOnItemPacketListener {
 
   private findVisibleGroundItem(player: any, groundItemId: number, position: Location): any | null {
     const exact = ItemOnGroundManager.getGroundItem(player.getUsername(), groundItemId, position, player.getPrivateArea());
-    if (exact) {
+    if (exact && ItemOnGroundManager.canSee(player, exact)) {
       return exact;
     }
 
@@ -291,6 +281,7 @@ export class MagicOnItemPacketListener {
       if (item.getPrivateArea?.() !== player.getPrivateArea?.()) {
         continue;
       }
+      if (!ItemOnGroundManager.canSee(player, item)) continue;
       if (item.getState?.() === State.SEEN_BY_PLAYER && item.getOwner?.() !== player.getUsername?.()) {
         continue;
       }
