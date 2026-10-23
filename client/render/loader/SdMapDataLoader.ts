@@ -1671,9 +1671,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         locSceneBuf.setHeightBounds(scene);
         doorSceneBuf.setHeightBounds(scene);
         const coreSize = isInstance ? INSTANCE_SIZE : Scene.MAP_SQUARE_SIZE;
-        if (!shouldLoadPartial) {
-            sceneBuf.addTerrain(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
-        }
 
         const sceneLocs = getSceneLocs(
             locTypeLoader,
@@ -1719,31 +1716,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             smoothLocAnimationSteps,
         );
 
-        if (!shouldLoadDoorOnly) {
-            addSceneModels(
-                this.modelHashBuf!,
-                textureLoader,
-                locSceneBuf,
-                sceneModels,
-                minimizeDrawCalls,
-            );
-        }
-        if (!shouldLoadLocOnly) {
-            addSceneModels(
-                this.modelHashBuf!,
-                textureLoader,
-                doorSceneBuf,
-                doorSceneModels,
-                minimizeDrawCalls,
-            );
-        }
-
-        // Animated locs
-        const locsAnimated = shouldLoadDoorOnly
-            ? []
-            : locSceneBuf.addLocAnimatedGroups(locAnimatedGroups);
-        if (mapProfileEnabled) console.log(`animated locs: ${locsAnimated.length}`);
-
         // Npcs
 
         let npcInstances: NpcInstance[] = [];
@@ -1775,6 +1747,41 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                       ? Math.floor(renderPosY * Scene.MAP_SQUARE_SIZE)
                       : mapY * Scene.MAP_SQUARE_SIZE,
               );
+
+        // A late animation/NPC miss makes every packed output from this pass disposable.
+        if (state.js5?.store.missCount !== sparseMissesBefore) {
+            if (mapProfileEnabled) console.timeEnd(`load map ${mapX},${mapY}`);
+            return { data: undefined, transferables: [] };
+        }
+
+        if (!shouldLoadPartial) {
+            sceneBuf.addTerrain(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
+        }
+
+        if (!shouldLoadDoorOnly) {
+            addSceneModels(
+                this.modelHashBuf!,
+                textureLoader,
+                locSceneBuf,
+                sceneModels,
+                minimizeDrawCalls,
+            );
+        }
+        if (!shouldLoadLocOnly) {
+            addSceneModels(
+                this.modelHashBuf!,
+                textureLoader,
+                doorSceneBuf,
+                doorSceneModels,
+                minimizeDrawCalls,
+            );
+        }
+
+        // Animated locs
+        const locsAnimated = shouldLoadDoorOnly
+            ? []
+            : locSceneBuf.addLocAnimatedGroups(locAnimatedGroups);
+        if (mapProfileEnabled) console.log(`animated locs: ${locsAnimated.length}`);
 
         // Build per-level CSR mappings of loc IDs per interior tile (64x64 region) at tile origin.
         // We only include object IDs for origins (e.g., loc.startX/startY matches the tile) and direct

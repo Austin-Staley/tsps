@@ -8,6 +8,9 @@ import type { GroupSpan } from "../rs/cache/store/SparseMemoryStore";
 import { SceneBuffer } from "../render/buffer/SceneBuffer";
 import { SdMapDataLoader } from "../render/loader/SdMapDataLoader";
 import { Scene } from "../rs/scene/Scene";
+import { LocEntity } from "../rs/scene/entity/LocEntity";
+import { LocModelType } from "../rs/config/loctype/LocModelType";
+import { calculateEntityTag, EntityType } from "../rs/scene/entity/EntityTag";
 
 function sparseCache() {
     const present = new Set<number>();
@@ -105,6 +108,77 @@ test("sparse map loads wait for missing scene models before baking geometry and 
     assert.equal(terrainBakes, 1, "incomplete scene passes must skip discarded geometry and minimap work");
     assert.equal(result.data?.minimapBlobs.length, 4, "the completed build still includes every minimap plane");
     assert.equal(outcome.complete, true, "only a complete scene can leave the worker");
+});
+
+test("animation dependency retries do not repeatedly pack terrain", async (t) => {
+    const cache = sparseCache();
+    let terrainBakes = 0, attempts = 0;
+    let blocking = true, group = 1, lateTexture = false;
+    const addTerrain = SceneBuffer.prototype.addTerrain;
+    t.mock.method(SceneBuffer.prototype, "addTerrain", function (
+        this: SceneBuffer, ...args: Parameters<SceneBuffer["addTerrain"]>
+    ) {
+        terrainBakes++;
+        if (lateTexture) this.usedTextureIds.add(1);
+        return addTerrain.apply(this, args);
+    });
+    const locType = { id: 1, name: "flag", sizeX: 1, sizeY: 1, mapFunctionId: -1 };
+    const state: any = {
+        ...cache.state,
+        cache: { info: { name: "test", game: "oldschool" } },
+        cacheSystem: { getIndex: () => ({ archiveExists: () => false }) },
+        textureLoader: {
+            getTextureIds: () => [1], isSd: () => true,
+            getPixelsArgb: () => {
+                if (cache.missing(group + 1)) throw new GroupMissingError(7, group + 1, 0, 520);
+                return new Int32Array([1]);
+            },
+        },
+        locTypeLoader: { load: () => locType },
+        locModelLoader: {
+            locTypeLoader: { load: () => locType },
+            seqTypeLoader: { load: () => ({ isSkeletalSeq: () => false, frameIds: [1] }) },
+            getModelAnimated: () => {
+                if (cache.missing(group) && blocking) throw new GroupMissingError(7, group, 0, 520);
+                return undefined;
+            },
+        },
+        sceneBuilder: {
+            mapFileLoader: { setRegionReplacements() {} },
+            clearLocOverrides() {}, clearLocSpawns() {}, clearTerrainOverrides() {},
+            buildScene: () => {
+                attempts++;
+                const scene = new Scene(4, 76, 76);
+                const entity = new LocEntity(1, LocModelType.FLOOR_DECORATION, 0, 0, 12, 12, 1, false);
+                scene.newFloorDecoration(0, 12, 12, 0, entity,
+                    calculateEntityTag(12, 12, EntityType.LOC, false, 1), LocModelType.FLOOR_DECORATION);
+                return scene;
+            },
+        },
+    };
+    const loader = new SdMapDataLoader();
+    const load = () => runWithSparseRetry(state, () => loader.load(state, {
+        mapX: 50, mapY: 50, maxLevel: 3, loadNpcs: false, smoothTerrain: false,
+        minimizeDrawCalls: true, loadedTextureIds: new Set(),
+    }));
+    let result = await load();
+    assert.equal(attempts, 2);
+    assert.equal(terrainBakes, 1, "a missing animation frame must yield before packing unchanged terrain");
+    assert.equal(result.data?.minimapBlobs.length, 4);
+
+    blocking = false;
+    group++;
+    terrainBakes = attempts = 0;
+    result = await load();
+    assert.equal(attempts, 2);
+    assert.equal(terrainBakes, 1, "a swallowed animation miss must also skip discarded output work");
+
+    lateTexture = true;
+    group++;
+    terrainBakes = attempts = 0;
+    result = await load();
+    assert.equal(attempts, 3, "a texture discovered after the checkpoint still receives its own retry");
+    assert.equal(result.data?.loadedTextures.has(1), true, "the final output must contain the later texture");
 });
 
 test("blocking group downloads recover from transient fetch errors", async (t) => {
