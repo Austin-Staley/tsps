@@ -44,10 +44,13 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   const CLOSED_CHEST_OBJECT_ID = 2183;
   const OPEN_CHEST_OBJECT_ID = 2182;
   const KHAZARD_WARLORD_SPAWN_ID = 4971;
+  const VARBIT_WARLORD_FIGHTING = 3460; // khazard_warlord_fighting
+  const WARLORD_COMBAT_ID = NpcIdentifiers.KHAZARD_WARLORD_3;
   const ELKOY_OUTSIDE_MAZE_ID = 6265;
   const ELKOY_INSIDE_MAZE_ID = 6266;
   const VILLAGE_ENTRANCE = new Location(2504, 3191, 0);
-  const VILLAGE_CENTRE = new Location(2541, 3170, 0);
+  // QH maze path ends south of Loose railing2186; Elkoy does not bypass it.
+  const INNER_MAZE_EXIT = new Location(2515, 3159, 0);
   const WALL_SOUTH_LANDING = new Location(2509, 3252, 0);
   const WALL_NORTH_LANDING = new Location(2509, 3254, 0);
 
@@ -174,6 +177,7 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   }
 
   const ballistaChoices = new WeakMap();
+  const warlordsByPlayer = new Map();
 
   function trackerMask(player) {
     return Number(player.getAttribute(TRACKER_STATE_ATTRIBUTE)) || 0;
@@ -415,7 +419,7 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
       if (option === "Can you show me out of the village?") {
         player.moveTo(VILLAGE_ENTRANCE.clone());
       } else if (option === "Yes please.") {
-        player.moveTo((isInsideVillage(player) ? VILLAGE_ENTRANCE : VILLAGE_CENTRE).clone());
+        player.moveTo((isInsideVillage(player) ? VILLAGE_ENTRANCE : INNER_MAZE_EXIT).clone());
       }
       return;
     }
@@ -525,10 +529,59 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
     }
   }
 
-  function handleNpcDeath({ npcId, killer, damagers }) {
+  function syncWarlord(player) {
+    const npc = warlordsByPlayer.get(player);
+    player.getPacketSender().sendVarbit(VARBIT_WARLORD_FIGHTING, npc?.isRegistered() ? 1 : 0);
+  }
+
+  function handleWarlordBootstrap({ player }) {
+    syncWarlord(player);
+  }
+
+  function clearWarlord(player) {
+    const npc = warlordsByPlayer.get(player);
+    if (npc) {
+      npc.getCombat().reset();
+      api.removeNpc(npc);
+      warlordsByPlayer.delete(player);
+    }
+    syncWarlord(player);
+  }
+
+  function handleWarlordThreat(request) {
+    const { player, npc, npcId, text } = request;
+    if (!KHAZARD_WARLORD_NPC_IDS.has(npcId) || !npc?.getLocation
+      || (npc.getOwner?.() && npc.getOwner() !== player)) return;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_RETURNED_FIRST_ORB || stage > STAGE_DEFEATED_WARLORD) return;
+    if (text !== "Ha, you really think you stand a chance? I'll crush you."
+      && text !== "Fool, warriors blessed by Khazard don't die. You can't kill that which is already dead. However I can kill you!") return;
+    const previous = request.after;
+    request.after = () => {
+      previous?.();
+      const existing = warlordsByPlayer.get(player);
+      if (existing?.isRegistered()) return;
+      if (player.isRegistered?.() === false || quest.getStage(player) !== stage || !npc.isRegistered()) return;
+      const at = npc.getLocation();
+      const fighter = api.spawnNpc({ id: WARLORD_COMBAT_ID, x: at.getX(), y: at.getY(), z: at.getZ(),
+        owner: player, ownerOnly: true, wanderRadius: 0 });
+      if (!fighter) return;
+      warlordsByPlayer.set(player, fighter);
+      syncWarlord(player);
+      fighter.getCombat().attack(player);
+    };
+  }
+
+  function handleWarlordLogout({ player }) {
+    clearWarlord(player);
+  }
+
+  function handleNpcDeath({ npc, npcId, killer, damagers }) {
     if (!KHAZARD_WARLORD_NPC_IDS.has(npcId)) return;
     const player = killer?.isPlayer?.() ? killer : (damagers ?? []).find((entry) => entry?.isPlayer?.());
-    if (!player) return;
+    if (!player || !npc || npc !== warlordsByPlayer.get(player)) return;
+    warlordsByPlayer.delete(player);
+    syncWarlord(player);
     const stage = quest.getStage(player);
     if (stage < STAGE_RETURNED_FIRST_ORB || stage > STAGE_DEFEATED_WARLORD) return;
     if (stage === STAGE_RETURNED_FIRST_ORB) quest.setStage(player, STAGE_DEFEATED_WARLORD);
@@ -555,6 +608,7 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   }
 
   function handleLogin({ player }) {
+    syncWarlord(player);
     refreshQuestList(player);
     sendProgressVarbits(player);
   }
@@ -584,6 +638,10 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleConditionStep);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("npc-dialogue:line", handleWarlordThreat);
+  api.onCustomEvent("player:bootstrap-complete", handleWarlordBootstrap);
+  api.onPlayerLogout(handleWarlordLogout);
+  api.onPlayerDeath(handleWarlordLogout);
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
   api.onCustomEvent("quest:stage-changed", handleStageChanged);

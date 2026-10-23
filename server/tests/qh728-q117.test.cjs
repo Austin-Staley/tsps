@@ -7,12 +7,17 @@
 // and variant, not a live dialogue playthrough.
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { NPC } = require('../dist/game/entity/impl/npc/NPC');
+const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 require('node:test').before(async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
     require('node:path').resolve(__dirname, '..'));
+  new NpcDefinitionLoader().load();
 });
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const runtime = require('../plugins/quests/QuestRuntime');
@@ -76,7 +81,13 @@ function makePlayer() {
   };
 
   const sender = new Proxy({
-    sendVarbit(id, value) { varbits.set(id, value); return sender; },
+    getVarbit: id => varbits.get(id) ?? 0, getVarp: id => configs.get(id) ?? 0,
+    sendVarbit(id, value) {
+      const {baseVar,startBit,endBit}=CacheDefinitions.getVarbit(id);
+      const mask=(2**(endBit-startBit+1)-1)<<startBit;
+      configs.set(baseVar,((configs.get(baseVar)??0)&~mask)|((value<<startBit)&mask));
+      varbits.set(id, value); return sender;
+    },
     sendConfig(id, value) { configs.set(id, value); return sender; },
   }, { get(target, key) { return key in target ? target[key] : () => sender; } });
 
@@ -95,7 +106,7 @@ function makePlayer() {
     getUsername: () => 'qh728-q117',
     getPrivateArea: () => null,
     getLocation: () => location,
-    isPlayer: () => true,
+    isPlayer: () => true, isNpc: () => false, getIndex: () => 1,
     sendMessage: (text) => messages.push(text),
     isRegistered: () => true,
   };
@@ -111,6 +122,7 @@ function harness() {
   const loginHooks = [];
   const transcripts = [];
   const groundItems = [];
+  const spawned = [], logoutHooks = [];
   const api = new Proxy({
     core,
     persistAttribute: noop,
@@ -119,6 +131,13 @@ function harness() {
     onObjectInteraction: (handler) => objectHooks.push(handler),
     onNpcDeath: (handler) => deathHooks.push(handler),
     onPlayerLogin: (handler) => loginHooks.push(handler),
+    onPlayerLogout: handler => logoutHooks.push(handler),
+    spawnNpc(definition) {
+      const npc=new NPC(definition.id,new core.Location(definition.x,definition.y,definition.z));
+      npc.setOwner(definition.owner);npc.isRegistered=()=>!npc.removed;
+      spawned.push(npc);return npc;
+    },
+    removeNpc(npc){npc.removed=true;},
     onCustomEvent: (name, handler) => {
       if (!events.has(name)) events.set(name, []);
       events.get(name).push(handler);
@@ -145,7 +164,7 @@ function harness() {
     runtime.startTranscript = originalStart;
   }
   const quest = runtime.getRegisteredQuests().findLast((entry) => entry.key === 'tree_gnome_village');
-  return { events, variants, conditions, objectHooks, deathHooks, loginHooks, transcripts, groundItems, quest };
+  return { events, variants, conditions, objectHooks, deathHooks, loginHooks, transcripts, groundItems, spawned, logoutHooks, quest };
 }
 
 function emit(h, name, event) {
@@ -201,7 +220,11 @@ function object(h, player, objectId, option) {
 }
 
 function death(h, player, npcId) {
-  const event = { npcId, killer: player, npc: { getId: () => npcId }, damagers: [player], location: player.getLocation() };
+  const source=new NPC(7621,player.getLocation().clone());source.isRegistered=()=>true;
+  const threat={player,npc:source,npcId:7621,text:"Ha, you really think you stand a chance? I'll crush you."};
+  emit(h,'npc-dialogue:line',threat);threat.after?.();
+  const npc=h.spawned.at(-1);
+  const event = { npcId: npc.getContentId(player), killer: player, npc, damagers: [player], location: player.getLocation() };
   for (const handler of h.deathHooks) handler(event);
   return event;
 }
@@ -443,15 +466,125 @@ test('post-quest Bolren recovery only awards the amulet on the canonical loss br
     'a full bag leaves one recoverable amulet across repeated receipt nodes');
 });
 
-test('Elkoy travel options move the player between the entrance and the centre', () => {
+test('Elkoy guide-in stops at the inner maze railing approach', () => {
   const h = harness();
   const p = makePlayer();
   h.quest.setStage(p, 1);
   p.setLocation(2504, 3191, 0);
   choose(h, p, ELKOY_OUTSIDE, 'Yes please.');
-  assert.equal(p.getLocation().x, 2541);
-  assert.equal(p.getLocation().y, 3170);
+  assert.equal(p.getLocation().x, 2515);
+  assert.equal(p.getLocation().y, 3159);
   choose(h, p, ELKOY_OUTSIDE, 'Can you show me out of the village?');
   assert.equal(p.getLocation().x, 2504);
   assert.equal(p.getLocation().y, 3191);
+});
+
+
+test('guide-in requires the normal cached Loose Railing shortcut before walking to Bolren', () => {
+  const {ObjectDefinition}=require('../dist/game/definition/ObjectDefinition');
+  const {RegionManager:R}=require('../dist/game/collision/RegionManager');
+  const {MapObjects:M}=require('../dist/game/entity/impl/object/MapObjects');
+  const {MovementQueue}=require('../dist/game/model/movement/MovementQueue');
+  const {RsmodRouteFinding}=require('../dist/game/model/movement/path/RsmodRouteFinding');
+  ObjectDefinition.init();R.init();R.loadMapFiles(2515,3161);
+  const h=harness(),p=makePlayer();h.quest.setStage(p,6);p.setLocation(2504,3191,0);
+  choose(h,p,ELKOY_OUTSIDE,'Yes please.');
+  const route=(x,y,dx,dy)=>new RsmodRouteFinding(R.getClipping.bind(R)).findRoute({level:0,
+    srcX:x,srcY:y,srcSize:1,destX:dx,destY:dy,destWidth:1,destLength:1,
+    locShape:-1,moveNear:false,privateArea:null});
+  assert.equal(route(2515,3159,2541,3164).success,false,'guide stays outside the village fence');
+  assert.equal(route(2515,3159,2515,3160).success,true);
+  const object=(M.mapObjects.get(M.getHash(2515,3161,0))??[]).find(o=>o.getId()===2186);
+  assert.ok(object);assert.equal(ObjectDefinition.forId(2186).getActions()[0],'Squeeze-through');
+  const rf=new RsmodRouteFinding(R.getClipping.bind(R));
+  const mq=new MovementQueue({isPlayer:()=>false,isNpc:()=>true,getLocation:()=>p.getLocation()});
+  const spec=mq.buildObjectRouteSpec(object);
+  assert.equal(rf.reachedAbsolute({level:0,srcX:2515,srcY:3160,srcSize:1,
+    destX:2515,destY:3161,destWidth:spec.reachWidth,destLength:spec.reachLength,
+    locAngle:spec.reachAngle,locShape:spec.reachShape,blockAccessFlags:spec.reachBlockAccessFlags,privateArea:null}),true);
+  p.setLocation(2515,3160,0);
+  let force=null;const tasks=[];let click;
+  Object.assign(p,{ getHitpoints:()=>99, getForceMovement:()=>force,setForceMovement:value=>{force=value;},
+    setSkillAnimation:noop,getUpdateFlag:()=>({flag:noop}),performAnimation:noop,
+    getMovementQueue:()=>({reset:noop,setBlockMovement:noop}),
+    getSkillManager:()=>({getCurrentLevel:()=>99,getMaxLevel:()=>99,addExperiences:noop}) });
+  require('../plugins/skills/Agility.plugin').register(new Proxy({core,
+    getTaskManager:()=>({submit(task){task.setRunning(true);if(task.isImmediate())task.execute();tasks.push(task);}}),
+    getItemOnGroundManager:()=>({}),onObjectFirstClick:(ids,handler)=>{if(ids.includes(2186))click=handler;},
+  },{get:(t,k)=>t[k]??noop}));
+  assert.equal(click({player:p,object,objectId:2186,clickType:1,location:{x:2515,y:3161,z:0}}),true);
+  for(let tick=0;tick<6;tick++)for(const task of tasks)if(task.isRunning())task.tick();
+  assert.deepEqual([p.getLocation().getX(),p.getLocation().getY()],[2515,3161]);
+  assert.equal(route(2515,3161,2541,3164).success,true,'after normal squeeze the king is reachable');
+});
+
+
+test('canonical warlord threat creates an owned full-health attack form and real death task grants earned orbs', () => {
+  const {NPCDeathTask}=require('../dist/game/task/impl/NPCDeathTask');
+  const {CacheDefinitions}=require('../dist/game/cache/CacheDefinitions');
+  const h=harness(),p=makePlayer(),other=makePlayer();h.quest.setStage(p,7);h.quest.setStage(other,7);
+  const source=new NPC(4971,new core.Location(2457,3302,0));source.isRegistered=()=>true;
+  assert.equal(CacheDefinitions.getNpc(4971).transformVarbit,3460);
+  assert.equal(source.getCurrentDefinition(p).getId(),7621);
+  assert.equal(source.getCurrentDefinition(p).isAttackable(),false);
+  const threat={player:p,npc:source,npcId:7621,text:"Ha, you really think you stand a chance? I'll crush you."};
+  emit(h,'npc-dialogue:line',threat);
+  assert.equal(h.spawned.length,0,'closing threat before continuing does not start a fight');
+  threat.after();const fighter=h.spawned.at(-1);
+  assert.equal(CacheDefinitions.getVarbitId('khazard_warlord_fighting'),3460);
+  assert.equal(p.varbits.get(3460),1);
+  assert.equal(source.getCurrentDefinition(p),undefined,'talk parent is hidden for its encounter owner');
+  assert.notEqual(source.getContentId(p),7621,'hidden parent cannot resolve conversational content');
+  assert.equal(fighter.getOwner(),p);assert.equal(fighter.getContentId(p),7622);
+  assert.equal(fighter.getCurrentDefinition(p).isAttackable(),true);
+  assert.ok(fighter.getCurrentDefinition(p).getActions().some(a=>a?.toLowerCase()==='attack'));
+  assert.equal(fighter.getHitpoints(),NpcDefinition.forId(7622).getHitpoints());
+  assert.ok(fighter.getHitpoints()>10,"not the conversational form default health");
+  assert.equal(fighter.getCombat().getTarget(),p);
+  assert.equal(source.getCurrentDefinition(other).getId(),7621,'shared NPC stays conversational for others');
+  threat.after();assert.equal(h.spawned.length,1,'repeat continuation cannot duplicate encounter');
+  for(const handler of h.deathHooks)handler({npc:source,npcId:7622,killer:p});
+  assert.equal(h.quest.getStage(p),7,'unrelated same-ID death cannot advance');
+  fighter.getCombat().addDamage(p,1);
+  const hooks=PluginManager.npcDeathHooks;const depth=hooks.length;
+  for(const handler of h.deathHooks)hooks.push({pluginName:'q117-real-death',handler});
+  try {
+    const task=new NPCDeathTask(fighter);task.execute();task.execute();
+    assert.equal(h.quest.getStage(p),8);assert.equal(p.getInventory().getAmount(I.ORBS_OF_PROTECTION),1);
+    assert.equal(h.quest.getStage(other),7);
+    assert.equal(p.varbits.get(3460),0);
+    assert.equal(source.getCurrentDefinition(p).getId(),7621);
+  } finally { hooks.length=depth; }
+});
+
+test('warlord owned combat cancels on logout and can retry without progress grants', () => {
+  const h=harness(),p=makePlayer();h.quest.setStage(p,7);
+  const source=new NPC(7621,new core.Location(2457,3302,0));source.isRegistered=()=>true;
+  const start=()=>{const e={player:p,npc:source,npcId:7621,text:"Ha, you really think you stand a chance? I'll crush you."};emit(h,'npc-dialogue:line',e);e.after();};
+  start();const first=h.spawned.at(-1);h.logoutHooks.forEach(fn=>fn({player:p}));
+  assert.equal(first.removed,true);assert.equal(h.quest.getStage(p),7);
+  assert.equal(p.varbits.get(3460),0);
+  assert.equal(p.getInventory().getAmount(I.ORBS_OF_PROTECTION),0);
+  start();assert.notEqual(h.spawned.at(-1),first);assert.equal(h.spawned.at(-1).getCurrentDefinition(p).isAttackable(),true);
+});
+
+
+test('warlord fighting visibility replays actual encounter and clears orphan state without touching siblings', () => {
+  const h=harness(),p=makePlayer();h.quest.setStage(p,7);
+  const source=new NPC(4971,new core.Location(2457,3302,0));source.isRegistered=()=>true;
+  const d=CacheDefinitions.getVarbit(3460), mask=(2**(d.endBit-d.startBit+1)-1)<<d.startBit;
+  const siblings=0x5a5a5a5a & ~mask;
+  p.configs.set(d.baseVar,siblings);p.varbits.set(3460,1);
+  h.loginHooks.forEach(fn=>fn({player:p}));
+  assert.equal(p.varbits.get(3460),0,'login without an actor clears orphan hiding');
+  const e={player:p,npc:source,npcId:7621,text:"Ha, you really think you stand a chance? I'll crush you."};
+  emit(h,'npc-dialogue:line',e);e.after();
+  p.varbits.set(3460,0);p.configs.set(d.baseVar,siblings);
+  emit(h,'player:bootstrap-complete',{player:p});
+  assert.equal(p.varbits.get(3460),1);assert.equal(source.getCurrentDefinition(p),undefined);
+  assert.equal(p.configs.get(d.baseVar)&~mask,siblings);
+  h.logoutHooks.forEach(fn=>fn({player:p}));
+  p.varbits.set(3460,1);emit(h,'player:bootstrap-complete',{player:p});
+  assert.equal(p.varbits.get(3460),0);assert.equal(source.getCurrentDefinition(p).getId(),7621);
+  assert.equal(p.configs.get(d.baseVar)&~mask,siblings);
 });
