@@ -53,6 +53,10 @@ function buildMcpServer(core) {
   require("./mcp/Session.AgentMcp")(ctx);
   require("./mcp/World.AgentMcp")(ctx);
   require("./mcp/Dialogue.AgentMcp")(ctx);
+  require("./mcp/Edit.AgentMcp")(ctx);
+  require("./mcp/EditBuild.AgentMcp")(ctx);
+  require("./mcp/EditNpcs.AgentMcp")(ctx);
+  require("./mcp/EditTerrain.AgentMcp")(ctx);
   require("./mcp/Bank.AgentMcp")(ctx);
   require("./mcp/Shop.AgentMcp")(ctx);
   require("./mcp/Social.AgentMcp")(ctx);
