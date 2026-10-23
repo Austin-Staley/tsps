@@ -314,3 +314,47 @@ test("despawned ECS indices cannot inherit previous poses or late animated callb
         assert.notEqual(f.queue.getFallbackKey([1, 1, 3], 7), oldKey);
     } finally { f.queue.dispose(); }
 });
+
+test("exact resident GPU poses become owned fallbacks and delayed replies cannot replace a newer displayed pose", async t => {
+    const f = fixture(), resident = new Set<string>();
+    const queue = new AsyncNpcPoseCache(f.loader, f.pool, key => resident.has(key));
+    let now = 100;
+    t.mock.method(performance, "now", () => now);
+    try {
+        const first = queue.getKey([1, 1, 0], 7)!;
+        resident.add(first);
+        queue.getKey([1, 1, 0], 7);
+        now += 10;
+        assert.equal(queue.get([1, 1, 1], 7), undefined, "the CPU cache can be empty while a usable GPU pose remains resident");
+        assert.equal(queue.getFallbackKey([1, 1, 1], 7), first);
+        await turn();
+        assert.equal(f.calls[0].input.request[1], 1, "a resident GPU fallback must not trigger an unnecessary base build");
+        assert.equal(f.calls[0].input.request[2], 1);
+        now += 10;
+        const latest = queue.getKey([1, 1, 3], 7)!;
+        resident.add(latest);
+        queue.getKey([1, 1, 3], 7);
+        f.calls[0].resolve(f.geometry(f.calls[0].input)); await turn();
+        assert.equal(queue.getFallbackKey([1, 1, 2], 7), latest,
+            "a late frame1 completion cannot overwrite the more recently displayed resident frame3");
+        const base = queue.getKey([1, -1, 0], 7)!;
+        resident.add(base);
+        queue.getKey([1, -1, 0], 7);
+        resident.delete(latest);
+        assert.equal(queue.getFallbackKey([1, 1, 2], 7), base,
+            "an evicted previous pose must fall through to a still-resident base instead of making the NPC disappear");
+    } finally { queue.dispose(); f.queue.dispose(); }
+});
+
+test("missing animation config still schedules and displays an available base without synchronous baking", async () => {
+    const f = fixture();
+    try {
+        (f.loader as any).seqTypeLoader.load = () => { throw Error("Sequence config still downloading"); };
+        assert.equal(f.queue.get([1, 1, 0], 7), undefined);
+        await turn();
+        assert.equal(f.calls[0].input.request[1], -1);
+        const base = f.geometry(f.calls[0].input);
+        f.calls[0].resolve(base); await turn();
+        assert.equal(f.queue.get([1, 1, 0], 7), base);
+    } finally { f.queue.dispose(); }
+});

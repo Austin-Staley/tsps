@@ -293,7 +293,7 @@ export class DynamicNpcAnimLoader {
         interpolation?: ActorInterpolation,
     ) {
         this.getContextKey();
-        if (!this.isReady()) {
+        if (!this.isReady() || seqId < 0) {
             return undefined;
         }
 

@@ -4,7 +4,7 @@ import { DynamicNpcAnimLoader, type DynamicNpcFrameGeometry, type NpcFrameReques
 
 type PoseRequest = ReturnType<DynamicNpcAnimLoader["getAsyncPoseRequest"]>;
 type Job = { input: NpcPoseInput; priority: number; touched: number; created: number; owners: Set<number> };
-type ActorRequest = { key: string; appearance: string; sequence: number; overlay: number; waitingSince: number };
+type ActorRequest = { key: string; appearance: string; sequence: number; overlay: number; waitingSince: number; lastExactAt: number };
 
 /** Bounded current-first CPU fallback. No model lighting, animation or geometry packing runs here. */
 export class AsyncNpcPoseCache {
@@ -40,7 +40,14 @@ export class AsyncNpcPoseCache {
 
     private resolve(request: NpcFrameRequest): PoseRequest {
         try { return this.loader.getAsyncPoseRequest(...request); }
-        catch { return undefined; } // Sparse configuration data queues a retry through JS5.
+        catch {
+            // Missing animation configuration must not hide an otherwise ready base model.
+            if (request[1] >= 0) {
+                try { return this.loader.getAsyncPoseRequest(request[0], -1, 0); }
+                catch {}
+            }
+            return undefined;
+        }
     }
 
     getKey(request: NpcFrameRequest, actorIdentity?: number): string | undefined {
@@ -52,7 +59,8 @@ export class AsyncNpcPoseCache {
         const key = pose ? this.key(pose.key, pose.appearance) : undefined;
         if (key && actorIdentity !== undefined && this.gpuResident?.(key)) {
             const actor = this.actorRequests.get(actorIdentity);
-            if (actor) actor.waitingSince = performance.now();
+            if (actor) actor.lastExactAt = actor.waitingSince = performance.now();
+            this.remember(this.fallbackIdentity(pose!, actorIdentity), key);
         }
         return key;
     }
@@ -63,9 +71,10 @@ export class AsyncNpcPoseCache {
         const pose = this.resolve(request);
         this.syncContext();
         if (!pose) return undefined;
-        const previous = this.previous.get(this.fallbackIdentity(pose, actorIdentity)) ??
-            this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
-        if (previous) return previous;
+        const previous = this.previous.get(this.fallbackIdentity(pose, actorIdentity));
+        if (previous && (!this.gpuResident || this.gpuResident(previous))) return previous;
+        const ownedBase = this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
+        if (ownedBase && (!this.gpuResident || this.gpuResident(ownedBase))) return ownedBase;
         const base = this.resolve([pose.request[0], -1, 0]);
         return base ? this.key(base.key, base.appearance) : undefined;
     }
@@ -84,7 +93,7 @@ export class AsyncNpcPoseCache {
         const cached = this.loader.getCachedGeometry(key);
         if (cached) {
             const actor = actorIdentity === undefined ? undefined : this.actorRequests.get(actorIdentity);
-            if (actor) actor.waitingSince = performance.now();
+            if (actor) actor.lastExactAt = actor.waitingSince = performance.now();
             this.stats.displayedFrame = cached.frameId;
             this.stats.poseAgeMs = 0;
             this.remember(fallbackIdentity, key);
@@ -101,7 +110,7 @@ export class AsyncNpcPoseCache {
             this.stats.poseAgeMs = performance.now() - (this.requestedAt.get(fallback) ?? performance.now());
             this.stats.maxPoseAgeMs = Math.max(this.stats.maxPoseAgeMs, this.stats.poseAgeMs);
         } else this.stats.absent++;
-        if (!fallback && pose.request[1] >= 0) {
+        if (!fallback && !(previous && this.gpuResident?.(previous)) && pose.request[1] >= 0) {
             if (base) this.enqueue(base, -1, actorIdentity);
         }
         this.enqueue(pose, 0, actorIdentity);
@@ -118,7 +127,8 @@ export class AsyncNpcPoseCache {
             }
             this.actorRequests.delete(actorIdentity);
             this.actorRequests.set(actorIdentity, { key, appearance: pose.appearance, sequence: pose.request[1],
-                overlay: pose.request[3] ?? -1, waitingSince: previous?.waitingSince ?? performance.now() });
+                overlay: pose.request[3] ?? -1, waitingSince: previous?.waitingSince ?? performance.now(),
+                lastExactAt: previous?.lastExactAt ?? -Infinity });
             if (this.actorRequests.size > 256) this.actorRequests.delete(this.actorRequests.keys().next().value!);
         }
     }
@@ -189,6 +199,7 @@ export class AsyncNpcPoseCache {
                         const current = this.actorRequests.get(owner);
                         if (!current || current.appearance !== job.input.appearance ||
                             (job.input.request[1] >= 0 && (current.sequence !== job.input.request[1] || current.overlay !== (job.input.request[3] ?? -1)))) continue;
+                        if (current.key !== key && job.created <= current.lastExactAt) continue;
                         const identity = `${owner}:${current.appearance}:${current.sequence}:${current.overlay}`;
                         if (job.input.request[1] < 0) this.remember(`${owner}:${current.appearance}:base`, result.key);
                         if (job.input.request[1] >= 0 || !this.previous.has(identity)) this.remember(identity, result.key);
