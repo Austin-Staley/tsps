@@ -144,6 +144,15 @@ test("interrupted or stale NPC dialogue cannot advance a banked/dropped clue", (
   assert.equal(f.items[0].getId(), 23245);
 });
 
+test("each map row opens the map drawn for its dig spot", () => {
+  // Matched against the OSRS Wiki map clue images; the cache does not link a row to its map.
+  const C = core.CacheDefinitions, maps = Runtime.data().steps.filter(s => s.kind === "map");
+  const expected = { 0: "trail_map01", 1: "trail_map02", 2: "trail_map03", 3: "trail_map06", 4: "trail_map11" };
+  assert.deepEqual(Object.fromEntries(maps.map(s => [s.key.match(/_(\d+)$/)[1], s.interfaceId])),
+    Object.fromEntries(Object.entries(expected).map(([row, name]) => [row, C.getInterfaceId(name)])));
+  assert.deepEqual(["trail_map02", "trail_map03", "trail_map06", "trail_map11"].map(name => C.getInterfaceId(name)), [347, 348, 351, 356]);
+});
+
 test("all five maps show their cache map and require the exact tile and plane", () => {
   const f = fixture();
   f.items[27] = new core.Item(core.ItemIdentifiers.SPADE, 1);
