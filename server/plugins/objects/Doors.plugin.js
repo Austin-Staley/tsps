@@ -1091,14 +1091,6 @@ function routeWallDoor(event) {
   const name = event.definition?.getName?.() ?? "";
   if (event.object?.getType?.() !== 0 ||
     (!DOOR_NAMES.has(name) && !/\b(?:doors?|doorway|gates?)\b/i.test(name))) return;
-  const source = event.sourceLocation;
-  const target = event.object.getLocation();
-  if (source && source.z === target.getZ() &&
-    Math.abs(source.x - target.getX()) + Math.abs(source.y - target.getY()) === 1) {
-    // A clicked wall door blocks its own approach edge; an already adjacent click needs no path.
-    event.destination = { x: source.x, y: source.y, z: source.z };
-    return;
-  }
   // A straight wall door is used across its face, never from either end of the wall.
   event.blockAccessFlags = (event.blockAccessFlags ?? 0) | 0x5;
 }

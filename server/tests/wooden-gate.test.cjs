@@ -131,11 +131,10 @@ test('shared wall-door reach masks cover every operation and preserve other obje
   const h = buildHarness();
   try {
     assert.equal(h.routes.length, 1, 'the shared reach hook is installed on startup');
-    const route = ({ name = 'Door', shape = 0, face = 0, clickType = 1, blockAccessFlags = 0,
-      sourceLocation = { x: 104, y: 97, z: 0 }, destination = null } = {}) => {
+    const route = ({ name = 'Door', shape = 0, face = 0, clickType = 1, blockAccessFlags = 0, destination = null } = {}) => {
       const event = {
         object: new GameObject(30112, new Location(100, 100, 0), shape, face, null),
-        sourceLocation, clickType, blockAccessFlags, destination,
+        sourceLocation: { x: 104, y: 97, z: 0 }, clickType, blockAccessFlags, destination,
         definition: { getName: () => name, getInteractions: () => ['Open', 'Close', 'Pick-lock'] },
       };
       h.routes[0](event);
@@ -147,15 +146,6 @@ test('shared wall-door reach masks cover every operation and preserve other obje
         assert.equal(event.blockAccessFlags, 0x5, `${option} uses the same local face mask at rotation ${face}`);
         assert.equal(event.destination, null, 'the shared route finder chooses either usable face tile');
       }
-    }
-    const adjacentClick = route({ sourceLocation: { x: 100, y: 99, z: 0 } });
-    assert.deepEqual(adjacentClick.destination, { x: 100, y: 99, z: 0 },
-      'a door clicked from its adjacent tile executes there instead of routing into its wall edge');
-    assert.equal(adjacentClick.blockAccessFlags, 0, 'an adjacent click needs no wall-side path mask');
-    for (const sourceLocation of [{ x: 101, y: 99, z: 0 }, { x: 100, y: 99, z: 1 }]) {
-      const invalidApproach = route({ sourceLocation });
-      assert.equal(invalidApproach.destination, null, 'diagonal and wrong-plane clicks do not use the adjacent-tile shortcut');
-      assert.equal(invalidApproach.blockAccessFlags, 0x5, 'nonadjacent clicks retain ordinary wall-door routing');
     }
     for (const name of ['Door', 'Doors', 'Large door', 'Castle door', 'Cell Door', 'Glass door',
       'Doorway', 'Wall', 'Ardougne Wall Door', 'Oak door', 'Heavy door', 'Tomb Door',
@@ -174,48 +164,25 @@ test('shared wall-door reach masks cover every operation and preserve other obje
   } finally { h.restore(); }
 });
 
-test('real Ardougne 1535 door adjacent click still reaches the shared quest lock hook', async () => {
+test('real Ardougne wall doors retain collision checks at their ends', async () => {
   await initializeMapCollisionOnce();
-  const location = new Location(2574, 3285, 0);
-  const base = MapObjects.get(1535, location, null);
-  assert.ok(base?.isMapOriginal(), 'the fixture is the real closed map door at the blocked native approach');
-  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
-  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
-  const player = {
-    getPrivateArea: () => null, getRights: () => 0,
-    getLocation: () => new Location(2574, 3284, 0),
-    isPlayer: () => true, getAsPlayer: () => player,
-  };
-  const routeEvent = {
-    object: base,
-    definition: { id: 1535, getName: () => 'Door' },
-    sourceLocation: { x: 2574, y: 3284, z: 0 },
-    clickType: 1,
-    blockAccessFlags: 0,
-    destination: null,
-  };
-  let toggleRequest;
-  const { PluginManager } = require('../dist/plugins/PluginManager');
-  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
-  const previousRouteHooks = PluginManager.objectRouteHooks.slice();
-  h.setDoorToggleHandler((request) => {
-    toggleRequest = request;
-    request.handled = true;
-  });
+  const door = MapObjects.get(1535, new Location(2579, 3285, 0), null);
+  assert.equal(door.getFace(), 2);
+  const h = buildHarness({ realMapObjects: true });
+  const finder = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
   try {
-    h.routes[0](routeEvent);
-    assert.deepEqual(routeEvent.destination, { x: 2574, y: 3284, z: 0 });
-    PluginManager.objectRouteHooks.length = 0;
-    PluginManager.createApi('AdjacentDoorRouteTest').onObjectRoute(h.routes[0]);
-    new MovementQueue(player).walkToObject(base, { execute: () => h.handlers.get('Door').Open({
-      player, object: base, objectId: 1535, definition: definitions.get(1535), location,
-    }) }, 1);
-    assert.equal(toggleRequest?.objectId, 1535, 'the ordinary door action still emits door:toggle for quest lock handlers');
-    assert.equal(toggleRequest?.handled, true, 'a closed quest gate can still reject the opened-door action');
-  } finally {
-    PluginManager.objectRouteHooks.splice(0, PluginManager.objectRouteHooks.length, ...previousRouteHooks);
-    h.restore();
-  }
+    const request = { object: door, definition: { getName: () => 'Door' },
+      sourceLocation: { x: 2579, y: 3284, z: 0 }, clickType: 1, destination: null };
+    h.routes[0](request);
+    assert.equal(request.destination, null, 'being adjacent cannot bypass another wall');
+    const reachable = (x, y) => finder.reachedAbsolute({
+      level: 0, srcX: x, srcY: y, srcSize: 1, destX: 2579, destY: 3285,
+      destWidth: 1, destLength: 1, locAngle: door.getFace(), locShape: door.getType(),
+      blockAccessFlags: request.blockAccessFlags, privateArea: null,
+    });
+    assert.equal(reachable(2579, 3284), false, 'the south tile is separated by the castle wall');
+    assert.equal(reachable(2580, 3285), true, 'the actual east door face remains usable');
+  } finally { h.restore(); }
 });
 
 test('base-map doors send private removals before spawns and keep identical instances independent', async () => {
