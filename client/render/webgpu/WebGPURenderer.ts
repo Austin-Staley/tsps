@@ -23,7 +23,7 @@ import { Scene } from "../../rs/scene/Scene";
 import type { MinimapIcon } from "../loader/SdMapData";
 import { SdMapData } from "../loader/SdMapData";
 import { SdMapDataLoader } from "../loader/SdMapDataLoader";
-import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
+import { SdMapLoaderInput, snapshotMapInput } from "../loader/SdMapLoaderInput";
 import type { WorldEntityAnimator } from "../WorldEntityAnimator";
 import { pickSeaPoint, projectDeckToWorld, updateWorldEntityMotion } from "../render/worldEntityMotion";
 import { getServerTickPhaseNow } from "../../network/serverConnection/timing";
@@ -345,8 +345,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const epoch = this.mapLoadEpoch;
         this.locUpdates.applyGamemode();
         const locVersion = this.locUpdates.version(mapX, mapY);
-        const input: SdMapLoaderInput = {
+        const input: SdMapLoaderInput = snapshotMapInput({
             persistentCache: isLowEndDevice,
+            minimapLevel: this.getPlayerRawPlane(),
             mapX,
             mapY,
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, Scene.MAX_LEVELS - 1)),
@@ -362,7 +363,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             extraLocs: this.getExtraLocs(mapX, mapY),
             doorOnly: partial === "door",
             locOnly: partial === "loc",
-        };
+        });
         try {
             const mapData = await this.loadSceneData(input);
             if (epoch !== this.mapLoadEpoch || this.instanceActive) return;
@@ -374,6 +375,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 this.mapManager.addInvalidMap(mapX, mapY);
                 return;
             }
+            mapData.minimapInput = input;
             this.mapsToLoad.push({ mapData, streamGeneration, locVersion });
         } catch (error) {
             if (epoch !== this.mapLoadEpoch || this.instanceActive) return;

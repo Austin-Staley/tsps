@@ -22,7 +22,7 @@ import { LocEntity } from "../../rs/scene/entity/LocEntity";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
 import { INVALID_HSL_COLOR, hslToRgb } from "../../rs/util/ColorUtil";
 import { getBridgeLinkedBelow, isBridgeSurfaceTile } from "../../game/scene/BridgeTiles";
-import { loadMinimapBlob } from "../../game/worker/MinimapData";
+import { loadMinimapBlob, type MinimapData } from "../../game/worker/MinimapData";
 import { RenderDataLoader, RenderDataResult } from "../../game/worker/RenderDataLoader";
 import { WorkerState } from "../../game/worker/RenderDataWorker";
 import { AnimationFrames } from "../AnimationFrames";
@@ -1366,6 +1366,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         }
     }
 
+    async load(state: WorkerState, input: SdMapLoaderInput & { minimapOnly: true }): Promise<RenderDataResult<MinimapData | undefined>>;
+    async load(state: WorkerState, input: SdMapLoaderInput): Promise<RenderDataResult<SdMapData | undefined>>;
     async load(
         state: WorkerState,
         {
@@ -1380,6 +1382,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             minimizeDrawCalls,
             doorOnly = false,
             locOnly = false,
+            minimapLevel,
+            minimapOnly = false,
             loadedTextureIds,
             locOverrides,
             locSpawns,
@@ -1390,10 +1394,9 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             extraNpcs: extraNpcsInput,
             overrideRenderPos,
         }: SdMapLoaderInput,
-    ): Promise<RenderDataResult<SdMapData | undefined>> {
+    ): Promise<RenderDataResult<SdMapData | MinimapData | undefined>> {
         if (mapProfileEnabled) console.time(`load map ${mapX},${mapY}`);
         const sparseMissesBefore = state.js5?.store.missCount;
-        this.init();
         state.sceneBuilder.mapFileLoader.setRegionReplacements(mapRegionReplacements);
 
         const locTypeLoader = state.locTypeLoader;
@@ -1405,14 +1408,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         const npcModelLoader = state.npcModelLoader;
 
         const varManager = state.varManager;
-
-        let textureIds: number[] = [];
-        const textureIdIndexMap = new Map<number, number>();
-        textureIds = textureLoader.getTextureIds().filter((id) => textureLoader.isSd(id));
-        textureIds = textureIds.slice(0, 2047);
-        for (let i = 0; i < textureIds.length; i++) {
-            textureIdIndexMap.set(textureIds[i], i + 1);
-        }
 
         const borderSize = 6;
 
@@ -1601,7 +1596,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         if (mapProfileEnabled) console.time(`build scene ${mapX},${mapY}`);
         let scene: Scene;
-        const locLoadType = shouldLoadPartial ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
+        const locLoadType = shouldLoadPartial || minimapOnly ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
         if (instanceInput) {
             scene = state.sceneBuilder.buildInstanceScene(
                 instanceInput.templateChunks,
@@ -1654,7 +1649,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             // Dynamic locs are added after SceneBuilder's normal lighting pass.
             // Light them before extracting render geometry so merge-normal locs
             // are converted from ModelData to Model.
-            scene.light(textureLoader, -50, -10, -50);
+            if (!minimapOnly) scene.light(textureLoader, -50, -10, -50);
         }
         if (mapProfileEnabled) console.timeEnd(`build scene ${mapX},${mapY}`);
         // Sparse model misses return undefined; wait before packing a scene we'll discard.
@@ -1662,6 +1657,23 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             if (mapProfileEnabled) console.timeEnd(`load map ${mapX},${mapY}`);
             return { data: undefined, transferables: [] };
         }
+
+        if (minimapOnly) {
+            const level = minimapLevel ?? -1;
+            if (!Number.isInteger(level) || level < 0 || level >= Scene.MAX_LEVELS) {
+                throw new Error("Invalid minimap floor");
+            }
+            const minimapBlobs: Blob[] = new Array(Scene.MAX_LEVELS);
+            minimapBlobs[level] = typeof OffscreenCanvas !== "undefined"
+                ? await loadMinimapBlob(state.minimapImageRenderer, scene, level, usedBorderSize)
+                : transparentPng1x1();
+            if (mapProfileEnabled) console.timeEnd(`load map ${mapX},${mapY}`);
+            return { data: { mapX, mapY, minimapBlobs }, transferables: [] };
+        }
+
+        this.init();
+        const textureIds = textureLoader.getTextureIds().filter((id) => textureLoader.isSd(id)).slice(0, 2047);
+        const textureIdIndexMap = new Map(textureIds.map((id, index) => [id, index + 1]));
 
         // Terrain does not change for LOC_ADD_CHANGE packets. Keep it in the
         // primary mesh and put mutable non-door locs in their own mesh.
@@ -2088,8 +2100,10 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         const minimapBlobs: Blob[] = shouldLoadPartial ? [] : new Array(Scene.MAX_LEVELS);
         if (!shouldLoadPartial) {
+            const levels = minimapLevel === undefined || isInstance || overrideRenderPos
+                ? [0, 1, 2, 3] : [Math.max(0, Math.min(Scene.MAX_LEVELS - 1, minimapLevel | 0))];
             if (typeof OffscreenCanvas !== "undefined") {
-                for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+                for (const level of levels) {
                     minimapBlobs[level] = await loadMinimapBlob(
                         state.minimapImageRenderer,
                         scene,
@@ -2099,7 +2113,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                 }
             } else {
                 const transparent = transparentPng1x1();
-                for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+                for (const level of levels) {
                     minimapBlobs[level] = transparent;
                 }
             }

@@ -15,7 +15,9 @@ import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
 import { multiLocVariants, multiLocVarps } from "../render/loc/MultiLocVarps";
-import { getMapSquareId } from "../rs/map/MapFileIndex";
+import { getMapPlaneId, getMapSquareId } from "../rs/map/MapFileIndex";
+import type { SdMapData } from "../render/loader/SdMapData";
+import type { SdMapLoaderInput } from "../render/loader/SdMapLoaderInput";
 
 /** Optional details of a LOC change (moves, rotations, shape changes). */
 export type LocChangeOptions = {
@@ -71,6 +73,43 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     mapManager: MapManager<T>;
     uiHidden: boolean = false;
     widgetsOverlay?: WidgetsOverlay;
+    private readonly minimapSources = new Map<number, SdMapLoaderInput>();
+    private readonly minimapRequests = new Map<number, { source: SdMapLoaderInput; retryAt: number }>();
+
+    registerMinimapSource(data: SdMapData): void {
+        const input = data.minimapInput;
+        if (!input || data.doorOnly || data.locOnly || input.instance || input.overrideRenderPos) return;
+        this.minimapSources.set(getMapSquareId(data.mapX, data.mapY), { ...input, loadedTextureIds: new Set() });
+        for (let level = 0; level < 4; level++) this.osrsClient.setMinimapImageUrl(data.mapX, data.mapY, undefined, level);
+    }
+
+    clearMinimapSources(): void {
+        this.minimapSources.clear();
+        this.minimapRequests.clear();
+    }
+
+    async requestMinimapImage(mapX: number, mapY: number, level: number): Promise<void> {
+        if (!Number.isInteger(level) || level < 0 || level >= 4) return;
+        const mapId = getMapSquareId(mapX, mapY);
+        const source = this.minimapSources.get(mapId);
+        if (!source) return;
+        const key = getMapPlaneId(mapX, mapY, level);
+        const pending = this.minimapRequests.get(key);
+        if (pending?.source === source && pending.retryAt > Date.now()) return;
+        const request = { source, retryAt: Infinity };
+        this.minimapRequests.set(key, request);
+        try {
+            const data = await this.osrsClient.workerPool.queueMinimap(source, level);
+            const blob = data?.minimapBlobs[level];
+            if (blob && this.minimapSources.get(mapId) === source) {
+                this.osrsClient.setMinimapImageUrl(mapX, mapY, URL.createObjectURL(blob), level);
+            }
+        } catch (error) {
+            console.warn(`[minimap] floor ${level} load failed for ${mapX},${mapY}`, error);
+        } finally {
+            if (this.minimapRequests.get(key) === request) request.retryAt = Date.now() + 1000;
+        }
+    }
 
     // OSRS camera shake slots (0:X, 1:Y, 2:Z, 3:Yaw, 4:Pitch).
     public readonly cameraShakeEnabled: boolean[] = [false, false, false, false, false];
@@ -210,6 +249,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         super();
         // Keep the number of queued map loads low to cap memory spikes
         this.mapManager = new MapManager(osrsClient.workerPool.size, this.queueLoadMap.bind(this));
+        this.mapManager.mapRemovedListeners.add((map) => {
+            this.minimapSources.delete(getMapSquareId(map.mapX, map.mapY));
+            for (let level = 0; level < 4; level++) this.minimapRequests.delete(getMapPlaneId(map.mapX, map.mapY, level));
+        });
     }
 
     protected override getEffectiveFpsLimit(): number {

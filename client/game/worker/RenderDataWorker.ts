@@ -60,12 +60,20 @@ import { squareNpcInstances } from "../../render/loader/SdMapDataLoader";
 import { Scene } from "../../rs/scene/Scene";
 import { RenderDataLoader, renderDataLoaderSerializer } from "./RenderDataLoader";
 import { runWithSparseRetry } from "./SparseRetry";
+import type { MinimapData } from "./MinimapData";
 
 registerSerializer(renderDataLoaderSerializer);
 
 const compressionPromise = Promise.all([Bzip2.initWasm(), Gzip.initWasm()]);
 const hasherPromise = Hasher.init();
 const npcGeometryLoader = new SdMapDataLoader();
+
+async function loadMinimapFloor(state: WorkerState, input: SdMapLoaderInput, level: number): Promise<MinimapData | undefined> {
+    const result = await runWithSparseRetry(state, () => npcGeometryLoader.load(state, {
+        ...input, minimapOnly: true, minimapLevel: level,
+    }));
+    return result.data;
+}
 
 export type WorkerState = {
     cache: LoadedCache;
@@ -369,6 +377,16 @@ const worker = {
             const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
             if (sdInput.mapProfileEnabled) console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
             if (hit && varsMatch) {
+                const level = sdInput.minimapLevel;
+                if (level !== undefined && !hit.data.minimapBlobs?.[level]) {
+                    try {
+                        const repaired = await loadMinimapFloor(workerState, sdInput, level);
+                        if (repaired?.minimapBlobs[level]) {
+                            hit.data.minimapBlobs ??= new Array(Scene.MAX_LEVELS);
+                            hit.data.minimapBlobs[level] = repaired.minimapBlobs[level];
+                        }
+                    } finally { clearCache(workerState); }
+                }
                 if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
                 dropLoadedTextures(hit.data, sdInput.loadedTextureIds);
                 return Transfer<D>(hit.data as D, []);
@@ -406,6 +424,12 @@ const worker = {
             return undefined;
         }
         return Transfer<D>(data, transferables);
+    },
+    async loadMinimap(input: SdMapLoaderInput, level: number): Promise<MinimapData | undefined> {
+        const state = await workerStatePromise;
+        if (!state) throw new Error("Worker not initialized");
+        try { return await loadMinimapFloor(state, input, level); }
+        finally { clearCache(state); }
     },
     async loadNpcGeometry(
         mapX: number,

@@ -110,3 +110,15 @@ export type SdMapLoaderInput = {
         y: number;
     };
 };
+
+/** Dynamic map state must match the input submitted to the geometry worker. */
+export function snapshotMapInput(input: SdMapLoaderInput): SdMapLoaderInput {
+    return {
+        ...input,
+        locOverrides: input.locOverrides && new Map([...input.locOverrides].map(([key, value]) => [key, { ...value }])),
+        locSpawns: input.locSpawns && new Map([...input.locSpawns].map(([key, value]) => [key, { ...value }])),
+        terrainOverrides: input.terrainOverrides && new Map([...input.terrainOverrides].map(([key, value]) => [key, { ...value }])),
+        mapRegionReplacements: input.mapRegionReplacements && new Map([...input.mapRegionReplacements].map(([key, value]) => [key, { ...value }])),
+        extraLocs: input.extraLocs?.map((loc) => ({ ...loc })),
+    };
+}

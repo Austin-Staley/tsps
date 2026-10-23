@@ -150,6 +150,7 @@ function loaderFixture() {
         osrsClient: { workerPool: { queueLoad: () => completion }, clientPlugins: { objectSettings: () => undefined } },
         locUpdates: { applyGamemode() {}, version: () => 0 },
         getExtraLocs: () => undefined,
+        getPlayerRawPlane: () => 0,
         loadSceneData: WebGPURenderer.prototype.loadSceneData,
     };
     return { renderer, resolve, reject, mapId, maps, leaveTarget: () => { target = false; } };

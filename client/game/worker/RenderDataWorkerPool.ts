@@ -10,6 +10,8 @@ import { NpcGeometryData } from "../../render/loader/NpcGeometryData";
 import type { NpcInstance } from "../../render/npc/NpcRenderTemplate";
 import { RenderDataLoader } from "./RenderDataLoader";
 import type { RenderDataWorker } from "./RenderDataWorker";
+import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
+import type { MinimapData } from "./MinimapData";
 
 type RenderDataWorkerThread = ModuleThread<RenderDataWorker>;
 
@@ -95,6 +97,10 @@ export class RenderDataWorkerPool {
                     renderBaseTile,
                 ) as ObservablePromise<NpcGeometryData>,
         );
+    }
+
+    queueMinimap(input: SdMapLoaderInput, level: number): QueuedTask<RenderDataWorkerThread, MinimapData | undefined> {
+        return this.pool.queue((worker) => worker.loadMinimap(input, level));
     }
 
     queueLoadTexture(

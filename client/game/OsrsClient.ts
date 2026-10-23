@@ -6221,11 +6221,13 @@ export class OsrsClient {
         const url = this.minimapImageUrls.get(mapId);
         if (url) {
             this.minimapImageAccess.set(mapId, performance.now());
+        } else {
+            void this.renderer?.requestMinimapImage(mapX, mapY, level);
         }
         return url;
     }
 
-    setMinimapImageUrl(mapX: number, mapY: number, url: string, level: number = 0): void {
+    setMinimapImageUrl(mapX: number, mapY: number, url: string | undefined, level: number = 0): void {
         const mapId = this.getMinimapImageKey(mapX, mapY, level);
         const old = this.minimapImageUrls.get(mapId);
         if (old) {
@@ -6233,12 +6235,14 @@ export class OsrsClient {
             this.minimapImageUrls.delete(mapId);
             this.minimapImageAccess.delete(mapId);
         }
+        if (!url) return;
         this.minimapImageUrls.set(mapId, url);
         this.minimapImageAccess.set(mapId, performance.now());
         this.pruneMinimapImageUrls();
     }
 
     clearMinimapImageUrls(): void {
+        this.renderer?.clearMinimapSources();
         for (const url of this.minimapImageUrls.values()) {
             this.releaseMinimapImageUrl(url);
         }
