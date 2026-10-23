@@ -6,7 +6,7 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Original 128: accepted natural main-route proofs
 
-Eight quests have accepted natural main-route completion evidence: **8 / 128 (6.25%)** (q003, q006, q008, q026, q041, q048, q063, q074). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Root acceptance artifacts are retained for q006, q026 and q048; their scoped limits remain in force.
+Nine quests have accepted natural main-route completion evidence: **9 / 128 (7.03%)** (q003, q006, q008, q026, q041, q048, q063, q074, q088). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Root acceptance artifacts are retained for q006, q026, q048 and q088; their scoped limits remain in force.
 
 ### q003 — The Ascent of Arceuus
 
@@ -50,6 +50,12 @@ Eight quests have accepted natural main-route completion evidence: **8 / 128 (6.
 - **Revision:** plugin/source = loaded = peer-reviewed `a529c99739ebd4f4eb238ac7867f62ee64bf555f4789bbb53738250fcf423523`; focused test `359f3365a3717682acbb6e030a4ea505ea120e8b154a37fc034e5229b4f6092b`.
 - **Natural route and result:** the accepted epoch-2 run started fresh at stage 0 and naturally completed the route. Cache quest row 97 uses varp 30 with completion value 80; live completion reached 80. It verified the full-inventory rune drop (eight law runes on the floor), normal logout/relogin interruption after rune handover, party completion, and pickup/reconciliation. QP +1 and Woodcutting quest XP +2000 (ordinary chopping XP is separately accounted); repeat/relog/save evidence showed no duplicate reward. Root accepted the bounded functional evidence.
 - **Limits/recheck:** a Wiki-marked later dialogue and visual overlay remain unchecked. The accepted run is scoped to this exact revision; it does not assert exact uncaptured presentation cadence. Evidence: `/tmp/tsps-728/native/jobs/q074-recovery.report.json`, `/tmp/tsps-728/root-reviews/q074-recovery.json`.
+
+### q088 — A Porcine of Interest
+
+- **Revision:** plugin/source = loaded = peer-reviewed `7c079b6a369bdb2fc6ebfa984570dc074f0b488daf636c5edb091534ac2c0694`; focused test `7633d98ea5dec96c05bbe7e9fb5b7a33651c15fb656dbc9f77fb3c4e6148fc4d`; root acceptance artifact `/tmp/tsps-728/native/evidence/q088-root-accepted-20261023.json`.
+- **Natural route and result:** the fresh-stage-0 route on `q728p404r1` continued from its saved epoch16 prefix in epoch17 and reached completion wire40. It gained 1 Quest Point, 1,000 Slayer XP, 5,000 coins and 30 Slayer points. The post-quest task dialogue did not add points twice. Completion and logout SQLite snapshots independently show QP 0→1 and Slayer points 0→30→30; normal relog preserved completion and rewards, and the account ended offline.
+- **Limits:** the optional Ned-shop rope was supplied as an ordinary declared item after that optional shop path failed. The optional helm-upgrade, full-bag and cancellation branches are not natively certified; there is no visual overlay proof. Foot wire30 and Sarah wire35 were corrected to match source without injecting progress. Evidence: `/tmp/tsps-728/native/jobs/q088-epoch17-completion.md` (SHA-256 `f2edb7bef4a6cd43ac6ece89e6ead49e341567a01f51c4c02f42ab0cd09313da`), `/tmp/tsps-728/native/jobs/q088-epoch17-completion.raw.jsonl` (SHA-256 `f3865c4ec8b0c06c14e6fb035ac13a82d6548ed59f1b340d11490cd5143841cc`), and `/tmp/tsps-728/native/evidence/q088-root-accepted-20261023.json`.
 
 ## Original 128: completion observations not yet accepted
 
@@ -212,7 +218,7 @@ plugins require checking the affected claims against the new loaded revisions.
 - Retain each historical result against its recorded source/test/loaded hashes. When a quest plugin changes, mark only claims depending on that plugin as requiring recheck; a changed unrelated plugin does not invalidate the whole ledger. Shared-core or data changes require targeted revalidation of affected routes/claims, not an automatic replay of every unchanged quest prefix.
 - Prefixes resumed across epochs remain one checkpoint-linked route with provenance. Supplemental routes, post-quest checks and retries never increment the whole-quest count.
 - `PASS` for a scoped contract means only that scope. Do not infer untested branches, overlay visibility, timing, full-bag behavior or recovery from a different branch.
-- The historical reconciliation inventory records four accepted natural main-route proofs before q063's epoch-8 acceptance. Root later accepted q006 and q026, then q048 in epoch16, bringing the accepted original-128 total to eight. The q129 tutorial result is additional and outside the original 128. See `/tmp/tsps-728/native/history-reconciliation.md` for the historical inventory cross-check.
+- The historical reconciliation inventory records four accepted natural main-route proofs before q063's epoch-8 acceptance. Root later accepted q006 and q026, then q048 in epoch16 and q088 in epoch17, bringing the accepted original-128 total to nine. The q129 tutorial result is additional and outside the original 128. See `/tmp/tsps-728/native/history-reconciliation.md` for the historical inventory cross-check.
 
 ### Epoch 14 shared item-on-NPC release and q006 handoff
 

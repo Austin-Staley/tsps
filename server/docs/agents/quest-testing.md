@@ -462,6 +462,9 @@ Repeated report-editing turns can take longer than the fix itself.
   }
   ```
   Re-verify on each login; a restart or relog can leave it off or on unexpectedly.
+  Record the command and acknowledgement as a declared combat aid. Such a route does not
+  certify unassisted damage balance. Disable immunity when a required mechanic needs the
+  player to take damage; still play the real encounter, phases and quest handoffs.
 - `set_npc_hitpoints` only lowers HP on a living, registered NPC in your private area/plane,
   within 32 tiles, after the real encounter is targetable. It never starts a fight and never
   changes quest state. Use it after the real entry/trigger, then land an ordinary hit through
