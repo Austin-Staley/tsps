@@ -128,6 +128,7 @@ function player() {
   const inventory = container(28);
   let manager;
   const packet = new Proxy({
+    getVarp(id) { return configs.get(id) ?? 0; },
     sendConfig(id, value) { configs.set(id, value); return packet; },
     sendVarbit(id, value) { varbits.set(id, value); return packet; },
     sendString() { return packet; },
@@ -285,7 +286,7 @@ test('EW1 yields the workbench bar to EW2 only while EW2 needs the crane claw', 
   const shield = player();
   h.quest.setStage(shield, 7);
   shield.inventory.adds(I.ELEMENTAL_METAL, 1);
-  shield.inventory.adds(I.BATTERED_BOOK, 1);
+  shield.inventory.adds(I.SLASHED_BOOK, 1);
   shield.inventory.adds(I.HAMMER, 1);
   const owned = h.itemOnObject(shield, I.ELEMENTAL_METAL, O.WORKBENCH_5);
   assert.equal(owned.handled, true);
