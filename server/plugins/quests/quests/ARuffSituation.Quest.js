@@ -252,6 +252,12 @@ module.exports = function registerARuffSituationQuest(api) {
     return request.complete === true;
   }
 
+  function questStage(player, key) {
+    const request = { player, key };
+    api.emitCustomEvent("quest:get-stage", request);
+    return Number(request.stage) || 0;
+  }
+
   function hasFollower(player) {
     const current = player.getAttribute?.("pets:current");
     return current?.isRegistered?.() === true;
@@ -707,6 +713,8 @@ module.exports = function registerARuffSituationQuest(api) {
   function talkGertrude(event) {
     const { player, npcId } = event;
     if (![GERTRUDE_NPC_ID, 7284].includes(npcId)) return false;
+    const gertrudesCatStage = questStage(player, GERTRUDES_CAT_KEY);
+    if (gertrudesCatStage > 0 && gertrudesCatStage < 6) return false;
     const stage = quest.getStage(player);
     if (stage !== STAGE_STARTED && stage !== STAGE_GERTRUDE) return false;
     startTranscript(
@@ -796,6 +804,13 @@ module.exports = function registerARuffSituationQuest(api) {
     }
     if (stage === STAGE_DOG) {
       startTranscript(api, player, npcId, PAGE, "at-the-dog-s-house-interacting-with-the-dog");
+      return;
+    }
+    // Closing the post-inspection conversation leaves the saved stage here; the
+    // dog interaction is the only way back to its final line, which starts the
+    // Cooks' Guild route.
+    if (stage === STAGE_INSPECTED) {
+      startTranscript(api, player, npcId, PAGE, "at-the-dog-s-house-after-inspecting-all-three-objects");
       return;
     }
     if (stage === STAGE_DEN) {
@@ -1055,7 +1070,10 @@ module.exports = function registerARuffSituationQuest(api) {
         return; // The transcript's end marker precedes this; finish on Chase's final line.
       default:
         if (event.text === "The stray dog barks in the direction the goblin ran off in.") setStage(player, STAGE_FIRST_PUPPY);
-        if (event.text === "The stray dog sniffs the air...") {
+        // This line also appears in the "which way did the goblins go?" reminder.
+        // Only the second-puppy conversation may advance the hunt; otherwise the
+        // reminder would skip the goblin trade.
+        if (event.text === "The stray dog sniffs the air..." && quest.getStage(player) === STAGE_SECOND_PUPPY) {
           event.handled = true; StatementDialogue.send(player, event.text, false);
           const key = {}; actionKeys.set(player, key);
           later(key, 3, () => { actionKeys.delete(player); setStage(player, STAGE_THIRD_SEARCH); beginRoute(player, "third"); player.getPacketSender().sendInterfaceRemoval(); });
