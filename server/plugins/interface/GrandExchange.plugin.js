@@ -427,14 +427,28 @@ function confirm(player, offer) {
 
 }
 
-function collect(player, action, slot = viewing.get(player)) {
+/**
+ * Script 9909's collection menu: a single noteable item offers Collect-item (1)
+ * and Collect-note (2); a stack offers Collect-notes (1) and Collect-items (2).
+ * A non-noteable item only has Collect (2) and Bank (3).
+ */
+function collectionOutputId(baseId, amount, action, forceNotes = false) {
+  const noteId = ItemDefinition.forId(baseId).getNoteId();
+  const noteable = noteId >= 0 && ItemDefinition.forId(noteId).isNoted();
+  if (!noteable || action === 3) return baseId;
+  if (forceNotes) return noteId;
+  if (action === 2) return amount === 1 ? noteId : baseId;
+  if (action === 1) return amount > 1 ? noteId : baseId;
+  return baseId;
+}
+
+function collect(player, action, slot = viewing.get(player), forceNotes = false) {
   const offer = completedOffers(player)[slot];
   if (!offer?.finished) return;
   const paid = payout(offer);
   const baseId = paid.coins ? COINS : ItemDefinition.forId(paid.itemId).unNote();
-  const noteId = ItemDefinition.forId(baseId).getNoteId();
-  const outputId = action === 1 && noteId >= 0 && ItemDefinition.forId(noteId).isNoted() ? noteId : baseId;
   const outputAmount = paid.amount;
+  const outputId = collectionOutputId(baseId, outputAmount, action, forceNotes);
   const inventory = player.getInventory();
   const destination = action === 3 ? player.getBank(Bank.getTabForItem(player, baseId)) : inventory;
   const result = action === 3 ? new Bank(player) : new Inventory(player);
@@ -491,7 +505,7 @@ function abort(player, slot = viewing.get(player)) {
 /** The Collect button (465:6, dynamic child 0): op 1 to the inventory (as notes), op 2 to the bank. */
 function collectAll(player, action) {
   const to = action === 2 ? 3 : 1;
-  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot);
+  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot, to === 1);
 }
 
 function openGrandExchange({ player }) {
@@ -575,7 +589,7 @@ function handleCollectionButton({ player, buttonId, slot, action }) {
   if (player.getInterfaceId() !== GE_COLLECT) return true;
   const child = buttonId & 0xffff;
   if ((child === 3 || child === 4) && action === 1) {
-    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index);
+    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index, child === 3);
   } else if (child >= 5 && child <= 12 && slot === 3 && action >= 1 && action <= 3) {
     collect(player, action, child - 5);
   }
@@ -665,6 +679,7 @@ module.exports = {
     price,
     sellPrice,
     changePrice,
+    collectionOutputId,
     fillDelayMs,
     remainingLimit,
     recordLimit,

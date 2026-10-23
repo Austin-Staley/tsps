@@ -10,6 +10,7 @@ const {
   price,
   sellPrice,
   changePrice,
+  collectionOutputId,
   fillDelayMs,
   remainingLimit,
   recordLimit,
@@ -30,6 +31,7 @@ function define(id, values = {}) {
     getName: () => `Item ${id}`,
     getGrandExchangeValue: () => 1,
     getGrandExchangeSellValue: () => 1,
+    getNoteId: () => -1,
     ...values,
   };
   definitions.set(id, definition);
@@ -42,6 +44,11 @@ const INVERTED = 1001;
 define(INVERTED, { getGrandExchangeValue: () => 67, getGrandExchangeSellValue: () => 18 });
 const NO_SELL_QUOTE = 1002;
 define(NO_SELL_QUOTE, { getGrandExchangeValue: () => 42, getGrandExchangeSellValue: undefined });
+const NOTEABLE = 1003;
+const NOTE = 1004;
+define(NOTEABLE, { getNoteId: () => NOTE });
+define(NOTE, { getNoteId: () => NOTEABLE, isNoted: () => true });
+const NO_NOTE = 1005;
 
 test('buy offers pay the high price and sell offers receive the low price', () => {
   assert.equal(price(INVERTED), 67);
@@ -49,6 +56,21 @@ test('buy offers pay the high price and sell offers receive the low price', () =
   assert.ok(price(INVERTED) > sellPrice(INVERTED));
   assert.ok(price(INVERTED) - sellPrice(INVERTED) > 0);
   assert.equal(sellPrice(NO_SELL_QUOTE), 42);
+});
+
+test('collection menus collect the item or its note they name', () => {
+  // A single noteable item: op 1 Collect-item, op 2 Collect-note.
+  assert.equal(collectionOutputId(NOTEABLE, 1, 1), NOTEABLE);
+  assert.equal(collectionOutputId(NOTEABLE, 1, 2), NOTE);
+  // A noteable stack: op 1 Collect-notes, op 2 Collect-items.
+  assert.equal(collectionOutputId(NOTEABLE, 5, 1), NOTE);
+  assert.equal(collectionOutputId(NOTEABLE, 5, 2), NOTEABLE);
+  // Bank always takes the base item, and Collect-all notes when it can.
+  assert.equal(collectionOutputId(NOTEABLE, 1, 3), NOTEABLE);
+  assert.equal(collectionOutputId(NOTEABLE, 1, 1, true), NOTE);
+  // Items without a noted form are never converted.
+  assert.equal(collectionOutputId(NO_NOTE, 1, 1), NO_NOTE);
+  assert.equal(collectionOutputId(NO_NOTE, 1, 2), NO_NOTE);
 });
 
 test('price controls step by one, five percent and the guide', () => {
