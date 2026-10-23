@@ -580,6 +580,7 @@ export class WorldResources {
 
         return new WorldResources({
             device,
+            canvasFormat,
             sceneData,
             sceneUniformBuffer,
             basePipelines: [createMainPipeline(false, "base"), createMainPipeline(true, "base")],
@@ -626,6 +627,7 @@ export class WorldResources {
     extensionActive = false;
     /** The world pass's MSAA sample count this frame (1 or 4), set by `selectExtension`. */
     sampleCount = 1;
+    readonly canvasFormat: GPUTextureFormat;
     /** The extension's group(1) layout and bind group; extended actor pipelines use these. */
     readonly extensionTexturesLayout?: GPUBindGroupLayout;
     readonly extensionTextureBindGroup?: GPUBindGroup;
@@ -658,6 +660,7 @@ export class WorldResources {
 
     private constructor(parts: {
         device: GPUDevice;
+        canvasFormat: GPUTextureFormat;
         sceneData: Float32Array;
         sceneUniformBuffer: GPUBuffer;
         basePipelines: [GPURenderPipeline, GPURenderPipeline];
@@ -681,6 +684,7 @@ export class WorldResources {
         loadedTextureIds: Set<number>;
     }) {
         this.device = parts.device;
+        this.canvasFormat = parts.canvasFormat;
         this.sceneData = parts.sceneData;
         this.sceneUniformBuffer = parts.sceneUniformBuffer;
         this.basePipelines = parts.basePipelines;

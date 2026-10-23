@@ -109,12 +109,48 @@ async function benchmark(settings) {
     });
     try {
         patch(GPURenderPassEncoder.prototype, "drawIndexed", (w, [indices, instances = 1]) => {
-            w.indexedDraws++; w.indices += indices * instances;
+            w.encodedIndexedDraws++; w.indexedDraws++; w.indices += indices * instances;
         });
         patch(GPURenderPassEncoder.prototype, "draw", (w, [vertices, instances = 1]) => {
             w.draws++; w.vertices += vertices * instances;
         });
         patch(GPURenderPassEncoder.prototype, "setPipeline", w => { w.pipelineBinds++; });
+        const bundleEncoders = new WeakMap(), bundles = new WeakMap();
+        const track = (object, name, run) => {
+            const original = object[name];
+            object[name] = function(...args) { return run.call(this, original, args); };
+            restore.push(() => { object[name] = original; });
+        };
+        track(GPURenderBundleEncoder.prototype, "drawIndexed", function(original, args) {
+            const counts = bundleEncoders.get(this) ?? { indexedDraws: 0, indices: 0 };
+            counts.indexedDraws++;
+            counts.indices += args[0] * (args[1] ?? 1);
+            bundleEncoders.set(this, counts);
+            if (work) work.encodedIndexedDraws++;
+            return original.apply(this, args);
+        });
+        track(GPURenderBundleEncoder.prototype, "finish", function(original, args) {
+            const bundle = original.apply(this, args);
+            bundles.set(bundle, bundleEncoders.get(this) ?? { indexedDraws: 0, indices: 0 });
+            if (work) work.bundleBuilds++;
+            return bundle;
+        });
+        patch(GPURenderPassEncoder.prototype, "executeBundles", (w, [list]) => {
+            for (const bundle of list) {
+                const counts = bundles.get(bundle);
+                if (!counts) throw new Error("Benchmark encountered a bundle recorded before its hooks");
+                w.indexedDraws += counts.indexedDraws;
+                w.indices += counts.indices;
+                w.bundleExecutions++;
+            }
+        });
+        patch(renderer.device, "createBuffer", (w, [descriptor]) => {
+            w.bufferCreates++; w.bufferAllocatedBytes += descriptor.size;
+        });
+        // Re-record pre-existing scenery bundles during warm-up so replayed draws are counted.
+        for (const map of [...renderer.mapManager.mapSquares.values(), renderer.editorOverlays?.preview?.square].filter(Boolean)) {
+            for (const batch of [...map.opaqueBatches, ...map.alphaBatches]) batch.bundles = undefined;
+        }
         patch(renderer.device.queue, "writeBuffer", (w, [, , data, offset = 0, size]) => {
             w.bufferWrites++;
             w.bufferBytes += size === undefined ? data.byteLength - offset * (data.BYTES_PER_ELEMENT ?? 1) : size * (data.BYTES_PER_ELEMENT ?? 1);
@@ -136,7 +172,8 @@ async function benchmark(settings) {
             let started;
             renderer.render = function(time, dt, resized) {
                 started ??= time;
-                if (time - started >= 1500 && !work) work = { indexedDraws: 0, draws: 0, indices: 0,
+                if (time - started >= 1500 && !work) work = { indexedDraws: 0, encodedIndexedDraws: 0, bundleExecutions: 0, bundleBuilds: 0,
+                    bufferCreates: 0, bufferAllocatedBytes: 0, draws: 0, indices: 0,
                     vertices: 0, pipelineBinds: 0, bufferWrites: 0, bufferBytes: 0,
                     textureWrites: 0, textureTexels: 0, textureCopies: 0, copyTexels: 0,
                     externalTextureCopies: 0, externalTexels: 0,

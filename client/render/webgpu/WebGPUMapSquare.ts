@@ -21,8 +21,10 @@ import {
     MAP_UNIFORMS_GROUP,
     MAP_UNIFORM_STRIDE,
     SCENE_GROUP,
+    SCENE_DEPTH_FORMAT,
     WORLD_TEXTURES_GROUP,
 } from "./bindings";
+import { SceneryDrawBundle } from "./SceneryDrawBundle";
 import type { WorldResources } from "./WorldResources";
 
 const FRAME_RENDER_DELAY = 0;
@@ -47,6 +49,7 @@ type MapDrawBatch = {
     uniformsBindGroup: GPUBindGroup;
     uniformBase: number;
     uniformEntries: number;
+    bundles?: [SceneryDrawBundle, SceneryDrawBundle];
 };
 
 /**
@@ -1093,16 +1096,9 @@ export class WebGPUMapSquare implements MapSquare {
         const resources = this.resources;
         const depthPipelines = resources.depthPipelines;
         if (depth && (!depthPipelines || !resources.depthTextureBindGroup)) return;
-        pass.setPipeline(
-            depth
-                ? depthPipelines![alpha ? 1 : 0]
-                : alpha ? resources.alphaPipeline : resources.opaquePipeline,
-        );
-        pass.setBindGroup(SCENE_GROUP, resources.sceneBindGroup);
-        pass.setBindGroup(
-            WORLD_TEXTURES_GROUP,
-            depth ? resources.depthTextureBindGroup! : resources.mapWorldTextureBindGroup,
-        );
+        const pipeline = depth ? depthPipelines![alpha ? 1 : 0]
+            : alpha ? resources.alphaPipeline : resources.opaquePipeline;
+        const worldTextures = depth ? resources.depthTextureBindGroup! : resources.mapWorldTextureBindGroup;
 
         const cullPlanes = roofPlaneLimit < 3;
         const cullLimit = roofPlaneLimit | 0;
@@ -1112,10 +1108,10 @@ export class WebGPUMapSquare implements MapSquare {
             if (batch.lod && (depth || this.worldEntity)) continue;
             if (!this.worldEntity && batch.bounds && !sceneryBoundsVisible(batch.bounds, baseX, baseZ,
                 visibility.tileX, visibility.tileZ, visibility.distance, visibility.camera, visibility.shadow)) continue;
-            pass.setBindGroup(MAP_TEXTURES_GROUP, batch.bindGroup);
-            pass.setVertexBuffer(0, batch.vertexBuffer);
-            pass.setIndexBuffer(batch.indexBuffer, "uint32");
-
+            batch.bundles ??= [new SceneryDrawBundle(), new SceneryDrawBundle()];
+            const bundle = batch.bundles[depth ? 1 : 0];
+            const commands = bundle.commands;
+            commands.length = 0;
             const planes = batch.planes;
             const visible = (i: number): boolean => {
                 const range = batch.ranges[i];
@@ -1142,18 +1138,31 @@ export class WebGPUMapSquare implements MapSquare {
                     }
                 }
                 for (let copy = 0; copy < this.transformCount; copy++) {
-                    pass.setBindGroup(MAP_UNIFORMS_GROUP, batch.uniformsBindGroup, [
+                    commands.push(
                         (copy * batch.uniformEntries + batch.uniformBase + first) * MAP_UNIFORM_STRIDE,
-                    ]);
-                    pass.drawIndexed(
-                        elements,
-                        instances,
-                        (range[0] / DRAW_RANGE_INDEX_BYTES) | 0,
-                        0,
-                        0,
+                        elements, instances, (range[0] / DRAW_RANGE_INDEX_BYTES) | 0,
                     );
                 }
             }
+            if (commands.length === 0) continue;
+            const bindings = [resources.sceneBindGroup, worldTextures, batch.bindGroup, batch.uniformsBindGroup];
+            bundle.draw(this.device, pass, pipeline, bindings, {
+                colorFormats: depth ? [] : [resources.extensionActive
+                    ? resources.extension?.sceneColorFormat ?? resources.canvasFormat : resources.canvasFormat],
+                depthStencilFormat: depth ? resources.extension?.depthFormat ?? SCENE_DEPTH_FORMAT : SCENE_DEPTH_FORMAT,
+                sampleCount: depth ? 1 : resources.sampleCount,
+            }, (encoder) => {
+                encoder.setPipeline(pipeline);
+                encoder.setBindGroup(SCENE_GROUP, bindings[0]);
+                encoder.setBindGroup(WORLD_TEXTURES_GROUP, bindings[1]);
+                encoder.setBindGroup(MAP_TEXTURES_GROUP, bindings[2]);
+                encoder.setVertexBuffer(0, batch.vertexBuffer);
+                encoder.setIndexBuffer(batch.indexBuffer, "uint32");
+                for (let i = 0; i < commands.length; i += 4) {
+                    encoder.setBindGroup(MAP_UNIFORMS_GROUP, bindings[3], [commands[i]]);
+                    encoder.drawIndexed(commands[i + 1], commands[i + 2], commands[i + 3], 0, 0);
+                }
+            });
         }
     }
 }
