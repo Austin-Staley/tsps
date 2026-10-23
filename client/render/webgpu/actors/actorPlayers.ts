@@ -385,14 +385,14 @@ export class PlayerPoseGeometry {
             if (opaqueFaces.length > 0) {
                 this.opaqueSceneBuf.addModel(model, opaqueFaces, undefined, true, actorNormals);
             }
-            const opaqueVertices = this.opaqueSceneBuf.vertexBuf.byteArray();
+            const opaqueVertices = new Uint8Array(this.opaqueSceneBuf.vertexBuf.byteArray());
             const opaqueIndices = new Int32Array(this.opaqueSceneBuf.indices);
 
             this.resetSceneBuf(this.alphaSceneBuf);
             if (alphaFaces.length > 0) {
                 this.alphaSceneBuf.addModel(model, alphaFaces, undefined, true, actorNormals);
             }
-            const alphaVertices = this.alphaSceneBuf.vertexBuf.byteArray();
+            const alphaVertices = new Uint8Array(this.alphaSceneBuf.vertexBuf.byteArray());
             const alphaIndices = new Int32Array(this.alphaSceneBuf.indices);
 
             return [{
