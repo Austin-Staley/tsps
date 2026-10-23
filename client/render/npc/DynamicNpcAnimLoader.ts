@@ -208,13 +208,19 @@ export class DynamicNpcAnimLoader {
     /** Shared rest model/sequence implementation for label poses; the model remains immutable. */
     getModelLoader(): NpcModelLoader | undefined { return this.npcModelLoader; }
 
+    peekBaseModel(npcTypeId: number): Model | undefined {
+        const type = this.getResolvedNpcType(npcTypeId);
+        return type ? this.npcModelLoader?.modelCache.get(type.id) : undefined;
+    }
+
     getGpuPoseSource(...request: NpcFrameRequest) {
         const resolved = this.resolveFrameRequest(...request);
         if (!resolved || !this.isSequenceFrameReady(request[1], resolved.normalizedFrame) ||
             ((request[3] ?? -1) >= 0 && !this.isSequenceFrameReady(request[3]!, resolved.normalizedOverlayFrame))) return undefined;
         const npcType = resolved.resolvedNpcType;
-        if (!this.npcModelLoader?.getModel(npcType, -1, -1)) return undefined;
-        const baseModel = this.npcModelLoader.modelCache.get(npcType.id);
+        const models = this.npcModelLoader?.modelCache;
+        if (!models?.has(npcType.id) && !this.npcModelLoader?.getModel(npcType, -1, -1)) return undefined;
+        const baseModel = models?.get(npcType.id);
         if (!baseModel) return undefined;
         return { key: resolved.key, baseKey: `${this.getGeometryTypeId(npcType)}:base`, npcType, baseModel,
             interpolation: resolved.interpolation, frameId: resolved.normalizedFrame,

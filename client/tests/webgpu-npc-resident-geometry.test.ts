@@ -167,6 +167,8 @@ test("GPU NPC sources share the existing unscaled rest model and normalized pose
     assert.equal(source.baseKey, "1:base");
     assert.equal(source.frameId, 0);
     assert.equal(source.key, f.loader.getFrameGeometryKey(1, 1, 0));
+    (f.loader.getModelLoader() as any).getModel = () => { throw Error("cached scaled rest poses must not clone again"); };
+    assert.equal(f.loader.getGpuPoseSource(1, 1, 0)!.baseModel, f.model);
     f.ready.clear();
     assert.equal(f.loader.getGpuPoseSource(1, 1, 0), undefined, "streamed current frames must be ready");
 });
