@@ -136,6 +136,7 @@ export class MagicOnItemPacketListener {
       player.sendMessage("Nothing interesting happens.");
       return;
     }
+    if (!this.canGrabGroundItem(player, groundItem)) return;
     if (!this.canReceiveGroundItem(player, groundItem.getItem())) {
       player.getInventory().full();
       return;
@@ -178,6 +179,13 @@ export class MagicOnItemPacketListener {
     });
   }
 
+  /** Generic permission query shared by cast and arrival checks. */
+  private canGrabGroundItem(player: any, groundItem: any): boolean {
+    const request = { player, groundItem, allow: true };
+    PluginManager.emitCustomEvent("magic:can-telekinetic-grab", request);
+    return request.allow !== false;
+  }
+
   /** The telegrab projectile has landed: the item is taken if it is still there. */
   private landGroundItemGrab(player: any, groundItemId: number, position: Location): void {
     if (!player.isRegistered?.() || player.getHitpoints?.() <= 0) {
@@ -193,6 +201,7 @@ export class MagicOnItemPacketListener {
       player.sendMessage("Too late - it's gone!");
       return;
     }
+    if (!this.canGrabGroundItem(player, groundItem)) return;
     if (ItemOnGroundManager.transferToInventory(player, groundItem, "telegrab") <= 0) return;
     PluginManager.emitCustomEvent("magic:telekinetic-grab", { player, itemId: groundItemId, position });
   }
