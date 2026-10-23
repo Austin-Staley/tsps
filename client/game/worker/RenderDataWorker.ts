@@ -1,3 +1,4 @@
+import { WorkerInputUpdates } from "./WorkerInputUpdates";
 import { BuildSteps } from "../../common/utils/BuildSteps";
 import JSZip from "jszip";
 import type { SdMapData } from "../../render/loader/SdMapData";
@@ -333,6 +334,7 @@ let sparseCoordinator: WorkerJs5Coordinator | undefined;
 const earlyDat2Chunks = new Map<number, ArrayBuffer>();
 
 const mapBuilds = new Map<number, AbortController>();
+const inputUpdates = new WorkerInputUpdates();
 
 const worker = {
     cancelLoad(id: number): void { mapBuilds.get(id)?.abort(); },
@@ -345,9 +347,15 @@ const worker = {
         // A request may have been answered before the chunk holding its data arrived.
         sparseCoordinator?.recheck();
     },
-    setCustomContent(payload: Parameters<typeof loadFromPayload>[0]): void {
-        loadFromPayload(payload);
-        void workerStatePromise?.then((state) => state.objTypeLoader.clearCache());
+    async setCustomContent(payload: Parameters<typeof loadFromPayload>[0]): Promise<void> {
+        const statePromise = workerStatePromise;
+        const state = await statePromise;
+        // Payloads can update different datasets: preserve them all, in arrival order.
+        return inputUpdates.update(Symbol(), () => {
+            if (statePromise !== workerStatePromise) return;
+            loadFromPayload(payload);
+            state?.objTypeLoader.clearCache();
+        });
     },
     initCache(cache: LoadedCache, npcInstances: NpcInstance[]) {
         for (const build of mapBuilds.values()) build.abort();
@@ -371,6 +379,7 @@ const worker = {
         const controller = new AbortController();
         if (requestId !== undefined) mapBuilds.set(requestId, controller);
         const build = new BuildSteps(controller.signal);
+        let releaseInputs: (() => void) | undefined;
         try {
             const workerState = await workerStatePromise;
             if (!workerState) {
@@ -378,6 +387,7 @@ const worker = {
             }
 
             build.check();
+            releaseInputs = inputUpdates.hold();
             const mapInput = input as { mapProfileEnabled?: boolean; mapX?: number; mapY?: number };
             const sdInput = input as SdMapLoaderInput;
             // Built map squares are kept in IndexedDB; see MapSquareCache for what is keyed.
@@ -453,13 +463,17 @@ const worker = {
             }
             build.check();
             return Transfer<D>(data, transferables);
-        } finally { if (requestId !== undefined) mapBuilds.delete(requestId); }
+        } finally {
+            releaseInputs?.();
+            if (requestId !== undefined) mapBuilds.delete(requestId);
+        }
     },
     async loadMinimap(input: SdMapLoaderInput, level: number): Promise<MinimapData | undefined> {
         const state = await workerStatePromise;
         if (!state) throw new Error("Worker not initialized");
+        const releaseInputs = inputUpdates.hold();
         try { return await loadMinimapFloor(state, input, level); }
-        finally { clearCache(state); }
+        finally { try { clearCache(state); } finally { releaseInputs(); } }
     },
     async loadWorldMapTile(input: WorldMapTileInput): Promise<TransferDescriptor<WorldMapTileReply>> {
         const state = await workerStatePromise;
@@ -495,6 +509,7 @@ const worker = {
             throw new Error("Worker not initialized");
         }
 
+        const releaseInputs = inputUpdates.hold();
         workerState.sceneJobs++;
         try {
             const { data, transferables } = await runWithSparseRetry(workerState, () =>
@@ -509,7 +524,7 @@ const worker = {
             return Transfer<NpcGeometryData>(data, transferables);
         } finally {
             workerState.sceneJobs--;
-            clearCache(workerState);
+            try { clearCache(workerState); } finally { releaseInputs(); }
         }
     },
     async loadTexture(
@@ -528,20 +543,25 @@ const worker = {
         return Transfer(pixels, [pixels.buffer]);
     },
     async setNpcInstances(instances: NpcInstance[]): Promise<void> {
-        const workerState = await workerStatePromise;
-        if (!workerState) {
-            throw new Error("Worker not initialized");
-        }
-        workerState.npcInstances = Array.isArray(instances) ? instances.slice() : [];
-        registerInstanceModelOverrides(workerState.npcInstances);
+        const statePromise = workerStatePromise;
+        const workerState = await statePromise;
+        if (!workerState) throw new Error("Worker not initialized");
+        return inputUpdates.update("npcs", () => {
+            if (statePromise !== workerStatePromise) return;
+            workerState.npcInstances = Array.isArray(instances) ? instances.slice() : [];
+            registerInstanceModelOverrides(workerState.npcInstances);
+        });
     },
     async setVars(values: Int32Array): Promise<void> {
-        const workerState = await workerStatePromise;
-        if (!workerState) {
-            throw new Error("Worker not initialized");
-        }
-        workerState.varManager.set(values);
+        const statePromise = workerStatePromise;
+        const workerState = await statePromise;
+        if (!workerState) throw new Error("Worker not initialized");
         workerState.worldMapTiles?.setVars(values);
+        return inputUpdates.update("vars", () => {
+            if (statePromise !== workerStatePromise) return;
+            workerState.varManager.set(values);
+            workerState.worldMapTiles?.setVars(values);
+        });
     },
     async exportSpritesToZip(): Promise<Blob> {
         const workerState = await workerStatePromise;
