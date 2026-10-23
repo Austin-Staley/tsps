@@ -31,7 +31,7 @@ let dialogueApi;
 before(async () => {
   await CachePipeline.initialize(ROOT);
   RegionManager.init();
-  for (const [x, y] of [[2240, 4288], [2304, 4288], [2240, 4352], [2304, 4352]]) {
+  for (const [x, y] of [[2240, 4288], [2304, 4288], [2240, 4352], [2304, 4352], [2560, 3008], [2592, 2944]]) {
     RegionManager.loadMapFiles(x, y, false);
   }
   new NpcDefinitionLoader().load();
@@ -311,6 +311,71 @@ test('Contact: the MovementQueue route uses range 10 and completes without the r
     assert.equal(player.getMovementQueue().points.length, 0, 'no walk was queued across the chasm');
   } finally {
     World.getNpcs().remove(npc);
+  }
+});
+
+test('item-on-NPC dispatch allows overlap and keeps route and target validity checks', () => {
+  const { Item } = require('../dist/game/model/Item');
+  const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
+  const { UseItemPacketListener } = require('../dist/net/packet/impl/UseItemPacketListener');
+  const hook = {
+    pluginName: 'remaining-contact-range-item-route-test',
+    handler(event) { event.handled = true; this.calls.push(event); },
+    calls: [],
+  };
+  PluginManager.itemOnNpcHooks.push(hook);
+
+  const run = (playerLocation, npcLocation, configureNpc) => {
+    const player = account(playerLocation[0], playerLocation[1]);
+    player.getInventory().getItems()[0] = new Item(ItemIdentifiers.OGRE_BELLOWS_3_, 1);
+    const npc = new NPC(1473, new Location(npcLocation[0], npcLocation[1], npcLocation[2] ?? 0));
+    configureNpc?.(npc, player);
+    assert.equal(World.getNpcs().add(npc, true), true);
+    try {
+      const before = hook.calls.length;
+      UseItemPacketListener.itemOnNpc(player, 3214, npc.getIndex(), ItemIdentifiers.OGRE_BELLOWS_3_, 0);
+      return { player, npc, calls: hook.calls.slice(before) };
+    } catch (error) {
+      World.getNpcs().remove(npc);
+      throw error;
+    }
+  };
+
+  const registered = [];
+  const check = (args, assertion, configureNpc) => {
+    const result = run(...args, configureNpc);
+    registered.push(result.npc);
+    assertion(result);
+    return result;
+  };
+
+  try {
+    check([[2598, 2969], [2598, 2969]], ({ calls }) => {
+      assert.equal(calls.length, 1, 'same-tile item use reaches the NPC handler');
+    });
+    check([[2597, 2969], [2598, 2969]], ({ calls }) => {
+      assert.equal(calls.length, 1, 'a normal adjacent route still reaches the handler');
+    });
+    check([[2559, 3019], [2560, 3019]], ({ calls }) => {
+      assert.equal(PathFinder.reachedEntity(
+        { getLocation: () => new Location(2559, 3019, 0), getSize: () => 1, getPrivateArea: () => null, isPlayer: () => true },
+        { getLocation: () => new Location(2560, 3019, 0), getSize: () => 1, getPrivateArea: () => null, isNpc: () => true }
+      ), false, 'cache clipping blocks this adjacent edge');
+      assert.equal(calls.length, 0, 'overlap allowance does not bypass an adjacent clipped edge immediately');
+    });
+    check([[2596, 2969], [2598, 2969]], ({ calls }) => {
+      assert.equal(calls.length, 0, 'a distance-two use is not treated as overlap');
+    });
+    check([[2598, 2969], [2598, 2969]], ({ calls }) => {
+      assert.equal(calls.length, 0, 'a foreign-owned NPC is rejected before the same-tile fast path');
+    }, (npc) => npc.setOwner(account(2500, 2500)));
+    check([[2598, 2969], [2598, 2969, 1]], ({ calls }) => {
+      assert.equal(calls.length, 0, 'a different-plane NPC is rejected before the same-tile fast path');
+    });
+  } finally {
+    PluginManager.itemOnNpcHooks.splice(PluginManager.itemOnNpcHooks.indexOf(hook), 1);
+    for (const npc of registered) World.getNpcs().remove(npc);
   }
 });
 

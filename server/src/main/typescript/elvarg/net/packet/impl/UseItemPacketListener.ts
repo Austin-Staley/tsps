@@ -171,6 +171,7 @@ export class UseItemPacketListener {
       range: 1,
     };
     PluginManager.emitNpcRoute(routeEvent);
+    // Item use can target an NPC occupying the player's tile; route geometry governs approach.
     player.getMovementQueue().walkToEntity(target, () => {
       player.setPositionToFace(target.getLocation());
       PluginManager.emitItemOnNpc({
@@ -184,7 +185,7 @@ export class UseItemPacketListener {
         slot,
         handled: false,
       });
-    }, routeEvent.range);
+    }, routeEvent.range, false, true);
   }
 
   public static spellOnObject(

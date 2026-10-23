@@ -1206,7 +1206,13 @@ export class MovementQueue {
             && (RegionManager.getClipping(destX, destY, z, area) & destWall) !== 0;
     }
 
-    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1, ignoreProjectileClip = false) {
+    public walkToEntity(
+        entity: Mobile,
+        runnable?: () => void,
+        range = 1,
+        ignoreProjectileClip = false,
+        allowOverlappingTiles = false
+    ) {
         let mobility = this.getMobility();
         if (!mobility.canMove()) {
             mobility.sendMessage(this.player);
@@ -1233,13 +1239,22 @@ export class MovementQueue {
             return;
         }
 
+        if (!this.isInteractionTargetValid(entity)) {
+            this.reset();
+            return;
+        }
+
         this.reset();
 
         this.walkToReset();
 
-        const reached = () => range <= 1 ? PathFinder.reachedEntity(this.player, entity) :
-            this.isInteractionTargetValid(entity) && this.player.getLocation().isWithinDistance(entity.getLocation(), range)
-            && (ignoreProjectileClip || RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation()));
+        const reached = () => (allowOverlappingTiles && this.overlapsEntity(entity)) || (
+            range <= 1
+                ? PathFinder.reachedEntity(this.player, entity)
+                : this.isInteractionTargetValid(entity) &&
+                  this.player.getLocation().isWithinDistance(entity.getLocation(), range) &&
+                  (ignoreProjectileClip || RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation()))
+        );
         if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
@@ -1338,11 +1353,20 @@ export class MovementQueue {
     }
 
     private isInteractionTargetValid(entity: Mobile): boolean {
-        return !!entity &&
-            entity.isRegistered() &&
-            entity.getHitpoints() > 0 &&
-            entity.getPrivateArea() === this.player.getPrivateArea() &&
-            entity.getLocation().getZ() === this.player.getLocation().getZ();
+        if (!entity || !entity.isRegistered() || entity.getHitpoints() <= 0 ||
+            entity.getPrivateArea() !== this.player.getPrivateArea() ||
+            entity.getLocation().getZ() !== this.player.getLocation().getZ()) return false;
+        const owner = entity.isNpc?.() ? (entity as NPC).getOwner?.() : null;
+        return !owner || owner === this.player;
+    }
+
+    private overlapsEntity(entity: Mobile): boolean {
+        const player = this.player.getLocation();
+        const target = entity.getLocation();
+        const playerSize = Math.max(1, this.player.getSize());
+        const targetSize = Math.max(1, entity.getSize());
+        return player.getX() < target.getX() + targetSize && player.getX() + playerSize > target.getX() &&
+            player.getY() < target.getY() + targetSize && player.getY() + playerSize > target.getY();
     }
 
     /** An NPC in the main world that a player aboard a boat can see and talk to from its root. */
