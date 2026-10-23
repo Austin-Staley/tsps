@@ -19,6 +19,53 @@ const { Inventory } = require('../dist/game/model/container/impl/Inventory');
 const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
 const core = PluginManager.getCoreApi();
 
+test('Munty door opens into its matching cache model and clears the blocked approach', () => {
+  const { RegionManager, MapObjects, ObjectDefinition, Location } = core;
+  RegionManager.init();
+  RegionManager.loadMapFiles(1551, 3754, false);
+  const tile = new Location(1551, 3754, 0);
+  const door = MapObjects.get(28479, tile, null);
+  assert.ok(door, 'Munty entrance is the real cache door');
+  assert.notDeepEqual(core.CacheDefinitions.getObject(28479).models, core.CacheDefinitions.getObject(28480).models);
+  assert.deepEqual(core.CacheDefinitions.getObject(28479).models, core.CacheDefinitions.getObject(28482).models);
+  const approaches = [[1550, 3754], [1552, 3754], [1551, 3753], [1551, 3755]];
+  const canCross = ([x, y]) => RegionManager.canMovestart(new Location(x, y, 0), tile, 1, 1, null);
+  const before = approaches.map(canCross);
+  const actions = new Map();
+  const registered = [];
+  const modulePath = require.resolve('../plugins/objects/Doors.plugin');
+  delete require.cache[modulePath];
+  require(modulePath).register({
+    core: {
+      ...core,
+      Sounds: { sendSound() {} },
+      TaskManager: { cancelTasks() {}, submit() {} },
+      ObjectManager: {
+        deregister: (...args) => core.ObjectManager.deregister(...args),
+        register(object, update) { registered.push(object); core.ObjectManager.register(object, update); },
+      },
+    },
+    emitCustomEvent() {},
+    onObjectInteraction: (name, handlers) => actions.set(name, handlers),
+    onRegionLoaded() {},
+    onServerStartup() {},
+  });
+  const player = { getPrivateArea: () => null, getPacketSender: () => ({ getVarbit: () => 0, getVarp: () => 0 }) };
+  try {
+    const open = actions.get('Door').Open({
+      player, object: door, objectId: door.getId(), location: tile,
+      definition: ObjectDefinition.forPlayer(door.getId(), player), clickType: 1,
+    });
+    assert.equal(open, true);
+    assert.equal(registered.at(-1).getId(), 28482, 'interleaved IDs do not select the neighbouring door model');
+    assert.ok(approaches.some((from, index) => !before[index] && canCross(from)), 'opening clears the original blocked edge');
+  } finally {
+    for (const object of registered) core.ObjectManager.deregister(object, true);
+    core.ObjectManager.register(door, true);
+    delete require.cache[modulePath];
+  }
+});
+
 const transcripts = [];
 const originalStartTranscript = runtime.startTranscript;
 runtime.startTranscript = (_api, _player, npcId, page, variant) => {
