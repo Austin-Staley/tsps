@@ -91,9 +91,9 @@ module.exports = function registerHazeelCultQuest(api) {
   const STAIRS_DOWN_FROM = { x: 2570, y: 3268, z: 1 };
   const STAIRS_DOWN_TO = { x: 2568, y: 3271, z: 0 };
 
-  // The world's npc-spawns.json still points the mansion/cave tiles at ids that
-  // the cache now resolves to nameless or wrong NPCs; these correct-id spawns
-  // are owner-only, so they replace those for the questing player.
+  // The placed old ids resolve to Fight Arena actors (1198/1203/1204/1206).
+  // Current HC transform parents 11972/11974/11976 are not placed in npc-spawns.json.
+  // These owner-only actors therefore supply the actual HC conversations.
   const CERIL_TILE = { x: 2565, y: 3271, z: 0 };
   const JONES_TILE = { x: 2569, y: 3272, z: 0 };
   const CLIVET_TILE = { x: 2566, y: 9683, z: 0 };
@@ -288,7 +288,7 @@ module.exports = function registerHazeelCultQuest(api) {
   function alomoneVariant(player) {
     const stage = quest.getStage(player);
     if (side(player) === SIDE_HAZEEL) {
-      if (stage >= STAGE_COMPLETE) return null;
+      if (stage >= STAGE_COMPLETE) return { page: "Alomone", variant: "after-hazeel-cult" };
       if (stage >= STAGE_RETURNED_ARMOUR) return "the-scroll-talking-to-alomone-after-obtaining-the-scroll";
       if (stage >= STAGE_FINISHED_SIDE_TASK) return "the-scroll-talking-to-alomone-again";
       if (stage >= STAGE_POISONED_FOOD) {
@@ -307,7 +307,7 @@ module.exports = function registerHazeelCultQuest(api) {
     if (stage < STAGE_STARTED) return null;
     if (stage === STAGE_STARTED) return "starting-off-talking-to-butler-jones";
     if (side(player) === SIDE_HAZEEL) {
-      if (stage >= STAGE_COMPLETE) return null;
+      if (stage >= STAGE_COMPLETE) return { page: "Butler Jones", variant: "after-hazeel-cult" };
       if (stage >= STAGE_RETURNED_ARMOUR) {
         return has(player, HAZEEL_SCROLL)
           ? "the-scroll-talking-to-jones-after-obtaining-the-scroll"
@@ -729,7 +729,7 @@ module.exports = function registerHazeelCultQuest(api) {
 
   /**
    * Spawns one owner-only NPC per key for the player, if that key is not already tracked.
-   * The world's own stale-id spawns stay put; these are what the player interacts with.
+   * Only actors tracked by this plugin are removed; SOTN's marked copies belong to it.
    */
   function spawnTracked(player, key, id, tile) {
     const entry = npcsByPlayer.get(player) ?? {};
@@ -740,16 +740,32 @@ module.exports = function registerHazeelCultQuest(api) {
     npcsByPlayer.set(player, entry);
   }
 
-  /** Correct-id quest NPCs for this player. Alomone is gone once killed/completed. */
+  /** SOTN supplies its own Alomone only during its cult investigation. */
+  function northOwnsAlomone(player) {
+    const request = { player, key: "secrets_of_the_north", stage: 0 };
+    api.emitCustomEvent("quest:get-stage", request);
+    return request.stage >= 7 && request.stage < 13;
+  }
+
+  /** Hazeel allies retain their living contacts; killed Alomone and arrested Jones do not return. */
   function ensureQuestNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     spawnTracked(player, "ceril", NpcIdentifiers.CERIL_CARNILLEAN, CERIL_TILE);
     spawnTracked(player, "clivet", NpcIdentifiers.CLIVET, CLIVET_TILE);
-    if (quest.isComplete(player)) return;
+    if (quest.isComplete(player) && side(player) === SIDE_CARNILLEAN) return;
     spawnTracked(player, "jones", NpcIdentifiers.BUTLER_JONES, JONES_TILE);
-    const alomoneDead =
-      side(player) === SIDE_CARNILLEAN && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK;
-    if (!alomoneDead) spawnTracked(player, "alomone", NpcIdentifiers.ALOMONE, ALOMONE_TILE);
+    const alomoneDead = side(player) === SIDE_CARNILLEAN && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK;
+    if (!alomoneDead && !northOwnsAlomone(player)) {
+      spawnTracked(player, "alomone", NpcIdentifiers.ALOMONE, ALOMONE_TILE);
+    } else {
+      const entry = npcsByPlayer.get(player);
+      if (entry?.alomone) api.removeNpc(entry.alomone);
+      if (entry) delete entry.alomone;
+    }
+  }
+
+  function handleSharedStageChanged({ player, key }) {
+    if (key === "secrets_of_the_north") ensureQuestNpcs(player);
   }
 
   function clearNpcs(player) {
@@ -759,7 +775,7 @@ module.exports = function registerHazeelCultQuest(api) {
     npcsByPlayer.delete(player);
   }
 
-  /** Completion drops the quest-state spawns (Jones, Alomone); Ceril and Clivet persist. */
+  /** Completion rebuilds only the contacts who remain alive on the chosen branch. */
   function completeQuest(player) {
     if (!quest.complete(player)) return;
     syncAuxiliaryState(player);
@@ -847,6 +863,7 @@ module.exports = function registerHazeelCultQuest(api) {
   });
 
   api.onCustomEvent("player:bootstrap-complete", handleBootstrapComplete);
+  api.onCustomEvent("quest:stage-changed", handleSharedStageChanged);
   api.persistAttribute(MARK_GIVEN_ATTRIBUTE, false);
   api.persistAttribute(ALOMONE_HOSTILE_ATTRIBUTE, false);
   api.persistAttribute(SIDE_ATTR);

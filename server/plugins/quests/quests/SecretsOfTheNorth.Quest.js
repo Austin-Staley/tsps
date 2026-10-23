@@ -594,7 +594,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       : stage >= STAGE_CULT && stage < STAGE_NORTH;
     ensureNpc(player, "hazeel:cult", NpcIdentifiers.HAZEEL_2, 2609, 9673, 0, hazeelAtCult);
     ensureNpc(player, "khazard:cult", NpcIdentifiers.GENERAL_KHAZARD_2, 2611, 9670, 0, inCult);
-    ensureNpc(player, "alomone:cult", NpcIdentifiers.ALOMONE, 2609, 9670, 0, inCult);
+    ensureNpc(player, "alomone:cult", NpcIdentifiers.ALOMONE, 2609, 9670, 0, inCult && helpedCult(player));
     // The quest guard (the world 1200 spawn is a nameless parent with no Talk-to).
     ensureNpc(player, "guard", GUARD_NPC, 2571, 3275, 0, true);
     // Claus only has a world spawn in the cult cave; the kitchen question needs

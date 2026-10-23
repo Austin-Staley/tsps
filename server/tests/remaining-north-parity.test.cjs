@@ -429,6 +429,7 @@ test('Evelot fight and death advance to the cult meeting, with interruption-safe
 
 test('North spawn cleanup preserves another quest\'s Alomone for the same player', () => {
   const h = harness(), p = player();
+  p.attributes.set('quest.hazeel_cult.side', 1); // Alomone survived on the helped-cult branch.
   const foreign = h.api.spawnNpc({
     id: N.ALOMONE, x: 2609, y: 9670, z: 0, owner: p, ownerOnly: true,
   });

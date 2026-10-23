@@ -14,6 +14,7 @@ const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition')
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+const { NPC } = require('../dist/game/entity/impl/npc/NPC');
 const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
@@ -30,8 +31,10 @@ before(async () => {
   RegionManager.loadMapFiles(2570, 9682);
 });
 
-function harness() {
+function harness({ realNpcs = false, withNorth = false, northFirst = false } = {}) {
   const hooks = {}, events = {}, tasks = [], npcs = [];
+  let northQuest;
+  const namedNpcHooks = [], queries = [];
   const taskManager = {
     submit(task) { task.setRunning(true); tasks.push(task); },
     cancelTasks(key) { tasks.filter(task => task.key === key).forEach(task => task.stop()); },
@@ -43,9 +46,26 @@ function harness() {
     getWorld: () => ({ getNpcs: () => npcs }),
     persistAttribute: noop,
     onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
-    emitCustomEvent: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
+    onNpcInteraction(name, actions) {
+      const start = PluginManager.npcInteractionHooks.length;
+      PluginManager.createApi('q055-shared-actor').onNpcInteraction(name, actions);
+      namedNpcHooks.push(...PluginManager.npcInteractionHooks.splice(start));
+    },
+    emitCustomEvent(key, event) {
+      (events[key] ?? []).forEach(fn => fn(event));
+      // Each fixture API models QuestRuntime's process-wide public stage query.
+      if (key === 'quest:get-stage' && event.key === 'secrets_of_the_north' && northQuest) {
+        event.stage = northQuest.getStage(event.player);queries.push(event.stage);
+      }
+    },
     sendMultiChatboxPrompt(p, title, ...pairs) { p.prompt = { title, options: pairs.filter((_, i) => i % 2 === 0), pairs }; return true; },
     spawnNpc(definition) {
+      if (realNpcs) {
+        const npc = new NPC(definition.id, new core.Location(definition.x, definition.y, definition.z));
+        npc.setOwner(definition.owner);npc.setOwnerOnly(definition.ownerOnly === true);
+        npc.removed = false;npc.isRegistered = () => !npc.removed;
+        npcs.push(npc);return npc;
+      }
       const npc = { ...definition, removed: false, getId: () => definition.id, getIndex: () => npc.index,
         index: nextIndex++, getLocation: () => new core.Location(definition.x, definition.y, definition.z),
         isRegistered: () => !npc.removed, performAnimation: noop, forceChat: noop };
@@ -53,7 +73,13 @@ function harness() {
     },
     removeNpc: npc => { npc.removed = true; },
   }, { get: (target, key) => target[key] ?? ((...args) => (hooks[key] ??= []).push(args.find(x => typeof x === 'function'))) });
+  const registerNorth = () => {
+    require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+    northQuest = runtime.getRegisteredQuests().findLast(quest => quest.key === 'secrets_of_the_north');
+  };
+  if (withNorth && northFirst) registerNorth();
   require('../plugins/quests/quests/HazeelCult.Quest')(api);
+  if (withNorth && !northFirst) registerNorth();
   PluginManager.emitNpcDialogueCondition = event => {
     for (const fn of hooks.onNpcDialogueCondition ?? []) {
       const answer = fn(event);
@@ -63,7 +89,16 @@ function harness() {
   };
   const h = {
     api, hooks, events, tasks, npcs,
-    quest: runtime.getRegisteredQuests().at(-1),
+    quest: runtime.getRegisteredQuests().findLast(quest => quest.key === 'hazeel_cult'),
+    northQuest, queries,
+    dispatchNpc(p, npc) {
+      const event = { player: p, npc, npcId: npc.getId(), definition: npc.getCurrentDefinition(p), clickType: 1, handled: false };
+      PluginManager.npcInteractionHooks.push(...namedNpcHooks);
+      try { PluginManager.emitNpcInteraction(event); } finally {
+        for (const hook of namedNpcHooks) PluginManager.npcInteractionHooks.splice(PluginManager.npcInteractionHooks.indexOf(hook), 1);
+      }
+      return event;
+    },
     emit(key, event) { (events[key] ?? []).forEach(fn => fn(event)); },
     talk(p, npcId) {
       const choice = (hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId })).find(Boolean);
@@ -139,6 +174,7 @@ function player() {
     },
     sendConfig(id, value) { varps.set(id, value); return packet; },
     getVarbit: id => varbits.get(id) ?? 0,
+    getVarp: id => varps.get(id) ?? 0,
     sendString(text, uid) { p.text = text; log.push(['text', uid, text]); return packet; },
     sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
   }, { get: (target, key) => target[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
@@ -541,5 +577,76 @@ test('canonical outside wall approaches offer Yes while the north room tile exit
     assert.deepEqual([p.loc.getX(),p.loc.getY(),p.loc.getZ()],[2572,3271,1]);
     h.object(p,46902,'Knock-at',{x:2572,y:3270,z:1});
     assert.deepEqual([p.loc.getX(),p.loc.getY(),p.loc.getZ()],[2571,3270,1]);
+  }
+});
+
+
+test('Hazeel completion retains real Alomone and Jones for canonical repeat dialogue and relog without rewards', () => {
+  const h = harness({ realNpcs: true }), p = player();
+  p.attrs.set('quest.hazeel_cult.stage', 7); p.attrs.set('quest.hazeel_cult.side', 1);
+  p.items.set(I.HAZEEL_SCROLL, 1);
+  h.login(p); h.talk(p, N.ALOMONE); h.finish(p);
+  assert.equal(h.quest.getStage(p), 9);
+  const coins = p.items.get(I.COINS), xp = [...p.xp];
+  const own = id => h.npcs.filter(npc => npc.getId() === id && npc.getOwner() === p && !npc.removed);
+  for (const id of [N.ALOMONE, N.BUTLER_JONES, N.CERIL_CARNILLEAN]) assert.equal(own(id).length, 1);
+  for (const [id, page] of [[N.ALOMONE, 'Alomone'], [N.BUTLER_JONES, 'Butler Jones']]) {
+    const choice = h.talk(p, id); assert.equal(choice.page, page); h.finish(p);
+  }
+  assert.ok(p.log.some(row => row[0] === 'text' && String(row[2]).includes('always welcome here')));
+  for (const fn of h.hooks.onPlayerLogout ?? []) fn({ player: p });
+  assert.equal(own(N.ALOMONE).length, 0);
+  h.login(p); h.emit('player:bootstrap-complete', { player: p });
+  assert.equal(own(N.ALOMONE).length, 1); h.talk(p, N.ALOMONE); h.finish(p);
+  assert.equal(p.items.get(I.COINS), coins); assert.deepEqual(p.xp, xp);
+});
+
+
+test('cache parents distinguish living HC contacts from the misplaced Fight Arena actors', () => {
+  const zero = { getVarbit: () => 0, getVarp: () => 0 };
+  assert.equal(CacheDefinitions.resolveNpc(1204, zero).id, 12030);
+  assert.equal(CacheDefinitions.getNpc(12030).name, 'Sammy Servil');
+  assert.equal(CacheDefinitions.resolveNpc(1203, zero).id, 12029);
+  assert.equal(CacheDefinitions.getNpc(12029).name, 'Lady Servil');
+  assert.equal(CacheDefinitions.resolveNpc(11976, zero).id, N.ALOMONE);
+  const dead = { ...zero, getVarbit: id => id === 14770 ? 2 : 0 };
+  assert.equal(CacheDefinitions.resolveNpc(11976, dead), undefined, 'killed Alomone has no visible HC form');
+  assert.equal(CacheDefinitions.resolveNpc(11972, zero).id, N.CERIL_CARNILLEAN);
+  assert.equal(CacheDefinitions.resolveNpc(11974, zero).id, N.BUTLER_JONES);
+  const spawns = require('../data/definitions/npc-spawns.json');
+  for (const id of [11972, 11974, 11976]) assert.equal(spawns.some(spawn => spawn.id === id), false);
+});
+
+test('both HC endings hand cult actors to SOTN at6/7/13 in either plugin order', () => {
+  for (const northFirst of [false, true]) for (const side of [0, 1]) {
+    const h = harness({ realNpcs: true, withNorth: true, northFirst }), p = player();
+    p.getUsername = () => `q055-${northFirst}-${side}`;
+    p.attrs.set('quest.hazeel_cult.stage', 9); p.attrs.set('quest.hazeel_cult.side', side);
+    p.loc = new core.Location(2609, 9670, 0);
+    h.northQuest.setStage(p, 6); h.login(p);
+    const live = id => h.npcs.filter(npc => !npc.removed && npc.getOwner() === p && npc.getId() === id);
+    const oldHC = live(N.ALOMONE)[0];
+    assert.equal(live(N.ALOMONE).length, side === 1 ? 1 : 0, 'stage6 uses living Alomone only when he survived HC');
+    const contact = side === 1 ? oldHC : live(N.HAZEEL_2)[0];
+    assert.ok(contact, 'Carnillean route has the canonical already-awake Hazeel alternative');
+    assert.equal(h.dispatchNpc(p, contact).handled, true);
+    h.continueUntil(p, () => h.northQuest.getStage(p) === 7);
+    p.manager.reset(); p.prompt = null;
+    assert.equal(live(N.ALOMONE).length, side === 1 ? 1 : 0, 'SOTN never resurrects killed Alomone');
+    if (side === 1) {
+      assert.equal(oldHC.removed, true, 'HC removes only its own copy at SOTN takeover');
+      assert.equal(live(N.ALOMONE)[0].hasFlag('secrets-of-the-north:spawned'), true);
+    }
+    h.login(p);
+    assert.equal(live(N.ALOMONE).length, side === 1 ? 1 : 0, 'either login ordering keeps one appropriate actor');
+    h.northQuest.setStage(p, 13); h.login(p);
+    assert.equal(live(N.ALOMONE).length, side === 1 ? 1 : 0, 'after13 only the surviving HC contact remains');
+    if (side === 1) {
+      assert.equal(live(N.ALOMONE)[0].hasFlag('secrets-of-the-north:spawned'), false, 'SOTN cleanup preserves HC ownership');
+      h.talk(p, N.ALOMONE); h.finish(p);
+    }
+    if (side === 1) assert.ok(h.queries.includes(6) && h.queries.includes(7) && h.queries.includes(13), 'HC consults the public stage query');
+    assert.equal(p.xp.length, 0); assert.equal(p.items.get(I.COINS) ?? 0, 0, 'handoff grants no HC rewards');
+    for (const fn of h.hooks.onPlayerLogout ?? []) fn({ player: p });
   }
 });
