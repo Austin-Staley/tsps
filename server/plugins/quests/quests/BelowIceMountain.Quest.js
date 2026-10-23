@@ -612,20 +612,9 @@ module.exports = function registerBelowIceMountainQuest(api) {
   function handleAtlasTalk(event) {
     const { player } = event;
     const variant = selectAtlasVariant(player);
-    if (!variant || !attrFlag(player, ATLAS_DECLINED_ATTRIBUTE) && attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) < 2) return false;
+    if (!variant) return false;
     event.handled = true;
-    const records = require("../QuestRuntime").loadTranscripts(api)[PAGE].variants;
-    if (attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) === 0) {
-      startTranscript(api, player, ATLAS_NPC_ID, PAGE, "checkal-the-strongman-talking-to-atlas", (steps) => [
-        { type: "line", speaker: "Atlas", text: "You're back. Would you like to start that training session now?" }, steps.at(-1),
-      ]);
-    } else {
-      const repeatMenu = records["checkal-the-strongman-talking-to-atlas-again-after-first-training-session"].find((step) => step.type === "choice");
-      startTranscript(api, player, ATLAS_NPC_ID, PAGE, variant, (steps) => [
-        ...steps.filter((step) => step.type !== "choice" && step.type !== "action"), repeatMenu,
-      ]);
-    }
-    return true;
+    return startTranscript(api, player, ATLAS_NPC_ID, PAGE, variant);
   }
 
   function handleStageChanged({ player, key }) {
