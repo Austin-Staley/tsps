@@ -9,6 +9,7 @@
 import { Scene } from "../../rs/scene/Scene";
 import type { SdMapData } from "../loader/SdMapData";
 import type { WebGPURenderer } from "./WebGPURenderer";
+import { WebGPUMapSquare } from "./WebGPUMapSquare";
 
 export class WebGPUInstances {
     /** Bumped per build (and on clear); only the latest build's result is applied. */
@@ -62,8 +63,9 @@ export class WebGPUInstances {
     }
 
     /** The latest finished build, once; the renderer applies it. */
-    takeBuiltScene(): SdMapData | null {
+    takeBuiltScene(ready?: (scene: SdMapData) => boolean): SdMapData | null {
         const scene = this.builtScene;
+        if (scene && ready && !ready(scene)) return null;
         this.builtScene = null;
         return scene;
     }
@@ -72,6 +74,7 @@ export class WebGPUInstances {
         const r = this.renderer;
         this.buildSeq++;
         this.cancelRebuild();
+        if (this.builtScene) WebGPUMapSquare.cancelPreparedLoad(this.builtScene);
         this.builtScene = null;
         r.instanceActive = false;
         r.instanceSceneMap = null;
@@ -121,7 +124,10 @@ export class WebGPUInstances {
                     return undefined;
                 });
             if (build !== this.buildSeq || !r.instanceActive) return;
-            if (mapData) this.builtScene = mapData;
+            if (mapData) {
+                if (this.builtScene) WebGPUMapSquare.cancelPreparedLoad(this.builtScene);
+                this.builtScene = mapData;
+            }
             else console.warn("[webgpu] instance scene load returned no data");
         } finally {
             this.activeBuilds--;

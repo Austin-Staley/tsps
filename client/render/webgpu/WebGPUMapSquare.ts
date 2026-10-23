@@ -1,4 +1,5 @@
 import { CollisionMap } from "../../rs/scene/CollisionMap";
+import { MapGeometryUpload, mapGeometrySources } from "../MapGeometryUpload";
 import type { MapSquare } from "../../game/MapManager";
 import type { Frustum } from "../../game/Frustum";
 import { getMapSquareId } from "../../rs/map/MapFileIndex";
@@ -118,7 +119,13 @@ function createGeometryBuffer(
     device: GPUDevice,
     data: Uint8Array | Int32Array,
     usage: GPUBufferUsageFlags,
+    prepared?: Map<ArrayBufferView, GPUBuffer>,
 ): GPUBuffer {
+    const ready = prepared?.get(data);
+    if (ready) {
+        prepared!.delete(data);
+        return ready;
+    }
     const byteLength = data.byteLength;
     const size = Math.max(4, Math.ceil(byteLength / 4) * 4);
     const buffer = device.createBuffer({ size, usage });
@@ -290,6 +297,7 @@ function createPendingGeometry(
     waterMaskTexture: GPUTexture,
     groundMaterialTexture: GPUTexture,
     input: GeometryInput,
+    prepared?: Map<ArrayBufferView, GPUBuffer>,
 ): PendingGeometry | undefined {
     if (input.opaqueRanges.length === 0 && input.alphaRanges.length === 0) return undefined;
     if (input.vertices.byteLength === 0 || input.indices.length === 0) return undefined;
@@ -298,11 +306,13 @@ function createPendingGeometry(
         device,
         input.vertices,
         GPU_BUFFER_USAGE.VERTEX | GPU_BUFFER_USAGE.COPY_DST,
+        prepared,
     );
     const indexBuffer = createGeometryBuffer(
         device,
         input.indices,
         GPU_BUFFER_USAGE.INDEX | GPU_BUFFER_USAGE.COPY_DST,
+        prepared,
     );
     const opaqueTexture = createModelInfoTexture(device, input.opaqueModelInfo);
     const alphaTexture = createModelInfoTexture(device, input.alphaModelInfo);
@@ -349,6 +359,45 @@ function writeMapUniform(
 }
 
 export class WebGPUMapSquare implements MapSquare {
+    private static readonly pendingGeometry = new Map<RenderMapData,
+        { device: GPUDevice; upload: MapGeometryUpload<GPUBuffer> }>();
+
+    static prepareLoad(device: GPUDevice, data: RenderMapData): boolean {
+        let pending = this.pendingGeometry.get(data);
+        if (!pending) {
+            const sources = mapGeometrySources(data);
+            if (sources.reduce((sum, source) => sum + source.data.byteLength, 0) <= MapGeometryUpload.FRAME_BYTES) return true;
+            const upload = new MapGeometryUpload(sources, (source) => device.createBuffer({
+                size: Math.ceil(source.data.byteLength / 4) * 4,
+                usage: (source.index ? GPU_BUFFER_USAGE.INDEX : GPU_BUFFER_USAGE.VERTEX) | GPU_BUFFER_USAGE.COPY_DST,
+            }), (buffer, bytes, offset) => {
+                if (bytes.byteLength % 4) {
+                    const padded = new Uint8Array(Math.ceil(bytes.byteLength / 4) * 4);
+                    padded.set(bytes);
+                    device.queue.writeBuffer(buffer, offset, padded);
+                } else device.queue.writeBuffer(buffer, offset, bytes);
+            }, (buffer) => buffer.destroy());
+            pending = { device, upload };
+            this.pendingGeometry.set(data, pending);
+        }
+        try {
+            return pending.upload.step();
+        } catch (error) {
+            this.cancelPreparedLoad(data);
+            throw error;
+        }
+    }
+
+    static cancelPreparedLoad(data: RenderMapData): void {
+        this.pendingGeometry.get(data)?.upload.dispose();
+        this.pendingGeometry.delete(data);
+    }
+
+    static cancelPreparedLoads(device: GPUDevice): void {
+        for (const [data, pending] of this.pendingGeometry) {
+            if (pending.device === device) this.cancelPreparedLoad(data);
+        }
+    }
     readonly locDataChangedListeners = new Set<() => void>();
 
     mapX: number;
@@ -444,6 +493,8 @@ export class WebGPUMapSquare implements MapSquare {
         time: number,
         frame: number,
     ): WebGPUMapSquare {
+        const prepared = this.pendingGeometry.get(mapData)?.upload.take();
+        this.pendingGeometry.delete(mapData);
         const { mapX, mapY, borderSize } = mapData;
         const renderPosX = mapData.renderPosX ?? mapX;
         const renderPosY = mapData.renderPosY ?? mapY;
@@ -480,7 +531,8 @@ export class WebGPUMapSquare implements MapSquare {
             waterMaskTexture,
             groundMaterialTexture,
         );
-        for (const kind of GROUP_ORDER) square.setGroup(kind, mapData);
+        for (const kind of GROUP_ORDER) square.setGroup(kind, mapData, prepared);
+        for (const unused of prepared?.values() ?? []) unused.destroy();
         square.collisionMaps = (mapData.collisionDatas ?? []).map(CollisionMap.fromData);
         square.tilePresenceByLevel = mapData.tilePresenceByLevel;
         square.tileRenderFlags = mapData.tileRenderFlags;
@@ -558,7 +610,7 @@ export class WebGPUMapSquare implements MapSquare {
     }
 
     /** (Re)builds one geometry group from `mapData`, destroying the group it replaces. */
-    private setGroup(kind: GeometryGroupKind, mapData: RenderMapData): void {
+    private setGroup(kind: GeometryGroupKind, mapData: RenderMapData, prepared?: Map<ArrayBufferView, GPUBuffer>): void {
         this.destroyGroup(kind);
         if (kind === "loc") {
             this.locAnimationUpdater.clear();
@@ -573,6 +625,7 @@ export class WebGPUMapSquare implements MapSquare {
                   this.waterMaskTexture,
                   this.groundMaterialTexture,
                   input,
+                  prepared,
               )
             : undefined;
         if (geometry) {

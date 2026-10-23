@@ -278,6 +278,7 @@ export async function doInstanceSceneBuild(host: WebGLOsrsRendererHost,
                 } border=${mapData.borderSize} extraLocs=${extraLocs?.length ?? 0}`,
             );
             // Clear any in-flight normal map loads that arrived during the async instance build
+            WebGLMapSquare.cancelPreparedLoads(host.app);
             host.mapsToLoad.clear();
             host.pendingStreamMapsByGeneration.clear();
             // Bypass grid/generation checks — instance scenes are always valid

@@ -1615,7 +1615,11 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // Load new map squares
         profiler.startPhase("mapApply");
         mapApplyCount += host.applyReadyStreamGenerationBatch();
-        const mapData = host.mapsToLoad.shift();
+        const nextMap = host.mapsToLoad.peekFront();
+        const canPrepare = nextMap && !nextMap.doorOnly && !nextMap.locOnly &&
+            !host.pendingLocUpdates.has(getMapSquareId(nextMap.mapX, nextMap.mapY));
+        const mapData = !nextMap || !canPrepare || WebGLMapSquare.prepareLoad(host.app, nextMap)
+            ? host.mapsToLoad.shift() : undefined;
         if (mapData) {
             const firstMapId = getMapSquareId(mapData.mapX, mapData.mapY);
             const firstBatchId = host.queuedLocReloadBatchByMap.get(firstMapId);

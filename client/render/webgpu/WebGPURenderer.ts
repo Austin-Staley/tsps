@@ -402,6 +402,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     override clearInstance(): void {
         this.mapLoadEpoch++;
         this.instances.clear();
+        WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.mapsToLoad.clear();
         // Drops the instance square and resets the grid, so streaming reloads the normal maps.
         this.mapManager.cleanUp();
@@ -517,9 +518,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
      * instance is active are dropped, as WebGL's queueStreamMapData does.
      */
     private applyInstanceScene(frameCount: number): void {
+        for (const queued of this.mapsToLoad.toArray()) WebGPUMapSquare.cancelPreparedLoad(queued.mapData);
         this.mapsToLoad.clear();
         const world = this.world;
-        const mapData = world ? this.instances.takeBuiltScene() : null;
+        const mapData = world ? this.instances.takeBuiltScene((data) => WebGPUMapSquare.prepareLoad(this.device, data)) : null;
         if (!world || !mapData) return;
         // The scene's loc animations go on in the new one (LocAnimated.carryOver): a held one (a
         // collapsed floor) would replay from frame 0 otherwise.
@@ -559,18 +561,24 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const startedAt = performance.now();
         while (this.mapsToLoad.length > 0) {
             if (performance.now() - startedAt > MAP_APPLY_BUDGET_MS) break;
-            const queued = this.mapsToLoad.shift();
+            const queued = this.mapsToLoad.peekFront();
             if (!queued) break;
             const { mapData } = queued;
             const { mapX, mapY } = mapData;
             if (queued.streamGeneration !== undefined && !this.mapManager.isMapInTargetGrid(mapX, mapY)) {
+                this.mapsToLoad.shift();
+                WebGPUMapSquare.cancelPreparedLoad(mapData);
                 this.mapManager.loadingMapIds.delete(getMapSquareId(mapX, mapY));
                 continue;
             }
             // Built before a loc change: the reload LocUpdates queued replaces it.
             if (queued.locVersion !== undefined && !this.locUpdates.isCurrent(mapX, mapY, queued.locVersion)) {
+                this.mapsToLoad.shift();
+                WebGPUMapSquare.cancelPreparedLoad(mapData);
                 continue;
             }
+            if (!mapData.doorOnly && !mapData.locOnly && !WebGPUMapSquare.prepareLoad(this.device, mapData)) break;
+            this.mapsToLoad.shift();
             const existing = this.mapManager.getMap(mapX, mapY);
             if (mapData.doorOnly || mapData.locOnly) {
                 // A door-only/loc-only build only replaces that group of a resident square;
@@ -1076,6 +1084,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
      */
     override clearSessionCaches(): void {
         this.mapLoadEpoch++;
+        WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.locUpdates.dispose();
         this.locOverrides.clear();
         this.addedLocs.clear();
@@ -1096,6 +1105,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     override cleanUp(): void {
         this.mapLoadEpoch++;
+        WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.locUpdates.dispose();
         this.actors?.dispose();
         this.overlays?.dispose();

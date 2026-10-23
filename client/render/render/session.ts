@@ -1,4 +1,5 @@
 import Denque from "denque";
+import { cancelPendingMapUploads } from "./streaming";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
 import { Schema } from "leva/dist/declarations/src/types";
@@ -191,7 +192,7 @@ import { RENDER_CONSTANTS } from "./constants";
 import { cleanUpRenderer } from "./handlers";
 
 export function clearSessionCaches(host: WebGLOsrsRendererHost, ): void {
-
+        cancelPendingMapUploads(host);
         // Clear NPC type caches (grow with each unique NPC type seen)
         host.npcDefaultHeightCache.clear();
         host.npcNameCache.clear();
@@ -270,7 +271,7 @@ export function clearSessionCaches(host: WebGLOsrsRendererHost, ): void {
 }
 
 export async function cleanUp(host: WebGLOsrsRendererHost, ): Promise<void> {
-
+        WebGLMapSquare.cancelPreparedLoads(host.app);
         cleanUpRenderer(host);
         host.canvas.removeEventListener("touchstart", host.onCanvasTouchStart, true);
         if (isMobileMode && typeof window !== "undefined") {

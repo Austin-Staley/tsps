@@ -1,3 +1,5 @@
+import "./browser-self";
+import Denque from "denque";
 import { strict as assert } from "node:assert";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -98,7 +100,7 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
         addedLocs: new Map(), locOverrides: new Map(), locSpawns: new Map(),
         instanceActive: false, instanceTemplateChunks: null, instanceLocRebuildTimer: null,
         instanceBuildSeq: 0, pendingInstanceScene: null,
-        mapsToLoad: { items: [] as any[], clear() { this.items.length = 0; }, push(item: any) { this.items.push(item); } },
+        mapsToLoad: { items: [] as any[], clear() { this.items.length = 0; }, push(item: any) { this.items.push(item); }, toArray() { return this.items; } },
         pendingStreamMapsByGeneration: new Map(),
         mapManager: { loadingMapIds: new Set<number>(), mapSquares: new Map() },
         maxLevel: 3, loadNpcs: false, smoothTerrain: false, hasMultiDraw: true, loadedTextureIds: new Set(),
@@ -618,6 +620,7 @@ for (const key of [
     "queuedLocReloadBatchByMap", "groundItemStacks", "groundItemStackHashes",
     "minimapIcons", "projectileRenderDebugCounts", "cachedLocIds", "cachedObjIds", "cachedNpcIds",
 ]) session[key] = new Map();
+session.mapsToLoad = new Denque();
 session.locOverrides.set("3200,3200,0,-1", { newId: 0, matchType: 0 });
 session.addedLocs.set("3199,3200,0,0", { locId: 778, x: 3199, y: 3200, level: 0, shape: 0, rotation: 1 });
 clearSessionCaches(session);

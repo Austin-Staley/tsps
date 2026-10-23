@@ -189,6 +189,7 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS } from "./constants";
+import { cancelPendingMapUploads } from "./streaming";
 
 export function resolveLocReloadBatchMap(host: WebGLOsrsRendererHost, 
         batchId: number,
@@ -414,7 +415,7 @@ export function isValidMapData(host: WebGLOsrsRendererHost, mapData: SdMapData):
 }
 
 export function clearMaps(host: WebGLOsrsRendererHost, ): void {
-
+        cancelPendingMapUploads(host);
         host.mapManager.cleanUp();
         host.mapsToLoad.clear();
         host.pendingStreamMapsByGeneration.clear();
