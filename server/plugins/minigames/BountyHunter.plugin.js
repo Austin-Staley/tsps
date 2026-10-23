@@ -8,8 +8,9 @@
 module.exports = {
   name: "BountyHunter",
   members: true,
-  // Points re-registers the "BOUNTY HUNTER POINTS" shop currency on varp bh_2023_points.
-  dependsOn: ["Shopkeepers"],
+  // Points re-registers the "BOUNTY HUNTER POINTS" shop currency on varp bh_2023_points;
+  // the bots are the PlayerBots runtime's PvP bots.
+  dependsOn: ["Shopkeepers", "PlayerBots"],
   register(api) {
     const bh = require("./bountyhunter/State.BountyHunter");
     require("./bountyhunter/Hud.BountyHunter")(api, bh);

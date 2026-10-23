@@ -2,31 +2,32 @@
 
 /**
  * Bounty Hunter bots. A real player arriving in an empty crater is asked which bots should
- * populate it (Novice / Intermediate / Veteran / None, as in Castle Wars). The bots spawn at
- * the arena sigils, geared from the PvP presets at combat levels the player can be matched
- * with, and the crater's own matchmaking hands out their targets. Each bot then:
+ * populate it (Novice / Intermediate / Veteran / None, as in Castle Wars). The bots are the
+ * PlayerBots runtime's own PvP bots on its "pvp" brain activity, so they fight exactly as
+ * they do in the Wilderness (specs, switches, prayers, freezes, eating, retaliation); this
+ * unit only adds what Bounty Hunter needs on top:
  *
- *   - eats when low (the PvP bots' eat node, at the tier profile's threshold);
- *   - keeps a fight going, else hunts its Bounty Hunter target;
- *   - otherwise roams the arena near where it stands.
- *
- * A bot that dies respawns outside like anyone else and is put back at a sigil, regeared.
- * Once no real player has been in the crater for a minute, the bots log out.
+ *   - gear and profile from the chosen tier, at combat levels the player can be matched with;
+ *   - the crater's matchmaking picks their fights: an assigned target becomes the bot's PvP
+ *     target, a cleared one is dropped (the engine's own Wilderness seek finds nothing here);
+ *   - with no target they roam the arena;
+ *   - they respawn at their sigil (the runtime's respawn resolver keeps the spawn tile) and
+ *     log out a minute after the last real player leaves the crater.
  */
 
-const { ActionNode, BotController, SelectorNode } = require("../../../src/main/typescript/elvarg/game/bot/BehaviorTree");
-const { createBotPlayer } = require("../../bots/behaviours/spawn/PlayerFactory.PlayerBots");
-const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/PersistenceConstants.PlayerBots");
+const { getActiveBotRuntime } = require("../../bots/runtime/RuntimeRegistry.PlayerBots");
+const { startActivity } = require("../../bots/brain/BrainActivities.PlayerBots");
+const { setModePvp } = require("../../bots/behaviours/state/State.PlayerBots");
 const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment.PlayerBots");
 const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
-const { EatFoodActionNode } = require("../../bots/behaviours/nodes/actions/EatFoodActionNode.PlayerBots");
 const { TIER_OPTIONS, TIER_PROFILE_IDS, TIER_BANDS, pickTierChoice } = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
 const Targets = require("./Targets.BountyHunter");
 const Entry = require("./Entry.BountyHunter");
 
 const BOT_COUNT = 12;
 const BOT_ATTRIBUTE = "bounty-hunter:bot";
-const LOADOUT_RETRY_MS = 5000;
+const PVP_ACTIVITY = "pvp";
+const TARGET_HOLD_MS = 30 * 60 * 1000; // the target is the crater's to clear, not the engine's timer
 const WANDER_RADIUS = 8;
 const WANDER_MIN_MS = 6000;
 const WANDER_JITTER_MS = 10000;
@@ -36,23 +37,24 @@ let api;
 let core;
 let bh;
 
-/** username -> bot state; the shape EatFoodActionNode reads ({ mode, pvp: { profileId, loadoutId } }). */
-const botStates = new Map();
 /** The live bot players. */
 const bots = new Set();
-const controllers = new Map();
-let eatNode;
+const nextWanderAt = new WeakMap();
 let emptyTicks = 0;
 
-// --- Population ----------------------------------------------------------------------------
-
 function isBot(player) {
-  return player.getAttribute(BOT_ATTRIBUTE) === true;
+  return player?.getAttribute?.(BOT_ATTRIBUTE) === true;
+}
+
+function stateOf(player) {
+  return getActiveBotRuntime().runtime?.botStatesByName?.get(player.getUsername()) ?? null;
 }
 
 function realPlayersInCrater() {
   return [...bh.lobby, ...bh.arena].filter((player) => !isBot(player));
 }
+
+// --- Population ----------------------------------------------------------------------------
 
 /**
  * The levels a bot can be matched with `player` at: the player's own range (15 below to their
@@ -69,37 +71,45 @@ function botLevelBand(player, tier) {
   return min <= max ? { min, max } : match;
 }
 
-function spawnBot(index, tier, band) {
-  const username = `BHBot${index + 1}`;
-  if (botStates.has(username)) return;
-  const bot = createBotPlayer(username, Entry.spawnTile(), { api, loadPersistence: false, saveRandomizedAppearance: false });
-  if (!bot) return;
-  bot.setPlayerBot(true);
-  bot.setAttribute(ATTR_SKIP_PERSISTENCE, true);
-  bot.setAttribute(BOT_ATTRIBUTE, true);
+/** The tier's profile and loadout replace the runtime's random pick, then the bot regears. */
+function applyTier(bot, state, tier, band, index) {
   const choice = pickTierChoice(tier, { index, band });
-  botStates.set(username, {
-    mode: "pvp",
-    tier,
-    band,
-    choice,
-    equipped: false,
-    nextLoadoutAt: Date.now() + Math.floor(Math.random() * 1500),
-    nextWanderAt: 0,
-    pvp: {},
+  Object.assign(state.pvp, buildRoamingPvpMetadata({
+    excludeF2p: false,
+    config: choice
+      ? { pvp: { loadoutWeights: [{ value: choice.loadoutId, weight: 1 }], profileWeights: [{ value: TIER_PROFILE_IDS[tier], weight: 1 }] } }
+      : {},
+  }), {
+    combatLevelRange: band,
+    generatedArchetypeId: choice?.archetypeId ?? null,
   });
+  applyGeneratedPvpLoadout(bot, state, { api });
+}
+
+function spawnBot(runtime, behaviorMode, index, tier, band) {
+  const spawn = Entry.spawnTile();
+  const bot = runtime.spawnPvpBot(spawn, { username: `BHBot${index + 1}`, mode: behaviorMode.PVP });
+  const state = bot && stateOf(bot);
+  if (!state?.pvp) return;
+  bot.setAttribute(BOT_ATTRIBUTE, true);
+  applyTier(bot, state, tier, band, index);
+  startActivity(bot, PVP_ACTIVITY, { home: { x: spawn.getX(), y: spawn.getY(), z: spawn.getZ() } });
   bots.add(bot);
-  api.emitPlayerLogin({ player: bot, username });
 }
 
 function populate(player, tier) {
+  const { runtime, behaviorMode } = getActiveBotRuntime();
+  if (!runtime) {
+    player.sendMessage("Bots are unavailable on this world.");
+    return;
+  }
   const band = botLevelBand(player, tier);
-  for (let index = 0; index < BOT_COUNT; index++) spawnBot(index, tier, band);
+  for (let index = 0; index < BOT_COUNT; index++) spawnBot(runtime, behaviorMode, index, tier, band);
 }
 
 /** A real player arriving in an empty crater picks the bots, or None. */
 function offerBots({ player }) {
-  if (isBot(player) || botStates.size > 0 || realPlayersInCrater().some((other) => other !== player)) return;
+  if (isBot(player) || bots.size > 0 || realPlayersInCrater().some((other) => other !== player)) return;
   const options = TIER_OPTIONS.flatMap(([label, tier]) => [label, () => populate(player, tier)]);
   api.sendMultiChatboxPrompt(player, "The Bounty Hunter crater is empty. Which bots should populate it?",
     ...options,
@@ -112,90 +122,46 @@ function despawnAll() {
     player.requestLogout();
   }
   bots.clear();
-  botStates.clear();
-  controllers.clear();
 }
 
-// --- Behaviour -----------------------------------------------------------------------------
+// --- Bounty Hunter on top of the PvP brain -------------------------------------------------
 
-function ensureLoadout(player, state, nowMs) {
-  if (state.equipped || nowMs < state.nextLoadoutAt) return;
-  state.nextLoadoutAt = nowMs + LOADOUT_RETRY_MS;
-  const { choice, tier, band } = state;
-  state.pvp = {
-    ...buildRoamingPvpMetadata({
-      excludeF2p: false,
-      config: choice
-        ? { pvp: { loadoutWeights: [{ value: choice.loadoutId, weight: 1 }], profileWeights: [{ value: TIER_PROFILE_IDS[tier], weight: 1 }] } }
-        : {},
-    }),
-    combatLevelRange: band,
-    ...(choice ? { generatedArchetypeId: choice.archetypeId } : {}),
-  };
-  state.equipped = applyGeneratedPvpLoadout(player, state, { api }) === true;
+/** The crater's matchmaking gave a bot its target: that is the bot's next fight. */
+function huntTarget({ player, target }) {
+  if (!isBot(player)) return;
+  const state = stateOf(player);
+  if (!state?.pvp) return;
+  const { behaviorMode } = getActiveBotRuntime();
+  setModePvp(player, state, target, Date.now(), TARGET_HOLD_MS, behaviorMode, { allowInCombatTransition: true });
 }
 
-function alive(mobile) {
-  return Boolean(mobile) && mobile.isRegistered?.() !== false && mobile.getHitpoints() > 0;
+/** Target gone: drop it; the engine's validation resets the bot to seeking next tick. */
+function dropTarget({ player }) {
+  if (!isBot(player)) return;
+  const pvp = stateOf(player)?.pvp;
+  if (!pvp) return;
+  pvp.targetUsername = null;
+  pvp.targetPlayer = null;
 }
 
-/** Keep the current fight, else go for the Bounty Hunter target. */
-function fight({ player }) {
+function idle(player) {
   const combat = player.getCombat();
-  if (alive(combat.getTarget?.()) || alive(combat.getAttacker?.())) return "running";
-  const target = bh.targetOf(player);
-  if (!alive(target) || !bh.inArena(target)) return "failure";
-  const method = core.CombatFactory.getMethod(player);
-  if (core.CombatFactory.canAttackPermission(player, target, false, method) !== core.CanAttackResponse.CAN_ATTACK) {
-    return "failure";
-  }
-  combat.attack(target);
-  return "running";
+  return !combat.getTarget?.() && !combat.getAttacker?.() && !bh.targetOf(player) &&
+    player.getMovementQueue().size() === 0;
 }
 
-/** Drift to a random arena tile nearby now and then. */
-function wander({ player, nowMs }) {
-  const state = botStates.get(player.getUsername());
-  if (nowMs < state.nextWanderAt || player.getMovementQueue().size() > 0) return "running";
-  state.nextWanderAt = nowMs + WANDER_MIN_MS + Math.floor(Math.random() * WANDER_JITTER_MS);
+/** The PvP engine only roams the Wilderness; a bot with no target roams the arena instead. */
+function wander(player, nowMs) {
+  if (nowMs < (nextWanderAt.get(player) ?? 0) || !idle(player)) return;
+  nextWanderAt.set(player, nowMs + WANDER_MIN_MS + Math.floor(Math.random() * WANDER_JITTER_MS));
   const here = player.getLocation();
   const x = here.getX() + core.Misc.random(WANDER_RADIUS * 2) - WANDER_RADIUS;
   const y = here.getY() + core.Misc.random(WANDER_RADIUS * 2) - WANDER_RADIUS;
   if (bh.isArenaTile({ x, y, z: 0 })) core.PathFinder.calculateWalkRoute(player, x, y);
-  return "running";
-}
-
-function controllerFor(player) {
-  let controller = controllers.get(player);
-  if (!controller) {
-    const at = player.getLocation();
-    controller = new BotController(player, at.getX(), at.getY(), at.getZ(), new SelectorNode([
-      eatNode,
-      new ActionNode(fight),
-      new ActionNode(wander),
-    ]));
-    controllers.set(player, controller);
-  }
-  return controller;
-}
-
-function processBot(player, nowMs) {
-  const state = botStates.get(player.getUsername());
-  if (!state || player.getHitpoints() <= 0) {
-    if (state) state.equipped = false; // death strips the gear: regear on respawn
-    return;
-  }
-  if (!bh.inCrater(player)) {
-    // Respawned outside after a death: back to a sigil.
-    player.moveTo(Entry.spawnTile());
-    return;
-  }
-  ensureLoadout(player, state, nowMs);
-  controllerFor(player).tick(nowMs);
 }
 
 function tick() {
-  if (botStates.size === 0) return;
+  if (bots.size === 0) return;
   emptyTicks = realPlayersInCrater().length > 0 ? 0 : emptyTicks + 1;
   if (emptyTicks >= DESPAWN_AFTER_TICKS) {
     emptyTicks = 0;
@@ -203,18 +169,18 @@ function tick() {
     return;
   }
   const nowMs = Date.now();
-  for (const player of bots) processBot(player, nowMs);
+  for (const player of bots) {
+    if (player.getHitpoints() <= 0 || player.isDyingReturn?.() === true) continue;
+    if (!bh.inCrater(player)) player.moveTo(Entry.spawnTile());
+    else if (bh.inArena(player)) wander(player, nowMs);
+  }
 }
 
 function forgetBot({ player }) {
-  if (!isBot(player)) return;
   bots.delete(player);
-  botStates.delete(player.getUsername());
-  controllers.delete(player);
 }
 
 function startTask() {
-  // A dedicated task: the world strides idle player bots, far too slowly for a fight.
   const task = new core.Task(1);
   task.execute = tick;
   api.getTaskManager?.()?.submit?.(task);
@@ -224,10 +190,11 @@ module.exports = function attachBots(pluginApi, state) {
   api = pluginApi;
   core = pluginApi.core;
   bh = state;
-  eatNode = new EatFoodActionNode(botStates, api);
   api.onCustomEvent("bounty-hunter:entered-lobby", offerBots);
+  api.onCustomEvent("bounty-hunter:target-assigned", huntTarget);
+  api.onCustomEvent("bounty-hunter:target-cleared", dropTarget);
   api.onPlayerLogout(forgetBot);
   api.onServerStartup(startTask);
 };
 
-Object.assign(module.exports, { _test: { botLevelBand, offerBots, botStates, BOT_COUNT } });
+Object.assign(module.exports, { _test: { botLevelBand, offerBots, huntTarget, dropTarget, BOT_COUNT } });

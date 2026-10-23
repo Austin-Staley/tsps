@@ -5,7 +5,7 @@
  * Transcript:Bounty_Hunter_portal, Transcript:Corrupted_Warrior_(Bounty_Hunter)):
  *
  * - the portal in Ferox Enclave asks "Teleport to Bounty Hunter?" and puts the player in Fort
- *   Daimon; it needs combat level 32 and 12 hours played. The first time, the Corrupted Warrior
+ *   Daimon; it needs combat level 32 (no play-time requirement here). The first time, the Corrupted Warrior
  *   outside gives the rules instead (14 June 2023). The crater's portal asks "Leave Bounty
  *   Hunter?" and goes back to Ferox. Every world here counts as a Bounty Hunter world;
  * - the fort's Arena gates (Enter) put the player on a random demonic sigil in the arena, once
@@ -17,7 +17,6 @@
  */
 
 const MIN_COMBAT_LEVEL = 32;
-const MIN_PLAY_SECONDS = 12 * 60 * 60;
 // ponytail: the Wiki's PvP world rule says "a few seconds" after a special attack; 3 s here.
 const SPECIAL_EXIT_DELAY_TICKS = 5;
 const SPAWN_SEARCH_RADIUS = 2;
@@ -42,18 +41,10 @@ function inCraterBox(location) {
   return bh.isArenaTile(location) || bh.isLobbyTile(location);
 }
 
-function playSeconds(player) {
-  const request = { player, seconds: null };
-  api.emitCustomEvent("player:lifetime-seconds", request);
-  return request.seconds;
-}
-
 function portalRefusal(player) {
   if (player.getSkillManager().getCombatLevel() < MIN_COMBAT_LEVEL) {
     return `You need a combat level of at least ${MIN_COMBAT_LEVEL} to enter Bounty Hunter.`;
   }
-  const seconds = playSeconds(player);
-  if (seconds != null && seconds < MIN_PLAY_SECONDS) return "You need at least 12 hours of play time to enter Bounty Hunter.";
   return null;
 }
 
