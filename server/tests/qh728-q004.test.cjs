@@ -304,7 +304,7 @@ test('AFL full-inventory recovery stops the sample, trimmed fur and report hand-
 
   h.quest.setStage(p, 9); p.full = true;
   talkName(h, p, 'Atza', N.ATZA);
-  h.continueUntil(p, () => /don't have enough room/.test(p.text));
+  h.continueUntil(p, () => /don't have (enough room|space)/.test(p.text));
   assert.equal(p.items.get(I.TRIMMED_FUR), undefined);
   h.finish(p);
 
@@ -364,6 +364,102 @@ test('AFL stage 11 with no report keeps out-of-order bed repair and recovers thr
   p.manager.advance();
   assert.equal(h.quest.getStage(p), 12);
   assert.equal(h.quest.isComplete(p), true);
+});
+
+test('AFL interrupted Atza hand-in recovers the pile through the registered Atza talk', () => {
+  const { h, p } = afl();
+  h.quest.setStage(p, 7);
+  p.items.set(I.FUR_SAMPLE, 1);
+
+  // The natural hand-in: Atza takes the sample and the stage moves on.
+  talkName(h, p, 'Atza', N.ATZA);
+  h.continueUntil(p, () => /give the fur sample/.test(p.text));
+  assert.equal(h.quest.getStage(p), 8);
+  assert.equal(p.items.get(I.FUR_SAMPLE), 0);
+
+  // The chatbox is closed before Atza's "It's all in that pile..." line, so the
+  // pile flag is never set.
+  p.getPacketSender().sendInterfaceRemoval();
+  assert.equal(p.varbits.get(9840) ?? 0, 0, 'the interrupted hand-in left the pile locked');
+
+  // Talking to Atza again must release the pile.
+  talkName(h, p, 'Atza', N.ATZA);
+  assert.equal(p.varbits.get(9840), 1, 'Atza did not re-ask for the pile');
+  h.continueUntil(p, () => p.text.startsWith('Don\'t forget'));
+  h.finish(p);
+
+  p.items.set(I.HAMMER, 1);
+  objectClick(h, p, 50880);
+  assert.ok(p.animations.includes(3676), 'the pile object stayed locked after the recovery');
+  h.tick(2);
+  h.continueUntil(p, () => p.text === 'All done!'); assert.equal(p.varbits.get(9840), 2);
+  h.continueUntil(p, () => /trimmed fur/.test(p.text));
+  assert.equal(h.quest.getStage(p), 9);
+  assert.equal(p.items.get(I.TRIMMED_FUR), 1);
+  h.finish(p);
+});
+
+test('AFL interrupted pile completion recovers the canonical trimmed fur hand-out', () => {
+  const { h, p } = afl();
+  h.quest.setStage(p, 8);
+  p.attrs.set('at-first-light:vars', 1 << 9); // housetrapped = 1, the pile is open
+  p.items.set(I.HAMMER, 1);
+
+  objectClick(h, p, 50880);
+  h.tick(2);
+  h.continueUntil(p, () => p.text === 'All done!');
+  assert.equal(p.varbits.get(9840), 2);
+  assert.equal(h.quest.getStage(p), 8, 'the stage only moves on with the fur');
+
+  // The chatbox is closed between "All done!" and Atza's trimmed fur hand-out.
+  p.getPacketSender().sendInterfaceRemoval();
+  assert.equal(p.items.get(I.TRIMMED_FUR), undefined, 'the interrupted pile gave no fur');
+
+  talkName(h, p, 'Atza', N.ATZA);
+  h.continueUntil(p, () => /trimmed fur/.test(p.text));
+  assert.equal(p.items.get(I.TRIMMED_FUR), 1, 'Atza did not hand over the trimmed fur');
+  assert.equal(h.quest.getStage(p), 9);
+  h.finish(p);
+});
+
+test('AFL keeps the interrupted pile recovery across a relog', () => {
+  const { h, p } = afl();
+  h.quest.setStage(p, 7);
+  p.items.set(I.FUR_SAMPLE, 1);
+
+  talkName(h, p, 'Atza', N.ATZA);
+  h.continueUntil(p, () => /give the fur sample/.test(p.text));
+  assert.equal(h.quest.getStage(p), 8);
+  p.getPacketSender().sendInterfaceRemoval();
+
+  // Log out and back in: the stage and the packed flags have to survive.
+  h.hooks.onPlayerLogout[0]({ player: p });
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.events['player:bootstrap-complete'][0]({ player: p });
+  assert.equal(h.quest.getStage(p), 8);
+  assert.equal(p.varbits.get(9840), 0, 'the relog left the pile flag as it was');
+
+  talkName(h, p, 'Atza', N.ATZA);
+  assert.equal(p.varbits.get(9840), 1, 'the relog lost the pile recovery');
+  h.finish(p);
+});
+
+test('AFL does not hand out a second trimmed fur after the bed is repaired', () => {
+  const { h, p } = afl();
+  h.quest.setStage(p, 11);
+  p.attrs.set('at-first-light:vars', 1 << 7); // bedRepair = 1
+
+  // The imported guard the transcript uses, answered through the registered dispatch.
+  const condition = stepId => PluginManager.emitNpcDialogueCondition({ player: p, stepId, text: '', npcId: N.ATZA });
+  assert.equal(condition('t0t5aX'), false, 'the guard still offers a replacement after the repair');
+  p.attrs.set('at-first-light:vars', 0);
+  assert.equal(condition('t0t5aX'), true, 'the guard offers a replacement before the repair');
+  p.attrs.set('at-first-light:vars', 1 << 7);
+
+  talkName(h, p, 'Atza', N.ATZA);
+  h.finish(p);
+  assert.equal(p.items.get(I.TRIMMED_FUR), undefined, 'Atza handed out a duplicate trimmed fur');
+  assert.equal(h.quest.getStage(p), 11);
 });
 
 test('AFL imported leaf-pick guards answer the real transcript conditions', () => {

@@ -492,10 +492,22 @@ module.exports = function registerAtFirstLightQuest(api) {
     } else if (stage < STAGE_SAMPLE) {
       startTranscript(api, player, ATZA_NPC_ID, "Atza", "standard-dialogue-before-at-first-light");
     } else if (stage >= STAGE_TRIMMED_FUR) {
-      startTranscript(api, player, ATZA_NPC_ID, PAGE, held(player, TRIMMED_FUR_ITEM_ID)
-        ? "fox-tracking-talking-to-atza-after-setting-up-the-equipment-talking-to-atza-again"
-        : "fox-tracking-talking-to-atza-after-setting-up-the-equipment");
+      // The "talking to Atza again" variant carries the imported guards: t0t5aX only
+      // replaces the trimmed fur while the bed is unrepaired and zL_kax points the
+      // player back to Fox. The unconditional hand-out (KG819o) would give a second
+      // trimmed fur once the bed repair has eaten the first one.
+      startTranscript(api, player, ATZA_NPC_ID, PAGE, "fox-tracking-talking-to-atza-after-setting-up-the-equipment-talking-to-atza-again");
     } else if (stage >= STAGE_SAMPLE_GIVEN) {
+      const trapped = sub(player, "housetrapped");
+      if (trapped === 2) {
+        // The pile was assembled, but the trimmed fur hand-out never reached the
+        // player (the conversation was cut short). Atza still has it to give.
+        startTranscript(api, player, ATZA_NPC_ID, PAGE, "fox-tracking-talking-to-atza-after-setting-up-the-equipment");
+        return;
+      }
+      // The sample is in Atza's hands, so she has asked for the pile: the pile object
+      // only opens once housetrapped is 1, which the interrupted hand-in never set.
+      if (trapped === 0) setSub(player, "housetrapped", 1);
       startTranscript(api, player, ATZA_NPC_ID, PAGE, "fox-tracking-talking-to-atza-after-she-asks-to-set-up-the-equipment");
     } else {
       startTranscript(api, player, ATZA_NPC_ID, PAGE, "fox-tracking-talking-to-atza");
