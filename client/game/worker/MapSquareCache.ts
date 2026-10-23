@@ -171,6 +171,23 @@ function openDb(): Promise<IDBDatabase | undefined> {
     return dbPromise;
 }
 
+export function compactSquareGeometry(data: SdMapData): boolean {
+    let changed = false;
+    for (const key of ["vertices", "doorVertices", "npcVertices"] as const) {
+        const bytes = data[key];
+        if (bytes && bytes.buffer.byteLength !== bytes.byteLength) {
+            data[key] = bytes.slice();
+            changed = true;
+        }
+    }
+    const loc = data.loc;
+    if (loc && loc.vertices.buffer.byteLength !== loc.vertices.byteLength) {
+        loc.vertices = loc.vertices.slice();
+        changed = true;
+    }
+    return changed;
+}
+
 /** Every failure resolves to "no cache": map loading must never depend on storage. */
 export async function readSquare(key: string): Promise<Entry | undefined> {
     try {
@@ -178,7 +195,12 @@ export async function readSquare(key: string): Promise<Entry | undefined> {
         if (!db) return undefined;
         const tx = db.transaction(["data", "meta"], "readwrite");
         const entry = (await req(tx.objectStore("data").get(key))) as Entry | undefined;
-        if (entry) tx.objectStore("meta").put({ lastUsed: Date.now() }, key);
+        if (entry) {
+            if (compactSquareGeometry(entry.data)) {
+                try { tx.objectStore("data").put(entry, key); } catch {}
+            }
+            tx.objectStore("meta").put({ lastUsed: Date.now() }, key);
+        }
         return entry;
     } catch {
         return undefined;

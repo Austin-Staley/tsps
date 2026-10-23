@@ -861,7 +861,7 @@ export function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
         );
 
     return {
-        vertices: sceneBuf.vertexBuf.byteArray(),
+        vertices: sceneBuf.vertexBuf.byteArray().slice(),
         indices: new Int32Array(sceneBuf.indices),
 
         modelTextureData: createModelInfoTextureData(sceneBuf.drawCommands),
@@ -2091,11 +2091,11 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
               }
             : buildTerrainPickData(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
 
-        const vertices = sceneBuf.vertexBuf.byteArray();
+        const vertices = sceneBuf.vertexBuf.byteArray().slice();
         const indices = new Int32Array(sceneBuf.indices);
-        const doorVertices = doorSceneBuf.vertexBuf.byteArray();
+        const doorVertices = doorSceneBuf.vertexBuf.byteArray().slice();
         const doorIndices = new Int32Array(doorSceneBuf.indices);
-        const npcVertices = npcSceneBuf.vertexBuf.byteArray();
+        const npcVertices = npcSceneBuf.vertexBuf.byteArray().slice();
         const npcIndices = new Int32Array(npcSceneBuf.indices);
 
         const minimapBlobs: Blob[] = shouldLoadPartial ? [] : new Array(Scene.MAX_LEVELS);
@@ -2469,7 +2469,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             renderBaseTile ? renderBaseTile.y | 0 : mapY * Scene.MAP_SQUARE_SIZE,
         );
 
-        const vertices = npcSceneBuf.vertexBuf.byteArray();
+        const vertices = npcSceneBuf.vertexBuf.byteArray().slice();
         const indices = new Int32Array(npcSceneBuf.indices);
 
         const loadedTextures = new Map<number, Int32Array>();
