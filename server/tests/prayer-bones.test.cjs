@@ -27,6 +27,8 @@ const handlers = new Map();
 const firstActions = [];
 let burialTasks = [];
 let membersWorld = true;
+let pluginConfig = {};
+const configReads = [];
 const api = {
   core: {
     Skill, Location, Equipment, ItemIdentifiers: Items, ObjectIdentifiers: Objects, CacheDefinitions, Animation, Sound,
@@ -46,6 +48,7 @@ const api = {
   onPlayerDisconnect(handler) { handlers.set("disconnect", [handler]); },
   onPlayerDeath(handler) { handlers.set("death", [handler]); },
   getTaskManager: () => ({ submit(task) { task.setRunning(true); burialTasks.push(task); } }),
+  getPluginConfig(key, fallback) { configReads.push([key, fallback]); return key in pluginConfig ? pluginConfig[key] : fallback; },
 };
 
 let diaryElite = false;
@@ -66,6 +69,8 @@ beforeEach(() => {
   diaryElite = false;
   burialTasks = [];
   membersWorld = true;
+  pluginConfig = {};
+  configReads.length = 0;
 });
 
 function player({ at = [3222, 3218], prayer = 50, maxPrayer = 70, amulet = null, inventory = {} } = {}) {
@@ -263,7 +268,41 @@ function tickBurials(count) {
 }
 const clickBury = (who, slot = 0) => firstActions[0]({ player: who, itemId: who.slots[slot].getId(), slot });
 
+test("by default a Bury click buries only the clicked bone, as OSRS, and nothing but movement interrupts it", () => {
+  // Unset, false or anything but the boolean true leaves burial as upstream: one bone per click.
+  for (const value of [undefined, false, "true"]) {
+    pluginConfig = value === undefined ? {} : { "Prayer:sequentialBurying": value };
+    const who = burialPlayer([Items.BONES, Items.BONES, Items.BONES]);
+    assert.equal(clickBury(who), true);
+    assert.deepEqual(configReads.at(-1), ["Prayer:sequentialBurying", false]);
+    assert.equal(who.state.skill, null, "a single burial is not a cancellable skilling action");
+    api.emitCustomEvent("can-use-item", { player: who, action: "action", itemId: Items.COINS });
+    tickBurials(1);
+    assert.equal(who.xp.get(Skill.PRAYER), undefined);
+    tickBurials(1);
+    assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
+    tickBurials(4);
+    assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
+    assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
+    assert.equal(burialTasks.some(task => task.isRunning()), false);
+    assert.deepEqual(who.animations.map(animation => animation.id), [827, Animation.DEFAULT_RESET_ANIMATION.id]);
+  }
+});
+
+test("by default walking away before the bone resolves keeps it, with the animation reset", () => {
+  const who = burialPlayer([Items.BONES]);
+  clickBury(who);
+  tickBurials(1);
+  who.state.location = new Location(3223, 3218, 0);
+  tickBurials(2);
+  assert.equal(who.xp.get(Skill.PRAYER), undefined);
+  assert.equal(who.slots[0].getId(), Items.BONES);
+  assert.equal(burialTasks.some(task => task.isRunning()), false);
+  assert.equal(who.animations.at(-1), Animation.DEFAULT_RESET_ANIMATION);
+});
+
 test("one Bury click buries the remaining bones sequentially, one every two ticks", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   const who = burialPlayer([Items.BONES, Items.BONES, Items.BONES]);
   assert.equal(clickBury(who), true);
   tickBurials(1);
@@ -278,6 +317,7 @@ test("one Bury click buries the remaining bones sequentially, one every two tick
 });
 
 test("the clicked bone is first, then eligible mixed bones in slot order", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   const superior = CacheDefinitions.getObjId("dragon_bones_superior");
   const who = burialPlayer([Items.BONES, Items.COINS, Items.BIG_BONES, superior, Items.BIG_BONES], 1);
   clickBury(who, 2);
@@ -291,6 +331,7 @@ test("the clicked bone is first, then eligible mixed bones in slot order", () =>
 });
 
 test("moving or replacing the resolving bone stops burial without consuming another item", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   for (const changed of ["location", "slot"]) {
     const who = burialPlayer([Items.BONES, Items.BONES]);
     clickBury(who);
@@ -304,6 +345,7 @@ test("moving or replacing the resolving bone stops burial without consuming anot
 });
 
 test("logout, disconnect, death, level-up and another item action cancel unresolved burial", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   for (const event of ["logout", "disconnect", "death", "level-up:popup-opened", "can-use-item"]) {
     const who = burialPlayer([Items.BONES, Items.BONES]);
     clickBury(who);
@@ -316,6 +358,7 @@ test("logout, disconnect, death, level-up and another item action cancel unresol
 });
 
 test("a repeated Bury click replaces its previous sequence instead of doubling rewards", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   const who = burialPlayer([Items.BONES, Items.BONES, Items.BONES]);
   clickBury(who);
   clickBury(who, 1);
@@ -325,6 +368,7 @@ test("a repeated Bury click replaces its previous sequence instead of doubling r
 });
 
 test("automatic burial leaves members-only bones untouched on a free world", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   membersWorld = false;
   const who = burialPlayer([Items.BONES, Items.DRAGON_BONES, Items.BONES]);
   clickBury(who);
@@ -334,6 +378,7 @@ test("automatic burial leaves members-only bones untouched on a free world", () 
 });
 
 test("a level-up caused by resolving a bone stops before consuming the next bone", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   const who = burialPlayer([Items.BONES, Items.BONES]);
   const skills = who.getSkillManager();
   who.getSkillManager = () => ({ ...skills, addExperiences(skill, amount) {
@@ -349,6 +394,7 @@ test("a level-up caused by resolving a bone stops before consuming the next bone
 });
 
 test("loss of skilling ownership cancels burial without resetting another action's animation", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
   const who = burialPlayer([Items.BONES, Items.BONES]);
   clickBury(who);
   const count = who.animations.length;

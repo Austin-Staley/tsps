@@ -27,6 +27,14 @@ let bones = null;
 let ashes = null;
 const burials = new WeakMap();
 
+/**
+ * world.json `pluginConfig` `"Prayer:sequentialBurying": true` (overridable in world.local.json)
+ * makes one Bury click continue through the inventory's bones (docs/prayer-bones.md). Off by
+ * default: one bone per click, as OSRS.
+ */
+const SEQUENTIAL_CONFIG = "Prayer:sequentialBurying";
+const sequentialBurying = () => api.getPluginConfig(SEQUENTIAL_CONFIG, false) === true;
+
 /** Rows keyed by item id, resolved from their obj gamevals on first use. */
 function rowsByItemId(rows) {
   const map = new Map();
@@ -95,7 +103,7 @@ function interruptBurialForItem(event) {
 
 function buryBone({ player, itemId, slot }) {
   const core = api.core;
-  let bone = boneFor(itemId);
+  const bone = boneFor(itemId);
   if (!bone) return false;
   if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
   const inventory = player.getInventory();
@@ -104,7 +112,59 @@ function buryBone({ player, itemId, slot }) {
     player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
     return true;
   }
+  if (sequentialBurying()) burySequence(player, itemId, slot, bone);
+  else buryOnce(player, itemId, slot, bone);
+  return true;
+}
 
+/** Still online, alive and standing where the burial started. */
+function stillBurying(player, location) {
+  return player.isRegistered() && player.getHitpoints() > 0 &&
+    player.getLocation().equals(location) && player.getMovementQueue().size() === 0 &&
+    player.getForceMovement() == null;
+}
+
+/** Consumes the bone at `slot` with its messages and experience; false when it is no longer there. */
+function resolveBurial(player, itemId, slot, bone) {
+  const inventory = player.getInventory();
+  if (inventory.get(slot)?.getId() !== itemId) return false;
+  inventory.deleteAtSlot(slot, 1);
+  player.sendMessage("You dig a hole in the ground..");
+  player.sendMessage(`..and bury the ${api.core.ItemDefinition.forId(itemId).getName()}.`);
+  award(player, itemId, bone, 1);
+  return true;
+}
+
+/** One bone per Bury click, as OSRS (the default). */
+function buryOnce(player, itemId, slot, bone) {
+  const core = api.core;
+  player.getSkillManager().stopSkillable();
+  player.getPacketSender().sendInterfaceRemoval();
+  player.performAnimation(new core.Animation(BURY_ANIMATION));
+  core.Sounds.sendSound(player, core.Sound.BURY_BONES);
+  const location = player.getLocation().clone();
+  // Consume and award XP together on the resolving tick. An interrupted burial
+  // keeps its bone, including on logout before the account is saved.
+  const task = new core.CountdownTask(player, 2, () => {
+    if (stillBurying(player, location)) resolveBurial(player, itemId, slot, bone);
+  });
+  task.onTick = () => { if (!stillBurying(player, location)) task.stop(); };
+  const stop = task.stop.bind(task);
+  task.stop = () => {
+    stop();
+    if (player.isRegistered()) player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
+  };
+  api.getTaskManager().submit(task);
+  player.getClickDelay().reset();
+}
+
+/**
+ * With `Prayer:sequentialBurying`: the clicked bone, then every eligible bone left in the
+ * inventory in slot order, one every two ticks, until the player does anything else.
+ */
+function burySequence(player, itemId, slot, bone) {
+  const core = api.core;
+  const inventory = player.getInventory();
   stopBurial({ player });
   player.getSkillManager().stopSkillable();
   player.getPacketSender().sendInterfaceRemoval();
@@ -114,11 +174,7 @@ function buryBone({ player, itemId, slot }) {
   const task = new (class extends core.Task {
     constructor() { super(2, player, false); }
     execute() {
-      if (!canComplete() || inventory.get(slot)?.getId() !== itemId) return this.stop();
-      inventory.deleteAtSlot(slot, 1);
-      player.sendMessage("You dig a hole in the ground..");
-      player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
-      award(player, itemId, bone, 1);
+      if (!canComplete() || !resolveBurial(player, itemId, slot, bone)) return this.stop();
       // Awarding XP can open a level-up popup and cancel this sequence.
       if (!this.isRunning() || !canComplete()) return this.stop();
       const next = inventory.getItems().findIndex(item => {
@@ -147,9 +203,7 @@ function buryBone({ player, itemId, slot }) {
   // Register as a cancellable skilling action so ordinary interactions can stop it.
   const action = { cancel: () => task.stop() };
   function canComplete() {
-    return player.isRegistered() && player.getHitpoints() > 0 &&
-      player.getLocation().equals(location) && player.getMovementQueue().size() === 0 &&
-      player.getForceMovement() == null && player.getSkill() === action;
+    return stillBurying(player, location) && player.getSkill() === action;
   }
   function animate() {
     player.performAnimation(new core.Animation(BURY_ANIMATION));
@@ -160,7 +214,6 @@ function buryBone({ player, itemId, slot }) {
   player.setSkill(action);
   animate();
   api.getTaskManager().submit(task);
-  return true;
 }
 
 /**
