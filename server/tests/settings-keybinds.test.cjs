@@ -44,12 +44,13 @@ test('search results number rows across every category, so the keybinds come aft
 });
 
 /** The Settings plugin registered on a fake api; returns its button handlers and custom events. */
-function registered() {
+function registered({persistAttribute = () => {}} = {}) {
   const buttons = new Map();
   const events = new Map();
   const logins = [];
   const ids = (id) => (Array.isArray(id) ? id : [id]);
   const api = {
+    persistAttribute,
     onInterfaceActionButton: (id, handler) => ids(id).forEach((one) => buttons.set(one, handler)),
     onCustomEvent: (name, handler) => events.set(name, handler),
     onPlayerLogin: (handler) => logins.push(handler),
@@ -198,6 +199,37 @@ test('Hide roofs is saved and sent back on login (the client script flips it too
   player.sent.length = 0;
   logins.find((login) => login.name === 'restoreSettings')({ player });
   assert.ok(player.sent.includes('varbit 12378=1'));
+});
+
+test('the native master clue warning toggles both ways and survives actual player save/load', () => {
+  const {Player} = require('../dist/game/entity/impl/player/Player');
+  const {PlayerSave} = require('../dist/game/entity/impl/player/persistence/PlayerSave');
+  const {buttons, logins} = registered({persistAttribute: (key, value) => PlayerSave.persistAttribute(key, value)});
+  const restore = logins.find(login => login.name === 'restoreSettings');
+  const settingId = 379, varbit = CacheDefinitions.getVarbitId('option_trail_reminder_master');
+  assert.equal(varbit, 10725);
+  assert.equal(CacheDefinitions.getStructParams(955).get(1077), settingId);
+  const ids = [];
+  for (const [, categoryId] of [...CacheDefinitions.getEnumValues(422)].sort(([a], [b]) => a - b)) {
+    const category = CacheDefinitions.getStructParams(Number(categoryId));
+    for (const [, structId] of [...CacheDefinitions.getEnumValues(Number(category.get(745)))].sort(([a], [b]) => a - b))
+      ids.push(CacheDefinitions.getStructParams(Number(structId)).get(1077));
+  }
+  const row = ids.indexOf(settingId); assert.ok(row >= 0, 'the setting is present in native search results');
+  let player = new Player(null), sender = recordingPlayer().getPacketSender();
+  player.getPacketSender = () => sender;
+  for (const value of [1, 0]) {
+    buttons.get(SEARCH)({player});
+    buttons.get(CLICKZONE)({player, slot: row});
+    assert.equal(sender.getVarbit(varbit), value);
+    assert.equal(player.getAttribute('settings:values')[`varbit:${varbit}`], value);
+    const loaded = new Player(null), nextSender = recordingPlayer().getPacketSender();
+    PlayerSave.fromPlayer(player).applyToPlayer(loaded);
+    loaded.getPacketSender = () => nextSender;
+    restore({player: loaded});
+    assert.equal(nextSender.getVarbit(varbit), value, 'login restores enabled and disabled choices');
+    player = loaded; sender = nextSender;
+  }
 });
 
 test('as captured: a dropdown that sets one varbit to the option, and closing a dropdown', () => {
