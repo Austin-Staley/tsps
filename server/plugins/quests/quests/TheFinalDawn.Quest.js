@@ -617,6 +617,12 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return request.complete === true;
   }
 
+  function twilightOwnsCrypt(player) {
+    const request = { player, key: "twilights_promise", stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return request.stage >= 8 && request.stage <= 12;
+  }
+
   function meetsRequirements(player) {
     const skills = player.getSkillManager();
     return (
@@ -926,6 +932,9 @@ module.exports = function registerTheFinalDawnQuest(api) {
     const npcId = npcIdOf(event);
     if (!SERVIUS_IDS.has(npcId)) return false;
     const { player } = event;
+    // Yield only during Twilight's crypt conversation, preserving later quests'
+    // post-quest dialogue when the earlier quest is already complete.
+    if (npcId === NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_2 && twilightOwnsCrypt(player)) return false;
     if (quest.isComplete(player)) {
       play(player, npcId, "post-quest-dialogue-talking-to-servius");
       return true;

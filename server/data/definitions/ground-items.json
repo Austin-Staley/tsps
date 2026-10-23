@@ -1821,5 +1821,7 @@
   {"id":2859,"location":{"x":2858,"y":3944,"z":0},"amt":1,"respawn":100,"description":"UNDIFINED"},
   {"id":1171,"location":{"x":3361,"y":3154,"z":0},"amt":1,"respawn":50,"description":"UNDIFINED"},
   {"id":1171,"location":{"x":3204,"y":3515,"z":0},"amt":1,"respawn":50,"description":"UNDIFINED"},
-  {"id":1765,"location":{"x":1240,"y":3688,"z":0},"amt":1,"respawn":0,"description":"UNDIFINED"}
+  {"id":1765,"location":{"x":1240,"y":3688,"z":0},"amt":1,"respawn":0,"description":"UNDIFINED"},
+  {"id":7155,"location":{"x":1822,"y":4827,"z":1},"amt":1,"respawn":0,"description":"Cabin Fever enemy-ship rope"},
+  {"id":7156,"location":{"x":1814,"y":4825,"z":0},"amt":1,"respawn":0,"description":"Cabin Fever ship tinderbox"}
 ]

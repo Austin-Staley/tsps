@@ -1104,7 +1104,7 @@ module.exports = function registerARuffSituationQuest(api) {
     const pair = new Set([usedItemId, usedWithItemId]);
     if (!pair.has(GRAIN_ITEM_ID) || ![...pair].some((itemId) => FUR_ITEM_IDS.has(itemId))) return;
     event.handled = true;
-    if (quest.getStage(player) < STAGE_STUFFED_DOG || quest.isComplete(player)) return;
+    if (quest.getStage(player) < STAGE_STUFFED_DOG || quest.getStage(player) > STAGE_TRADE) return;
     if (hasItem(player, STUFFED_DOG_ITEM_ID)) {
       startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, "stuffed-dog-trying-to-craft-another-stuffed-dog");
       return;
@@ -1142,6 +1142,8 @@ module.exports = function registerARuffSituationQuest(api) {
   }
 
   function craftStuffedDog(player, furId) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_STUFFED_DOG || stage > STAGE_TRADE || hasItem(player, STUFFED_DOG_ITEM_ID)) return;
     if (!hasCraftItems(player)) {
       player.sendMessage(
         "You do not have the required items to make a stuffed dog. You need grain, some fur, a needle and some thread."
@@ -1152,7 +1154,8 @@ module.exports = function registerARuffSituationQuest(api) {
     player.getInventory().deleteNumber(furId, 1);
     // The recorded single craft leaves the needle and thread in the inventory.
     player.getInventory().adds(STUFFED_DOG_ITEM_ID, 1);
-    player.performAnimation(new Animation(8839)); setStage(player, STAGE_CRAFTED);
+    player.performAnimation(new Animation(8839));
+    if (stage < STAGE_CRAFTED) setStage(player, STAGE_CRAFTED);
     player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0,
       STUFFED_DOG_ITEM_ID, "You create a stuffed dog. It will probably convince the goblins.")));
   }
