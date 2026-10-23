@@ -11,6 +11,7 @@ const { Location } = require('../dist/game/model/Location');
 const Plugin = require('../plugins/npcs/RandomEvents.plugin');
 const Events = require('../plugins/npcs/random-events/Common.RandomEvents');
 const Teleports = require('../plugins/npcs/random-events/Teleports.RandomEvents');
+const Locations = require('../plugins/npcs/random-events/Locations.RandomEvents');
 const Pinball = require('../plugins/npcs/random-events/Pinball.RandomEvents');
 const JekyllPlugin = require('../plugins/npcs/DrJekyll.plugin');
 const Gift = require('../plugins/npcs/random-events/GiftRewards.RandomEvents');
@@ -45,7 +46,8 @@ function harness(t, members = true) {
   t.mock.method(Item.prototype, 'getDefinition', function () { return { isStackable: () => this.getId() === I.COINS }; });
   const hooks = {}, npcs = [], prompts = [], drops = [], objects = [], interfaces = [];
   const custom = new Map();
-  let enabled = true, blocked = () => false, movable = () => true;
+  let enabled = true, blocked = () => false, movable = () => true, roof = () => false;
+  const mapObjects = new Map();
   const ObjectManager = {
     register(object) { objects.push(object); },
     deregister(object) { object.deregistered = true; },
@@ -61,7 +63,7 @@ function harness(t, members = true) {
       Animation, Task, PlayerRights,
       DialogueChainBuilder, NpcDialogue, PlayerDialogue, StatementDialogue,
       ItemStatementDialogue, EndDialogue, ActionDialogue, GameObject: FakeGameObject, ObjectManager,
-      MapObjects: { get: () => null } },
+      MapObjects: { get: () => null, mapObjects, getHash: (x, y, z) => `${x},${y},${z}` } },
     registerCommand(name, handler, rights, description) { hooks[name] = { handler, rights, description }; },
     onCustomEvent(name, cb) { custom.set(name, [...(custom.get(name) ?? []), cb]); },
     emitCustomEvent(name, event) { custom.get(name)?.forEach(cb => cb(event)); },
@@ -71,7 +73,8 @@ function harness(t, members = true) {
       const drop = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true, -1, null);
       drops.push(drop); return drop;
     } }),
-    getRegionManager: () => ({ blocked: (...args) => blocked(...args), canMovestart: (...args) => movable(...args) }),
+    getRegionManager: () => ({ blocked: (...args) => blocked(...args), canMovestart: (...args) => movable(...args),
+      getRegion: () => ({ isUnderRoof: (...args) => roof(...args) }) }),
     getWorld: () => ({ getNpcsNear: () => npcs }),
     getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
     registerCustomInterface(definition) { interfaces.push(definition); },
@@ -194,6 +197,7 @@ function harness(t, members = true) {
       for (const task of [...tasks]) if (task.isRunning()) task.tick();
     } },
     advance: ms => { now += ms; }, random: value => { random = value; },
+    roof: value => { roof = value; }, mapObjects,
     collision: (b, m) => { blocked = b; movable = m; }, disable: () => { enabled = false; } };
 }
 
@@ -312,6 +316,119 @@ test('managed non-Wilderness areas defer the schedule instead of spawning in an 
   h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000); h.emit('PlayerProcess', { player: p });
   assert.equal(h.npcs.length, 0);
   assert.ok(p.getAttribute('random-events:next-at') > Date.now());
+});
+
+test('bank roof footprints block natural spawns, leave the street eligible, and respect plane and roof gaps', t => {
+  const h = harness(t);
+  h.roof(() => true);
+  for (const [x, y, z, blocked] of [[3093, 3244, 0, true], [3085, 3244, 0, false],
+    [3209, 3219, 2, true], [3209, 3219, 0, false]]) {
+    const p = h.player(); p.location = new Location(x, y, z);
+    h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000);
+    const before = h.npcs.length;
+    h.emit('PlayerProcess', { player: p });
+    assert.equal(h.npcs.length > before, !blocked, `${x},${y},${z}`);
+    assert.ok(p.getAttribute('random-events:next-at') > Date.now(), 'a blocked due opportunity rearms the clock');
+  }
+  h.roof(() => false);
+  const p = h.player(); p.location = new Location(3093, 3244, 0);
+  assert.equal(Locations.bank(h.api, p), false, 'a bounding box does not classify unroofed gaps as indoors');
+});
+
+test('bank chest standing tiles block spawns while named bank exceptions remain eligible', t => {
+  const h = harness(t), p = h.player();
+  const chest = { getDefinition: () => ({ getName: () => 'Bank chest' }) };
+  for (const [x, y, z, expected] of [[3308, 3120, 0, true], [3374, 11493, 0, false],
+    [2465, 2848, 1, false], [3043, 4970, 1, false]]) {
+    p.location = new Location(x, y, z);
+    h.mapObjects.set(`${x + 1},${y},${z}`, [chest]);
+    assert.equal(Locations.bank(h.api, p), expected, `${x},${y},${z}`);
+  }
+  p.location = new Location(3306, 3120, 0);
+  assert.equal(Locations.bank(h.api, p), false, 'the chest does not suppress the surrounding settlement');
+});
+
+test('only Genie, Count Check and Jekyll follow into an ordinary bank, and invalidated invitations cannot reward', t => {
+  const h = harness(t);
+  h.roof(() => true);
+  for (const [index, name, survives] of [[0, 'Genie', true], [7, 'Count Check', true],
+    [6, 'Dr Jekyll', true], [2, 'Drunken Dwarf', false], [20, 'Mysterious Old Man', false]]) {
+    const p = h.player(); p.location = new Location(3085, 3244, 0);
+    const npc = h.spawn(p, index);
+    p.location = new Location(3087, 3244, 0);
+    assert.equal(Events.valid(Events.activeFor(p), p), survives, name);
+    if (!survives) {
+      h.hooks[name]['Talk-to']({ player: p, npc });
+      assert.deepEqual(p.rewards, []);
+    }
+    h.emit('PlayerProcess', { player: p });
+    assert.equal(!!npc.removed, !survives, name);
+    const before = h.npcs.length;
+    h.hooks.randevt.handler({ player: p, parts: ['randevt', String(index)] });
+    assert.equal(h.npcs.length, before, 'the testing command also refuses a new bank invitation');
+  }
+});
+
+test('the four original Hunter biomes exclude teleport events without suppressing harmless events or later hunting grounds', t => {
+  const h = harness(t), p = h.player();
+  for (const [x, y] of [[2556, 2914], [2315, 3545], [2714, 3765], [3402, 3095]]) {
+    p.location = new Location(x, y, 0);
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), false);
+    assert.equal(Locations.available(h.api, { kind: 'genie' }, p), true);
+    h.hooks.randevt.handler({ player: p, parts: ['randevt', '20'] });
+    assert.equal(h.npcs.length, 0, 'a forbidden invitation cannot be forced by the command');
+  }
+  for (const [x, y] of [[1565, 3030], [2269, 3413], [3287, 2739]]) {
+    p.location = new Location(x, y, 0);
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, 'later Hunter areas retain teleport events');
+  }
+  p.location = new Location(2556, 2914, 1);
+  assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, 'Hunter ground restrictions are per plane');
+});
+
+test('safe managed areas allow events; underwater and Kalphite Lair use their reduced pools', t => {
+  const h = harness(t), p = h.player();
+  for (const pluginName of ['GiantsFoundry', 'Darkness', 'SlayerTower', 'CreatureCreation']) {
+    p.area = { pluginName };
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, pluginName);
+  }
+  p.area = undefined;
+  for (const [x, y, z, kinds] of [[3732, 10281, 1, ['genie', 'countcheck', 'jekyll', 'certer', 'gift']],
+    [3480, 9500, 0, ['genie', 'countcheck', 'jekyll', 'certer', 'gift', 'dwarf', 'drill', 'plant']]]) {
+    p.location = new Location(x, y, z);
+    for (const kind of ['genie', 'countcheck', 'jekyll', 'certer', 'gift', 'dwarf', 'drill', 'plant', 'sandwich', 'mime', 'maze']) {
+      assert.equal(Locations.available(h.api, { kind }, p), kinds.includes(kind), `${x},${y},${z}: ${kind}`);
+    }
+  }
+});
+
+test('advance_time reaches the real scheduler and expires its invitation', t => {
+  const h = harness(t), p = h.player();
+  h.emit('PlayerLogin', { player: p });
+  const request = { player: p, ms: 121 * 60_000, handledBy: [] };
+  h.api.emitCustomEvent('agent:advance-time', request);
+  assert.deepEqual(request.handledBy, ['RandomEvents']);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 1);
+  h.api.emitCustomEvent('agent:advance-time', { player: p, ms: 60_000, handledBy: [] });
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs[0].removed, true);
+});
+
+test('bank footprint classification matches the active cache, including the street and Lumbridge floor', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  RegionManager.init();
+  const api = { core: { MapObjects }, getRegionManager: () => RegionManager };
+  for (const [x, y, z, expected] of [[3093, 3244, 0, true], [3085, 3244, 0, false],
+    [3185, 3440, 0, true], [3192, 3440, 0, false], [3209, 3219, 2, true],
+    [3209, 3219, 0, false], [3308, 3120, 0, true], [2465, 2848, 1, false]]) {
+    RegionManager.loadMapFiles(x, y);
+    assert.equal(Locations.bank(api, { getLocation: () => new Location(x, y, z) }), expected, `${x},${y},${z}`);
+  }
 });
 
 test('randevt is described and owner-only, selects each index immediately and replaces the owned event', t => {
