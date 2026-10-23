@@ -370,7 +370,7 @@ function registerQuestWidgets(api) {
   // Registered with the first quest, so this runs before every quest's own login hook.
   api.onPlayerLogin(holdLoginQuestList);
   api.onCustomEvent("player:bootstrap-complete", sendLoginQuestList);
-  api.onPlayerLogout(releaseLoginQuestList);
+  api.onPlayerLogout?.(releaseLoginQuestList);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
   api.onPlayerLogin(sendQuestVarps);
