@@ -53,18 +53,26 @@ function playerFixture({ inventory = inventoryFixture(), hands = null, head = nu
   const varbits = new Map();
   const configs = new Map();
   const experiences = [];
+  const dialogueStarts = [];
   let location = new core.Location(3361, 2956, 0);
   let packet;
   packet = new Proxy({
     sendVarbit(id, value) { varbits.set(id, value); return packet; },
     sendConfig(id, value) { configs.set(id, value); return packet; },
   }, { get: (target, key) => target[key] ?? ((...args) => packet) });
+  const dialogueManager = {
+    startDialogues(chain) { dialogueStarts.push([...chain.getDialogues().values()]); },
+    reset() {},
+    isActive: () => false,
+    getCurrent: () => null,
+  };
   const player = {
     inventory,
     messages,
     varbits,
     configs,
     experiences,
+    dialogueStarts,
     getUsername: () => 'qh728-q039',
     getAttribute: (key) => attributes.get(key),
     setAttribute(key, value) { attributes.set(key, value); },
@@ -84,7 +92,7 @@ function playerFixture({ inventory = inventoryFixture(), hands = null, head = nu
     }),
     getLocation: () => location,
     moveTo: (to) => { location = to; },
-    getDialogueManager: () => ({ startDialogues() {}, reset() {}, isActive: () => false, getCurrent: () => null }),
+    getDialogueManager: () => dialogueManager,
     getPacketSender: () => packet,
     sendMessage: (message) => messages.push(message),
   };
@@ -115,7 +123,6 @@ function registerQuestPlugin() {
   };
   const pluginName = 'TheFeudTest';
   const spawned = [];
-  const dialogueStarts = [];
   const customEvents = new Set();
   const api = new Proxy({ core }, { get(target, key) {
     if (key in target) return target[key];
@@ -155,10 +162,7 @@ function registerQuestPlugin() {
       hooks.push({ pluginName, handler });
       PluginManager.customEventHooks.set(eventName, hooks);
     };
-    if (key === 'emitCustomEvent') return (eventName, payload) => {
-      if (eventName === 'npc-dialogue:start') dialogueStarts.push(payload);
-      return PluginManager.emitCustomEvent(eventName, payload);
-    };
+    if (key === 'emitCustomEvent') return (eventName, payload) => PluginManager.emitCustomEvent(eventName, payload);
     if (key === 'spawnNpc') return (def) => {
       const npc = { def, getId: () => def.id, getOwner: () => def.owner, isRegistered: () => true };
       spawned.push(npc);
@@ -173,7 +177,6 @@ function registerQuestPlugin() {
   return {
     quest,
     spawned,
-    dialogueStarts,
     cleanup() {
       PluginManager.npcInteractionHooks.length = before.interaction;
       PluginManager.objectInteractionHooks.length = before.objectInteraction;
@@ -187,6 +190,45 @@ function registerQuestPlugin() {
           .filter((hook) => hook.pluginName !== pluginName);
         if (kept.length) PluginManager.customEventHooks.set(eventName, kept);
         else PluginManager.customEventHooks.delete(eventName);
+      }
+    },
+  };
+}
+
+function registerNpcDialogueRunner() {
+  const before = {
+    anyNpc: PluginManager.npcAnyInteractionHooks.length,
+    custom: new Map([...PluginManager.customEventHooks].map(([name, hooks]) => [name, hooks.length])),
+  };
+  const pluginName = 'NpcDialoguesQ039Test';
+  const api = new Proxy({ core }, { get(target, key) {
+    if (key in target) return target[key];
+    if (key === 'onAnyNpcInteraction') return (actions) => {
+      PluginManager.npcAnyInteractionHooks.push({ pluginName, handler: (event) => {
+        if (event.handled || event.clickType !== 1) return;
+        const handler = actions[event.definition?.getActions?.()?.[event.clickType - 1]];
+        if (handler && handler(event) !== false) event.handled = true;
+      } });
+    };
+    if (key === 'onCustomEvent') return (name, handler) => {
+      const hooks = PluginManager.customEventHooks.get(name) ?? [];
+      hooks.push({ pluginName, handler });
+      PluginManager.customEventHooks.set(name, hooks);
+    };
+    if (key === 'emitCustomEvent') return (name, event) => PluginManager.emitCustomEvent(name, event);
+    if (key === 'sendMultiChatboxPrompt') return () => true;
+    return () => {};
+  } });
+  require('../plugins/npcs/NpcDialogues.plugin.js').register(api);
+  return {
+    cleanup() {
+      PluginManager.npcAnyInteractionHooks.length = before.anyNpc;
+      for (const [name, hooks] of [...PluginManager.customEventHooks]) {
+        const kept = hooks.filter((hook) => hook.pluginName !== pluginName);
+        const oldLength = before.custom.get(name) ?? 0;
+        if (kept.length > oldLength) kept.splice(oldLength);
+        if (kept.length) PluginManager.customEventHooks.set(name, kept);
+        else PluginManager.customEventHooks.delete(name);
       }
     },
   };
@@ -210,7 +252,11 @@ function npcEvent(player, name, action = 'Talk-to') {
     player,
     npc: {},
     npcId: NPC_IDS[name],
-    definition: { getName: () => name, getActions: () => [action, null, null, null, null] },
+    definition: {
+      getId: () => NPC_IDS[name],
+      getName: () => name,
+      getActions: () => [action, null, null, null, null],
+    },
     clickType: 1,
     handled: false,
   };
@@ -364,8 +410,9 @@ test('Completion and saved stages replay canonical varbit 334 through login', ()
   }
 });
 
-test('Post-quest Ali the Operator yields to the named shared page', () => {
-  const { quest, dialogueStarts, cleanup } = registerQuestPlugin();
+test('Post-quest Ali the Operator falls through to the registered standard dialogue runner', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  const dialogueRunner = registerNpcDialogueRunner();
   try {
     const player = playerFixture();
     quest.setStage(player, 28);
@@ -374,12 +421,13 @@ test('Post-quest Ali the Operator yields to the named shared page', () => {
     assert.equal(PluginManager.emitNpcInteraction(event), true);
     assert.equal(event.handled, true);
     assert.equal(transcriptCalls.length, 0, 'post-quest Talk-to does not replay a quest-specific transcript');
-    assert.deepEqual(dialogueStarts.at(-1), {
-      player,
-      npc: event.npc,
-      npcId: core.NpcIdentifiers.ALI_THE_OPERATOR,
-    }, 'the registered Talk-to path starts the flat standard page through the dialogue runner');
+    const npcLines = player.dialogueStarts.flatMap((chain) => chain)
+      .filter((dialogue) => typeof dialogue.getText === 'function')
+      .map((dialogue) => dialogue.getText());
+    assert.ok(npcLines.includes('What do you want?'),
+      'after the quest hook yields, the real dialogue plugin resolves the canonical standard page');
   } finally {
+    dialogueRunner.cleanup();
     cleanup();
   }
 });

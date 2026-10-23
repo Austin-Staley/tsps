@@ -732,13 +732,6 @@ module.exports = function registerTheFeudQuest(api) {
     if (npcId !== OPERATOR_ID) return false;
     const current = stage(player);
     const variant = operatorVariant(player);
-    if (!variant && current >= STAGE_COMPLETE) {
-      // The named quest hook owns this Talk-to. Explicitly hand completed
-      // dialogue to the canonical flat Ali the Operator page.
-      api.emitCustomEvent("npc-dialogue:start", { player, npc: event.npc, npcId });
-      event.handled = true;
-      return;
-    }
     if (!variant) return false;
     if (!talk(player, variant, npcId)) return false;
     event.handled = true;
