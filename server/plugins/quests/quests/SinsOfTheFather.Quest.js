@@ -872,6 +872,24 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     return request.started === true;
   }
 
+  /**
+   * A Taste of Hope owns the old-base Vertida's post-quest flail reclaim, and
+   * it answers this question through "quest:taste-of-hope:flail-reclaim". Sins
+   * keeps its own Vertida conversation while the crafting steps (the logs and
+   * the flail handover) still need it, then yields the talk so a completed
+   * Taste player can still buy a replacement flail during the quest.
+   */
+  function tasteFlailReclaimDue(player, npc) {
+    const request = { player, npc, needed: false };
+    api.emitCustomEvent("quest:taste-of-hope:flail-reclaim", request);
+    if (!request.needed) return false;
+    if (quest.getStage(player) < STAGE_SAFALAAN_WALK) return false;
+    const spot = npc?.getLocation?.() ?? player.getLocation?.();
+    if (!spot) return false;
+    return Math.max(Math.abs(spot.getX() - HIDEOUT_VERTIDA_TILE.x),
+      Math.abs(spot.getY() - HIDEOUT_VERTIDA_TILE.y)) <= 3;
+  }
+
   function meetsRequirements(player) {
     if (!REQUIRED_QUESTS.every((requirement) => questComplete(player, requirement.key))) return false;
     const skills = player.getSkillManager();
@@ -2274,6 +2292,9 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   function talkVertida(event) {
     const { player, npcId } = event;
     if (!VERTIDA_IDS.has(npcId)) return false;
+    // The completed A Taste of Hope reclaim owns the old-base Vertida while
+    // the player has no flail to hand.
+    if (tasteFlailReclaimDue(player, event.npc)) return false;
     const stage = quest.getStage(player);
     if (stage < STAGE_GRAVEYARD || stage >= STAGE_VANSTROM_DEAD) return false;
     if (stage < STAGE_CONVINCING) {
@@ -2634,6 +2655,9 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       return null;
     }
     if (VERTIDA_IDS.has(npcId)) {
+      // The completed A Taste of Hope reclaim owns the old-base Vertida while
+      // the player has no flail to hand; its page answers instead.
+      if (tasteFlailReclaimDue(player, event.npc)) return null;
       if (stage < STAGE_CONVINCING) return "a-nice-and-simple-plan-speaking-to-the-myreque-talking-to-vertida";
       if (stage < STAGE_CONVINCED) {
         return hasBit(player, BIT_VERTIDA)
