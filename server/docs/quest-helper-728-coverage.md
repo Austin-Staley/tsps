@@ -68,8 +68,8 @@ checks). Scene visuals and natural completion remain unverified. These are sourc
 with no additional accepted natural-route count.
 
 Tree Gnome Village and the Hazeel Cult Hazeel-side route now have accepted
-reward/repeat/relog/offline evidence. Alomone's disappearance after Hazeel completion is
-a separately tracked NPC-availability bug, with no claim of full branch/recovery parity.
+reward/repeat/relog/offline evidence. Alomone and Jones's post-Hazeel availability fix is separately natively verified; this
+does not add an alternate-branch/recovery claim.
 Remaining native work includes Lost City stage2
 (Shamus and the natural ferry completed, on Entrana). Resume those accounts without reset
 under the captured epoch24 runtime. Integration independently matched all 16 frozen
@@ -305,7 +305,7 @@ deferred quest. No deferred quest is counted as complete.
 | The Great Brain Robbery | `GreatBrainRobbery` | Pending | Pending | Pending |
 | Grim Tales | `GrimTales` | Pending | Pending | Pending |
 | The Hand in the Sand | `HandInTheSand` | Shared bell/Zavistic, canonical wire, single sandpit payment and earned helper auxiliaries reviewed/pushed | 28 combined Hand/Zogre checks pass | Pending natural route; scene/interface gaps remain |
-| Hazeel Cult | `HazeelCult` | Canonical cave/mansion/hidden-room path, helper state and shared ownership reviewed/pushed; postquest NPC follow-up active | 13 focused; 52 shared mansion checks pass | Accepted Hazeel-side main route, rewards/Clivet repeat/relog/offline ([ledger](quest-helper-728-verification.md)); Carnillean/recovery unchecked; missing postquest Alomone open |
+| Hazeel Cult | `HazeelCult` | Canonical cave/mansion/hidden-room path, helper state and shared ownership reviewed/pushed; postquest Alomone/Jones fix natively verified | 16 focused; 55 shared Hazeel/North checks pass | Accepted Hazeel-side main route, rewards/Clivet repeat/relog/offline ([ledger](quest-helper-728-verification.md)); Carnillean/recovery unchecked; living postquest Alomone/Jones delta verified |
 | The Heart of Darkness | `TheHeartOfDarkness` | Pending | Pending | Pending |
 | Holy Grail | `HolyGrail` | Pending | Pending | Pending |
 | Horror from the Deep | `HorrorFromTheDeep` | Earned bridge/lighthouse/basement helper state and bootstrap replay reviewed/pushed | 8 focused checks pass | Pending natural route |
