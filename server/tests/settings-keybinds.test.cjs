@@ -86,6 +86,23 @@ test('as captured: the search bar takes the keyboard, and closing All Settings b
   assert.deepEqual(player.sent, [], 'closing anything else leaves them alone');
 });
 
+test('as captured: the quest list cog opens All Settings searching "Quest List"', () => {
+  const { buttons } = registered();
+  const player = recordingPlayer();
+  const sender = player.getPacketSender();
+  Object.assign(sender, {
+    sendSubInterface: (uid, group) => { player.sent.push(`opensub ${uid >> 16}:${uid & 0xffff}=${group}`); return sender; },
+    sendInterfaceFlagsRange: () => sender,
+    sendClientScript: (id, ...args) => { player.sent.push(`script ${id}${args.length ? ` ${args.join(',')}` : ''}`); return sender; },
+  });
+  player.setInterfaceId = () => {};
+  buttons.get((399 << 16) | 11)({ player });
+  assert.deepEqual(player.sent, [
+    'varbit 9656=6', 'varbit 9648=1', 'opensub 161:16=134', 'script 5968 Quest List', 'script 4020',
+  ], 'Interfaces, where the quest list settings are; then the search');
+  assert.equal(player.getAttribute('settings-view'), -1, 'rows clicked are search results');
+});
+
 test('XP orb mounts the counter only while enabled, and Setup opens the cached settings', () => {
   const { buttons, logins } = registered();
   const player = recordingPlayer();
@@ -189,6 +206,15 @@ test('as captured: toggles in a category flip their var; split private chat runs
   assert.deepEqual(click(CLICKZONE, 47), ['varbit 9657=5', 'varbit 10236=0']);
   click(CATEGORIES, 2);
   assert.deepEqual(click(CLICKZONE, 5), ['varbit 9657=35', 'varp 287=1', 'script 83'], 'Split friends private chat');
+});
+
+test('Hide roofs is saved and sent back on login (the client script flips it too)', () => {
+  const { player, click, logins } = allSettings(4);
+  assert.deepEqual(click(CLICKZONE, 4), ['varbit 9657=7', 'varbit 12378=1'], 'Hide roofs');
+  assert.deepEqual(player.getAttribute('settings:values'), { 'varbit:9656': 4, 'varbit:12378': 1 });
+  player.sent.length = 0;
+  logins.find((login) => login.name === 'restoreSettings')({ player });
+  assert.ok(player.sent.includes('varbit 12378=1'));
 });
 
 test('as captured: a dropdown that sets one varbit to the option, and closing a dropdown', () => {

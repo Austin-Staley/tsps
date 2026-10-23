@@ -2337,6 +2337,15 @@ export class OsrsClient {
             this.playerEcs,
             this.seqTypeLoader,
             this.seqFrameLoader,
+            (serverId, index, seqType, frame) =>
+                this.handleSeqFrameSounds(seqType, frame, {
+                    position: {
+                        x: this.playerEcs.getX(index) | 0,
+                        y: this.playerEcs.getY(index) | 0,
+                        z: (this.playerEcs.getLevel(index) | 0) * 128,
+                    },
+                    isLocalPlayer: serverId === (this.controlledPlayerServerId | 0),
+                }),
         );
         // PlayerEcs needs SeqType metadata for OSRS-parity movement blocking (sequenceDelay/priority checks).
         this.playerEcs.setSeqTypeLoader?.(this.seqTypeLoader);

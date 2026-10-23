@@ -17,6 +17,9 @@ const QUEST_LIST_LIST_UID = (QUEST_LIST_GROUP_ID << 16) | QUEST_LIST_LIST_CHILD_
 const QUEST_LIST_TEXT_CONTAINER_UID =
     (QUEST_LIST_GROUP_ID << 16) | QUEST_LIST_TEXT_CONTAINER_CHILD_ID;
 const QUEST_LIST_SCROLLBAR_UID = (QUEST_LIST_GROUP_ID << 16) | QUEST_LIST_SCROLLBAR_CHILD_ID;
+/** 399:2, where script 4137 hangs script 1340 on ~210 quest varps to rebuild the list (2633). */
+const QUEST_LIST_ROOT_UID = (QUEST_LIST_GROUP_ID << 16) | 2;
+const QUEST_LIST_REBUILD_SCRIPT = 1340;
 
 const HEADER_HEIGHT = 18;
 const HEADER_ADVANCE = 25;
@@ -134,6 +137,19 @@ function registerChild(widgetManager: WidgetManager, parent: WidgetNode, child: 
     widgetManager.registerWidget(child);
 }
 
+/**
+ * Script 2633, rerun on every quest varp, measures the rows it builds itself. Under a server-owned
+ * list it builds none, so it scrolled the list back to the top on every quest update. The server
+ * sends the list again as quests progress, and that keeps the scroll position.
+ */
+function stopCacheListRebuilds(widgetManager: WidgetManager): void {
+    const root = widgetManager.getWidgetByUid(QUEST_LIST_ROOT_UID);
+    if (!root || root.onVarTransmit?.[0] !== QUEST_LIST_REBUILD_SCRIPT) return;
+    root.onVarTransmit = undefined;
+    root.varTransmitTriggers = undefined;
+    if (root.eventHandlers) delete root.eventHandlers.onVarTransmit;
+}
+
 export function applyQuestListWidgetGroups(
     widgetManager: WidgetManager,
     groups: QuestListWidgetGroup[],
@@ -148,6 +164,7 @@ export function applyQuestListWidgetGroups(
     widgetManager.setServerOwnedWidget(QUEST_LIST_LIST_UID, true);
     widgetManager.setServerOwnedWidget(QUEST_LIST_TEXT_CONTAINER_UID, true);
     widgetManager.setServerOwnedWidget(QUEST_LIST_SCROLLBAR_UID, false);
+    stopCacheListRebuilds(widgetManager);
     clearDynamicChildren(widgetManager, list);
 
     let y = 0;

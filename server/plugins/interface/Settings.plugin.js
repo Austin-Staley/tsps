@@ -80,6 +80,13 @@ const CHATDEFAULT_STOPINPUT_SCRIPT = 4020;
 const CHATDEFAULT_RESTOREINPUT_SCRIPT = 2158;
 // The category shown: scripts 3837/3840 draw the category list and its settings from it.
 const SETTINGS_CATEGORY_VARBIT = 9656;
+// Capture (quest list "Settings" cog, 7 recordings): All Settings opens on the quest list's
+// category with settings_first_load set, searching "Quest List" (settings_search_override).
+const QUEST_LIST_SETTINGS_BUTTON = (399 << 16) | 11;
+const SETTINGS_FIRST_LOAD_VARBIT = 9648;
+const SETTINGS_SEARCH_OVERRIDE_SCRIPT = 5968;
+const QUEST_LIST_SEARCH = "Quest List";
+const QUEST_LIST_SORTING_SETTING = 214;
 // The setting last clicked (settings_selected_setting). Capture: a row click sets it to that
 // setting's id; choosing a dropdown option, closing the dropdown or changing category clears it.
 const SETTINGS_SELECTED_SETTING_VARBIT = 9657;
@@ -436,6 +443,17 @@ function openAllSettings(player) {
   return true;
 }
 
+function openQuestListSettings({ player }) {
+  setSettingVar(player, `varbit:${SETTINGS_CATEGORY_VARBIT}`, catalog().settings.get(QUEST_LIST_SORTING_SETTING).category);
+  player.getPacketSender().sendVarbit(SETTINGS_FIRST_LOAD_VARBIT, 1);
+  openAllSettings(player);
+  player.setAttribute("settings-view", SEARCH_VIEW);
+  player.getPacketSender()
+    .sendClientScript(SETTINGS_SEARCH_OVERRIDE_SCRIPT, QUEST_LIST_SEARCH)
+    .sendClientScript(CHATDEFAULT_STOPINPUT_SCRIPT);
+  return true;
+}
+
 function startSettingsSearch({ player }) {
   player.setAttribute("settings-view", SEARCH_VIEW);
   player.getPacketSender()
@@ -510,6 +528,7 @@ module.exports = {
 
     // "All Settings" button in the settings side panel, and its close button.
     api.onInterfaceActionButton(ALL_SETTINGS_SIDE_BUTTON, ({ player }) => openAllSettings(player));
+    api.onInterfaceActionButton(QUEST_LIST_SETTINGS_BUTTON, openQuestListSettings);
     api.onInterfaceActionButton(ALL_SETTINGS_CLOSE_BUTTON, ({ player }) => {
       player.getPacketSender().sendInterfaceRemoval();
       return true;

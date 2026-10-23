@@ -12,7 +12,6 @@ import type { Inventory } from "../../rs/inventory/Inventory";
 import { buildSelectedSpellPayload } from "../../common/spells/selectedSpellPayload";
 import {
     INTERFACE_ACHIEVEMENT_DIARY_ID,
-    INTERFACE_QUEST_LIST_ID,
     SIDE_JOURNAL_GROUP_ID,
 } from "../../common/ui/sideJournal";
 import type { WidgetManager } from "../../widgets/WidgetManager";
@@ -64,11 +63,10 @@ export function handleWidgetActionTargeting(
 ): boolean {
     if (!event.widget) return false;
 
+    // The quest list's cog goes to the server, which opens All Settings on a "Quest List" search.
     if (
         event.option === "Settings" &&
-        (groupId === INTERFACE_QUEST_LIST_ID ||
-            groupId === SIDE_JOURNAL_GROUP_ID ||
-            groupId === INTERFACE_ACHIEVEMENT_DIARY_ID)
+        (groupId === SIDE_JOURNAL_GROUP_ID || groupId === INTERFACE_ACHIEVEMENT_DIARY_ID)
     ) {
         const widgetManager = deps.getWidgetManager();
         const varManager = deps.getVarManager();

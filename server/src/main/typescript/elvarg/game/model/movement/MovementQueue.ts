@@ -114,6 +114,8 @@ export class MovementQueue {
     private stepBlockedByEntity = false;
     private lastSentDestX = Number.MIN_SAFE_INTEGER;
     private lastSentDestY = Number.MIN_SAFE_INTEGER;
+    /** Ctrl-click run choice for the current path only; null follows the run setting. */
+    private runOverride: boolean | null = null;
 
     /**
      * Creates a walking queue for the specified character.
@@ -344,7 +346,7 @@ export class MovementQueue {
         return true;
     }
 
-    public requestWalk(destination: Location): void {
+    public requestWalk(destination: Location, runOverride: boolean | null = null): void {
         if (!this.player || this.player.getHitpoints() <= 0) {
             return;
         }
@@ -364,6 +366,8 @@ export class MovementQueue {
             handled: false,
         })) return;
         PathFinder.calculateWalkRoute(this.player, destination.getX(), destination.getY());
+        // Set after routing: the route calculation resets the queue.
+        this.runOverride = this.points.length > 0 ? runOverride : null;
     }
 
     private getLast(): Point {
@@ -558,6 +562,7 @@ export class MovementQueue {
         if (moved) this.lastMoveCycle = World.getProcessCycle();
 
         if (this.points.length === 0) {
+            this.runOverride = null;
             this.syncDestinationFlagToRoute();
         }
 
@@ -691,10 +696,11 @@ export class MovementQueue {
             }
             return;
         }
-        if (player.isRunningReturn()) {
+        if (this.isRunToggled()) {
             player.setRunEnergy(player.getRunEnergy() - applyRunEnergyDrainModifiers(player, 1));
             if (player.getRunEnergy() <= 0) {
                 player.setRunEnergy(0);
+                this.runOverride = null;
                 player.setRunning(false);
                 player.getPacketSender().sendRunStatus();
             }
@@ -734,6 +740,7 @@ export class MovementQueue {
 
     public reset(clearDestination = true): MovementQueue {
         this.externalMovementUntil = 0;
+        this.runOverride = null;
         this.points.clear();
         this.followX = -1;
         this.followY = -1;
@@ -930,7 +937,7 @@ export class MovementQueue {
 
     public isRunToggled(): boolean {
         return this.character.isPlayer()
-            ? (this.character as Player).isRunningReturn()
+            ? this.runOverride ?? (this.character as Player).isRunningReturn()
             : this.character.getAsNpc().getMovementSteps() > 1;
     }
 
