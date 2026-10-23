@@ -6,13 +6,20 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Seventeen quests have accepted natural main-route completion evidence: **17 / 106 active quests (16.04%)** (q003, q006, q008, q010, q011, q017, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Eighteen quests have accepted natural main-route completion evidence: **18 / 106 active quests (16.98%)** (q003, q006, q008, q010, q011, q017, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
 long or complex quests; all 17 accepted routes are within the retained 106. Against
 the original inventory the count is still 17/128 (13.28%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
+
+### q117 — Tree Gnome Village
+
+- **Revision:** final source/loaded epoch24 `0524f8011ba46adde48bbb1b4e8450369d4457867b6f47f8ab6773a3cef6f013`; test `742e74b9fc6dac85bdacdb957fe56648f6cd51cb8ddb8c9c01f204c5984bd2bd`. Earlier earned checkpoints link epochs21–23 without reset. Root acceptance artifact: `/tmp/tsps-728/native/evidence/q117-root-accepted-20261023.json` (all eight raw-file hashes and selected saves).
+- **Route:** fresh normal King Bolren start, logs, all three trackers, coordinate and ballista; actual crumbled wall, tower ladder/chest, first orb hand-in; canonical threat and real owned warlord combat/death for the remaining orbs. The corrected Elkoy guide lands at2515,3159; the observed railing Squeeze-through reaches2515,3161 before returning to Bolren. Epoch24's real local gnomes speak the four ordered chorus groups, then the canonical final dialogue/action completes the quest.
+- **Rewards/persistence:** varp111 8→9, QP0→2, Attack XP13034431→13045881 (+11,450), one Gnome amulet589; orbs588 consumed. Normal postquest talk adds no rewards; credentialed relog retains state, XP and items; final logout and player-list absence confirmed. Root independently checked saves1351 before completion,1353 completion and1355/1356 logout, plus the earlier stage1/4/6/7 saves.
+- **Aids/limits:** ordinary skills/gear/logs/food and initial placement were declared before the normal start. Effective HP1 assists followed real damage on a hostile trooper and the owned warlord; dead-target attempts were rejected. No target quest-state/items were injected. Initial zero is inferred from the fresh account and canonical start; an explicit initial varp111=0 read was not captured. All recovery/optional branches, exact ceremony camera/timing and the Java overlay remain unchecked.
 
 ### q003 — The Ascent of Arceuus
 

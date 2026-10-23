@@ -36,9 +36,9 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **17/106 active scoped main routes (16.04%)**. The count
-is 17/128 against the original inventory; the increase in percentage comes only
-from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau and Client of Kourend routes. Supplemental issue-809 evidence
+of accepted route counts: **18/106 active scoped main routes (16.98%)**. The count
+is 18/128 against the original inventory; the increase in percentage comes only
+from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend and Tree Gnome Village routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The draft PR is updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
@@ -67,8 +67,9 @@ replay after bootstrap, while preserving WGS's proven counter ownership (28 comb
 checks). Scene visuals and natural completion remain unverified. These are source publications,
 with no additional accepted natural-route count.
 
-Latest normal saved checkpoints are Hazeel Cult stage6 (mark and chest key), Tree Gnome
-Village stage8 (real recovered orbs, before ceremony completion), and Lost City stage2
+Tree Gnome Village has now completed naturally with reward/repeat/relog/offline evidence
+accepted above. Latest remaining checkpoints include Hazeel Cult stage7 (real scroll
+retrieved through the hidden room) and Lost City stage2
 (Shamus and the natural ferry completed, on Entrana). Resume those accounts without reset
 under the captured epoch24 runtime. Integration independently matched all 16 frozen
 plugin hashes against its actual loaded-module capture. All raw evidence and prior
