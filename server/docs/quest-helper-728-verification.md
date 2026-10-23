@@ -4,9 +4,15 @@ This ledger preserves native playthrough evidence across service epochs. A nativ
 
 Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinned checkout `06da90f982518a093f2fe1c9cfac5547fa7053d3`. Cache data and shared runtime revisions are named where material. The epoch-3 shared MovementQueue footprint fix was `62eefaee16e32f2df54181ac71618c6b7808a2a6fb28022c8b4d9f34cee0bab4`, from source `b1bfa4f36636195e12ae089ee12db13bbb0ec3e9a476c62e50ac9db8d1c85d08` (accepted offline build/tests 19/19). Later service epochs captured loaded plugin hashes and cache hashes independently. These shared revisions do not replace the per-quest source/loaded hashes below.
 
-## Original 128: accepted natural main-route proofs
+## Active 106: accepted natural main-route proofs
 
-Fourteen quests have accepted natural main-route completion evidence: **14 / 128 (10.94%)** (q003, q006, q008, q011, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Fourteen quests have accepted natural main-route completion evidence: **14 / 106 active quests (13.21%)** (q003, q006, q008, q011, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+
+The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
+long or complex quests; all 14 accepted routes are within the retained 106. Against
+the original inventory the count is still 14/128 (10.94%). Deferral changes scope,
+not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
+lists the exact active and deferred sets and preserves their prior evidence.
 
 ### q003 — The Ascent of Arceuus
 

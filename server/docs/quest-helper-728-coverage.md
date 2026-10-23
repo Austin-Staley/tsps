@@ -36,7 +36,9 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **14/128 scoped main routes**. Supplemental issue-809 evidence
+of accepted route counts: **14/106 active scoped main routes (13.21%)**. The count
+remains 14/128 against the original inventory; the increase in percentage comes only
+from the approved scope reduction. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The draft PR is updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
@@ -210,7 +212,12 @@ cache walk sequence instead of the blanket default. The plugin is left unchanged
 quest shim was added. The tankard step is proven by dispatch and cache repro plus
 collision analysis only, not by a live interaction; natural completion stays pending.
 
-## Quest status
+## Active quest status — 106 quests
+
+On 23 October 2026 the user deferred the 22 long or complex quests listed below. Their
+existing fixes, reports and checkpoints are preserved. Remaining completion work for
+PR #753 targets these 106 active quests; shared dependency fixes may still affect a
+deferred quest. No deferred quest is counted as complete.
 
 “Pending” means no accepted evidence yet. Source review does not imply native completion.
 
@@ -230,16 +237,12 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Cold War | `ColdWar` | Pending | Pending | Pending |
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
-| Darkness of Hallowvale | `DarknessOfHallowvale` | Pending | Pending | Pending |
 | Death on the Isle | `DeathOnTheIsle` | Captured item IDs, accusation bit and evidence recovery checkpoint reviewed; full parity review pending | 8 focused dispatch tests pass | Pending |
 | Death Plateau | `DeathPlateau` | Harold’s IOU recovery, ordered condition checks and missing-item handouts use the imported transcript; shared runner now continues explicitly true linear sibling conditions | 47 shared/runtime and quest regressions pass | Natural completion and native recovery remain pending |
 | Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Pending | Pending | Pending |
 | The Depths of Despair | `DepthsOfDespair` | Recovery/dialogue review and cache-backed stepping-stone approach fixed | 14 focused checks pass, including normal movement to the bank | Native route paused at stepping stones; corrected threshold awaits reload |
-| Desert Treasure I | `DesertTreasureI` | Pending | Pending | Pending |
-| Desert Treasure II - The Fallen Empire | `DesertTreasureII` | Pending | Pending | Pending |
 | Devious Minds | `DeviousMinds` | Pending | Pending | Pending |
 | The Dig Site | `DigSite` | Pending | Pending | Pending |
-| Dragon Slayer II | `DragonSlayerII` | Pending | Pending | Pending |
 | Dream Mentor | `DreamMentor` | Pending | Pending | Pending |
 | Druidic Ritual | `DruidicRitual` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Dwarf Cannon | `DwarfCannon` | Pending | Pending | Pending |
@@ -260,7 +263,6 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Forgettable Tale... | `ForgettableTale` | Pending | Pending | Pending |
 | The Forsaken Tower | `ForsakenTower` | Pending | Pending | Pending |
 | The Fremennik Isles | `TheFremennikIsles` | Pending | Pending | Pending |
-| The Fremennik Trials | `FremennikTrials` | Pending | Pending | Pending |
 | The Garden of Death | `GardenOfDeath` | Pending | Pending | Pending |
 | Garden of Tranquillity | `GardenOfTranquillity` | Pending | Pending | Pending |
 | Gertrude's Cat | `GertrudesCat` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
@@ -272,7 +274,6 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | The Hand in the Sand | `HandInTheSand` | Pending | Pending | Pending |
 | Hazeel Cult | `HazeelCult` | Pending | Pending | Pending |
 | The Heart of Darkness | `TheHeartOfDarkness` | Pending | Pending | Pending |
-| Heroes' Quest | `HeroesQuest` | Pending | Pending | Pending |
 | Holy Grail | `HolyGrail` | Pending | Pending | Pending |
 | Horror from the Deep | `HorrorFromTheDeep` | Pending | Pending | Pending |
 | Icthlarin's Little Helper | `IcthlarinsLittleHelper` | Pending | Pending | Pending |
@@ -280,38 +281,25 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | In Search of the Myreque | `InSearchOfTheMyreque` | Pending | Pending | Pending |
 | Jungle Potion | `JunglePotion` | Bounded natural stage 9→12 route, including lost-herb re-search; no full-quest completion claim | QP, quest Herb XP and cleaning XP, repeat/relog and save snapshot verified | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | King's Ransom | `KingsRansom` | Pending | Pending | Pending |
-| A Kingdom Divided | `AKingdomDivided` | Pending | Pending | Pending |
-| Legends' Quest | `LegendsQuest` | Pending | Pending | Pending |
 | Lost City | `LostCity` | Pending | Pending | Pending |
 | The Lost Tribe | `LostTribe` | Pending | Pending | Pending |
-| Lunar Diplomacy | `LunarDiplomacy` | Pending | Pending | Pending |
 | Making Friends with My Arm | `MakingFriendsWithMyArm` | Pending | Pending | Pending |
 | Making History | `MakingHistory` | Pending | Pending | Pending |
 | Meat and Greet | `MeatAndGreet` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
 | Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
-| Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
-| Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
-| Mourning's End Part I | `MourningsEndPartI` | Pending | Pending | Pending |
-| Mourning's End Part II | `MourningsEndPartII` | Pending | Pending | Pending |
 | Murder Mystery | `MurderMystery` | Pending | Pending | Pending |
 | My Arm's Big Adventure | `MyArmsBigAdventure` | Pending | Pending | Pending |
 | Nature Spirit | `NatureSpirit` | Pending | Pending | Pending |
-| A Night at the Theatre | `ANightAtTheTheatre` | Pending | Pending | Pending |
 | Observatory Quest | `ObservatoryQuest` | Pending | Pending | Pending |
 | Olaf's Quest | `OlafsQuest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
-| One Small Favour | `OneSmallFavour` | Pending | Pending | Pending |
 | Plague City | `PlagueCity` | Pending | Pending | Pending |
 | A Porcine of Interest | `PorcineOfInterest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Priest in Peril | `PriestInPeril` | Pending | Pending | Pending |
 | The Queen of Thieves | `QueenOfThieves` | Pending | Pending | Pending |
 | Rag and Bone Man I | `RagAndBoneManI` | Pending | Pending | Pending |
-| Rag and Bone Man II | `RagAndBoneManII` | Pending | Pending | Pending |
-| Ratcatchers | `Ratcatchers` | Pending | Pending | Pending |
-| Recipe for Disaster | `RecipeForDisaster` | Pending | Pending | Pending |
 | Recruitment Drive | `RecruitmentDrive` | Pending | Pending | Pending |
-| Regicide | `Regicide` | Pending | Pending | Pending |
 | The Ribbiting Tale of a Lily Pad Labour Dispute | `RibbitingTale` | Pending | Pending | Pending |
 | Roving Elves | `RovingElves` | Pending | Pending | Pending |
 | A Ruff Situation | `ARuffSituation` | Pending | Pending | Pending |
@@ -322,7 +310,6 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Shilo Village | `ShiloVillage` | Pending | Pending | Pending |
 | Sleeping Giants | `SleepingGiants` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | The Slug Menace | `SlugMenace` | Pending | Pending | Pending |
-| Song of the Elves | `SongOfTheElves` | Pending | Pending | Pending |
 | A Soul's Bane | `SoulsBane` | Pending | Pending | Pending |
 | Swan Song | `SwanSong` | Pending | Pending | Pending |
 | A Tail of Two Cats | `TailOfTwoCats` | Pending | Pending | Pending |
@@ -337,14 +324,42 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Troll Romance | `TrollRomance` | Pending | Pending | Pending |
 | Troll Stronghold | `TrollStronghold` | Pending | Pending | Pending |
 | Twilight's Promise | `TwilightPromise` | Pending | Pending | Pending |
-| Underground Pass | `UndergroundPass` | Pending | Pending | Pending |
 | Wanted! | `Wanted` | Pending | Pending | Pending |
 | Watchtower | `Watchtower` | Pending | Pending | Pending |
 | What Lies Below | `WhatLiesBelow` | Pending | Pending | Pending |
-| While Guthix Sleeps | `WhileGuthixSleeps` | Pending | Pending | Pending |
 | Witch's House | `WitchsHouse` | Pending | Pending | Pending |
 | Zogre Flesh Eaters | `ZogreFleshEaters` | Canonical import needs no source change; the three formerly `unavailable` nodes are now real messages the plugin already references; the Dragon Inn tankard dispatch is verified against the generated page | 11 focused tests pass | Stopped at stage 3 with 25 identical "I can't reach that!" on NPC 1320; cause is core reach (wandering NPC on unreachable counter-row tiles), not the quest plugin; natural completion pending |
-| Learning the Ropes | `LearningTheRopes` | Pending | Pending | Pending |
+
+## Deferred — 22 long or complex quests
+
+These quests remain part of the original issue inventory, outside this PR's remaining
+completion requirements. Existing evidence and unfinished changes are retained for
+follow-up; their historical statuses below are not acceptance claims.
+
+| Quest | Module | Source / fixes | Regression | Natural completion / recovery |
+| --- | --- | --- | --- | --- |
+| Darkness of Hallowvale | `DarknessOfHallowvale` | Pending | Pending | Pending |
+| Desert Treasure I | `DesertTreasureI` | Pending | Pending | Pending |
+| Desert Treasure II - The Fallen Empire | `DesertTreasureII` | Pending | Pending | Pending |
+| Dragon Slayer II | `DragonSlayerII` | Pending | Pending | Pending |
+| The Fremennik Trials | `FremennikTrials` | Pending | Pending | Pending |
+| Heroes' Quest | `HeroesQuest` | Pending | Pending | Pending |
+| A Kingdom Divided | `AKingdomDivided` | Pending | Pending | Pending |
+| Legends' Quest | `LegendsQuest` | Pending | Pending | Pending |
+| Lunar Diplomacy | `LunarDiplomacy` | Pending | Pending | Pending |
+| Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
+| Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
+| Mourning's End Part I | `MourningsEndPartI` | Pending | Pending | Pending |
+| Mourning's End Part II | `MourningsEndPartII` | Pending | Pending | Pending |
+| A Night at the Theatre | `ANightAtTheTheatre` | Pending | Pending | Pending |
+| One Small Favour | `OneSmallFavour` | Pending | Pending | Pending |
+| Rag and Bone Man II | `RagAndBoneManII` | Pending | Pending | Pending |
+| Ratcatchers | `Ratcatchers` | Pending | Pending | Pending |
+| Recipe for Disaster | `RecipeForDisaster` | Pending | Pending | Pending |
+| Regicide | `Regicide` | Pending | Pending | Pending |
+| Song of the Elves | `SongOfTheElves` | Pending | Pending | Pending |
+| Underground Pass | `UndergroundPass` | Pending | Pending | Pending |
+| While Guthix Sleeps | `WhileGuthixSleeps` | Pending | Pending | Pending |
 
 ## Separate tutorial
 
