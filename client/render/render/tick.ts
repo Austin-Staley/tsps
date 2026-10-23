@@ -215,10 +215,7 @@ export function tickPass(host: WebGLOsrsRendererHost,
             const map = host.mapManager.visibleMaps[i];
             visibleMaps.push(map);
 
-            for (const loc of map.locsAnimated) {
-                // DynamicObject/loc animation timing is based on Client.cycle (20ms each).
-                loc.update(seqFrameLoader, clientCycle | 0, host.seqSoundCallback);
-            }
+            map.updateAnimatedLocs(seqFrameLoader, clientCycle | 0, host.seqSoundCallback);
 
             host._ecsUpdateNpcClient(map, clientTicksElapsed);
             host._ecsUpdatePlayerOccupancy(map);

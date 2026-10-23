@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import { Camera } from "../game/Camera";
+import { InputManager } from "../game/InputManager";
 import { ClientPluginManager } from "../game/plugins/ClientPluginManager";
 
 // The renderer shares the client shell; only its bundled assets need Node loaders.
@@ -39,7 +40,7 @@ Object.assign(renderer, {
         clientPlugins: new ClientPluginManager(),
         isLoggedIn: () => loggedIn,
         camera: new Camera(0, 0, 0, 256, 0),
-        inputManager: { wheelDeltaY: 0 },
+        inputManager: new InputManager(),
         playerEcs: { size: () => 0 },
         worldViewManager: { interpolateEntities: noop },
         ambientSounds: { frame: noop },
@@ -53,6 +54,7 @@ Object.assign(renderer, {
         getMap: () => undefined, getMapForWorldTile: () => undefined,
     },
     stats: { frameCount: 1 },
+    sceneBuilds: new Map(),
     cameraShakeEnabled: Array(5).fill(false),
     cameraShakeRandomAmplitude: Array(5).fill(0),
     cameraShakeWaveAmplitude: Array(5).fill(0),
@@ -212,11 +214,12 @@ renderer.mapManager.visibleMaps = [];
 renderer.osrsClient.followPlayerCamera = true;
 renderer.osrsClient.camera.setViewPitchOverride(undefined);
 renderer.osrsClient.clientPlugins.hdEnabled = () => true;
-const wheelInput: any = { wheelDeltaY: 120, viewportWheelDeltaY: 0, mouseX: 100, mouseY: 100 };
+const wheelInput = new InputManager();
+Object.assign(wheelInput, { wheelDeltaY: 120, mouseX: 100, mouseY: 100 });
 renderer.osrsClient.inputManager = wheelInput;
 let handler = 36;
 renderer.handleInput = () => processWidgetScrollWheelInput(
-    { getCs2Vm: () => ({ invokeEventHandler: noop }) } as any,
+    { getCs2Vm: () => ({ context: { getViewportFovValues: noop }, scriptCallbackListeners: new Set(), invokeEventHandler: noop }) } as any,
     { input: wheelInput, mx: 100, hits: [{ uid: 2, eventHandlers: { onScroll: { scriptId: handler } } }] } as any,
     { isEffectivelyHidden: () => false } as any,
     { isDraggingWidget: false } as any,
@@ -229,6 +232,13 @@ handler = 39;
 wheelInput.wheelDeltaY = 120;
 render();
 assert.equal(renderer.followCamWheel, 120, "native viewport zoom still forwards the original delta to HD");
+renderer.followCamWheel = 0;
+wheelInput.wheelDeltaY = 0;
+wheelInput.pinchZoomDelta = 0.25;
+wheelInput.viewportWheelDeltaY = 0;
+render();
+assert.equal(renderer.followCamWheel, 0.25, "viewport ownership preserves a fractional pinch for HD after clearWheel");
+assert.equal(wheelInput.getCameraZoomDelta(), 0, "native viewport dispatch consumes the gesture exactly once");
 renderer.followCamWheel = 0;
 renderer.osrsClient.camera.setViewPitchOverride(200);
 wheelInput.wheelDeltaY = 120;

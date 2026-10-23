@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { InputManager } from "../game/InputManager";
 import { createCacheVm } from "../scripts/cache/cs2-sweep";
 import { createScriptEvent } from "../rs/cs2/Cs2Vm";
 import { processWidgetScrollWheelInput } from "../game/widgets/input/widgetScrollWheelInput";
@@ -17,7 +18,8 @@ const scrollbar = manager.getWidgetByUid(list.eventHandlers.onScroll.intArgs[0])
 const thumb = scrollbar.children[1];
 const before = thumb.y;
 const wheel = () => {
-    const input = { wheelDeltaY: 120 };
+    const input = new InputManager();
+    input.wheelDeltaY = 120;
     processWidgetScrollWheelInput({ getCs2Vm: () => vm } as any, { input, mx: 30, hits: [list] } as any, manager, { isDraggingWidget: false } as any);
     assert.equal(input.wheelDeltaY, 0, "native Settings consumes camera delta");
 };
