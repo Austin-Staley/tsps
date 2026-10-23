@@ -195,6 +195,8 @@ export interface ClientPlugin {
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
     widgetOverlay?: WidgetOverlay;
+    /** Overlays that come and go (one per tracked skill, say), drawn after `widgetOverlay`. */
+    widgetOverlays?(): WidgetOverlay[];
     /** Lays out movable overlays (the RuneLite OverlayRenderer). */
     placeOverlay?(
         overlay: WidgetOverlay,
@@ -391,6 +393,7 @@ export class ClientPluginManager {
     widgetOverlays(): WidgetOverlay[] {
         const overlays: WidgetOverlay[] = [];
         for (const plugin of this.implementing("widgetOverlay")) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
+        for (const plugin of this.implementing("widgetOverlays")) overlays.push(...plugin.widgetOverlays!());
         return overlays;
     }
 

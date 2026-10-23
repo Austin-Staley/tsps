@@ -109,6 +109,7 @@ export class MenuSwapperPlugin extends Plugin {
         entries: SimpleMenuEntry[],
         context: MenuTransformContext,
     ): SimpleMenuEntry[] {
+        if (context.surface === "widget") return entries;
         return applyMenuSwaps(
             entries,
             { ...context, isShiftHeld: ClientState.isShiftPressed() },

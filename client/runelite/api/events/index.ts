@@ -9,6 +9,7 @@ import { GameTick } from "./GameTick";
 import { PluginMessage } from "./PluginMessage";
 import { PluginChanged } from "./PluginChanged";
 import { PostClientTick } from "./PostClientTick";
+import { StatChanged } from "./StatChanged";
 
 export { BeforeRender } from "./BeforeRender";
 export { ChatMessage } from "./ChatMessage";
@@ -21,6 +22,7 @@ export { GameTick } from "./GameTick";
 export { PluginMessage } from "./PluginMessage";
 export { PluginChanged } from "./PluginChanged";
 export { PostClientTick } from "./PostClientTick";
+export { StatChanged } from "./StatChanged";
 
 export type EventInstance = object;
 export type EventClass<E = EventInstance> = new (...args: never[]) => E;
@@ -41,4 +43,5 @@ export const EVENT_CLASSES: Record<string, EventClass> = {
     PluginChanged,
     CommandExecuted,
     FocusChanged,
+    StatChanged,
 };
