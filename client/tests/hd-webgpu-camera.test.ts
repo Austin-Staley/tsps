@@ -29,6 +29,7 @@ for (const backend of ["WebGL", "WebGPU"]) {
         const renderer: any = {
             osrsClient: {
                 camera, followPlayerCamera: true, controlledPlayerServerId: 7,
+                getCameraTargetPosition: () => undefined,
                 zoomWidth: 256, zoomHeight: 256,
                 playerEcs: {
                     getIndexForServerId: () => 0, size: () => 1,

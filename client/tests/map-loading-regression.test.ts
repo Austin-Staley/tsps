@@ -100,7 +100,7 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
         instanceBuildSeq: 0, pendingInstanceScene: null,
         mapsToLoad: { items: [] as any[], clear() { this.items.length = 0; }, push(item: any) { this.items.push(item); } },
         pendingStreamMapsByGeneration: new Map(),
-        mapManager: { loadingMapIds: new Set<number>() },
+        mapManager: { loadingMapIds: new Set<number>(), mapSquares: new Map() },
         maxLevel: 3, loadNpcs: false, smoothTerrain: false, hasMultiDraw: true, loadedTextureIds: new Set(),
         getInstanceExtraLocs: () => undefined,
         clearMaps() { cleared++; drawn.clear(); },
