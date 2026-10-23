@@ -9,6 +9,7 @@ const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { Item } = require("../dist/game/model/Item");
 const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { Bank } = require("../dist/game/model/container/impl/Bank");
+const { World } = require("../dist/game/World");
 const { PlayerStatus } = require("../dist/game/model/PlayerStatus");
 
 const TRIDENT = 11907;
@@ -504,7 +505,7 @@ function bankerHarness() {
   let useNpc;
   const useObjects = [];
   const api = {
-    core: { Bank, PlayerStatus, Item, ItemIdentifiers, DialogueChainBuilder, OptionDialogue },
+    core: { Bank, PlayerStatus, Item, ItemIdentifiers, DialogueChainBuilder, OptionDialogue, World },
     onNpcInteraction: (name, handlers) => npc.set(name, handlers),
     onObjectInteraction: (name, handlers) => object.set(name, handlers),
     onItemOnNpc: (handler) => { useNpc = handler; },

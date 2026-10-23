@@ -57,7 +57,8 @@ function harness(t, members = true) {
   const tasks = [];
   const api = {
     core: { Item, ItemIdentifiers: I, NpcIdentifiers: N, Skill, Location, Wilderness: { isPvpArea: () => false },
-      WorldDefinition: { isMembersWorld: () => members }, Animation, Task, PlayerRights,
+      WorldDefinition: { isMembersWorld: () => members }, World: { getProcessCycle: () => Math.floor(now / 600) },
+      Animation, Task, PlayerRights,
       DialogueChainBuilder, NpcDialogue, PlayerDialogue, StatementDialogue,
       ItemStatementDialogue, EndDialogue, ActionDialogue, GameObject: FakeGameObject, ObjectManager,
       MapObjects: { get: () => null } },
