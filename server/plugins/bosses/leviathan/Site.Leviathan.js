@@ -1,0 +1,135 @@
+const Common = require('./Common.Leviathan');
+const { Fight } = require('./Fight.Leviathan');
+// Revision241 cache locations, independently checked for Travel actions.
+const CAMP_BOAT = 49212, ISLAND_BOAT = 49213;
+const sessions = new Map();
+let AreaClass;
+function areaClass() {
+  if (AreaClass) return AreaClass;
+  AreaClass = class LeviathanIsland extends Common.core.TemplatedInstanceArea {
+    constructor() { super(Common.data.instance.width, Common.data.instance.height); }
+    getName() { return "The Leviathan's island"; }
+    allowSummonPet() { return false; }
+    postLeave(mobile, logout) {
+      const session = this.session;
+      if (mobile === session?.player) {
+        if (logout) mobile.setLocation(Common.location(Common.data.site.campReturn));
+        session.end();
+      }
+      super.postLeave(mobile, logout);
+    }
+  };
+  return AreaClass;
+}
+class Session {
+  constructor(player) {
+    this.player = player; this.awakened = false; this.ended = false; this.fight = null; this.perfectKills = 0;
+    this.area = new (areaClass())(); this.area.session = this;
+    const { sourceChunkX, sourceChunkY, width, height, planes } = Common.data.instance;
+    for (const z of planes) for (let x = 0; x < width; x++) for (let y = 0; y < height; y++)
+      this.area.setChunk(z, x, y, { sourceChunkX: sourceChunkX + x, sourceChunkY: sourceChunkY + y, sourcePlane: z, rotation: 0 });
+  }
+  tile(tile) { return Common.tile(this.area, tile); }
+  sourceTile(tile) { return Common.sourceTile(this.area, tile); }
+  spawn(id, tile) {
+    const at = this.tile(tile), npc = Common.api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: this.player, ownerOnly: true, wanderRadius: 0 });
+    if (npc) { npc.__skipDefaultRespawn = true; this.area.add(npc); }
+    return npc;
+  }
+  start() {
+    if (this.ended || this.fight && !this.fight.over) return;
+    this.fight?.stop();
+    const fight = new Fight(this); this.fight = fight; fight.start();
+    const { Task, TaskManager } = Common.core;
+    TaskManager.submit(new (class extends Task {
+      constructor() { super(1, null, false); }
+      execute() {
+        if (fight.stopped || fight.session.ended || fight.session.fight !== fight) { this.stop(); return; }
+        fight.process();
+      }
+    })());
+  }
+  scheduleRespawn(fight) {
+    Common.later(Common.data.inferred.respawnTicks, () => {
+      if (!this.ended && this.fight === fight) this.start();
+    });
+  }
+  end() {
+    if (this.ended) return;
+    this.ended = true; sessions.delete(this.player); this.fight?.stop();
+    this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
+    if (!this.area.isDestroyed()) this.area.destroy();
+  }
+}
+const sessionOf = player => sessions.get(player) ?? null;
+function complete(player) {
+  const request = { player, key: Common.data.quest, complete: false };
+  Common.api.emitCustomEvent('quest:is-complete', request);
+  return request.complete === true;
+}
+function travel({ player, objectId }) {
+  if (objectId === ISLAND_BOAT) {
+    if (!sessionOf(player)) return false;
+    leave(player); return true;
+  }
+  if (objectId !== CAMP_BOAT || !complete(player)) return false;
+  if (sessionOf(player)) return true;
+  const session = new Session(player); sessions.set(player, session);
+  session.area.enter(player);
+  player.moveTo(session.tile(Common.data.site.islandArrival));
+  player.setAttribute(Common.INSIDE_ATTRIBUTE, true);
+  return true;
+}
+function climb({ player, objectId }) {
+  const session = sessionOf(player);
+  if (!session || ![Common.ids.locs.entry, Common.ids.locs.questEntry].includes(objectId)) return false;
+  const at = session.sourceTile(player.getLocation());
+  if (at[0] >= Common.data.site.arenaArrival[0]) {
+    player.moveTo(session.tile(Common.data.site.islandArrival));
+    session.fight?.stop(); session.fight = null; session.perfectKills = 0;
+  } else {
+    // Awakened entry stays unavailable until its uncaptured timings and damage bounds are verified.
+    if (player.getInventory().contains(Common.ids.awakenerOrb)) player.sendMessage("This encounter currently supports the normal Leviathan. Your awakener's orb has not been consumed.");
+    player.moveTo(session.tile(Common.data.site.arenaArrival));
+    session.start();
+  }
+  return true;
+}
+function leave(player) {
+  const session = sessionOf(player);
+  if (!session) return;
+  player.moveTo(Common.location(Common.data.site.campReturn));
+  session.end();
+}
+function guardian({ player }) {
+  if (!complete(player) || sessionOf(player)) return false;
+  player.moveTo(Common.location(Common.data.site.guardianArrival));
+  return true;
+}
+function recover({ player }) {
+  if (!player.getAttribute(Common.INSIDE_ATTRIBUTE) || sessionOf(player)) return;
+  player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
+  player.moveTo(Common.location(Common.data.site.campReturn));
+}
+function grave(request) {
+  if (!sessionOf(request.player)) return;
+  const [x, y, z] = Common.data.site.campReturn;
+  request.tile = { x, y, z };
+  if (Common.count(request.player, Common.KILLS_ATTRIBUTE) < 5) request.feeMultiplier = 0.25;
+}
+function death({ player }) {
+  const session = sessionOf(player);
+  if (!session) return;
+  // As in OSRS, unprotected carried items use the outside grave; existing floor loot is lost.
+  session.end();
+}
+function attach(api) {
+  api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
+  api.onObjectInteraction('Rowboat', { Travel: travel });
+  api.onObjectInteraction('Handholds', { Climb: climb });
+  api.onNpcInteraction('Catalytic Guardian', { 'Talk-to': guardian });
+  api.onPlayerLogin(recover);
+  api.onPlayerDeath(death);
+  api.onCustomEvent('gravestones:grave-location', grave);
+}
+module.exports = { attach, Session, sessionOf, travel, climb, leave };
