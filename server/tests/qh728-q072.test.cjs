@@ -289,6 +289,32 @@ test('cache completion contract: varbit 11182, threshold 26', () => {
   }
 });
 
+test('an interrupted spice-box unlock resumes the canonical delivery line on retalk', () => {
+  const { h, player } = route();
+  try {
+    h.hook(EMELIO, 'quest:meat-and-greet:start');
+    h.line(EMELIO, "Okay, I guess I can go see where they've got to.");
+    h.line(SPICE_MERCHANT, 'Sure thing!');
+    h.action(SPICE_MERCHANT, 'gRONbi');
+    player.enteredAmount.execute(2546);
+    assert.equal(player.varbits.get(11183), 3, 'unlocked, before the merchant sends the spices');
+
+    // Simulate leaving the scene before the merchant speaks, then use the real Talk-to handler.
+    h.transcripts.length = 0;
+    h.talk('Spice Merchant', SPICE_MERCHANT);
+    const resumed = h.transcripts.at(-1);
+    assert.equal(resumed.variant, 'searching-for-spices-unlocking-the-box');
+    const steps = require('../data/definitions/npc-dialogues.json')['Meat and Greet'].variants[resumed.variant];
+    const deliveryLine = steps.map(step => step.text ?? step.npc).find(text => text?.startsWith('Kuani!'));
+    assert.ok(deliveryLine, 'the selected imported transcript actually contains the delivery receipt');
+    h.line(SPICE_MERCHANT, deliveryLine);
+    assert.equal(player.varbits.get(11183), 4);
+    assert.equal(h.variant(SPICE_MERCHANT), 'searching-for-spices-talking-to-the-spice-merchant-after-unlocking-the-box');
+  } finally {
+    h.restore();
+  }
+});
+
 test('full mandatory Quest Helper route dispatches stage 0 to 26', () => {
   const { h, player } = route();
   try {

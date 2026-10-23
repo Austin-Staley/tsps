@@ -304,7 +304,9 @@ module.exports = function registerMeatAndGreetQuest(api) {
   function selectSpiceMerchant(player) {
     if (stage(player) !== STAGE_DELIVERIES) return null;
     const spice = sub(player, "spice");
-    if (spice >= 3) return "searching-for-spices-talking-to-the-spice-merchant-after-unlocking-the-box";
+    // The unlock scene's final line sends the delivery; resume it if interrupted.
+    if (spice === 3) return "searching-for-spices-unlocking-the-box";
+    if (spice >= 4) return "searching-for-spices-talking-to-the-spice-merchant-after-unlocking-the-box";
     return spice === 2 ? "searching-for-spices-talking-to-the-spice-merchant-again" : "searching-for-spices";
   }
 
