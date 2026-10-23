@@ -1,6 +1,7 @@
 import { hintArrow } from "../../../game/HintArrow";
 import { updateSkyColor } from "../environment";
 import { syncCameraViewportUnitScale } from "../quality";
+import { resolveSceneFramebuffer } from "../init/framebuffers";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -774,20 +775,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // didn't already render directly into the texture framebuffer.
         profiler.startPhase("blit");
         if (!directTextureScenePass) {
-            host.app.readFramebuffer(host.framebuffer);
-            host.app.drawFramebuffer(host.textureFramebuffer);
-            host.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
-            host.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT, {
-                srcStartX: 0,
-                srcStartY: 0,
-                srcEndX: host.sceneRenderWidth | 0,
-                srcEndY: host.sceneRenderHeight | 0,
-                dstStartX: 0,
-                dstStartY: 0,
-                dstEndX: host.app.width | 0,
-                dstEndY: host.app.height | 0,
-                filter: PicoGL.LINEAR,
-            });
+            resolveSceneFramebuffer(host);
         }
         host.app.viewport(0, 0, host.app.width | 0, host.app.height | 0);
         profiler.endPhase();

@@ -321,6 +321,12 @@ export async function cleanUp(host: WebGLOsrsRendererHost, ): Promise<void> {
         host.depthTarget?.delete();
         host.depthTarget = undefined;
 
+        host.sceneResolveFramebuffer?.delete();
+        host.sceneResolveFramebuffer = undefined;
+
+        host.sceneResolveColorTarget?.delete();
+        host.sceneResolveColorTarget = undefined;
+
         host.textureFramebuffer?.delete();
         host.textureFramebuffer = undefined;
 
