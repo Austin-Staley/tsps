@@ -107,6 +107,21 @@ after(() => {
   ItemOnGroundManager.registers = originalRegisters;
 });
 
+test('force-add preserves every non-stackable reward with zero, one or two free slots', () => {
+  for (const freeSlots of [0, 1, 2, 3]) {
+    const player = createPlayer();
+    fillInventory(player, 28 - freeSlots);
+    dropped = [];
+    const reward = new Item(REWARD_ITEM, 3);
+    player.getInventory().forceAdd(player, reward);
+    const carried = player.getInventory().getAmount(REWARD_ITEM);
+    const onGround = dropped.filter(drop => drop.id === REWARD_ITEM).reduce((sum, drop) => sum + drop.amount, 0);
+    assert.equal(carried, freeSlots, `${freeSlots} items fit`);
+    assert.equal(carried + onGround, 3, 'every reward is carried or available on the ground');
+    assert.equal(reward.getAmount(), 3, 'overflow never mutates the caller’s item');
+  }
+});
+
 test('delayed completion scrolls resolve each player’s own reward icon', (t) => {
   const pending = [];
   class CompletionTask {

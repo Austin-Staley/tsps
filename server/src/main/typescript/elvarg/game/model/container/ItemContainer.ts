@@ -779,7 +779,13 @@ export abstract class ItemContainer {
       // Drop once at the reward location. Ground-stack merging must not mutate the reward item.
       getItemOnGroundManager().registers(player, item.clone());
     } else {
+      const previousAmount = this.getAmount(item.getId());
       this.addItem(item);
+      const added = this.getAmount(item.getId()) - previousAmount;
+      const remaining = item.getAmount() - added;
+      if (remaining > 0) {
+        getItemOnGroundManager().registers(player, item.clone().setAmount(remaining));
+      }
     }
   }
 
