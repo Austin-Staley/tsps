@@ -3,8 +3,8 @@
 module.exports = {
   name: "BeginnerTreasureTrails",
   register(api) {
-    require("./Runtime.BeginnerTreasureTrails")(api);
-    require("./Rewards.BeginnerTreasureTrails")(api);
-    require("./Capacity.BeginnerTreasureTrails")(api);
+    require("./beginner/Runtime.BeginnerTreasureTrails")(api);
+    require("./beginner/Rewards.BeginnerTreasureTrails")(api);
+    require("./beginner/Capacity.BeginnerTreasureTrails")(api);
   },
 };

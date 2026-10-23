@@ -6,7 +6,7 @@ require("../dist/game/cache/CachePipeline").CachePipeline.initialize();
 const {Player} = require("../dist/game/entity/impl/player/Player");
 const {PlayerSave} = require("../dist/game/entity/impl/player/persistence/PlayerSave");
 const JsonPersistence = require("../plugins/persistence/JsonPlayerPersistence.plugin");
-const Rewards = require("../plugins/treasuretrails/Rewards.BeginnerTreasureTrails");
+const Rewards = require("../plugins/treasuretrails/beginner/Rewards.BeginnerTreasureTrails");
 const TEN_HOURS = 36_000_000;
 let codec;
 JsonPersistence.register({
