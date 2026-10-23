@@ -67,6 +67,7 @@ async function benchmark(settings) {
     const client = window.__osrsClient || window.osrsClient;
     const renderer = client?.renderer;
     if (client?.gameState !== 30 || renderer?.type !== "webgpu") throw new Error("Requires in-game WebGPU");
+    if (client.widgetManager.rootInterface === 378) throw new Error("Dismiss the Welcome Screen before benchmarking");
     for (const name of ["117 HD", "GPU", "Animation Smoothing", "Camera"]) {
         const plugin = client.runeLite.pluginManager.getPlugins().find(p => p.getName() === name);
         if (!plugin?.isStarted()) throw new Error(`Enable ${name} before benchmarking`);
@@ -76,7 +77,9 @@ async function benchmark(settings) {
     if (Math.floor(position[0]) !== 3104 || Math.floor(position[1]) !== 3508 || client.playerEcs.getLevel(player) !== 0) {
         throw new Error(`Benchmark requires 3104,3508,0; currently ${position}`);
     }
-    if (!renderer.mapManager.isSceneReady(renderer.stats.frameCount)) throw new Error("Wait for scene loading to finish");
+    const sceneReady = renderer.mapManager.isSceneReady?.(renderer.stats.frameCount) ??
+        (renderer.mapDataLoadedNotified && renderer.mapManager.visibleMaps.length > 0);
+    if (!sceneReady) throw new Error("Wait for scene loading to finish");
     const originalRender = renderer.render;
     const originalScale = renderer.getCanvasResolutionScale;
     const yaw = client.camera.yaw, pitch = client.camera.pitch;
@@ -117,6 +120,7 @@ async function benchmark(settings) {
             w.bufferBytes += size === undefined ? data.byteLength - offset * (data.BYTES_PER_ELEMENT ?? 1) : size * (data.BYTES_PER_ELEMENT ?? 1);
         });
         patch(renderer.device.queue, "writeTexture", (w, [, , , size]) => { w.textureWrites++; w.textureTexels += texels(size); });
+        patch(renderer.device.queue, "copyExternalImageToTexture", (w, [, , size]) => { w.externalTextureCopies++; w.externalTexels += texels(size); });
         patch(GPUCommandEncoder.prototype, "copyTextureToTexture", (w, [, , size]) => { w.textureCopies++; w.copyTexels += texels(size); });
         patch(renderer.actors.dynamicNpcLoader, "cacheModelGeometry", w => { w.npcPoseBuilds++; });
         patch(renderer.world.extension.clutter, "build", w => { w.grassBuilds++; });
@@ -135,6 +139,7 @@ async function benchmark(settings) {
                 if (time - started >= 1500 && !work) work = { indexedDraws: 0, draws: 0, indices: 0,
                     vertices: 0, pipelineBinds: 0, bufferWrites: 0, bufferBytes: 0,
                     textureWrites: 0, textureTexels: 0, textureCopies: 0, copyTexels: 0,
+                    externalTextureCopies: 0, externalTexels: 0,
                     npcPoseBuilds: 0, grassBuilds: 0 };
                 if (mode !== "idle") client.inputManager._cameraDragDeltaX = -512 * dt / 1000 / .9;
                 const begin = performance.now();
@@ -155,9 +160,14 @@ async function benchmark(settings) {
                 frameIntervalMs: summary(samples.map(f => f.dt)),
                 gapsOver25ms: samples.filter(f => f.dt > 25).length,
                 queueDrainMs: performance.now() - drainStart,
-                work: counts, perFrame: Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v / samples.length])), samples });
+                work: counts, perFrame: Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v / samples.length])),
+                fps: (samples.length - 1) * 1000 / (samples.at(-1).time - samples[0].time),
+                maps: renderer.mapManager.visibleMaps.map(m => [m.mapX, m.mapY]), samples });
         }
         return { settings, position, canvas, gpu: client.clientPlugins.gpuSettings(),
+            cssCanvas: [renderer.canvas.clientWidth, renderer.canvas.clientHeight],
+            sceneViewport: renderer.getSceneViewportWidgetRect(),
+            cameraViewport: [client.camera.viewportWidth, client.camera.viewportHeight],
             hd: renderer.world.extension.options(),
             browser: navigator.userAgent, scripts: [...document.scripts].map(s => s.src).filter(Boolean), windows, errors };
     } finally {
