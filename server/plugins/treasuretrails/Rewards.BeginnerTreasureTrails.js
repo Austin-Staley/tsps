@@ -9,9 +9,19 @@ let core;
 
 function between(min, max, random) { return min + Math.floor(random() * (max - min + 1)); }
 
-function roll(random = Math.random) {
-  const entries = TABLE.entries;
-  const total = TABLE.out_of;
+function uniqueEligible(player, now = Date.now()) {
+  const created = player.getCreationDate?.()?.getTime?.();
+  return Number.isSafeInteger(created) && created > 0 && created <= now &&
+    now - created >= TABLE.restrictions.unique_minimum_account_age_seconds * 1000;
+}
+
+function roll(random = Math.random, eligibleForUniques = true) {
+  // The published table marks unique rows. Until eligible, sample the remaining
+  // canonical weights directly; no retries, invented items or empty rewards.
+  // This conditional distribution is an implementation assumption, not a
+  // claimed disclosure of Jagex's unpublished restricted-account algorithm.
+  const entries = eligibleForUniques ? TABLE.entries : TABLE.entries.filter(entry => !entry.unique);
+  const total = eligibleForUniques ? TABLE.out_of : entries.reduce((sum, entry) => sum + entry.weight, 0);
   const drops = [];
   const rolls = between(...TABLE.rolls, random);
   for (let i = 0; i < rolls; i++) {
@@ -70,15 +80,13 @@ function open(event) {
   }
   player.setAttribute(OPENING_ATTRIBUTE, true);
   try {
-    // Known fidelity gap: early-account unique eligibility and the online
-    // replacement distribution still need a source-backed implementation.
     let drops, count;
     try {
       const completed = Number(player.getAttribute(Runtime.COMPLETED_ATTRIBUTE) ?? 0);
       if (!Number.isSafeInteger(completed) || completed < 0 || completed >= Number.MAX_SAFE_INTEGER)
         throw new Error("Invalid beginner completion count");
       count = completed + 1;
-      const request = {player, completed: count, milestones: TABLE.milestones, drops: roll(), handled: false, error: null};
+      const request = {player, completed: count, milestones: TABLE.milestones, drops: roll(Math.random, uniqueEligible(player)), handled: false, error: null};
       api.emitCustomEvent("treasure-trails:milestone-rewards", request);
       if (!request.handled || request.error) throw request.error ?? new Error("Beginner milestone service unavailable");
       drops = prepareDrops(request.drops);
@@ -111,4 +119,4 @@ module.exports = function attachRewards(pluginApi) {
   core = api.core;
   api.onItemAction("Reward casket (beginner)", { Open: open });
 };
-Object.assign(module.exports, { TABLE, roll, prepareDrops, give, open, onEntrana });
+Object.assign(module.exports, { TABLE, roll, uniqueEligible, prepareDrops, give, open, onEntrana });

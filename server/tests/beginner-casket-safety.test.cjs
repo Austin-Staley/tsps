@@ -39,11 +39,17 @@ test("an actual DEFAULT fallback in added reward data preserves the beginner cas
 });
 
 test("missing normal and milestone cache definitions are rejected before consuming anything", () => {
-  for (const id of [Rewards.TABLE.entries[0].item_id, core.ItemIdentifiers.MINOR_BEGINNER_SCROLL_CASE]) {
+  for (const [id, eligible] of [
+    [Rewards.TABLE.entries[0].item_id, true],
+    [Rewards.TABLE.entries.find(row => !row.unique).item_id, false],
+    [core.ItemIdentifiers.MINOR_BEGINNER_SCROLL_CASE, true],
+  ]) {
     const f = fixture(49), original = core.ItemDefinition.forId;
-    try { core.ItemDefinition.forId = requested => requested === id ? core.ItemDefinition.DEFAULT : original(requested);
+    f.player.getCreationDate = () => new Date(Date.now() - (eligible ? 36_000_001 : 0));
+    try { core.ItemDefinition.forId = requested => requested === id ? core.ItemDefinition.DEFAULT : original.call(core.ItemDefinition, requested);
       assert.doesNotThrow(() => f.open()); }
     finally { core.ItemDefinition.forId = original; }
+    assert.match(f.event.error?.message ?? "", new RegExp(`Missing beginner reward ${id}$`));
     f.preserved();
   }
 });
@@ -103,5 +109,20 @@ test("reentrant preparation opens one casket once and credits its real milestone
 test("invalid saved completion counts preserve the casket rather than reset or overflow progress", () => {
   for (const value of [-1, NaN, Number.MAX_SAFE_INTEGER]) {
     const f = fixture(value); assert.doesNotThrow(() => f.open()); f.preserved();
+  }
+});
+
+test("opening enforces unique eligibility while young accounts retain ordinary rewards and milestones", () => {
+  for (const [age, eligible] of [[0, false], [36_000_001, true]]) {
+    const f = fixture(49);
+    f.player.getCreationDate = () => new Date(Date.now() - age);
+    assert.doesNotThrow(() => f.open());
+    assert.equal(f.event.error, undefined);
+    assert.equal(f.attributes.get(Runtime.COMPLETED_ATTRIBUTE), 50);
+    assert.equal(f.inventory.getAmount(core.ItemIdentifiers.MINOR_BEGINNER_SCROLL_CASE), 1);
+    const expected = Rewards.TABLE.entries.find(row => eligible || !row.unique);
+    assert.equal(f.inventory.getAmount(expected.item_id), expected.quantity[0]);
+    const unique = Rewards.TABLE.entries.find(row => row.unique);
+    assert.equal(f.inventory.getAmount(unique.item_id), eligible ? unique.quantity[0] : 0);
   }
 });
