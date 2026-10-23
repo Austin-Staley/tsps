@@ -6,7 +6,7 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Original 128: accepted natural main-route proofs
 
-Nine quests have accepted natural main-route completion evidence: **9 / 128 (7.03%)** (q003, q006, q008, q026, q041, q048, q063, q074, q088). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Root acceptance artifacts are retained for q006, q026, q048 and q088; their scoped limits remain in force.
+Ten quests have accepted natural main-route completion evidence: **10 / 128 (7.81%)** (q003, q006, q008, q011, q026, q041, q048, q063, q074, q088). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Root acceptance artifacts are retained for q006, q011, q026, q048 and q088; their scoped limits remain in force.
 
 ### q003 — The Ascent of Arceuus
 
@@ -20,6 +20,12 @@ Nine quests have accepted natural main-route completion evidence: **9 / 128 (7.0
 - **Revision:** plugin/source = loaded = peer-reviewed `4a0656ff904a18720472ea8f121b8ffef7b9fbdca555d9da48592f852cba5cdd`; focused test `395aa164379a038ad557c11ecac4047520b172787f0ee6b182033df94f2bd09d`.
 - **Natural route and result:** epoch 5 exercised the dialogue/scene handoffs, canal barge and copied sailing instance, voyage, arrival, Junior Navigator completion, and completion UI. Cache quest row 11 uses varbit 5795 with completion wire value 50; durable stage 11 was verified. QP +1; no skill XP reward; Fossil island notebook +1 and declared consumables were reconciled. Museum Kudos were earned in the run through ten Historian Minas reports and five real finds; they were not a setup fixture. Ordinary non-target prerequisites were declared as setup. The completed Junior Navigator despawned; a same-target repeat attempt could not reopen completion and caused no duplicate QP, XP or notebook. Relog preserved stage/rewards; completion save #220 and logout save #221 were recorded. Post-quest Curator dialogue and barge travel to Fossil Island worked after relog.
 - **Limits/recheck:** lost-item reclaims, full-bag, interrupted voyage/conversation and overlay remain unchecked (the scoped source tests cover several recovery branches, which is not native proof). Evidence: `/tmp/tsps-728/native/jobs/q008-epoch5.report.json`, `/tmp/tsps-728/native/prior/q008-epoch5/release.json`.
+
+### q011 — Clock Tower
+
+- **Revision:** plugin/source = loaded = peer-reviewed `48a7cb0c9ffa5a3ee2fd861c67a747c7284675fe7b3073ebcb9dc8a022a62986`; focused test `8d35c5110e0696048b5b5d1997f1fa87ce923432a9afee20997b910094b4c3c1`; root acceptance artifact `/tmp/tsps-728/native/evidence/q011-root-accepted-20261023.json`.
+- **Natural route and result:** the linked route resumed the preserved stage-3 checkpoint (red/blue cogs already placed), reached stage4 with black cog placed, then used the west staircase and both ordinary doors to reach the white spindle. White cog20 fit naturally, then the player returned through the staircase and completed Kojo's dialogue. Final stage8, QP +1, coins +500 (6000→6500), skill XP unchanged. A repeat Kojo dialogue did not duplicate rewards. Normal relog preserved stage/rewards, and final logout confirmed offline.
+- **Limits:** this is a checkpoint continuation, not a fresh-stage-0 standalone route; the QH overlay was not visually checked. Evidence: `/tmp/tsps-728/native/jobs/q011-epoch18-acceptance.md` (SHA-256 `cc13bc04b6f70455341a07421d5a1b3fd94ca23a5bf3899c52034b45bb25b2ff`), `/tmp/tsps-728/native/jobs/q011-epoch18-natural-route.raw.jsonl` (SHA-256 `e629ddafa2ecc72b8ff95d4eab797f266ccfde88f872e71fbd19b9307762dbab`), and `/tmp/tsps-728/native/evidence/q011-root-accepted-20261023.json`.
 
 ### q006 — Big Chompy Bird Hunting
 
@@ -218,7 +224,7 @@ plugins require checking the affected claims against the new loaded revisions.
 - Retain each historical result against its recorded source/test/loaded hashes. When a quest plugin changes, mark only claims depending on that plugin as requiring recheck; a changed unrelated plugin does not invalidate the whole ledger. Shared-core or data changes require targeted revalidation of affected routes/claims, not an automatic replay of every unchanged quest prefix.
 - Prefixes resumed across epochs remain one checkpoint-linked route with provenance. Supplemental routes, post-quest checks and retries never increment the whole-quest count.
 - `PASS` for a scoped contract means only that scope. Do not infer untested branches, overlay visibility, timing, full-bag behavior or recovery from a different branch.
-- The historical reconciliation inventory records four accepted natural main-route proofs before q063's epoch-8 acceptance. Root later accepted q006 and q026, then q048 in epoch16 and q088 in epoch17, bringing the accepted original-128 total to nine. The q129 tutorial result is additional and outside the original 128. See `/tmp/tsps-728/native/history-reconciliation.md` for the historical inventory cross-check.
+- The historical reconciliation inventory records four accepted natural main-route proofs before q063's epoch-8 acceptance. Root later accepted q006, q026, q048, q088, and q011 in epoch18, bringing the accepted original-128 total to ten. The q129 tutorial result is additional and outside the original 128. See `/tmp/tsps-728/native/history-reconciliation.md` for the historical inventory cross-check.
 
 ### Epoch 14 shared item-on-NPC release and q006 handoff
 
