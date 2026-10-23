@@ -9,7 +9,12 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { NPC } = require('../dist/game/entity/impl/npc/NPC');
+const { RegionManager } = require('../dist/game/collision/RegionManager');
+const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
@@ -28,7 +33,7 @@ const BIT_TALKED_JOHANHUS = 1 << 6;
 const BIT_TRAPDOOR = 1 << 7;
 const BIT_CRATE = 1 << 12;
 
-function harness() {
+function harness(realFollower = false) {
   const hooks = {}, events = {}, tasks = [], zones = [], objects = [], npcs = [], removed = [];
   const objectManager = { register: object => objects.push(object), deregister: object => { const i = objects.indexOf(object); if (i >= 0) objects.splice(i, 1); } };
   const taskManager = { submit(task) { task.setRunning(true); tasks.push(task); }, cancelTasks(key) { tasks.filter(task => task.key === key).forEach(task => task.stop()); } };
@@ -41,7 +46,10 @@ function harness() {
     onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
     emitCustomEvent: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
     persistAttribute: noop,
-    onNpcInteraction: (name, actions) => { for (const fn of Object.values(actions)) (hooks.onNpcInteraction ??= []).push(fn); },
+    onNpcInteraction: (name, actions) => { for (const fn of Object.values(actions)) (hooks.onNpcInteraction ??= []).push(event => {
+      const resolved = CacheDefinitions.resolveNpc(event.npcId, event.player.getPacketSender());
+      if (NpcDefinition.forId(resolved?.id ?? event.npcId)?.getName() === name) return fn(event);
+    }); },
     onObjectInteraction: (first, actions) => {
       const list = typeof first === 'function' ? [first] : Object.values(actions ?? {});
       for (const fn of list) (hooks.onObjectInteraction ??= []).push(fn);
@@ -50,9 +58,18 @@ function harness() {
     onPlayerLogin: fn => (hooks.onPlayerLogin ??= []).push(fn),
     onPlayerLogout: fn => (hooks.onPlayerLogout ??= []).push(fn),
     spawnNpc(definition) {
-      let location = new core.Location(definition.x, definition.y, definition.z), area = null;
+      if (realFollower && [4508,4509].includes(definition.id)) {
+        const npc = new NPC(definition.id, new core.Location(definition.x,definition.y,definition.z));
+        npc.setOwner(definition.owner); npc.isRegistered = () => !npc.removed;
+        npcs.push(npc); return npc;
+      }
+      let location = new core.Location(definition.x, definition.y, definition.z), area = null, following = null, transformed = definition.id;
       const npc = { ...definition, getId: () => definition.id, index: nextIndex++, getLocation: () => location, moveTo: to => { location = to; },
-        getArea: () => area, setArea: value => { area = value; }, isRegistered: () => !npc.removed, setPositionToFace: noop,
+        getArea: () => area, setArea: value => { area = value; },
+        getFollowing: () => following, setFollowing: value => { following = value; }, setMobileInteraction: noop,
+        setNpcTransformationId: value => { transformed = value; }, getContentId: () => transformed,
+        getCurrentDefinition: player => NpcDefinition.forId(CacheDefinitions.resolveNpc(transformed, player.getPacketSender())?.id ?? transformed),
+        isRegistered: () => !npc.removed, setPositionToFace: noop,
         performAnimation: noop, showHitsplat: noop, getMovementQueue: () => ({ addSteps: to => { npc.walkingTo = to; } }),
         getOwner: () => definition.owner, getCombat: () => ({ attack: player => { npc.target = player; }, reset: noop }) };
       npcs.push(npc); return npc;
@@ -96,7 +113,12 @@ function player(stage = 0) {
   const inventory = container(28), equipment = container(14);
   let manager;
   const packet = new Proxy({
-    sendConfig(id, value) { configs.set(id, value); return packet; }, sendVarbit(id, value) { varbits.set(id, value); return packet; },
+    sendConfig(id, value) { configs.set(id, value); return packet; }, sendVarbit(id, value) {
+      const {baseVar,startBit,endBit}=CacheDefinitions.getVarbit(id);
+      const mask=(2**(endBit-startBit+1)-1)<<startBit;
+      configs.set(baseVar,((configs.get(baseVar)??0)&~mask)|((value<<startBit)&mask));
+      varbits.set(id, value); return packet;
+    },
     getVarbit: id => varbits.get(id) ?? 0, getVarp: id => configs.get(id) ?? 0,
     sendString(value) { text = value; log.push(['text', value]); return packet; },
     sendInterfaceRemoval() { manager.reset(); prompt = null; return packet; },
@@ -105,11 +127,15 @@ function player(stage = 0) {
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value), getInventory: () => inventory,
     getEquipment: () => equipment, getPacketSender: () => packet, getDialogueManager: () => manager,
     getSkillManager: () => ({ addExperiences: (skill, amount) => xp.push([skill.getIndex(), amount]), getMaxLevel: () => 99, getCurrentLevel: () => 99 }),
-    getMovementQueue: () => ({ reset() { return this; }, addSteps(to) { location = to; return this; }, setBlockMovement() { return this; } }),
+    getMovementQueue: () => ({ isMovings: () => false, followX: -1, followY: -1, reset() { return this; }, addSteps(to) { location = to; return this; }, setBlockMovement() { return this; } }),
     getLocation: () => location, moveTo: to => { location = to; }, getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; },
     isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true, getUsername: () => 'q018', getIndex: () => p.index,
     setUntargetable: noop, setPositionToFace: noop, performAnimation: noop, sendMessage: value => messages.push(value),
     getCombat: () => ({ reset: noop }), getHitpoints: () => 99,
+    isTeleportingReturn: () => false, isPlayerBot: () => false, isDyingReturn: () => false,
+    tiles: () => [location],
+    outterTiles: () => [new core.Location(location.getX()-1,location.getY(),location.getZ()),
+      new core.Location(location.getX()+1,location.getY(),location.getZ())],
   };
   manager = new DialogueManager(p);
   Object.defineProperty(p, 'text', { get: () => text, set: value => { text = value; } });
@@ -170,7 +196,7 @@ test('q018 robe hand-in consumes one set and moves to the tour wire value 3', ()
 
 test('q018 five gated tour stops enable the mark story and move the wire to 4', () => {
   const { h, p } = dttd(2);
-  for (const npcId of [N.DUKE, N.MAN, N.FATHER_AERECK, N.GOBLIN, N.SHOP_KEEPER]) { h.npc(p, npcId); h.clearChat(p); }
+  for (const npcId of [N.DUKE_HORACIO, N.MAN, N.FATHER_AERECK, N.GOBLIN, N.SHOP_KEEPER]) { h.npc(p, npcId); h.clearChat(p); }
   assert.equal(p.attrs.get(BITS_KEY) & 0b11111, 0b11111, 'Duke, citizen, Aereck, goblin and shop bits');
   assert.equal(PluginManager.emitNpcDialogueCondition({ player: p, stepId: '1Ciw7b', pages: [{ page: PAGE }] }), true,
     'the mark story is offered once all five stops are done');
@@ -179,7 +205,7 @@ test('q018 five gated tour stops enable the mark story and move the wire to 4', 
   assert.equal(p.varbits.get(2258), 4, 'Quest Helper infiltrate-H.A.M. stage');
 
   const early = dttd(2);
-  early.h.npc(early.p, N.DUKE);
+  early.h.npc(early.p, N.DUKE_HORACIO);
   assert.equal(PluginManager.emitNpcDialogueCondition({ player: early.p, stepId: '1Ciw7b', pages: [{ page: PAGE }] }), false,
     'the mark story is withheld until every stop is done');
 });
@@ -316,4 +342,123 @@ test('q018 registration dispatch covers the shared NPC boundary and early talks'
   outside.h.npc(outside.p, N.ZANIK_6, 'Talk-to');
   assert.ok(!outside.p.manager.getCurrent(), 'out-of-zone 4506 is left to other quests');
   assert.equal(outside.h.quest.getStage(outside.p), 4);
+});
+
+
+test('q018 partial earned tour/guard/corpse flags replay using actual cache parents', () => {
+  const {h,p}=dttd(2);
+  const names={dttd_tour_duke:2259,dttd_tour_priest:2260,dttd_tour_goblins:2261,dttd_tour_citizens:2262,
+    dttd_tour_sun:2263,dttd_tour_shop:2265,dttd_tour_ham_deacon:2268,dttd_tour_ham_johanhus:2269,
+    dttd_guard_1_dead:2275,dttd_guard_2_dead:2277,dttd_guard_3_dead:2278,dttd_guard_4_dead:2280,
+    dttd_guard_5_dead:2282,dttd_zanik_corpse:2271,dttd_mill_guards_dead:2283};
+  for(const[name,id]of Object.entries(names))assert.equal(CacheDefinitions.getVarbitId(name),id);
+  h.npc(p,N.DUKE_HORACIO);h.clearChat(p);
+  assert.equal(p.varbits.get(2259),1);assert.equal(p.varbits.get(2260),0);
+  assert.equal(p.varbits.get(2263),0,'Duke alone does not earn sunlight');
+  const parent=CacheDefinitions.getVarbit(2259).baseVar;
+  const ids=[2258,2264,...Object.values(names)];
+  const mask=ids.filter(id=>CacheDefinitions.getVarbit(id).baseVar===parent).reduce((m,id)=>{
+    const d=CacheDefinitions.getVarbit(id);return m|((2**(d.endBit-d.startBit+1)-1)<<d.startBit)},0);
+  const siblings=0x5a5a5a5a&~mask;p.configs.set(parent,siblings);p.varbits.clear();
+  const stage=h.quest.getStage(p),xp=[...p.xp];
+  h.emit('player:bootstrap-complete',{player:p});
+  assert.equal(p.varbits.get(2259),1);assert.equal(p.varbits.get(2260),0);
+  assert.equal(p.configs.get(parent)&~mask,siblings);
+  assert.equal(h.quest.getStage(p),stage);assert.deepEqual(p.xp,xp);
+  p.attrs.set(STAGE_KEY,7);h.login(p);assert.equal(p.varbits.get(2271),1);
+  h.action(p,N.ZANIK,'8TfJKO');assert.equal(p.varbits.get(2271),0);
+  p.attrs.set(GUARDS_KEY,2);h.emit('player:bootstrap-complete',{player:p});
+  assert.equal(p.varbits.get(2275),1);assert.equal(p.varbits.get(2277),1);assert.equal(p.varbits.get(2278),0);
+});
+
+test('q018 sunlight is earned only by continuing the full surface transcript at QH anchor', () => {
+  const {h,p}=dttd(2);p.moveTo(new core.Location(3217,3219,0));
+  const zone=h.zoneAt(3217,3219);assert.ok(zone);
+  zone.fn({player:p});
+  assert.ok(p.manager.getCurrent());
+  assert.equal(p.varbits.get(2263)??0,0);
+  h.clearChat(p);zone.fn({player:p});
+  let remaining=40;while(p.manager.getCurrent()){assert.ok(remaining-->0);p.manager.advance();}
+  assert.equal(p.varbits.get(2263),1);
+  p.varbits.clear();h.emit('player:bootstrap-complete',{player:p});assert.equal(p.varbits.get(2263),1);
+});
+
+test('q018 mill guard count uses tracked individual deaths and avoids respawning defeated guards', () => {
+  const {h,p}=dttd(11);p.moveTo(new core.Location(3217,9692,0));h.login(p);
+  const guards=h.npcs.filter(n=>n.id===N.GUARD && n.owner===p && !n.removed);
+  assert.equal(guards.length,3);
+  const death=npc=>h.hooks.onNpcDeath[0]({killer:p,npcId:N.GUARD,npc});
+  death({...guards[0]});assert.equal(p.varbits.get(2283),0,'foreign same-ID object refused');
+  death(guards[0]);death(guards[0]);assert.equal(p.varbits.get(2283),1);
+  for(const fn of h.hooks.onPlayerLogout??[])fn({player:p});h.login(p);
+  const remaining=h.npcs.filter(n=>n.id===N.GUARD && n.owner===p && !n.removed);
+  assert.equal(remaining.length,2);assert.equal(p.varbits.get(2283),1);
+  remaining.forEach(death);assert.equal(p.varbits.get(2283),3);
+});
+
+
+test('q018 real owned follower variant and metadata start, transform, stop and replay together', () => {
+  const {h,p}=dttd(1);
+  assert.equal(CacheDefinitions.getVarpId('follower_npc'),447);
+  assert.equal(CacheDefinitions.getNpcId('dttd_zanik_follower'),4508);
+  assert.equal(CacheDefinitions.getNpcId('dttd_zanik_follower_ham'),4509);
+  p.configs.set(447,0x1234);h.login(p);
+  assert.equal(h.npcs.some(n=>n.getFollowing?.()===p),false,'before robe hand-in no follower');
+  h.quest.setStage(p,2);h.login(p);
+  let follower=h.npcs.find(n=>n.getFollowing?.()===p);
+  assert.ok(follower);assert.equal(follower.getContentId(p),4508);
+  assert.equal(p.configs.get(447)>>>16,4508);assert.equal(p.configs.get(447)&65535,0x1234);
+  h.quest.setStage(p,4);
+  assert.equal(follower.getContentId(p),4509);assert.equal(p.configs.get(447)>>>16,4509);
+  p.configs.set(447,0x1234);h.emit('player:bootstrap-complete',{player:p});
+  assert.equal(p.configs.get(447)>>>16,4509);
+  follower.setFollowing(null);h.tick(1);
+  assert.equal(p.configs.get(447),0x1234,'normal follow cancellation clears only high bits');
+  h.npc(p,4509);h.clearChat(p);
+  assert.equal(follower.getFollowing(),p);
+  p.configs.set(447,(123<<16)|0x4321);
+  h.tick(1);assert.equal(follower.getFollowing(),null,'new follower owner is respected');
+  for(const fn of h.hooks.onPlayerLogout??[])fn({player:p});
+  assert.equal(p.configs.get(447),(123<<16)|0x4321,'cleanup preserves unrelated new owner');
+  p.configs.set(447,0x4321);h.login(p);
+  follower=h.npcs.find(n=>!n.removed&&n.getFollowing?.()===p);
+  assert.ok(follower);assert.equal(follower.getContentId(p),4509);
+  h.quest.setStage(p,7);
+  assert.equal(follower.getFollowing(),null);assert.equal(follower.removed,true);
+  assert.equal(p.configs.get(447),0x4321);
+});
+
+test('q018 actual NPC MovementQueue follows the player by clipped walking steps', () => {
+  ObjectDefinition.init();RegionManager.init();RegionManager.loadMapFiles(3200,3220);
+  const h=harness(true),p=player(2);p.moveTo(new core.Location(3200,3220,0));h.login(p);
+  const follower=h.npcs.find(n=>n instanceof NPC);
+  assert.ok(follower);assert.equal(follower.getFollowing(),p);
+  assert.equal(follower.getContentId(p),4508);assert.equal(p.configs.get(447)>>>16,4508);
+  const before=follower.getLocation().clone();
+  p.moveTo(new core.Location(3205,3220,0));
+  follower.getMovementQueue().processFollowing();
+  assert.ok(follower.getMovementQueue().size()>0,'real follow processing built a walk route');
+  follower.getMovementQueue().process();
+  assert.notDeepEqual([follower.getLocation().getX(),follower.getLocation().getY()],[before.getX(),before.getY()]);
+  assert.ok(follower.getLocation().getDistance(before)<=2,'ordinary step, no interaction-side teleport');
+});
+
+
+test('q018 rapid follow stop/restart keeps one pending watcher for the same NPC', () => {
+  const {h,p}=dttd(4);h.login(p);
+  const npc=h.npcs.find(n=>n.getFollowing?.()===p);
+  assert.ok(npc);
+  const pending=()=>h.tasks.filter(task=>task.isRunning());
+  assert.equal(pending().length,1);
+  for(let i=0;i<3;i++) {
+    npc.setFollowing(null);
+    h.npc(p,4509);h.clearChat(p);
+    assert.equal(npc.getFollowing(),p);
+    assert.equal(pending().length,1,'restart before scheduled tick reuses the pending watcher');
+  }
+  h.tick(1);
+  assert.equal(pending().length,1,'only one chain reschedules after the tick');
+  for(const fn of h.hooks.onPlayerLogout??[])fn({player:p});
+  h.tick(1);
+  assert.equal(pending().length,0,'logout terminates its observer');
 });

@@ -27,9 +27,6 @@
  * page, plus the cache (object/NPC transforms, varbits, placements) for ids.
  *
  * Gaps / approximations:
- *  - Zanik does not truly follow: the plugin moves her to the player's side at
- *    every scripted interaction, zone entry and login (the static cellar Zanik
- *    4507 is the varp-794 transform that appears at stage 1).
  *  - The optional tour stops (the tutors, Fred, Millie, Father Urhney, the
  *    candle seller, Gee/Donie, the border guard) are not implemented; only the
  *    five stops the transcript gates on (Duke, a common man/woman, Father
@@ -70,6 +67,11 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
 
   const VARP_DTTD = 794; // "dttd"
   const VARBIT_DTTD_MAIN = 2258; // dttd_main, bits 0-10
+  const VARBIT_ZANIK_CORPSE = 2271;
+  const VARBIT_MILL_GUARDS_DEAD = 2283;
+  const VARP_FOLLOWER_NPC = 447;
+  const FOLLOWER_ZANIK_ID = NpcIdentifiers.ZANIK_7; // dttd_zanik_follower4508
+  const FOLLOWER_HAM_ZANIK_ID = NpcIdentifiers.ZANIK_8; // dttd_zanik_follower_ham4509
   const VARBIT_DTTD_ZANIK_IN_CELLAR = 2264; // dttd_zanik_in_cellar, varp 794 bit 16
 
   const STAGE_STARTED = 1;
@@ -104,6 +106,10 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   const BIT_CRATE = 1 << 12;
   const BIT_MET_ZANIK = 1 << 13;
   const BIT_HEARD_DEACON = 1 << 14;
+  const BIT_SUN = 1 << 15;
+  const millGuardBits = new WeakMap();
+  const watchedFollowers = new WeakSet();
+  const MILL_GUARDS_ATTRIBUTE = "death-to-the-dorgeshuun:mill-guards-dead";
 
   const TOUR_BITS =
     BIT_DUKE | BIT_COMMON | BIT_AERECK | BIT_GOBLIN | BIT_SHOP;
@@ -263,6 +269,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
 
   function setBit(player, bit) {
     player.setAttribute(BITS_ATTRIBUTE, bits(player) | bit);
+    syncAuxiliaryState(player);
   }
 
   function guardsKilled(player) {
@@ -271,6 +278,27 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
 
   function setGuardsKilled(player, value) {
     player.setAttribute(GUARDS_ATTRIBUTE, value | 0);
+    syncAuxiliaryState(player);
+  }
+
+  const AUXILIARY_TOUR_BITS = [
+    [2259, BIT_DUKE], [2260, BIT_AERECK], [2261, BIT_GOBLIN],
+    [2262, BIT_COMMON], [2263, BIT_SUN], [2265, BIT_SHOP],
+    [2268, BIT_HEARD_DEACON], [2269, BIT_TALKED_JOHANHUS],
+  ];
+  const GUARD_DEATH_VARBITS = [2275, 2277, 2278, 2280, 2282];
+
+  function syncAuxiliaryState(player) {
+    const sender = player.getPacketSender();
+    for (const [id, bit] of AUXILIARY_TOUR_BITS) sender.sendVarbit(id, hasBit(player, bit) ? 1 : 0);
+    for (let i = 0; i < GUARD_DEATH_VARBITS.length; i++) {
+      sender.sendVarbit(GUARD_DEATH_VARBITS[i], guardsKilled(player) > i ? 1 : 0);
+    }
+    const stage = quest.getStage(player);
+    sender.sendVarbit(VARBIT_ZANIK_CORPSE, stage >= STAGE_JAILED && stage < STAGE_REVIVED
+      && !hasBit(player, BIT_BODY_TAKEN) ? 1 : 0);
+    const dead = Number(player.getAttribute(MILL_GUARDS_ATTRIBUTE)) || 0;
+    sender.sendVarbit(VARBIT_MILL_GUARDS_DEAD, (dead & 1) + ((dead >> 1) & 1) + ((dead >> 2) & 1));
   }
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
@@ -402,33 +430,70 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   // Zanik (owner-only spawn moved to the player's side) and quest spawns
   // ==========================================================================
 
+  function shouldFollowZanik(player) {
+    const stage = quest.getStage(player);
+    return stage >= STAGE_TOURING && stage < STAGE_COMPLETE
+      && !(stage >= STAGE_JAILED && stage < STAGE_REVIVED) && !(hasBit(player, BIT_CRATE) && held(player, CRATE_WITH_ZANIK_ITEM_ID));
+  }
+
+  function syncFollower(player) {
+    const sender = player.getPacketSender();
+    const current = sender.getVarp(VARP_FOLLOWER_NPC) | 0;
+    const currentId = current >>> 16;
+    const ownSlot = currentId === FOLLOWER_ZANIK_ID || currentId === FOLLOWER_HAM_ZANIK_ID;
+    const npc = zanikByPlayer.get(player);
+    const following = npc?.isRegistered() && npc.getFollowing() === player;
+    if (!ownSlot && currentId !== 0 && currentId !== 65535) {
+      if (following) npc.setFollowing(null);
+      return;
+    }
+    const id = following ? npc.getContentId(player) : 0;
+    if (following || ownSlot) sender.sendConfig(VARP_FOLLOWER_NPC, (id << 16) | (current & 65535));
+  }
+
+  function watchFollower(player, npc) {
+    if (watchedFollowers.has(npc)) return;
+    watchedFollowers.add(npc);
+    TaskManager.submit(new CountdownTask(npc, 1, () => {
+      watchedFollowers.delete(npc);
+      if (zanikByPlayer.get(player) !== npc || !npc.isRegistered()) return;
+      syncFollower(player);
+      if (npc.getFollowing() === player) watchFollower(player, npc);
+    }));
+  }
+
   function despawnZanik(player) {
     const npc = zanikByPlayer.get(player);
-    if (!npc) return;
-    api.removeNpc(npc);
-    zanikByPlayer.delete(player);
+    if (npc) {
+      npc.setFollowing(null);
+      api.removeNpc(npc);
+      zanikByPlayer.delete(player);
+    }
+    syncFollower(player);
   }
 
   function placeZanik(player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE_TOURING) return;
-    const location = player.getLocation();
-    const target = new Location(location.getX() + 1, location.getY(), location.getZ());
-    const npc = zanikByPlayer.get(player);
-    if (npc) {
-      npc.moveTo(target);
+    if (!shouldFollowZanik(player)) {
+      despawnZanik(player);
       return;
     }
-    const spawned = api.spawnNpc({
-      id: NpcIdentifiers.ZANIK,
-      x: target.getX(),
-      y: target.getY(),
-      z: target.getZ(),
-      wanderRadius: 0,
-      owner: player,
-      ownerOnly: true,
-    });
-    if (spawned) zanikByPlayer.set(player, spawned);
+    const stage = quest.getStage(player);
+    const id = stage >= STAGE_INFILTRATING && stage <= STAGE_CAUGHT
+      ? FOLLOWER_HAM_ZANIK_ID : FOLLOWER_ZANIK_ID;
+    let npc = zanikByPlayer.get(player);
+    if (!npc?.isRegistered()) {
+      const location = player.getLocation();
+      npc = api.spawnNpc({ id, x: location.getX() + 1, y: location.getY(), z: location.getZ(),
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!npc) return;
+      zanikByPlayer.set(player, npc);
+    }
+    npc.setNpcTransformationId(id);
+    const wasFollowing = npc.getFollowing() === player;
+    npc.setFollowing(player);
+    npc.setMobileInteraction(player);
+    syncFollower(player);
+    if (!wasFollowing && npc.getFollowing() === player) watchFollower(player, npc);
   }
 
   function despawnTourGoblin(player) {
@@ -481,20 +546,19 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     const npcs = [];
     const spawn = (id, x, y) =>
       api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
-    const zanik = spawn(NpcIdentifiers.ZANIK, 3218, 9702);
-    if (zanik) {
-      npcs.push(zanik);
-      zanikByPlayer.set(player, zanik);
-    }
+    placeZanik(player);
     const sigmund = spawn(NpcIdentifiers.SIGMUND_2, 3219, 9700);
     if (sigmund) npcs.push(sigmund);
-    for (const [x, y] of [
-      [3215, 9702],
-      [3223, 9700],
-      [3211, 9702],
-    ]) {
+    const deadGuards = Number(player.getAttribute(MILL_GUARDS_ATTRIBUTE)) || 0;
+    const guardTiles = [[3215, 9702], [3223, 9700], [3211, 9702]];
+    for (let i = 0; i < guardTiles.length; i++) {
+      if ((deadGuards & (1 << i)) !== 0) continue;
+      const [x, y] = guardTiles[i];
       const guard = spawn(NpcIdentifiers.GUARD, x, y);
-      if (guard) npcs.push(guard);
+      if (guard) {
+        npcs.push(guard);
+        millGuardBits.set(guard, 1 << i);
+      }
     }
     cellarNpcsByPlayer.set(player, npcs);
   }
@@ -642,7 +706,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     // Zanik (the 4507 map spawn) but also Land of the Goblins' fairy-ring Zanik,
     // so only claim 4506 in the cellar and let other quests' Zaniks through.
     if (
-      npcId !== NpcIdentifiers.ZANIK &&
+      npcId !== NpcIdentifiers.ZANIK && npcId !== FOLLOWER_ZANIK_ID && npcId !== FOLLOWER_HAM_ZANIK_ID &&
       (npcId !== NpcIdentifiers.ZANIK_6 || !inZone(player, CELLAR_ZONE))
     ) {
       return false;
@@ -901,6 +965,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     if (hook !== START_HOOK) return;
     if (quest.getStage(player) === 0) quest.setStage(player, STAGE_STARTED);
     syncCellarVarbit(player);
+    syncAuxiliaryState(player);
   }
 
   function handleDialogueCondition(event) {
@@ -1195,6 +1260,14 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   function handleNpcDeath(event) {
     const player = event.killer ?? event.damagers?.[0];
     if (!player) return;
+    const guardBit = event.npc && millGuardBits.get(event.npc);
+    if (quest.getStage(player) === STAGE_MILL && guardBit
+      && (cellarNpcsByPlayer.get(player) ?? []).includes(event.npc)) {
+      const dead = Number(player.getAttribute(MILL_GUARDS_ATTRIBUTE)) || 0;
+      player.setAttribute(MILL_GUARDS_ATTRIBUTE, dead | guardBit);
+      syncAuxiliaryState(player);
+      return;
+    }
     if (STORE_GUARD_IDS.has(event.npcId) && quest.getStage(player) === STAGE_TRAPDOOR) {
       const killed = guardsKilled(player) + 1;
       setGuardsKilled(player, killed);
@@ -1253,6 +1326,23 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     if (quest.getStage(player) >= STAGE_REVIVED) placeZanik(player);
   }
 
+  function handleSunZoneEnter({ player }) {
+    if (quest.getStage(player) !== STAGE_TOURING || hasBit(player, BIT_SUN)
+      || player.getLocation().getZ() !== 0 || player.getDialogueManager()?.isActive?.()) return;
+    placeZanik(player);
+    playVariant(player, NpcIdentifiers.ZANIK, "a-tour-of-lumbridge-walking-outside-the-castle");
+  }
+
+  function handleSunLine(request) {
+    if (quest.getStage(request.player) !== STAGE_TOURING
+      || request.text !== "For generations my people have lived with rock over our heads. But now I can see the sky!") return;
+    const previous = request.after;
+    request.after = () => {
+      previous?.();
+      setBit(request.player, BIT_SUN);
+    };
+  }
+
   function handleLumbridgeZoneEnter({ player }) {
     placeTourGoblin(player);
   }
@@ -1265,12 +1355,16 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   }
 
   function handleBootstrap({ player }) {
+    syncFollower(player);
     syncCellarVarbit(player);
+    syncAuxiliaryState(player);
   }
 
   function handleQuestStageChanged({ player, key }) {
     if (key !== quest.key) return;
+    if (zanikByPlayer.has(player)) placeZanik(player);
     syncCellarVarbit(player);
+    syncAuxiliaryState(player);
     placeTourGoblin(player);
   }
 
@@ -1278,6 +1372,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     ensureWorldObjects();
     const stage = quest.getStage(player);
     syncCellarVarbit(player);
+    syncAuxiliaryState(player);
     if (stage >= STAGE_TOURING && !(stage >= STAGE_JAILED && stage <= STAGE_TEARS)) {
       placeZanik(player);
     }
@@ -1499,6 +1594,8 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   api.onNpcInteraction("Juna", { "Talk-to": talkJuna });
   api.onObjectInteraction(JUNA_LOC_NAME, { "Talk-to": talkJuna });
   api.onNpcDialogueCondition(answerCondition);
+  api.persistAttribute(MILL_GUARDS_ATTRIBUTE, 0);
+  api.onCustomEvent("npc-dialogue:line", handleSunLine);
   api.onCustomEvent("npc-dialogue:hook", handleDialogueHook);
   api.onCustomEvent("npc-dialogue:condition", handleDialogueCondition);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
@@ -1508,6 +1605,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemAction(ZANIK_BODY_ITEM_ID, { Drop: handleItemAction });
   api.onNpcDeath(handleNpcDeath);
+  api.onZoneEnter({ minX: 3217, maxX: 3217, minY: 3219, maxY: 3219 }, handleSunZoneEnter);
   api.onZoneEnter(HAM_ZONE, handleHamZoneEnter);
   api.onZoneEnter(RUBBLE_ZONE, handleRubbleZoneEnter);
   api.onZoneEnter(STORE_ZONE, handleStoreZoneEnter);
