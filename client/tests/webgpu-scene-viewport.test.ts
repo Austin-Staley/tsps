@@ -117,7 +117,7 @@ camera.setViewPitchOverride(200);
 const beforeShake = [...camera.pos], beforeYaw = camera.yaw;
 let shaken: { x: number; pitch: number } | undefined;
 renderer.mapManager.visibleMaps.push({
-    canRender: () => true,
+    canRender: () => true, hasSunkenLocs: () => false,
     updateAnimatedLocs: noop,
     drawOpaque: () => { shaken = { x: camera.getPosX(), pitch: camera.getScenePitchAngle() }; },
     drawAlpha: noop,
@@ -190,7 +190,7 @@ renderer.osrsClient.scenePreviewEnabled = true;
 renderer.osrsClient.camera.snapToPosition(3090, -10, 3520);
 renderer.mapManager.update = () => streamed++;
 renderer.handleInput = () => inputs++;
-renderer.mapManager.visibleMaps = [{ canRender: () => true, updateAnimatedLocs: noop,
+renderer.mapManager.visibleMaps = [{ canRender: () => true, hasSunkenLocs: () => false, updateAnimatedLocs: noop,
     drawOpaque: (_pass: unknown, plane: number) => { assert.equal(plane, 1); worldDraws++; }, drawAlpha: noop }];
 renderer.interactionHost.getRoofPlaneLimit = () => 1;
 renderer.overlays = { update: noop, drawWorld: () => overlayDraws++, drawScreen: () => overlayDraws++ };
