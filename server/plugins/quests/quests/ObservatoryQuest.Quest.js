@@ -23,6 +23,9 @@ module.exports = function registerObservatoryQuest(api) {
   const PAGE = "Observatory Quest";
 
   const VARP_OBSERVATORY_QUEST = 112;
+  const VARBIT_GATE_UNLOCKED = 3826; // varp 113 bit 0
+  const VARBIT_SCOPE_LOOKED = 3836; // varp 113 bit 14
+  const VARBIT_MOULD_PRESENT = 3837; // varp 113 bit 15
 
   const STAGE_PLANKS = 1;
   const STAGE_BRONZE = 2;
@@ -36,6 +39,8 @@ module.exports = function registerObservatoryQuest(api) {
   const VIEWED_ATTRIBUTE = "quest.observatory_quest.viewed";
   const GUARD_AWAKE_ATTRIBUTE = "quest.observatory_quest.guard_awake";
   const CONSTELLATION_ATTRIBUTE = "quest.observatory_quest.constellation";
+  const GATE_UNLOCKED_ATTRIBUTE = "observatory-quest:gate-unlocked";
+  const PROFESSOR_NAME_ATTRIBUTE = "observatory-quest:professor-name-known";
 
   const START_HOOK = "quest:observatory-quest:start";
 
@@ -132,6 +137,31 @@ module.exports = function registerObservatoryQuest(api) {
   const has = (player, itemId, quantity = 1) => player.getInventory().getAmount(itemId) >= quantity;
 
   let quest;
+
+  function ownsMould(player) {
+    return has(player, LENS_MOULD)
+      || (player.getBanks?.() ?? []).some(bank => bank.getAmount(LENS_MOULD) > 0);
+  }
+
+  function syncMouldPresence(player) {
+    player.getPacketSender().sendVarbit(VARBIT_MOULD_PRESENT, ownsMould(player) ? 1 : 0);
+  }
+
+  function handleMouldDiscarded({ player, item }) {
+    if (item.getId() === LENS_MOULD) syncMouldPresence(player);
+  }
+
+  function handleMouldAfterDeath({ victim }) {
+    // PlayerDeathTask has already removed losses and restored kept items here.
+    if (victim.getPacketSender().getVarbit(VARBIT_MOULD_PRESENT) === 1) syncMouldPresence(victim);
+  }
+
+  function syncHelperState({ player }) {
+    const sender = player.getPacketSender();
+    sender.sendVarbit(VARBIT_GATE_UNLOCKED, player.getAttribute(GATE_UNLOCKED_ATTRIBUTE) === true ? 1 : 0);
+    sender.sendVarbit(VARBIT_SCOPE_LOOKED, player.getAttribute(VIEWED_ATTRIBUTE) ? 1 : 0);
+    syncMouldPresence(player);
+  }
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -232,6 +262,9 @@ module.exports = function registerObservatoryQuest(api) {
   function answerCondition({ player, npcId, text }) {
     if (!PROFESSOR_NPC_IDS.has(npcId) && npcId !== ASSISTANT_NPC_ID) return null;
     const value = String(text).toLowerCase();
+    if (value.includes("has asked the observatory assistant about his real name")) {
+      return player.getAttribute(PROFESSOR_NAME_ATTRIBUTE) === true;
+    }
     if (value.includes("no free inventory space") || value.includes("does not have inventory space")) {
       return player.getInventory().isFull();
     }
@@ -320,6 +353,7 @@ module.exports = function registerObservatoryQuest(api) {
         if (stage !== STAGE_LENS) return;
         player.getInventory().deleteNumber(OBSERVATORY_LENS, 1);
         player.getInventory().deleteNumber(LENS_MOULD, 1);
+        syncMouldPresence(player);
         quest.setStage(player, STAGE_TELESCOPE);
         return;
       default:
@@ -395,7 +429,8 @@ module.exports = function registerObservatoryQuest(api) {
     if (KITCHEN_GATE_IDS.has(objectId) && option.includes("open")) {
       if (quest.getStage(player) < STAGE_MOULD) return;
       event.handled = true;
-      if (!has(player, GOBLIN_KITCHEN_KEY)) {
+      const unlocked = player.getAttribute(GATE_UNLOCKED_ATTRIBUTE) === true;
+      if (!unlocked && !has(player, GOBLIN_KITCHEN_KEY)) {
         player.sendMessage("The kitchen gate is locked.");
         return;
       }
@@ -403,10 +438,12 @@ module.exports = function registerObservatoryQuest(api) {
         player.sendMessage("If you open the gate, the guard will hear you. You need to get rid of him.");
         return;
       }
-      player.getInventory().deleteNumber(GOBLIN_KITCHEN_KEY, 1);
+      if (!unlocked) player.getInventory().deleteNumber(GOBLIN_KITCHEN_KEY, 1);
       player.sendMessage("You unlock the kitchen gate.");
       player.sendMessage("You had better be quick, there may be more guards about.");
       openKitchenGate(event.object);
+      player.setAttribute(GATE_UNLOCKED_ATTRIBUTE, true);
+      player.getPacketSender().sendVarbit(VARBIT_GATE_UNLOCKED, 1);
       return;
     }
 
@@ -414,11 +451,17 @@ module.exports = function registerObservatoryQuest(api) {
     if (GOBLIN_STOVE_IDS.has(objectId) && option.includes("inspect")) {
       if (quest.getStage(player) < STAGE_MOULD) return;
       event.handled = true;
-      if (has(player, LENS_MOULD)) {
+      syncMouldPresence(player);
+      if (ownsMould(player)) {
         player.sendMessage("Just a plain stove. Nothing here.");
         return;
       }
+      if (player.getInventory().isFull()) {
+        player.sendMessage("You need a free inventory space.");
+        return;
+      }
       player.getInventory().adds(LENS_MOULD, 1);
+      syncMouldPresence(player);
       player.sendMessage("The goblins appear to have been using the lens mould to cook their stew!");
       player.sendMessage("You shake out its contents and take it with you.");
       return;
@@ -428,6 +471,7 @@ module.exports = function registerObservatoryQuest(api) {
       if (quest.getStage(player) !== STAGE_TELESCOPE) return;
       const sign = constellationForViewing(player);
       player.setAttribute(VIEWED_ATTRIBUTE, true);
+      player.getPacketSender().sendVarbit(VARBIT_SCOPE_LOOKED, 1);
       player.sendMessage(`You look through the telescope and see the constellation ${sign}.`);
       event.handled = true;
     }
@@ -474,15 +518,23 @@ module.exports = function registerObservatoryQuest(api) {
     request.handled = true;
   }
 
-  /** Fill the wiki transcript's "[player name]" blanks for the Observatory pair. */
-  function fillPlayerName(request) {
+  /** Fill player names and record the assistant's actual name revelation. */
+  function handleDialogueLine(request) {
     if (!request?.player || typeof request.text !== "string") return;
     if (!PROFESSOR_NPC_IDS.has(request.npcId) && request.npcId !== ASSISTANT_NPC_ID) return;
+    if (request.npcId === ASSISTANT_NPC_ID && request.text.includes("his name is Mambo-duna")) {
+      const previous = request.before;
+      request.before = () => {
+        previous?.();
+        request.player.setAttribute(PROFESSOR_NAME_ATTRIBUTE, true);
+      };
+    }
     if (!request.text.includes("[player name]")) return;
     request.text = request.text.replace(/\[player name\]/gi, request.player.getUsername());
   }
 
   function handleLogin({ player }) {
+    syncHelperState({ player });
     refreshQuestList(player);
   }
 
@@ -506,12 +558,17 @@ module.exports = function registerObservatoryQuest(api) {
   api.persistAttribute(VIEWED_ATTRIBUTE);
   api.persistAttribute(GUARD_AWAKE_ATTRIBUTE);
   api.persistAttribute(CONSTELLATION_ATTRIBUTE);
+  api.persistAttribute(GATE_UNLOCKED_ATTRIBUTE, false);
+  api.persistAttribute(PROFESSOR_NAME_ATTRIBUTE, false);
+  api.onCustomEvent("player:bootstrap-complete", syncHelperState);
+  api.onCustomEvent("item:discarded", handleMouldDiscarded);
+  api.onPlayerDefeated(handleMouldAfterDeath);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onNpcInteraction("Sleeping guard", { Prod: prodSleepingGuard });
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
-  api.onCustomEvent("npc-dialogue:line", fillPlayerName);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("ladders:climb", claimObservatoryClimb);
   api.onItemOnItem(handleItemOnItem);
   api.onObjectInteraction(handleObjectInteraction);

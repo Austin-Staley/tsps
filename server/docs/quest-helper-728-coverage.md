@@ -325,7 +325,7 @@ deferred quest. No deferred quest is counted as complete.
 | Murder Mystery | `MurderMystery` | Shared guard and Salesman ownership, actual culprit alibi, native suspect replay, receipts and evidence hand-in reviewed/published | 9 focused checks pass; shared guard regression fails against old published King's Ransom and passes with its minimal prerequisite fix | Natural route pending; banked silver cleanup remains open |
 | My Arm's Big Adventure | `MyArmsBigAdventure` | Pending | Pending | Pending |
 | Nature Spirit | `NatureSpirit` | Pending | Pending | Pending |
-| Observatory Quest | `ObservatoryQuest` | Pending | Pending | Pending |
+| Observatory Quest | `ObservatoryQuest` | Earned gate/mould/view helper state and assistant-name condition reviewed; full-bag mould retry, consumed-key reopening and actual destruction/death refresh repaired | 12 focused checks pass | Pending natural route; guard/trap, chest and full cutscene behavior unverified |
 | Olaf's Quest | `OlafsQuest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Plague City | `PlagueCity` | Pending | Pending | Pending |
 | A Porcine of Interest | `PorcineOfInterest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |

@@ -11,11 +11,17 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const runtime = require('../plugins/quests/QuestRuntime');
+const { PacketSender } = require('../dist/net/packet/PacketSender');
+const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const originalStartTranscript = runtime.startTranscript;
 
 const core = PluginManager.getCoreApi();
 before(async () => {
   await CachePipeline.initialize(process.cwd());
   RegionManager.init();
+  new NpcDefinitionLoader().load();
+  core.ObjectDefinition.init();
 });
 const transcripts = [];
 runtime.startTranscript = (api, player, npcId, page, variant) => {
@@ -34,9 +40,11 @@ const CONSTELLATION = 'quest.observatory_quest.constellation';
 const VIEWED = 'quest.observatory_quest.viewed';
 const GUARD_AWAKE = 'quest.observatory_quest.guard_awake';
 
-function setup() {
+function setup({ realWire = false, realTranscript = false } = {}) {
   transcripts.length = 0;
   const attributes = new Map();
+  const bankItems = new Map();
+  let wire;
   const items = new Map();
   const varbits = new Map();
   const messages = [];
@@ -88,10 +96,11 @@ function setup() {
   };
 
   const sender = new Proxy({
-    sendVarbit(id, value) { varbits.set(id, value); return sender; },
-    sendConfig(id, value) { varbits.set(id, value); return sender; },
-    getVarbit(id) { return varbits.get(id) ?? 0; },
-    getVarp(id) { return varbits.get(id) ?? 0; },
+    sendVarbit(id, value) { wire?.sendVarbit(id, value); varbits.set(id, value); return sender; },
+    sendConfig(id, value) { wire?.sendConfig(id, value); varbits.set(id, value); return sender; },
+    getVarbit(id) { return wire ? wire.getVarbit(id) : varbits.get(id) ?? 0; },
+    getVarp(id) { return wire ? wire.getVarp(id) : varbits.get(id) ?? 0; },
+    sendInterfaceRemoval() { player.manager?.reset();player.prompt = null;return sender; },
   }, { get(target, prop) { return prop in target ? target[prop] : () => sender; } });
 
   const player = {
@@ -99,6 +108,8 @@ function setup() {
     getAttribute: (key) => attributes.get(key),
     setAttribute(key, value) { attributes.set(key, value); },
     getInventory: () => inventory,
+    getBanks: () => [{ getAmount: id => bankItems.get(id) ?? 0 }],
+    getSession: () => ({ sendClientPacket() {} }),
     getPacketSender: () => sender,
     getSkillManager: () => ({
       getCurrentLevel: () => 99,
@@ -114,6 +125,8 @@ function setup() {
     sendMessage(message) { messages.push(message); },
   };
 
+  if (realWire) wire = new PacketSender(player);
+  if (realTranscript) { player.manager = new DialogueManager(player);player.getDialogueManager = () => player.manager; }
   const custom = new Map();
   const variantHooks = [];
   const conditionHooks = [];
@@ -121,6 +134,7 @@ function setup() {
   const itemOnItemFns = [];
   const npcHooks = new Map();
   const loginHooks = [];
+  const deathHooks = [];
 
   const coreForPlugin = {
     ...core,
@@ -130,6 +144,7 @@ function setup() {
   const api = new Proxy({
     core: coreForPlugin,
     persistAttribute() {},
+    sendMultiChatboxPrompt(p, title, ...pairs) { p.prompt = { title, pairs, options: pairs.filter((_,index) => index % 2 === 0) }; return true; },
     onCustomEvent(name, fn) {
       if (!custom.has(name)) custom.set(name, []);
       custom.get(name).push(fn);
@@ -153,6 +168,7 @@ function setup() {
       if (typeof first === 'string') npcHooks.set(first, second);
     },
     onPlayerLogin(fn) { loginHooks.push(fn); },
+    onPlayerDefeated(fn) { deathHooks.push(fn); },
   }, {
     get(target, prop) {
       if (prop in target) return target[prop];
@@ -160,7 +176,9 @@ function setup() {
     },
   });
 
-  register(api);
+  const saved = runtime.startTranscript;
+  if (realTranscript) runtime.startTranscript = originalStartTranscript;
+  try { register(api); } finally { runtime.startTranscript = saved; }
   const quest = runtime.getRegisteredQuests().findLast((entry) => entry.key === 'observatory_quest');
 
   const variant = (npcId) => {
@@ -233,7 +251,17 @@ function setup() {
   };
 
   return {
-    player, quest, items, attributes, varbits, messages, ground, xp, transforms, transcripts,
+    api, custom, deathHooks, player, quest, items, bankItems, attributes, varbits, messages, ground, xp, transforms, transcripts,
+    reconnect() { wire = new PacketSender(player);login();runtime.sendQuestVarps({player});api.emitCustomEvent('player:bootstrap-complete', { player }); },
+    talk(npcId) {
+      const choice = variantHooks.map(fn => fn({ player,npcId })).find(Boolean);
+      return originalStartTranscript(api,player,npcId,typeof choice==='string'?PAGE:choice.page,typeof choice==='string'?choice:choice.variant);
+    },
+    withConditions(callback) {
+      const previous = PluginManager.emitNpcDialogueCondition;
+      PluginManager.emitNpcDialogueCondition = event => { for (const fn of conditionHooks) { const result=fn(event);if(result!=null)return result; }return null; };
+      try { callback(); } finally { PluginManager.emitNpcDialogueCondition=previous; }
+    },
     variant, condition, action, hook, object, npc, itemOnItem, ladder, login, give,
     stage: () => quest.getStage(player),
     setStage: (value) => quest.setStage(player, value),
@@ -433,4 +461,159 @@ test('prose conditions select the observed constellation and inventory-space bra
   h.setFreeSlots(0);
   assert.equal(h.condition('If the player has inventory space:'), false);
   assert.equal(h.condition('If the player has no free inventory space:'), true);
+});
+
+
+test('earned gate, mould and telescope helper bits survive reconnect and preserve shared siblings', () => {
+  const h = setup({ realWire: true }), p = h.player, s = p.getPacketSender();
+  s.sendConfig(113, (1 << 5) | (1 << 16)); s.sendVarbit(542, 1);
+  h.setStage(4); h.give(I.GOBLIN_KITCHEN_KEY); h.npc('Sleeping guard', N.SLEEPING_GUARD);
+  h.object(O.KITCHEN_GATE, 'Open');
+  assert.equal(s.getVarbit(3826), 1);
+  h.setFreeSlots(0); h.object(O.GOBLIN_STOVE, 'Inspect');
+  assert.equal(h.items.has(I.LENS_MOULD), false); assert.equal(s.getVarbit(3837), 0);
+  h.setFreeSlots(1); h.object(O.GOBLIN_STOVE, 'Inspect');
+  assert.equal(s.getVarbit(3837), 1);
+  assert.equal(core.ObjectDefinition.forPlayer(25442, p).id, O.GOBLIN_STOVE_2);
+  assert.equal(s.getVarp(113) & ((1 << 5) | (1 << 16)), (1 << 5) | (1 << 16));
+  assert.equal(s.getVarbit(542), 1, 'Observatory does not own global cutscene status');
+  h.items.delete(I.LENS_MOULD); h.bankItems.set(I.LENS_MOULD, 1); h.reconnect();
+  assert.equal(p.getPacketSender().getVarbit(3826), 1);
+  assert.equal(p.getPacketSender().getVarbit(3837), 1, 'actual banked mould remains present');
+  h.object(O.GOBLIN_STOVE, 'Inspect'); assert.equal(h.items.has(I.LENS_MOULD), false, 'banked mould cannot duplicate');
+  h.object(O.KITCHEN_GATE, 'Open'); assert.equal(h.items.has(I.GOBLIN_KITCHEN_KEY), false, 'saved unlock does not require another key');
+  h.bankItems.clear(); h.setFreeSlots(1); h.object(O.GOBLIN_STOVE, 'Inspect');
+  assert.equal(h.items.get(I.LENS_MOULD), 1, 'lost mould can be recovered');
+  h.setFreeSlots(1); h.give(I.OBSERVATORY_LENS); h.setStage(5); h.action('p1dzXH');
+  assert.equal(p.getPacketSender().getVarbit(3837), 0, 'actual hand-in consumes mould');
+  h.object(O.TELESCOPE_8, 'View');
+  assert.equal(p.getPacketSender().getVarbit(3836), 1);
+  h.reconnect();
+  assert.equal(p.getPacketSender().getVarbit(3836), 1);
+  assert.equal(p.getPacketSender().getVarbit(3826), 1);
+  const fresh = setup({ realWire: true }); fresh.setStage(7); fresh.login(); fresh.api.emitCustomEvent('player:bootstrap-complete', { player: fresh.player });
+  for (const id of [3826, 3837, 3836]) assert.equal(fresh.player.getPacketSender().getVarbit(id), 0, 'completion earns no missing helper facts');
+});
+
+test('professor name option is earned by actual assistant speech even if the wine cannot fit', () => {
+  const h = setup({ realTranscript: true }), p = h.player;
+  h.setStage(7);
+  const text = 'If the player has asked the Observatory assistant about his real name:';
+  assert.equal(h.condition(text), false);
+  h.setFreeSlots(0);
+  h.withConditions(() => {
+    const professorMenu = () => {
+      h.talk(N.OBSERVATORY_PROFESSOR);
+      for (let i = 0;i < 50 && !p.prompt;i++)p.manager.advance();
+      const menu = p.prompt, index = menu.options.indexOf('Talk about the Observatory quest.');
+      p.prompt = null; menu.pairs[index * 2 + 1]();
+      for (let i = 0;i < 50 && !p.prompt;i++)p.manager.advance();
+      const options = [...p.prompt.options]; p.manager.reset(); p.prompt = null; return options;
+    };
+    assert.equal(professorMenu().includes('Is it true your name is Mambo-duna-roona?'), false);
+    h.talk(N.OBSERVATORY_ASSISTANT);
+    for (let i = 0;i < 50 && !p.prompt;i++)p.manager.advance();
+    const prompt = p.prompt, index = prompt.options.indexOf("Wait a minute, what's your real name?");
+    assert.ok(index >= 0); p.prompt = null; prompt.pairs[index * 2 + 1]();
+    assert.equal(h.condition(text), false, 'queued but unheard name does not earn the option');
+    p.manager.reset(); p.prompt = null;
+    h.talk(N.OBSERVATORY_ASSISTANT);
+    for (let i = 0;i < 50 && !p.prompt;i++)p.manager.advance();
+    const repeat = p.prompt, choice = repeat.options.indexOf("Wait a minute, what's your real name?");
+    p.prompt = null; repeat.pairs[choice * 2 + 1]();
+    for (let i = 0;i < 80 && p.manager.isActive();i++)p.manager.advance();
+    assert.ok(professorMenu().includes('Is it true your name is Mambo-duna-roona?'));
+  });
+  assert.equal(h.condition(text), true);
+  assert.equal(h.items.has(I.JUG_OF_WINE), false, 'hearing the name does not fabricate a wine receipt');
+  assert.equal(h.stage(), 7);
+});
+
+
+test('cache professor transforms still follow stage112 while helper bits remain independent', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const h = setup({ realWire: true }), s = h.player.getPacketSender();
+  h.setStage(4);
+  assert.equal(CacheDefinitions.resolveNpc(6403, s).id, N.OBSERVATORY_PROFESSOR);
+  assert.equal(CacheDefinitions.resolveNpc(6404, s), undefined);
+  h.setStage(6);
+  assert.equal(CacheDefinitions.resolveNpc(6403, s), undefined);
+  assert.equal(CacheDefinitions.resolveNpc(6404, s).id, N.OBSERVATORY_PROFESSOR);
+  assert.equal(s.getVarbit(3836), 0);
+  h.object(O.TELESCOPE_8, 'View');
+  assert.equal(s.getVarbit(3836), 1);
+  assert.equal(CacheDefinitions.resolveNpc(6404, s).id, N.OBSERVATORY_PROFESSOR);
+});
+
+
+test('real mould destruction refreshes presence after mutation and preserves an actual banked copy', () => {
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { DropItemPacketListener } = require('../dist/net/packet/impl/DropItemPacketListener');
+  const h = setup({ realWire: true }), p = h.player;
+  const { Bank } = require('../dist/game/model/container/impl/Bank');
+  const bank = new Bank(p); p.getBanks = () => [bank];
+  const inventory = new Inventory(p); p.getInventory = () => inventory;
+  p.getHitpoints = () => 10; p.getRights = () => 0; p.busy = () => false;
+  p.getAsPlayer = () => p; p.isPlayerBot = () => false;
+  const skills = p.getSkillManager(); p.getSkillManager = () => ({ ...skills, stopSkillable() { } });
+  const base = p.getPacketSender(); let group = -1;
+  const sender = new Proxy(base, {
+    get(target, key) {
+      if (key === 'sendChatboxInterface') return value => { group = value; return sender; };
+      if (key === 'isChatboxInterface') return value => group === value;
+      if (key === 'sendInterfaceRemoval') return () => { group = -1; target.sendInterfaceRemoval(); return sender; };
+      return target[key];
+    }
+  });
+  p.getPacketSender = () => sender;
+  const buttons = new Map(), dropStart = PluginManager.itemDropHooks.length;
+  const previous = PluginManager.customEventHooks.get('item:discarded');
+  const handlers = (h.custom.get('item:discarded') ?? []).map(handler => ({ pluginName: 'q084-discard-test', handler }));
+  PluginManager.customEventHooks.set('item:discarded', [...(previous ?? []), ...handlers]);
+  require('../plugins/interface/DestroyItem.plugin').register({
+    core, registerCustomInterface() { },
+    onItemDropPolicy: handler => PluginManager.createApi('q084-destroy-test').onItemDropPolicy(handler),
+    onInterfaceActionButton: (id, handler) => buttons.set(id, handler),
+    emitCustomEvent: (name, event) => PluginManager.emitCustomEvent(name, event),
+  });
+  try {
+    for (const banked of [false, true]) {
+      bank.resetItems(); if (banked) bank.setItem(0, new core.Item(I.LENS_MOULD, 1));
+      inventory.setItem(0, new core.Item(I.LENS_MOULD, 1)); h.login();
+      assert.equal(sender.getVarbit(3837), 1);
+      DropItemPacketListener.drop(p, I.LENS_MOULD, Inventory.INTERFACE_ID, 0);
+      assert.equal(group, 30005, 'actual non-dropable mould opens registered destruction confirmation');
+      assert.equal(inventory.getAmount(I.LENS_MOULD), 1, 'showing confirmation does not remove the mould');
+      buttons.get((30005 << 16) | 12)({ player: p });
+      assert.equal(sender.getVarbit(3837), 1, 'cancelled destruction retains presence');
+      DropItemPacketListener.drop(p, I.LENS_MOULD, Inventory.INTERFACE_ID, 0);
+      buttons.get((30005 << 16) | 11)({ player: p });
+      assert.equal(inventory.getAmount(I.LENS_MOULD), 0, 'actual confirmation mutates the real inventory');
+      assert.equal(sender.getVarbit(3837), banked ? 1 : 0, 'post-discard event reads remaining inventory plus bank');
+    }
+  } finally {
+    PluginManager.itemDropHooks.splice(dropStart);
+    if (previous) PluginManager.customEventHooks.set('item:discarded', previous); else PluginManager.customEventHooks.delete('item:discarded');
+  }
+});
+
+
+test('registered post-death hook refreshes actual remaining containers without clearing kept or banked moulds', () => {
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { Bank } = require('../dist/game/model/container/impl/Bank');
+  const h = setup({ realWire: true }), p = h.player, inventory = new Inventory(p), bank = new Bank(p);
+  p.getInventory = () => inventory; p.getBanks = () => [bank];
+  const start = PluginManager.playerDefeatedHooks.length;
+  for (const handler of h.deathHooks) PluginManager.createApi('q084-death-test').onPlayerDefeated(handler);
+  try {
+    for (const kept of [false, true]) for (const banked of [false, true]) {
+      bank.resetItems(); if (banked) bank.setItem(0, new core.Item(I.LENS_MOULD, 1));
+      inventory.setItem(0, new core.Item(I.LENS_MOULD, 1)); h.login();
+      assert.equal(p.getPacketSender().getVarbit(3837), 1);
+      // PlayerDeathTask emits this public event after inventory loss and kept-item restoration.
+      inventory.resetItems(); if (kept) inventory.setItem(0, new core.Item(I.LENS_MOULD, 1));
+      PluginManager.emitPlayerDefeated(null, p);
+      assert.equal(p.getPacketSender().getVarbit(3837), kept || banked ? 1 : 0);
+    }
+  } finally { PluginManager.playerDefeatedHooks.splice(start); }
 });
