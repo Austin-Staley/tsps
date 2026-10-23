@@ -1,16 +1,17 @@
 # Client performance comparison — 23 October 2026
 
-The camera benchmark uses the reported scene at **3104,3508,0**, with **117 HD,
-GPU, Animation Smoothing and Camera enabled**. The finished branch reduces CPU
-work and frame spikes without lowering the requested quality. CPU stress still
-produces missed frames; this is not a claim that panning is now smooth on every PC.
+The camera benchmark uses **3104,3508,0**, with **117 HD, GPU, Animation Smoothing
+and Camera enabled**. This branch reduces render-thread work while preserving the
+requested quality. These are browser stress tests, not a physical Windows reproduction.
 
 ## Builds and method
 
-- Current-main baseline: `01a1770e9e5ed904ebc98645969be3b6e31e9603`, production
+- Current-main baseline: `d09aaeceba48fa6b21294c25e06f78841c6924e1`, production
   `main.a5c1c569.js` (SHA256 `58cb2ab8024d03bc8d02946fb22d88fa534815ccf2ab391a6cf19f23bc19fd6f`).
-- Performance product source: `849ab16fc`, production `main.713c8668.js`. Later
-  benchmark/documentation/browser-test commits do not change the deployed product.
+- Performance product source: `bebd1a740`, production `main.35179182.js`. This is the deployed product; the following
+  documentation commit does not change its code.
+- Main advanced since the previous capture. Its complete client source tree is byte-identical
+  to `01a1770e9`; its server was rebuilt at the new head for these fresh captures.
 - Apple M5 Pro, native Apple Metal WebGPU, Chrome 156 headless; four existing cache
   workers and cross-origin isolation in both builds. The cache manifest, indexes
   and dat2 file matched byte for byte. Separate worktree servers used a copied
@@ -45,52 +46,92 @@ browser's 60 Hz ceiling despite the client's 240 FPS setting.
 
 | Turning workload | Metric | Current main | Performance branch |
 | --- | --- | ---: | ---: |
-| Native | Render CPU mean | 6.24 ms | 3.61 ms |
-| Native | Render CPU p95 / p99 | 9.06 / 16.15 ms | 6.31 / 7.75 ms |
-| Native | FPS | 60.0 | 60.0 |
-| 6× CPU slowdown | Render CPU mean | 38.74 ms | 18.86 ms |
-| 6× CPU slowdown | Render CPU p95 / p99 | 75.04 / 90.38 ms | 35.30 / 41.46 ms |
-| 6× CPU slowdown | Frame interval p95 | 83.33 ms | 33.34 ms |
-| 6× CPU slowdown | FPS | 21.58 | 44.09 |
-| Four times the pixels | Render CPU mean / p95 | 6.61 / 10.38 ms | 3.81 / 5.56 ms |
-| Four times the pixels | FPS | 60.0 | 60.0 |
+| Native | Render CPU mean | 5.31 ms | 1.72 ms |
+| Native | Render CPU p95 / p99 | 8.81 / 12.34 ms | 2.46 / 3.39 ms |
+| Native | FPS | 60.00 | 60.00 |
+| 6× CPU slowdown | Render CPU mean | 24.59 ms | 7.04 ms |
+| 6× CPU slowdown | Render CPU p95 / p99 | 39.88 / 65.80 ms | 8.79 / 11.23 ms |
+| 6× CPU slowdown | FPS | 35.46 | 60.00 |
+| 6× CPU slowdown | Frame interval p95 | 50.00 ms | 16.67 ms |
+| 6× CPU slowdown | Frame gaps above 25 ms | 253 | 0 |
+| Four times the pixels | Render CPU mean | 4.79 ms | 1.26 ms |
+| Four times the pixels | Render CPU p95 / p99 | 6.92 / 14.04 ms | 1.88 / 2.22 ms |
+| Four times the pixels | FPS | 60.00 | 60.00 |
 
-The stressed turning windows individually reached 21.1–22.0 FPS on main and
-43.6–44.6 FPS on the branch. Native and resolution-stress captures recorded no
-frame intervals above 25 ms in either build. Every capture recorded zero rendering
-errors. CPU durations include synchronous submission work and the same lightweight
-counters in both builds; they are not GPU execution times.
+All six captures recorded zero rendering errors. Native and pixel-stress cases
+reached the headless browser's 60 Hz ceiling. CPU measurements include synchronous
+submission and the same counters in both builds; worker CPU time is excluded.
+Moving pose construction onto workers removes its main-thread cost, not its total work.
 
 ### Work submitted in native turning frames
 
-These averages use the native case, where both builds delivered the same frame
-rate. Counts cover WebGPU passes; the separate WebGL widget canvas is excluded.
+These averages compare runs where both builds delivered the same frame rate.
+They cover WebGPU passes; the separate WebGL widget canvas is excluded.
 
 | Work per frame | Current main | Performance branch |
 | --- | ---: | ---: |
-| Indexed draw submissions | 533.4 | 221.1 |
-| Submitted index elements, including instances | 542,246 | 420,316 |
-| Pipeline binds | 77.2 | 40.1 |
-| `queue.writeBuffer` calls | 15.7 | 12.5 |
-| `queue.writeBuffer` source bytes | 225,201 | 69,867 |
-| NPC CPU pose-mesh builds | 6.29 | 2.80 |
-| Grass rebuilds across both turning windows | 12 | 0 |
+| Indexed draw submissions | 543.87 | 228.73 |
+| Submitted index elements, including instances | 545,529 | 432,188 |
+| Pipeline binds | 77.21 | 40.16 |
+| queue.writeBuffer calls | 16.95 | 13.96 |
+| queue.writeBuffer source bytes | 234,036 | 81,918 |
+| Main-thread NPC pose-mesh builds | 7.01 | 0.00 |
 
-Draw submissions fell 59%, submitted indices 22%, and buffer payload bytes 69%.
-These are API work counts, not measured GPU bandwidth, utilization or execution
-time. The device was not created with timestamp queries; queue-completion latency
-is retained in the raw output but is not presented as GPU time.
+Grass rebuilt 12 times across main's two native turning windows and zero times
+on the branch. Submission counts and payload bytes are API work measurements,
+not GPU bandwidth, utilization or execution time. GPU timestamp experiments were
+excluded from the matched captures; overlapping pass intervals must not be summed
+as total GPU frame time.
 
-The builds were captured sequentially with moving actors. The final metadata
-contained 16 NPCs/one player on main and 17 NPCs/two players on the branch because
-another player was using 3102. Main processed nine visible map squares versus six
-on the branch, with the same 25-tile requested distance. Those lists intentionally
-exclude unnecessary outer-map frame work in the branch. These are live-scene
-measurements with residual variation, not a deterministic replay or physical
-Windows reproduction.
+Captures ran sequentially with moving actors. End snapshots contained 16 active
+NPCs on main versus 17 on the branch. Main processed nine map squares versus six
+on the branch at the same requested distance; the branch skips unnecessary outer
+squares. Viewports, GPU settings and all HD options matched exactly. Residual
+live-scene and cache variation remains.
+
+## NPC poses, HD caches and remaining spikes
+
+- WebGPU NPCs reuse player label poses and rest meshes for eligible fractional
+  keyframes. Skeletal, alpha/colour-changing and integer-truncated poses fall back.
+  Jointed HD normals must be rebuilt to preserve lighting, so those models use the
+  worker path; no approximate HD lighting was shipped.
+- Unsupported poses build on existing cache workers. Queues are bounded and
+  current/base requests take priority over prefetch. At most two existing workers
+  build poses in parallel; single-worker clients remain serial. Pool reservations
+  retain foreground task ownership through cancellation and shutdown. Completed
+  geometry transfers
+  into the existing 16 MiB CPU cache. Previous poses and neutral bases remain usable
+  during misses; active neutral bases stay recent within the existing cache budget.
+  Actor despawn, content changes, old replies and missing sequence data are covered.
+- Worker sparse retry collectors attach only during actual foreground task passes.
+  NPC jobs can run during foreground JS5 waits without contaminating those passes
+  or publishing partial geometry. Existing deadlines and progress checks remain.
+- HD mist reuses unchanged terrain targets while continuing easing each frame.
+  HD lights cache stable location/height inputs while retaining their animation.
+  Sixty stationary frames use 81 rather than 4,860 mist height reads; light tests
+  reduce CSR reads 287,160→4,786 and loc/height reads 9,720→162 with identical outputs.
+- Real-cache checks cover 212 GPU candidate poses and 268 worker-built poses.
+  GPU position error stays below 1/1024 model unit; the 24 actual WebGPU shader
+  passes read back 41,904 vertices with maximum error 0.000016 and zero errors.
+  Worker geometry matched all four arrays exactly: 5,272,168 bytes.
+
+Gameplay checks observed both pose workers. With downloaded data warm and pose
+caches cleared, native first appearances took at most 18 ms; advancing requests
+held a displayed pose for at most 34 ms in that native run. Two CPU6 runs observed
+maximum holds of 66 and 49 ms, versus 156 ms in the serial diagnostic. These are
+short live-scene observations, not latency bounds. No actor lifetime had a draw
+gap after its first appearance. Despawn/reused indices are counted separately.
+
+The follow-up CPU6 profile contains no synchronous NPC mesh builds on the render
+thread and no steady-state long tasks. Remaining work is mainly widget drawing,
+culling and submission. GC accounts for less than 1% of sampled wall time.
+Shadow refreshes do not explain the worst remaining frames. Broader UI invalidation
+or shader-quality changes were not added without a demonstrated benefit.
 
 ## World map and correctness
 
+The earlier matched world-map comparison used the preceding performance product
+`849ab16fc` and main `01a1770e9` (whose client source is unchanged on current main).
 The same 15 archive tiles (`x=48..52`, `y=49..51`, ppi 2) were requested three
 times per build, with decoded map caches cleared between runs and JS5 bytes/image
 dependencies already warm. Rendering and client ticks were paused without
@@ -108,7 +149,7 @@ matched across both builds and every run. Aggregate SHA256:
 - Pixels: `c7549b21f294ad6913a210df1ce5e66aaa56309083c52727c3df46417c3dade7`
 - Icons: `7620de797f89c6226813381c1d38a2fade54f78cf76a647ccbc94e8cb2290c0b`
 
-Additional checks isolate the new changes:
+Earlier isolated checks for the preceding batch:
 
 - Four frozen views at the reported location compared GPU-resident NPC pose reuse
   against CPU rebuilding with an empty CPU cache: every 3,124,488-byte view matched,
@@ -140,24 +181,30 @@ Additional checks isolate the new changes:
 
 ## Validation and limits
 
-Client typecheck and production builds passed in both checkouts. Main's client
-suite passed 196 files and failed `map-loading-regression.test.ts` on its existing
-import of deleted `ConstructionData`; baseline source was left unchanged. The
-performance branch's final publication run passed 222 files, with zero failures
-and zero skipped tests; the final nine affected suites also passed.
+The complete client suite passed **225 files, zero failures, zero skips**. Final
+affected pose/retry suites, typecheck and production builds also passed. Main's
+client source/build is unchanged from the earlier successful build/typecheck; its
+suite had 196 passing files and one existing deleted-`ConstructionData` import
+failure. The current-main server was rebuilt successfully for the new captures.
 
-One queued `INVALID_OPERATION` was observed before the first Android-path camera
-capture. It did not recur during fresh startup, per-call tracing, three AA/plugin
-toggle cycles, or an uninstrumented repeat with zero initial/capture errors. No
-unconfirmed production fix was added for that observation.
+The single-worker secure WebGPU path also retained visible NPCs through cold pose
+caches (maximum first use 17 ms, hold 50 ms in the final observed run). Its path and
+insecure-LAN WebGL also matched all
+983,040 world-map pixel bytes and icons across three runs. Non-HD gameplay used
+GPU poses for 17 observed NPC lifetimes without draw gaps after first appearance.
+Android-UA WebGL with one worker, no shared buffers and 4× MSAA rendered 16 distinct
+camera images/yaws. One INVALID_OPERATION occurred in the first capture immediately
+after AA configuration; the repeat and three per-call-traced AA/plugin toggle
+cycles recorded zero errors. Its cause remains unconfirmed; no speculative fix
+was added.
 
-Remaining CPU pose misses and final region setup can still produce long frames.
-Staging covers bulk geometry; textures and final metadata still initialize
-synchronously. Preparing a replacement also keeps the old scene alive until
-publication. Physical Windows/Android frame pacing and peak transition memory
-remain unverified. The changes preserve the selected plugins, distance and AA.
+Worker poses can lag requests while data or jobs are pending. GPU rest meshes,
+textures and final region metadata can still require synchronous initialization.
+Preparing a replacement keeps the old scene alive until publication. Physical
+Windows/Android frame pacing and peak transition memory remain unverified.
 
-Raw local artifacts: `/tmp/main-camera-{native,cpu6,scale2}.json`,
-`/tmp/tsps-final-camera-{native,cpu6,scale2}.json`,
-`/tmp/tsps-main-final-camera-comparison.json`, `/tmp/world-map-current-main.json`,
-`/tmp/world-map-final-pr.json` and `/tmp/tsps-final-npc-resident-parity.json`.
+Raw latest artifacts: `/tmp/main-nextbatch-camera-{native,cpu6,scale2}.json`,
+`/tmp/tsps-nextbatch-camera-{native,cpu6,scale2}.json`,
+`/tmp/tsps-nextbatch-main-comparison.json`,
+`/tmp/tsps-npc-cadence-two-*.json`, `/tmp/world-map-nextbatch-lan.json` and
+`/tmp/tsps-nextbatch-npc-gpu-readback.json`.
