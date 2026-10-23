@@ -202,7 +202,7 @@ module.exports = function registerWorldTools(ctx) {
       if (name !== undefined) slot = inventorySlot(p, name);
       if (slot === undefined) throw new Error("item or slot is required");
       const item = p.getInventory().getItems()[slot];
-      if (!item || item.getId() <= 0) throw new Error(`Inventory slot ${slot} is empty`);
+      if (!item || item.getId() < 0) throw new Error(`Inventory slot ${slot} is empty`);
       return send(p, { type: "inventory_action", slot, itemId: item.getId(), widgetId: 3214, option });
     }
   );
@@ -229,7 +229,7 @@ module.exports = function registerWorldTools(ctx) {
       if (slot === undefined) throw new Error("item or slot is required");
       const inventory = p.getInventory().getItems();
       const item = inventory[slot];
-      if (!item || item.getId() <= 0) throw new Error(`Inventory slot ${slot} is empty`);
+      if (!item || item.getId() < 0) throw new Error(`Inventory slot ${slot} is empty`);
       const level = p.getLocation().getZ();
       let target;
       if (targetItem !== undefined) {
@@ -241,7 +241,7 @@ module.exports = function registerWorldTools(ctx) {
           : { kind: kind === "object" ? "loc" : "ground", id: thing.id, x: thing.x, y: thing.y, level };
       } else if (on === "inventory") {
         const other = inventory[targetSlot];
-        if (!other || other.getId() <= 0) throw new Error(`Inventory slot ${targetSlot} is empty`);
+        if (!other || other.getId() < 0) throw new Error(`Inventory slot ${targetSlot} is empty`);
         target = { kind: "inventory", slot: targetSlot, itemId: other.getId() };
       } else if (on) {
         if (id === undefined) throw new Error("id is required");
