@@ -79,6 +79,11 @@ export type WidgetOverlayDrawContext = {
     fontLoader: FontLoader;
     /** A cache sprite as a texture. */
     sprite(id: number): { tex: WebGLTexture; w: number; h: number } | undefined;
+    /**
+     * An item's 36x32 inventory image, without its quantity text (RuneLite's
+     * ItemManager.getImage); `outline` 1 adds the item's black border.
+     */
+    itemImage?(itemId: number, quantity: number, outline: number): HTMLCanvasElement | undefined;
     /** Where a movable overlay of this size (layout units) draws this frame; nothing while the HUD is hidden. */
     place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
 };

@@ -23,7 +23,6 @@ import {
 type TaggedItem = {
     itemId: number;
     quantity: number;
-    quantityMode: number;
     color: number;
     x: number;
     y: number;
@@ -160,7 +159,10 @@ export class InventoryTagsPlugin extends Plugin {
     /** RuneLite opens a colour chooser; here it is the browser's own colour picker. */
     private pickColor(itemId: number): void {
         if (typeof document === "undefined") return;
+        // A picker closed without a choice fires nothing; drop it before opening another.
+        document.querySelectorAll("input[data-inventory-tag-picker]").forEach((old) => old.remove());
         const input = document.createElement("input");
+        input.dataset.inventoryTagPicker = "";
         input.type = "color";
         input.value = `#${colorHex(this.getTag(itemId) ?? 0xffffff)}`;
         Object.assign(input.style, { position: "fixed", left: "-100px", top: "0", opacity: "0", pointerEvents: "none" });
@@ -172,7 +174,11 @@ export class InventoryTagsPlugin extends Plugin {
         }, { once: true });
         input.addEventListener("blur", () => setTimeout(done, 0), { once: true });
         document.body.appendChild(input);
-        input.click();
+        try {
+            input.showPicker();
+        } catch {
+            input.click();
+        }
     }
 
     // ------------------------------------------------------------------ overlay
@@ -207,7 +213,6 @@ export class InventoryTagsPlugin extends Plugin {
                     items.push({
                         itemId,
                         quantity: (widget.itemQuantity ?? 1) | 0,
-                        quantityMode: (widget.itemQuantityMode ?? 2) | 0,
                         color, x, y, w, h,
                     });
                 }
@@ -236,11 +241,11 @@ export class InventoryTagsPlugin extends Plugin {
         for (const item of items) {
             const [r, g, b] = [(item.color >> 16) & 0xff, (item.color >> 8) & 0xff, item.color & 0xff];
             if (d.fill && d.fillOpacity > 0) {
-                const tex = this.texture(renderer, item, "fill", d.fillOpacity);
+                const tex = this.texture(context, item, "fill", d.fillOpacity);
                 if (tex) renderer.drawTexture(tex, item.x, item.y, item.w, item.h);
             }
             if (d.outline) {
-                const tex = this.texture(renderer, item, "outline", 255);
+                const tex = this.texture(context, item, "outline", 255);
                 if (tex) renderer.drawTexture(tex, item.x, item.y, item.w, item.h);
             }
             if (d.underline) {
@@ -254,22 +259,27 @@ export class InventoryTagsPlugin extends Plugin {
         return rects;
     }
 
-    /** The outline or fill of one item sprite as a texture, built once per item/colour. */
-    private texture(renderer: WidgetOverlayDrawContext["renderer"], item: TaggedItem, kind: "outline" | "fill", alpha: number) {
-        const key = `${TEXTURE_KEY_PREFIX}${kind}:${item.itemId}:${item.quantity}:${item.quantityMode}:${colorHex(item.color)}:${alpha}`;
+    /**
+     * The outline or fill of one item image as a texture, built once per item/colour. As in
+     * RuneLite, the outline traces the image with its black border (getItemOutline) and the
+     * fill covers the plain image (getImage + fillImage); neither has the quantity text.
+     */
+    private texture(context: WidgetOverlayDrawContext, item: TaggedItem, kind: "outline" | "fill", alpha: number) {
+        const { renderer } = context;
+        const key = `${TEXTURE_KEY_PREFIX}${kind}:${item.itemId}:${item.quantity}:${colorHex(item.color)}:${alpha}`;
         const cached = renderer.getTexture(key);
         if (cached) return cached;
-        const icons: any = (this.osrsClient as any)?.renderer?.itemIconRenderer;
-        const sprite = icons?.createSprite?.(item.itemId, item.quantity, 0, 0, item.quantityMode, false, 512);
-        if (!sprite || typeof document === "undefined") return undefined;
-        const { width, height } = sprite;
+        const source = context.itemImage?.(item.itemId, item.quantity, kind === "outline" ? 1 : 0);
+        const pixels = source && opaquePixels(source);
+        if (!source || !pixels || typeof document === "undefined") return undefined;
+        const { width, height } = source;
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (!ctx) return undefined;
         const image = ctx.createImageData(width, height);
-        image.data.set(tagSpriteRgba(sprite.pixels, width, height, kind, item.color, alpha));
+        image.data.set(tagSpriteRgba(pixels, width, height, kind, item.color, alpha));
         ctx.putImageData(image, 0, 0);
         if (this.textureKeys.size >= MAX_TAG_TEXTURES) this.releaseTextures();
         this.textureKeys.add(key);
@@ -281,4 +291,14 @@ export class InventoryTagsPlugin extends Plugin {
         for (const key of this.textureKeys) renderer?.deleteTexture(key);
         this.textureKeys.clear();
     }
+}
+
+/** The image's pixels as 0 (transparent) or 1 (drawn), the form tagSpriteRgba reads. */
+function opaquePixels(source: HTMLCanvasElement): Int32Array | undefined {
+    const { width, height } = source;
+    const data = source.getContext("2d")?.getImageData(0, 0, width, height).data;
+    if (!data) return undefined;
+    const out = new Int32Array(width * height);
+    for (let i = 0; i < out.length; i++) out[i] = data[i * 4 + 3] !== 0 ? 1 : 0;
+    return out;
 }

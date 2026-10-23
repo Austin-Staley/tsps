@@ -99,7 +99,6 @@ const client: any = {
     inventory: { getSlots: () => inventorySlots },
     equipment: { getSlots: () => equipmentSlots },
     objTypeLoader: { load: (id: number) => objs[id] ?? { noteTemplate: -1, placeholderTemplate: -1 } },
-    renderer: { itemIconRenderer: { createSprite: () => undefined } },
     widgetManager: {
         getWidgetsForGroup: (group: number) => groups[group] ?? [],
         isEffectivelyHidden: () => false,
@@ -177,6 +176,23 @@ async function pluginChecks(): Promise<void> {
     assert.deepEqual(result.calls, ["fill", "underline", "fill", "underline"]);
     config.setConfigValue(InventoryTagsConfig, "fillOpacity", 0);
     assert.deepEqual(drawn().calls, ["underline", "underline"], "fill opacity 0 draws no fill");
+    // Texture sources: RuneLite's outline traces the bordered image, the fill the plain one,
+    // both without quantity text; the image comes from the draw context on either renderer.
+    const requested: string[] = [];
+    const uncached: any = {
+        renderer: { getTexture: () => undefined, drawTexture() {}, drawRect() {}, createTextureFromCanvas() {}, deleteTexture: () => true },
+        itemImage: (itemId: number, quantity: number, outline: number) => {
+            requested.push(`${itemId}x${quantity}:${outline}`);
+            return undefined;
+        },
+    };
+    config.setConfigValue(InventoryTagsConfig, "showTagOutline", true);
+    config.setConfigValue(InventoryTagsConfig, "fillOpacity", 50);
+    plugin.widgetOverlay.draw(uncached);
+    assert.deepEqual(requested, ["385x1:0", "385x1:1", "1127x1:0", "1127x1:1"]);
+    config.setConfigValue(InventoryTagsConfig, "showTagOutline", false);
+    config.setConfigValue(InventoryTagsConfig, "fillOpacity", 0);
+
     const before = signature();
     assert.equal(signature(), before, "a stable scene keeps its signature");
     config.setConfigValue(InventoryTagsConfig, "tagUnderline", false);
