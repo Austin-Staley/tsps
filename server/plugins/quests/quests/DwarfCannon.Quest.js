@@ -412,7 +412,8 @@ module.exports = function registerDwarfCannonQuest(api) {
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     xpRewards: [{ skillId: Skill.CRAFTING.getIndex(), amount: 750, label: "Crafting" }],
-    rewardItemId: ItemIdentifiers.AMMO_MOULD,
+    // Nulodion already supplies the mould; completion retains it.
+    scrollItemId: ItemIdentifiers.AMMO_MOULD,
     rewardItemLabel: "An ammo mould",
     otherRewards: ["Ability to use dwarf multicannons", "Ability to make cannonballs", "Black Guard membership"],
     buildJournal,

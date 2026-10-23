@@ -29,7 +29,7 @@ function inventoryFixture(initial = new Map(), freeSlots = 28) {
         items.set(id, (items.get(id) ?? 0) + 1);
       }
     },
-    forceAdd(_item) {},
+    forceAdd(_player, item) { this.adds(item.getId(), item.getAmount()); },
     deleteNumber(id, amount = 1) {
       const left = Math.max(0, (items.get(id) ?? 0) - amount);
       if (left === 0) {
@@ -256,6 +256,7 @@ test('fresh stage 0 runs every mandatory Dwarf Cannon leg to the canonical varp 
     assert.equal(quest.getStage(player), 11, 'completion is the cache completion threshold');
     assert.equal(player.configs.get(0), 11, 'canonical varp 0 carries the completion value');
     assert.equal(inventory.getAmount(I.NULODIONS_NOTES), 0, 'the notes are handed over');
+    assert.equal(inventory.getAmount(I.AMMO_MOULD), 1, 'Nulodion’s mould is retained without another completion grant');
     assert.equal(player.getAttribute('quest.points'), 1);
     assert.equal(player.xp.length, beforeXp + 1);
     assert.equal(player.xp.at(-1).skill.getIndex(), core.Skill.CRAFTING.getIndex());
@@ -264,6 +265,7 @@ test('fresh stage 0 runs every mandatory Dwarf Cannon leg to the canonical varp 
     action(player, N.CAPTAIN_LAWGOF, 'c8LrCL');
     assert.equal(player.getAttribute('quest.points'), 1, 'repeat hand-in cannot award quest points twice');
     assert.equal(player.xp.length, beforeXp + 1, 'repeat hand-in cannot award XP twice');
+    assert.equal(inventory.getAmount(I.AMMO_MOULD), 1, 'repeat hand-in cannot duplicate the mould');
 
     player.configs.clear();
     PluginManager.emitPlayerLogin({ player });
