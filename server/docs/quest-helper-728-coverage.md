@@ -50,7 +50,11 @@ and required maze railing (`fc5d81024`). Their combined lifecycle/quest checks p
 493/493. Queen of Thieves wire stages and lost-letter search remain available in
 `b0df76772` (8/8 focused checks); NPC identity, lost memoir-page recovery, full-bag
 coin rewards and shared chest rendering remain open review findings. These are
-source publications, with no additional accepted natural-route count.
+source publications, with no additional accepted natural-route count. The Hand in
+the Sand also corrects its canonical varbit, shares the bell/Zavistic with Zogre
+and consumes sandpit supplies once (27 combined checks, including both registered
+quests; the prior source fails all three focused regression cases). Its serum/counter
+helper auxiliaries, scene visuals and natural completion remain unverified.
 
 The saved Hazeel Cult stage5, Tree Gnome Village stage7 and fresh Lost City stage1
 checkpoints resumed under the captured epoch23 runtime. The test server loaded all
