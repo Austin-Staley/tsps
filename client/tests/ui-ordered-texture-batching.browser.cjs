@@ -28,6 +28,9 @@ async function main() {
         assert.ok(result.nonzero > 10000, "Readback must contain the rendered UI test pattern");
         assert.equal(result.alternatingDraws, 1, "Different texture/tint/alpha quads must share one draw");
         assert.ok(result.batchedDraws < result.immediateDraws / 2, "Mixed UI batching must reduce actual GL submissions");
+        assert.deepEqual(result.rotatedAfterDeletion, result.rotatedBeforeDeletion,
+            "Deleting a nonzero batch texture must not suppress the next immediate rotated draw");
+        assert.ok(result.rotatedAfterDeletion.some(channel => channel > 0), "The rotated sprite must render");
         console.log("UI ordered texture batch readback passed:", result);
     } finally {
         socket.close();
@@ -99,8 +102,21 @@ function compareBatches() {
             if (immediate.pixels[i] !== batched.pixels[i]) different++;
             if (batched.pixels[i]) nonzero++;
         }
+        const readRotatedPixel = () => {
+            renderer.clear(0, 0, 0, 0);
+            renderer.drawTextureRotated(textures[0], 0, 0, 32, 32, 0);
+            const pixel = new Uint8Array(4);
+            gl.readPixels(8, 184, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return Array.from(pixel);
+        };
+        const rotatedBeforeDeletion = readRotatedPixel();
+        for (let i = 0; i < 8; i++) renderer.drawTexture(textures[i], i * 2, 0, 2, 2);
+        renderer.flush();
+        renderer.deleteTexture("3");
+        const rotatedAfterDeletion = readRotatedPixel();
         return { different, nonzero, alternatingDraws: batched.alternatingDraws,
-            immediateDraws: immediate.draws, batchedDraws: batched.draws, error: gl.getError() };
+            immediateDraws: immediate.draws, batchedDraws: batched.draws,
+            rotatedBeforeDeletion, rotatedAfterDeletion, error: gl.getError() };
     } finally {
         gl.getExtension("WEBGL_lose_context")?.loseContext();
     }
