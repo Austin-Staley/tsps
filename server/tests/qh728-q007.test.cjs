@@ -6,6 +6,11 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const path = require('node:path');
+const { Server } = require('../dist/Server');
+Server.installProductionPathResolver();
+require('node:test').before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+});
 const { PluginManager } = require('../dist/plugins/PluginManager');
 
 const PLUGIN_PATH = path.resolve(__dirname, '../plugins/quests/quests/Biohazard.Quest');

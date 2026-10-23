@@ -2708,12 +2708,17 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                             } else if (distSq <= 4225) {
                                 const markerTex = tc.getByNameToken("mapmarker,1");
                                 if (markerTex) {
+                                    // Native drawSpriteOnMinimap: x - width / 2 in whole pixels,
+                                    // so an odd-width marker sits half a pixel right of centre.
                                     minimapRenderer.drawOverlay(
                                         markerTex,
                                         screen.x,
                                         screen.y,
                                         markerTex.w * minimapRenderScale,
                                         markerTex.h * minimapRenderScale,
+                                        0,
+                                        Math.floor(markerTex.w / 2) * minimapRenderScale,
+                                        Math.floor(markerTex.h / 2) * minimapRenderScale,
                                     );
                                 }
                             }
@@ -2756,6 +2761,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                 flagScreen.y,
                                 flagTex.w * minimapRenderScale,
                                 flagTex.h * minimapRenderScale,
+                                0,
+                                Math.floor(flagTex.w / 2) * minimapRenderScale,
+                                Math.floor(flagTex.h / 2) * minimapRenderScale,
                             );
                         }
                     }

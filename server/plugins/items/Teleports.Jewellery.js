@@ -57,7 +57,8 @@ const JEWELLERY = [
     ],
     spent: ItemIds.AMULET_OF_GLORY_T_,
     rechargeable: true,
-    recharge: { heroes: true, quest: "Heroes' Quest" },
+    // The Wiki's 1-in-25,000 eternal glory chance also applies to the trimmed variant.
+    recharge: { heroes: true, quest: "Heroes' Quest", eternalChance: 25000 },
     wildernessLevel: DRAGONSTONE_WILDERNESS_LEVEL,
     rubMessage: "You rub the amulet...",
     emptyMessage: "Your amulet hasn't got any charges left.",

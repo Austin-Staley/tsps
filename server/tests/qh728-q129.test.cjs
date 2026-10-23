@@ -5,6 +5,12 @@
 // the tutorial jumps past the threshold in one step (the island skip / quiet login resync).
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+require('../dist/Server').Server.installProductionPathResolver();
+
+require('node:test').before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
+    require('node:path').resolve(__dirname, '..'));
+});
 
 const T = require('../plugins/areas/tutorialisland/Common.TutorialIsland');
 const runtime = require('../plugins/quests/QuestRuntime');

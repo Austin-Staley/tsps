@@ -399,6 +399,8 @@ export interface PluginPlayerDeathItemDropEvent {
   player: any;
   killer: any;
   item: any;
+  /** Whether the item is one the death keeps (protected), rather than one it loses. */
+  kept: boolean;
   location: any;
   shouldDropItems: boolean;
   /** Whether core would create a normal floor item for this item. */
@@ -1231,8 +1233,20 @@ export interface PluginApi {
   registerRunEnergyRestoreModifier(
     modifier: (entity: any, delayMs: number) => number
   ): void;
+  /** Run energy spent per movement step; return 0 to skip the drain. */
+  registerRunEnergyDrainModifier(
+    modifier: (entity: any, amount: number) => number
+  ): void;
+  /** Ticks between special-attack restores; a rate-doubling effect halves this. */
+  registerSpecialEnergyRestoreModifier(
+    modifier: (entity: any, delayTicks: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
+  ): void;
+  /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
+  registerPrayerDrainModifier(
+    modifier: (entity: any, amount: number, context: any) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1280,6 +1294,10 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  BonusManager: any;
+  WeaponInterfaces: any;
+  Barrows: any;
+  applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
   CombatEquipment: any;
   CanAttackResponse: any;
   CombatType: any;
@@ -1310,6 +1328,7 @@ export interface PluginCoreApi {
   Direction: any;
   Equipment: any;
   Bank: any;
+  PlayerStatus: any;
   Task: any;
   CountdownTask: any;
   ForceMovement: any;
@@ -1359,6 +1378,8 @@ export interface PluginCoreApi {
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
   CacheDefinitions: any;
+  CacheMaps: any;
+  MapRegionReplacementManager: any;
   readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
   Wilderness: any;
   PathFinder: any;

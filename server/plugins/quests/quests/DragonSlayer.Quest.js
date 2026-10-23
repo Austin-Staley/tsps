@@ -104,9 +104,11 @@ module.exports = function registerDragonSlayerQuest(api) {
   // Cache rev241 2602 "Exit door" placements in Melzar's Maze. Wiki: the ground
   // north-east room and the basement zombie/Melzar/demon rooms each have a brown
   // door to the exit. Leaving through an exit door restarts the maze, so these are
-  // one-way only: quest-room side -> exit corridor, never back.
+  // one-way only: from the room the player is leaving to the maze/exit corridor,
+  // never back. The ground door's room is the ladder room east of it, reached by
+  // climbing up from the basement after the chest.
   const MELZAR_EXIT_DOORS = [
-    { x: 2938, y: 3252, z: 0, exitX: 1 }, // ground NE room -> east exit corridor
+    { x: 2938, y: 3252, z: 0, exitX: -1 }, // ground NE ladder room -> maze
     { x: 2931, y: 9640, z: 0, exitX: -1 }, // zombie room -> west exit corridor
     { x: 2927, y: 9649, z: 0, exitX: -1 }, // Melzar room -> west exit corridor
     { x: 2924, y: 9654, z: 0, exitX: -1 }, // demon room -> west exit corridor
@@ -114,6 +116,7 @@ module.exports = function registerDragonSlayerQuest(api) {
 
   const TILE = {
     melzarInside: new Location(2933, 3248, 0),
+    melzarOutside: new Location(2942, 3248, 0),
     melzarBasementLadder: new Location(2932, 3240, 0),
     melzarBasement: new Location(2932, 9640, 0),
     crandor: new Location(2835, 3235, 0),
@@ -762,7 +765,9 @@ module.exports = function registerDragonSlayerQuest(api) {
     const stage = quest.getStage(player);
 
     if (itemId === ITEM.mazeKey && objectId === LOC.melzarEntrance) {
-      if (stage >= STAGE_OZIACH) player.moveTo(TILE.melzarInside.clone());
+      const at = event.object?.getLocation?.();
+      if (at && player.getLocation().getX() < at.getX()) player.moveTo(TILE.melzarOutside.clone());
+      else if (stage >= STAGE_OZIACH) player.moveTo(TILE.melzarInside.clone());
       event.handled = true;
       return;
     }
@@ -879,6 +884,13 @@ module.exports = function registerDragonSlayerQuest(api) {
   function handleMelzarEntranceClick(event) {
     const { player } = event;
     event.handled = true;
+    const at = event.object?.getLocation?.();
+    // The same exterior door on the building's east side is the way out of the
+    // north-east ladder room; the Exit doors themselves only lead into the maze.
+    if (at && player.getLocation().getX() < at.getX()) {
+      player.moveTo(TILE.melzarOutside.clone());
+      return;
+    }
     if (quest.getStage(player) < STAGE_OZIACH || !hasItem(player, ITEM.mazeKey)) {
       player.sendMessage("The door is locked.");
       return;
@@ -916,9 +928,9 @@ module.exports = function registerDragonSlayerQuest(api) {
 
   /**
    * Brown exit doors at the cache placements above. Only the room side may pass
-   * into the exit corridor; the exit side is refused so it cannot re-enter
-   * without the matching maze key (Wiki Dragon Slayer I: use the normal door and
-   * start the maze over).
+   * into the maze or exit corridor; the other side is refused so it cannot
+   * re-enter without the matching maze key (Wiki Dragon Slayer I: use the normal
+   * door and start the maze over).
    */
   function handleMelzarExitDoorClick(event) {
     const at = event.object?.getLocation?.();

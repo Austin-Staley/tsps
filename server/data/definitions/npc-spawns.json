@@ -24444,7 +24444,7 @@
   {"level":0,"name":"Wyrmscraig Goat","x":2583,"y":2195,"id":16302,"source":"wiki"},
   {"level":0,"name":"Wyrmscraig Goat","x":2587,"y":2200,"id":16302,"source":"wiki"},
   {"level":0,"name":"Wyrmscraig Goat","x":2587,"y":2194,"id":16302,"source":"wiki"},
-  {"level":0,"name":"Mortimer","x":2590,"y":8614,"id":4462,"wanderRadius":1},
+  {"level":0,"name":"Mortimer","x":2589,"y":8614,"id":16175,"source":"wiki","wanderRadius":0},
   {"level":0,"name":"Ffion","x":2573,"y":2295,"id":16327,"source":"wiki"},
   {"level":0,"name":"Cormac","x":2576,"y":2253,"id":16318,"source":"wiki"},
   {"level":0,"name":"Mr Supplies Jnr","x":2566,"y":2255,"id":16295,"source":"wiki"},

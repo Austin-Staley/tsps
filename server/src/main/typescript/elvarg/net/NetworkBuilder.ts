@@ -42,7 +42,7 @@ import {
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
-  WORLD_MAP_ORB_WIDGET_IDS,
+  isWorldMapOrbWidget,
 } from "./protocol/WorldMapProtocol";
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
@@ -117,9 +117,9 @@ export async function connectHeadlessClient(username: string, password: string):
 
 /** "Log out" on the remembered-account screen: the server drops that browser's token. */
 async function forgetLoginToken(rawUsername: string, token: string): Promise<void> {
-  const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
+  const username = Misc.formatDisplayName(rawUsername);
+  const protocolName = Misc.formatNameForProtocol(username);
   if (protocolName.length < 1 || protocolName.length > 12 || !Misc.isValidName(protocolName)) return;
-  const username = Misc.formatText(protocolName);
   const online = World.getPlayerByName(username);
   if (online) {
     const entries = readLoginTokens(online.getAttribute(LOGIN_TOKENS_ATTRIBUTE), Date.now());
@@ -246,6 +246,22 @@ export class NetworkBuilder {
         response.end(JSON.stringify({ regions: MapRegionReplacementManager.getRegionIds() }));
         return;
       }
+      // Terrain-only replacements have no pack (the .pack format needs object
+      // data too); the map editor fetches their raw terrain bytes here instead.
+      const terrainMatch = /^\/regions\/(\d+)\.terrain$/.exec(request.url ?? "");
+      if (terrainMatch) {
+        const terrain = MapRegionReplacementManager.getReplacementMapData(
+          Number(terrainMatch[1]))?.terrainData;
+        if (!terrain) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader("Content-Length", terrain.length);
+        response.end(Buffer.from(terrain));
+        return;
+      }
       const match = /^\/regions\/(\d+)\.pack$/.exec(request.url ?? "");
       const pack = match ? MapRegionReplacementManager.getRegionPack(Number(match[1])) : null;
       if (!pack) {
@@ -283,6 +299,18 @@ export class NetworkBuilder {
 
 export class ClientConnection {
   private static readonly pendingNames = new Set<string>();
+  /**
+   * A logged-in connection that sends nothing for this long is dead: the client pings every 5 s
+   * while the server talks. A phone that sleeps or changes network never closes its socket (a
+   * tunnel keeps the server's end open too), and its player stayed in the world, so logging back
+   * in failed with "already logged in".
+   */
+  private static readonly IDLE_TIMEOUT_MS = 30_000;
+  private static readonly IDLE_CHECK_MS = 5_000;
+  private lastFrameAt = Date.now();
+  /** Set by the first ping: a client from before the keepalive is never timed out. */
+  private sendsKeepalive = false;
+  private idleCheck?: ReturnType<typeof setInterval>;
   private pending?: PendingLogin;
   private reservedName?: string;
   private player?: Player;
@@ -298,6 +326,7 @@ export class ClientConnection {
   constructor(private readonly channel: BinaryChannel) {
     channel.onData((frame) => {
       if (this.closed) return;
+      this.lastFrameAt = Date.now();
       if (frame.length > MAX_GAME_MESSAGE_BYTES || this.queuedInputFrames >= NetworkConstants.PACKET_QUEUE_LIMIT) {
         console.warn("[network] client input limit exceeded", { bytes: frame.length, queued: this.queuedInputFrames });
         this.cleanup("input_limit");
@@ -621,7 +650,7 @@ export class ClientConnection {
         case "dialogue_amount": {
           const action = this.player?.getEnteredAmountAction();
           // 0 is dropped unless the prompt takes it (a setting where 0 means off).
-          if (action && (packet.amount > 0 || (packet.amount === 0 && (action as { acceptsZero?: boolean }).acceptsZero === true))) {
+          if (action && (packet.amount > 0 || (packet.amount === 0 && action.acceptsZero === true) || (packet.amount < 0 && action.acceptsNegative === true))) {
             action.execute(packet.amount);
           }
           else if (this.player && Bank.isOpen(this.player) && packet.amount > 0) {
@@ -651,7 +680,7 @@ export class ClientConnection {
             // option's statement) must not take the same click as its option.
             const openDialogue = this.player.getDialogueManager().getCurrent();
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
-            if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
+            if (isWorldMapOrbWidget(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
               this.player.getPacketSender().toggleWorldMap();
             } else if (actionPacket.widgetId === WORLD_MAP_CLOSE_WIDGET_ID) {
               this.player.getPacketSender().closeWorldMap();
@@ -974,8 +1003,10 @@ export class ClientConnection {
           continue;
         case "raw":
           continue;
-        case "hello":
         case "ping":
+          this.sendsKeepalive = true;
+          continue;
+        case "hello":
           continue;
         case "login":
           await this.login(packet.username, packet.password, packet.revision, packet.flags);
@@ -997,8 +1028,8 @@ export class ClientConnection {
   private async login(rawUsername: string, password: string, revision: number, flags = 0): Promise<void> {
     const tokenLogin = (flags & LOGIN_FLAG_TOKEN) !== 0;
     this.releasePendingName();
-    const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
-    const username = Misc.formatText(protocolName);
+    const typedName = Misc.formatDisplayName(rawUsername);
+    const protocolName = Misc.formatNameForProtocol(typedName);
     const key = protocolName.toLowerCase();
 
     if (revision !== CachePipeline.getActive().revision) {
@@ -1015,7 +1046,7 @@ export class ClientConnection {
       this.failLogin(3, "Invalid username or password.");
       return;
     }
-    if (PlayerPunishment.banned(username)) {
+    if (PlayerPunishment.banned(typedName)) {
       this.failLogin(4, "Your account has been disabled.");
       return;
     }
@@ -1025,8 +1056,8 @@ export class ClientConnection {
     }
     if (
       World.getPlayers().isFull() ||
-      World.getPlayerByName(username) ||
-      World.getAddPlayerQueue().some((player) => player.getUsername().toLowerCase() === username.toLowerCase()) ||
+      World.getPlayerByName(typedName) ||
+      World.getAddPlayerQueue().some((player) => Misc.formatNameForProtocol(player.getUsername()) === protocolName) ||
       ClientConnection.pendingNames.has(key)
     ) {
       this.failLogin(World.getPlayers().isFull() ? 2 : 5, World.getPlayers().isFull()
@@ -1039,9 +1070,9 @@ export class ClientConnection {
 
     let save: any | null = null;
     try {
-      save = GameConstants.PLAYER_PERSISTENCE.load(username);
+      save = GameConstants.PLAYER_PERSISTENCE.load(typedName);
     } catch (error) {
-      console.error(`[login] failed to load ${username}`, error);
+      console.error(`[login] failed to load ${typedName}`, error);
       this.releasePendingName();
       this.failLogin(8, "The login server is busy.");
       return;
@@ -1064,15 +1095,15 @@ export class ClientConnection {
         const check = checkLoginToken(entries, password);
         if (check.kind !== "valid") {
           if (check.kind === "reused") {
-            console.warn(`[login] ${username}: a replaced login token was used again; revoking it`);
-            await this.saveLoginTokens(username, save, revokeLoginToken(entries, check.index));
+            console.warn(`[login] ${typedName}: a replaced login token was used again; revoking it`);
+            await this.saveLoginTokens(typedName, save, revokeLoginToken(entries, check.index));
           }
           this.releasePendingName();
           this.failLogin(3, "Invalid username or password.");
           return;
         }
         ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now, check.index));
-        await this.saveLoginTokens(username, save, loginTokens);
+        await this.saveLoginTokens(typedName, save, loginTokens);
         passwordHash = String(save.getPasswordHashWithSalt?.() ?? "");
       } else if (save) {
         const stored = String(save.getPasswordHashWithSalt?.() ?? "");
@@ -1101,10 +1132,10 @@ export class ClientConnection {
         const now = Date.now();
         const entries = readLoginTokens(save?.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
         ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now));
-        if (save) await this.saveLoginTokens(username, save, loginTokens);
+        if (save) await this.saveLoginTokens(typedName, save, loginTokens);
       }
     } catch (error) {
-      console.error(`[login] failed to authenticate ${username}`, error);
+      console.error(`[login] failed to authenticate ${typedName}`, error);
       this.releasePendingName();
       this.failLogin(8, "The login server is busy.");
       return;
@@ -1116,6 +1147,9 @@ export class ClientConnection {
       this.releasePendingName();
       return;
     }
+    // An account keeps the name it was first saved with; the typed one only names a new account.
+    const savedName = String(save?.getDisplayName?.() ?? "");
+    const username = Misc.formatNameForProtocol(savedName) === protocolName ? savedName : typedName;
     this.pending = { username, passwordHash, save, loginTokens };
     this.send(encodeLoginResponse(true, -1, "", username, loginToken));
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
@@ -1152,6 +1186,7 @@ export class ClientConnection {
       return;
     }
     this.player = player;
+    this.startIdleCheck();
     CONNECTIONS.set(player, this);
     this.releasePendingName();
     // Back aboard a boat they logged out on at sea.
@@ -1204,14 +1239,14 @@ export class ClientConnection {
     // Ctrl (1) inverts the run toggle for this walk; Ctrl+Shift (2) is a staff teleport that
     // plugins take over, and walks like a Ctrl-click for everyone else.
     const invert = modifierFlags === 2 || (modifierFlags & 1) !== 0;
-    const run = forceRun || (invert ? !player.isRunningReturn() : player.isRunningReturn());
-    player.setRunning(run);
-    player.getMovementQueue().requestWalk(
-      new Location(x, y, player.getLocation().getZ())
-    );
+    // The inversion holds for this path only; the run setting and orb stay as they are.
+    const runOverride = forceRun ? true : invert ? !player.isRunningReturn() && player.getRunEnergy() > 0 : null;
     // MovementQueue owns the destination flag and de-duplicates it; sending it
     // here as well double-posts the marker on every walk click.
-    player.getPacketSender().sendRunStatus();
+    player.getMovementQueue().requestWalk(
+      new Location(x, y, player.getLocation().getZ()),
+      runOverride
+    );
   }
 
   private inventoryAction(packet: Extract<ReturnType<typeof decodeClientPackets>[number], { type: "inventory_action" }>): void {
@@ -1378,9 +1413,23 @@ export class ClientConnection {
     this.pending = undefined;
   }
 
+  /** Drops the logged-in connection once a client that pings goes quiet (IDLE_TIMEOUT_MS). */
+  private startIdleCheck(): void {
+    if (this.closed) return;
+    this.idleCheck = setInterval(() => {
+      if (!this.sendsKeepalive || Date.now() - this.lastFrameAt < ClientConnection.IDLE_TIMEOUT_MS) return;
+      this.cleanup("idle_timeout");
+      try {
+        this.channel.close(1001, "idle timeout");
+      } catch {}
+    }, ClientConnection.IDLE_CHECK_MS);
+    this.idleCheck.unref?.();
+  }
+
   private cleanup(source: string): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.idleCheck) clearInterval(this.idleCheck);
     this.releasePendingName();
     if (!this.player) return;
     // The disconnect hooks fire when the player leaves the world, which a player in

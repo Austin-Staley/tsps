@@ -2406,3 +2406,32 @@ test("a courier crate withdrawn from the hold goes into the player's hands, from
     h.done();
   }
 });
+
+test("the Sailing cape teleports a boat to the Pandemonium and renames it from the word lists", () => {
+  const { content } = require("../plugins/skills/sailing/SailingContent.Sailing");
+  const BoatTeleport = require("../plugins/skills/sailing/BoatTeleport.plugin");
+  content();
+
+  const messages = [];
+  const state = { boats: [], activeBoatSlot: null, returnPoint: null, tools: [], lastDock: null, lastStandardDock: null };
+  const player = {
+    getSailing: () => state,
+    sendMessage: (text) => messages.push(text),
+    getPacketSender: () => ({ sendVarbit() {} }),
+  };
+  const boat = Sailing.giveBoat(player, "raft", "port_sarim", [0, 0, 0]);
+  assert.ok(boat, "a raft at Port Sarim");
+
+  BoatTeleport._test.moveBoatToPandemonium(player, boat);
+  assert.deepEqual(boat.location, { kind: "docked", dock: "the_pandemonium" });
+  assert.match(messages.at(-1), /teleported to the Pandemonium/i);
+
+  BoatTeleport._test.moveBoatToPandemonium(player, boat);
+  assert.match(messages.at(-1), /already at the Pandemonium/i);
+
+  const words = content().names.words;
+  assert.deepEqual(BoatTeleport._test.parseBoatName("Golden Hind"),
+    [0, words[1].indexOf("Golden") + 1, words[2].indexOf("Hind") + 1]);
+  assert.equal(BoatTeleport._test.parseBoatName("Golden"), null);
+  assert.equal(BoatTeleport._test.parseBoatName("Notaword Hind"), null);
+});

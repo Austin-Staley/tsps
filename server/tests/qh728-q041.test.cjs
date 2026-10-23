@@ -9,6 +9,11 @@ const assert = require('node:assert/strict');
 const { test, after } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
+
+require('node:test').before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
+    require('node:path').resolve(__dirname, '..'));
+});
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const runtime = require('../plugins/quests/QuestRuntime');

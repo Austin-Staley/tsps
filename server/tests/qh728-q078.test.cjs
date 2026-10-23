@@ -15,6 +15,11 @@ const { test } = require('node:test');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 require(root + '/dist/Server').Server.installProductionPathResolver();
+
+require('node:test').before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
+    require('node:path').resolve(__dirname, '..'));
+});
 const { PluginManager } = require(root + '/dist/plugins/PluginManager');
 const runtime = require(root + '/plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();

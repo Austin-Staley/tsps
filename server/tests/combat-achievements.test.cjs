@@ -300,6 +300,21 @@ test("derived rules: \"without taking any damage\" fails on any hit taken", () =
   assert.equal(Progress.isComplete(player, named("Demon Evasion").id), false);
 });
 
+test("fights: hits on and from NPCs no rule reads are not kept (issue #748)", () => {
+  const player = fighter();
+  player.isPlayer = () => true;
+  const man = fightNpc("Man", 7);
+  const hit = { getCombatType: () => "MELEE", getTotalDamage: () => 1 };
+  for (processCycle = 20000; processCycle < 26000; processCycle += 4) {
+    Fights.onDealt({ player, target: man, hit });
+    Fights.onHitResolved({ attacker: man, target: player, hit });
+  }
+  assert.equal(Fights._test.taken.get(player), undefined, "an hour tanking men keeps no history");
+  Fights.onDealt({ player, target: fightNpc("Alchemical Hydra", 100), hit });
+  Fights.onHitResolved({ attacker: man, target: player, hit });
+  assert.equal(Fights._test.taken.get(player).length, 1, "in a fight a rule reads, every NPC's hits count");
+});
+
 test("Dagannoth Kings: all three within 9 seconds, Rex with another on one tick", () => {
   const player = fighter();
   const hit = { getCombatType: () => "MELEE", getTotalDamage: () => 10 };

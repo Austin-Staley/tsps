@@ -3,6 +3,11 @@ const { test, afterEach } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
+require('node:test').before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
+    require('node:path').resolve(__dirname, '..'));
+});
+
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { DialogueChainBuilder } = require('../dist/game/model/dialogues/builders/DialogueChainBuilder');
 const { ActionDialogue } = require('../dist/game/model/dialogues/entries/impl/ActionDialogue');

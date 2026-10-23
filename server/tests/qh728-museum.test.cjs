@@ -421,11 +421,22 @@ test("Museum: real cache actions, transcript assessment, display cases and Minas
   player.getDialogueManager().reset();
   player.menu = null;
 
-  for (const [stepId, key] of MINAS) {
+  // Independent, true transcript branches can report several completed quests
+  // in one conversation. Each newly recorded report must still pay exactly once.
+  const expectedReports = new Set(MINAS.map(([, key]) => key));
+  for (let attempts = 0; attempts < MINAS.length; attempts++) {
+    const previous = player.getAttribute(STATE).minas ?? [];
+    if (previous.length === expectedReports.size) break;
     const before = getKudos(world, player);
     talkToMinas(world, player);
-    assert.equal(getKudos(world, player), before + 5, `Minas report ${stepId}/${key}`);
+    const reports = player.getAttribute(STATE).minas;
+    const added = reports.filter((key) => !previous.includes(key));
+    assert.ok(added.length > 0, 'the conversation reports an outstanding quest');
+    assert.equal(new Set(reports).size, reports.length, 'reports are unique');
+    for (const key of added) assert.ok(expectedReports.has(key), `unexpected report ${key}`);
+    assert.equal(getKudos(world, player), before + 5 * added.length);
   }
+  assert.deepEqual(new Set(player.getAttribute(STATE).minas), expectedReports);
   assert.equal(getKudos(world, player), 100);
 
   // The four canonical Minas lamps were granted once at the report point.

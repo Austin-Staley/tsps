@@ -1139,13 +1139,14 @@ export class PluginManager {
       return null;
     }
     const event: PluginCanAttackEvent = { attacker, target, method, allow: null };
+    let allowed = false;
     for (const hook of PluginManager.canAttackHooks) {
+      event.allow = null;
       PluginManager.executeHook(hook, event, "can_attack", "can_attack");
-      if (event.allow !== null) {
-        return event.allow;
-      }
+      if (event.allow === false) return false;
+      if (event.allow === true) allowed = true;
     }
-    return null;
+    return allowed ? true : null;
   }
 
   public static emitCanTeleport(player: any, wildernessLevelLimit: number = 20, destination?: any): boolean | null {
@@ -2180,6 +2181,10 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      BonusManager: require(`${model}/equipment/BonusManager`).BonusManager,
+      WeaponInterfaces: require(`${combat}/WeaponInterfaces`).WeaponInterfaces,
+      Barrows: require(`${combat}/Barrows`).Barrows,
+      applyPrayerDrainModifiers: require(`${combat}/EquipmentEffects`).applyPrayerDrainModifiers,
       CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
@@ -2211,6 +2216,7 @@ export class PluginManager {
       Direction: require(`${model}/Direction`).Direction,
       Equipment: require(`${model}/container/impl/Equipment`).Equipment,
       Bank: require(`${model}/container/impl/Bank`).Bank,
+      PlayerStatus: require(`${model}/PlayerStatus`).PlayerStatus,
       Task: require("../game/task/Task").Task,
       CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
@@ -2257,6 +2263,8 @@ export class PluginManager {
       PlayerDeathTask: require("../game/task/impl/PlayerDeath").PlayerDeathTask,
       CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      CacheMaps: require("../game/cache/CacheMaps").CacheMaps,
+      MapRegionReplacementManager: require("../game/collision/MapRegionReplacementManager").MapRegionReplacementManager,
       readTemplateRegion: require("../game/collision/TemplateRegionData").readTemplateRegion,
       Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
@@ -4098,8 +4106,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerRunEnergyRestoreModifier(
           modifier
         ),
+      registerRunEnergyDrainModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerRunEnergyDrainModifier(
+          modifier
+        ),
+      registerSpecialEnergyRestoreModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
+          modifier
+        ),
+      registerPrayerDrainModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

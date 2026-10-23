@@ -7,6 +7,11 @@ const { test } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
+require('node:test').before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(
+    require('node:path').resolve(__dirname, '..'));
+});
+
 const { Player } = require('../dist/game/entity/impl/player/Player');
 const { Location } = require('../dist/game/model/Location');
 const { Direction } = require('../dist/game/model/Direction');

@@ -324,6 +324,13 @@ unresolved recovery case. Commit and push ledger updates with the reviewed fix b
 
 - Narrow the contract once: quest key, start state, mandatory legs, rewards, recovery cases.
   Write it down; do not re-derive it every turn.
+- Position a fresh actor at the helper's first quest interaction before recording the
+  baseline. Do not spend the test travelling from the default account spawn. If a
+  preparation snapshot was already recorded but the quest is still unstarted and no
+  target interaction occurred, preserve that snapshot, finish the declared positioning
+  setup, and record a new baseline. Record any failed unrelated travel service separately;
+  this does not prove that service works. Once quest progress begins, follow the natural
+  route and its required transports.
 - Include ordinary tools from the helper's item requirements in the declared setup before
   the baseline: hammers, needles, spades, food and standard travel supplies. Exercise an
   in-quest tool handout when it changes progression or is the recovery case being checked.
@@ -342,6 +349,11 @@ unresolved recovery case. Commit and push ledger updates with the reviewed fix b
 - One persistent MCP client per account. When a driver reconnects, check `list_players` for
   its own username first: reuse an already-online account and log in only when it is offline.
   Reconnecting does not authorize repeating setup, granting items or resetting progress.
+- A non-watch server can keep testing a reviewed, captured source revision while the
+  worktree advances. Retain that exact Git blob or source snapshot and its loaded hash;
+  never label newer disk content as loaded code. Continue unaffected route legs, and
+  revalidate changed behavior on the next safe server release. Evidence from the older
+  release does not certify the newer change.
   Batch normal packets; avoid LLM turns between every click. Use the highest batched action
   the tool supports, then assert once.
 - Treat `walk_to` as a local minimap click. The route finder searches a 128-tile square

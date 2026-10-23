@@ -162,6 +162,10 @@ export type NpcView = Tile & ActorUpdateView & {
   faceTile?: { x: number; y: number };
   /** Body-model slot overrides (OSRS npc model customisation); an empty list resets them. */
   modelCustomisation?: { slot: number; modelId: number }[];
+  /** Stand / walk / turn sequence overrides (0 idle, 1 walk, 2 turn left, 3 turn right); an empty list resets them. */
+  baseAnimations?: { slot: number; seqId: number }[];
+  /** A fade of its model (OSRS npc transparency): `from` (-1 its current look) to `to`, 0 opaque to 255 invisible. */
+  transparency?: { startCycles: number; endCycles: number; from: number; to: number };
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
   /** The boat/static ship this NPC stands on (its deck) rather than the main world. */
@@ -1390,6 +1394,27 @@ export function encodeResetInteractionMode(worldId: number): Buffer {
 }
 
 /** Puts the camera back on the player and stops any shake (cam_reset). */
+/**
+ * cam_target: the camera (and what the client centres its view and sound on) follows a tile or
+ * another player instead of the local player, as for a spectator; cam_reset ends it.
+ */
+export function encodeCameraTarget(target: { x: number; y: number; level: number } | { player: number }): Buffer {
+  if ("player" in target) {
+    const payload = Buffer.alloc(4);
+    payload[0] = 12;
+    payload[1] = 1;
+    payload.writeUInt16BE(target.player & 0xffff, 2);
+    return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+  }
+  const payload = Buffer.alloc(7);
+  payload[0] = 12;
+  payload[1] = 0;
+  payload.writeUInt16BE(target.x & 0xffff, 2);
+  payload.writeUInt16BE(target.y & 0xffff, 4);
+  payload[6] = target.level & 0x3;
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
 export function encodeCameraReset(): Buffer {
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([0]));
 }
@@ -2160,11 +2185,20 @@ export function resolveGameframeRoot(
   return STANDARD_GAMEFRAME_ROOTS.has(saved) ? saved : fallback;
 }
 
+// Minimap orbs: desktop `orbs`, and the mobile toplevel's own `orbs_osm`, laid out for the
+// mobile orb art (live's Android client mounts it at toplevel_osm:orbs).
+export const ORBS_GROUP_ID = 160;
+export const MOBILE_ORBS_GROUP_ID = 897;
+
+export function orbsGroupFor(root: number): number {
+  return root === MOBILE_GAMEFRAME_ROOT ? MOBILE_ORBS_GROUP_ID : ORBS_GROUP_ID;
+}
+
 export function encodeGameframeBootstrap(playerName: string, root: number = 161, xpDropsEnabled = false): Buffer[] {
   const mounts = [
     // pm_chat -> toplevel_osrs_stretch:pm_container (93), xp_drops -> :xp_drops (9).
     // 161:7 (hud_container_back) has no fixed-layout pane, so XP drops mounted there vanished.
-    [96, 162], [93, 163], [33, 160], ...(xpDropsEnabled ? [[9, 122]] : []), [6, 651, 5929],
+    [96, 162], [93, 163], [33, orbsGroupFor(root)], ...(xpDropsEnabled ? [[9, 122]] : []), [6, 651, 5929],
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
     [82, 218], [83, 7], [84, 109], [85, 429], [86, 182], [87, 116],
     [88, 216], [89, 239],
@@ -2497,6 +2531,8 @@ const NPC_MASK = {
   EXACT_MOVE: 0x400,
   FACE_TILE: 0x800,
   MODEL_CUSTOMISATION: 0x1000,
+  BASE_ANIMATIONS: 0x2000,
+  TRANSPARENCY: 0x8000,
   SPOT_ANIM: 0x20000,
 } as const;
 
@@ -2627,6 +2663,8 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.faceTile ? NPC_MASK.FACE_TILE : 0) |
     (view.modelCustomisation ? NPC_MASK.MODEL_CUSTOMISATION : 0) |
+    (view.baseAnimations ? NPC_MASK.BASE_ANIMATIONS : 0) |
+    (view.transparency ? NPC_MASK.TRANSPARENCY : 0) |
     (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
 }
 
@@ -2732,6 +2770,21 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
       bytes.push(entry.slot & 0xff);
       shortLE(bytes, entry.modelId & 0xffff);
     }
+  }
+  if (view.baseAnimations) {
+    bytes.push(view.baseAnimations.length & 0xff);
+    for (const entry of view.baseAnimations) {
+      bytes.push(entry.slot & 0xff);
+      shortBE(bytes, entry.seqId < 0 ? 0xffff : entry.seqId);
+    }
+  }
+  if (view.transparency) {
+    // Start and end cycles into the tick, the transparency it fades from (0xffff: its current
+    // look) and to: 0 opaque, 255 invisible.
+    shortBE(bytes, view.transparency.startCycles & 0xffff);
+    shortBE(bytes, view.transparency.endCycles & 0xffff);
+    shortBE(bytes, view.transparency.from < 0 ? 0xffff : view.transparency.from & 0xff);
+    bytes.push(view.transparency.to & 0xff);
   }
   return Buffer.from(bytes);
 }
