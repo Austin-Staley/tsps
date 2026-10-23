@@ -6,13 +6,20 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Eighteen quests have accepted natural main-route completion evidence: **18 / 106 active quests (16.98%)** (q003, q006, q008, q010, q011, q017, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Nineteen quests have accepted natural main-route completion evidence: **19 / 106 active quests (17.92%)** (q003, q006, q008, q010, q011, q017, q019, q026, q040, q041, q048, q055, q063, q072, q074, q085, q088, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
 long or complex quests; all 17 accepted routes are within the retained 106. Against
 the original inventory the count is still 17/128 (13.28%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
+
+### q055 — Hazeel Cult (Hazeel side)
+
+- **Revision:** source/loaded epoch24 `b8ccb93c19a71669d4f8e68cd4c89105f2be08dbc10fd1ca8fac38725bb12924`; test `c690d1bb152889fd91211436956b079624ce7ebb1e0cbc71368a6ab67366116a`. Root acceptance artifact `/tmp/tsps-728/native/evidence/q055-root-accepted-20261023.json` contains nine raw-file hashes and ten independently checked save snapshots.
+- **Route:** linked fresh normal Ceril/Clivet start and Hazeel-side poison receipt, actual mansion range poisoning, five valves and mark, raft/Alomone, proper cave return and basement crate key. After the shared-world fix, the real upstairs door/wall Yes prompt, ladder and key-on-chest46903 yield scroll2403. Normal exit/raft/Alomone hand-in reaches varp223=9; the scroll is consumed.
+- **Rewards/persistence:** QP0→1, Thieving13034431→13035931 (+1,500), coins0→2000; mark2406 and key2404 remain. Normal postquest Clivet talk gives no additional rewards. Credentialed relog and final offline retain all values. Root checked completion1359, logout1361, repeat1363 and final logout1364 against earlier stage4/5/6/7 saves.
+- **Aids/limits:** initial master/first-NPC placement and one ordinary Ardougne tablet; no NPC HP aid or target state/items injected. Initial zero is inferred from the fresh account and canonical start, rather than an explicit223=0 read. This covers the Hazeel branch; Carnillean/optional recovery, scene visuals and Java overlay remain unchecked. **Alomone's disappearance after completion is an open NPC-availability bug**, separately assigned for correction; the successful repeat uses Clivet.
 
 ### q117 — Tree Gnome Village
 

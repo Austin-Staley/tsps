@@ -535,8 +535,10 @@ Repeated report-editing turns can take longer than the fix itself.
   player to take damage; still play the real encounter, phases and quest handoffs.
 - `set_npc_hitpoints` only lowers HP on a living, registered NPC in your private area/plane,
   within 32 tiles, after the real encounter is targetable. It never starts a fight and never
-  changes quest state. Use it after the real entry/trigger, then land an ordinary hit through
-  the normal combat path.
+  changes quest state. First perform the entry/trigger and land an ordinary hit through the
+  normal combat path; then lower HP if helpful. The user's combat-aid authorization covers
+  ordinary hostile encounters as well as bosses. Record the actor, prior HP, observed damage
+  and aid result; obtain drops through the normal death and pickup handlers.
 - Do not use or document unverified kill-all, force-complete or arbitrary state commands.
 - Preserve thresholds and scene handoffs: if the quest needs the boss phase, the cutscene, the
   cage/door state or a specific tile, perform it normally; cheats after that must not skip it.
@@ -583,7 +585,7 @@ Never report "PASS" if a mandatory leg, reward, relog or post-quest check is mis
   prerequisite, verify the target remains at stage zero, then record every XP/QP/item delta
   in the setup and capture the baseline. This does not prove the prerequisite was played.
   After that baseline, never grant target quest items or set target stages, varbits, events
-  or handlers in a run claimed as natural. Use ordinary travel and item acquisition; boss
+  or handlers in a run claimed as natural. Use ordinary travel and item acquisition; combat
   damage assistance still requires the real encounter and hit described above.
 
 ## Tests
