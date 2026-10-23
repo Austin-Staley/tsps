@@ -19,6 +19,7 @@ import { SkeletalSeqLoader } from "../../rs/model/skeletal/SkeletalSeqLoader";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
 import { SceneBuffer } from "../buffer/SceneBuffer";
 import { buildActorNormals } from "../buffer/ActorNormals";
+import { packedActorBounds, type ActorBounds } from "../ActorVisibility";
 import { CustomModelRegistry } from "../../custom/items/CustomModelRegistry";
 
 export interface DynamicNpcSequenceMeta {
@@ -42,6 +43,7 @@ export interface DynamicNpcFrameGeometry {
     alphaVertices: Uint8Array;
     alphaIndices: Int32Array;
     approxBytes: number;
+    bounds?: ActorBounds;
 }
 
 export type NpcFrameRequest = Parameters<DynamicNpcAnimLoader["getFrameGeometry"]>;
@@ -378,6 +380,7 @@ export class DynamicNpcAnimLoader {
             opaqueIndices: opaque.indices,
             alphaVertices: alpha.vertices,
             alphaIndices: alpha.indices,
+            bounds: packedActorBounds(opaque.vertices, alpha.vertices),
             approxBytes:
                 opaque.vertices.byteLength +
                 opaque.indices.byteLength +

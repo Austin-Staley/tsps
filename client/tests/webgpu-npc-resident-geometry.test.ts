@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
+import { mat4 } from "gl-matrix";
+import { Frustum } from "../game/Frustum";
 
 import { DynamicNpcAnimLoader } from "../render/npc/DynamicNpcAnimLoader";
 import { ActorGeometryCache, POSE_ROWS, POSE_WIDTH } from "../render/webgpu/actors/actorGpu";
@@ -56,12 +58,12 @@ function fixture(alpha = true, capacity = 8) {
             getFrameIndex: () => frame, getMovementFrameIndex: () => 0,
             getMovementOverrides: () => ({}), getPathLengthLike: () => 0,
             getRotation: () => 0, getTargetRot: () => 0,
-            getWorldX: () => 64, getWorldY: () => 64, getLevel: () => 0,
+            getWorldX: () => 64, getWorldY: () => 64, getLevel: () => 0, getWorldViewId: () => -1,
             getServerId: () => 23, getColorOverride: () => ({ amount: 0 }),
         },
     };
     const actors: any = Object.create(WebGPUActors.prototype);
-    Object.assign(actors, { renderer: { osrsClient: client }, dynamicNpcLoader: loader,
+    Object.assign(actors, { stats: { npcCandidates: 0, npcBoundsTests: 0, npcsCulled: 0 }, npcBounds: new Map(), renderer: { osrsClient: client }, dynamicNpcLoader: loader,
         geometry: cache,
         asyncNpcPoses: { getKey: (request: any) => loader.getFrameGeometryKey(...request),
             get: (request: any) => resolveUnbatchedNpcGeometry(client, loader, 5, request), getFallbackKey: () => undefined },
@@ -75,7 +77,7 @@ function fixture(alpha = true, capacity = 8) {
         return state as any;
     };
     const evictCpu = () => { (loader as any).geomCache.clear(); (loader as any).geomCacheBytes = 0; };
-    return { actors, client, loader, cache, pack, evictCpu, ready, model,
+    return { actors, client, loader, cache, map, pack, evictCpu, ready, model,
         setType: (id: number) => { typeId = id; }, setVariant: (id: number) => { variant = id; },
         setSequence: (id: number) => { sequence = id; }, setFrame: (id: number) => { frame = id; },
         builds: () => builds, uploads: () => uploads };
@@ -215,4 +217,84 @@ test("GPU NPC sources share the existing unscaled rest model and normalized pose
     assert.equal(f.loader.getGpuPoseSource(1, 1, 0)!.baseModel, f.model);
     f.ready.clear();
     assert.equal(f.loader.getGpuPoseSource(1, 1, 0), undefined, "streamed current frames must be ready");
+});
+
+
+test("exact cached NPC bounds skip CPU pose requests outside camera and shadow, preserving actor bindings", () => {
+    const f = fixture();
+    const camera = new Frustum();
+    camera.setPlanes(mat4.ortho(mat4.create(), 20, 30, -5, 5, -5, 5));
+    f.client.camera = { frustum: camera };
+    Object.assign(f.map, { heightMapData: new Int16Array(4 * 66 * 66), heightMapSize: 66,
+        borderSize: 0, getRenderBaseWorldX: () => 0, getRenderBaseWorldY: () => 0 });
+    f.actors.shadow = null;
+    let requests = 0;
+    const original = f.actors.asyncNpcPoses.get;
+    f.actors.asyncNpcPoses.get = (...args: any[]) => { requests++; return original(...args); };
+    assert.equal(f.pack().opaque.length, 1, "unknown new poses prepare once");
+    f.evictCpu();
+    const hidden = f.pack();
+    assert.equal(hidden.opaque.length, 0);
+    assert.equal(requests, 1, "known off-screen poses must not enqueue CPU work after eviction");
+    assert.equal(hidden.npcByEcsId.size, 1, "attached GFX still resolve the actor-data slot");
+    assert.equal(f.actors.stats.npcsCulled, 1);
+    f.actors.shadow = new Frustum();
+    assert.equal(f.pack().opaque.length, 1, "an off-screen shadow caster remains drawn");
+    f.actors.shadow = null;
+    camera.setPlanes(mat4.ortho(mat4.create(), -5, 5, -5, 5, -5, 5));
+    assert.equal(f.pack().opaque.length, 1, "turning the camera reveals the resident actor immediately");
+    camera.setPlanes(mat4.ortho(mat4.create(), 20, 30, -5, 5, -5, 5));
+    f.client.npcEcs.getWorldViewId = () => 1;
+    assert.equal(f.pack().opaque.length, 1, "deck-local actor coordinates must not be camera-culled");
+    f.client.npcEcs.getWorldViewId = () => -1;
+    f.setType(2);
+    assert.equal(f.pack().opaque.length, 1, "a new appearance cannot inherit another pose's bound");
+});
+
+
+test("actor updates keep simulation ahead of packing and preserve an unknown shadow volume", () => {
+    const actors = new WebGPUActors({ osrsClient: { clientPlugins: { gpuSettings: () => undefined,
+        hdEnabled: () => false }, renderDistance: 40 }, stats: { frameCount: 1 },
+        mapManager: { visibleMaps: [] }, playerPosUni: [0, 0] });
+    actors.world = {};
+    const order: string[] = [];
+    actors.gfx = { projectiles: { update: () => order.push("projectiles") }, manager: {
+        update: () => order.push("gfx"), resetWorldBindings: () => order.push("bindings") } };
+    actors.stepNpcClientAnimations = () => order.push("animations");
+    actors.tileSelection.ensureForFrame = () => order.push("tiles");
+    actors.update(1, undefined);
+    assert.equal(actors.shadow, undefined, "an unavailable extension frustum must not become camera-only culling");
+    assert.deepEqual(order, ["projectiles", "gfx", "animations", "tiles", "bindings"]);
+    actors.update(2, null);
+    assert.equal(actors.shadow, null, "a renderer without shadows may use camera-only culling");
+});
+
+test("HD prepares the current actor shadow frustum once and preserves cached world shadow refreshes", () => {
+    const { createHdWebGPUExtension } = require("../game/plugins/hd/webgpu/HdWebGPU");
+    const device = { createTexture: () => ({ createView: () => ({}) }), createBuffer: () => ({}),
+        createSampler: () => ({}), queue: { writeTexture() {} } };
+    const extension = createHdWebGPUExtension(() => true, () => ({}), { device, textureIdIndexMap: new Map() });
+    let updates = 0, worlds = 0, actors = 0, copies = 0;
+    extension.update = () => {
+        updates++;
+        extension.shadowFrustum.setPlanes(mat4.ortho(mat4.create(), updates * 10, updates * 10 + 5, -5, 5, -5, 5));
+        return updates !== 2;
+    };
+    const renderer = { drawWorldDepth: (_pass: unknown, shadow: Frustum) => {
+        worlds++; assert.equal(shadow, extension.shadowFrustum);
+    }, drawActorDepth: () => actors++ };
+    const encoder = { beginRenderPass: () => ({ end() {} }), copyTextureToTexture: () => copies++ };
+    const current = extension.prepareActorVisibility(renderer);
+    assert.equal(current, extension.shadowFrustum);
+    assert.equal(current.intersectsBox([[11, 0, 0], [12, 1, 1]]), true);
+    extension.beforeScene(renderer, encoder);
+    assert.equal(updates, 1, "drawing must reuse the visibility preparation's matrix");
+    extension.prepareActorVisibility(renderer);
+    extension.beforeScene(renderer, encoder);
+    assert.equal(updates, 2);
+    assert.equal(worlds, 1, "the cached world shadow does not refresh on steady frames");
+    assert.equal(actors, 2); assert.equal(copies, 2);
+    extension.beforeScene(renderer, encoder);
+    assert.equal(updates, 3, "direct extension callers still prepare their own frame");
+    assert.equal(worlds, 2); assert.equal(actors, 3);
 });

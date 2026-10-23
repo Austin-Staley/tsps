@@ -44,3 +44,21 @@ assert.equal(geometry.resolve(1, false), first, "the old CPU pose remains cached
 assert.deepEqual(first.opaqueVertices, opaqueBefore, "a later pose cannot overwrite cached opaque bytes");
 assert.deepEqual(first.alphaVertices, alphaBefore, "a later pose cannot overwrite cached alpha bytes");
 console.log("CPU player pose cache snapshots passed");
+
+
+assert.ok(first.bounds && second.bounds, "final CPU poses retain bounds for both geometry passes");
+let boundsTests = 0, poseRequests = 0;
+geometry.poseCache.set(first.key, null);
+geometry.poseFor = () => { poseRequests++; return undefined; };
+const offscreen = (cached: any) => { boundsTests++; assert.equal(cached, first); return false; };
+assert.equal(geometry.resolve(1, true, offscreen), undefined);
+assert.equal(boundsTests, 1);
+assert.equal(poseRequests, 0, "known off-screen CPU poses must skip pose preparation");
+assert.equal(geometry.resolve(3, true, offscreen)?.key.includes("|2"), true,
+    "unknown animation frames prepare once and do not inherit old bounds");
+assert.equal(boundsTests, 1);
+assert.equal(poseRequests, 1);
+geometry.poseCache.delete(first.key);
+assert.equal(geometry.resolve(1, true, () => { throw new Error("unverified GPU pose was culled"); }), first,
+    "a pose without known CPU-only eligibility is retained");
+console.log("CPU player visibility checks passed");

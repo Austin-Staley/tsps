@@ -1,3 +1,5 @@
+import type { Frustum } from "../../../game/Frustum";
+import { actorBoundsVisible, type ActorBounds } from "../../ActorVisibility";
 import { ACTOR_VERTEX_STRIDE } from "../../buffer/ActorNormals";
 import type { IProjectileManager } from "../../../game/interfaces/IProjectileManager";
 import type { OsrsClient } from "../../../game/OsrsClient";
@@ -45,7 +47,7 @@ import {
     packWorldGfxActorData,
     updateNpcClientAnimations,
 } from "./actorPacking";
-import { PlayerPoseGeometry } from "./actorPlayers";
+import { PlayerPoseGeometry, type PosedActorGeometry } from "./actorPlayers";
 import { NpcPoseGeometry } from "./actorNpcs";
 import { DynamicNpcAnimLoader } from "../../npc/DynamicNpcAnimLoader";
 import { AsyncNpcPoseCache } from "../../npc/AsyncNpcPoseCache";
@@ -98,6 +100,10 @@ interface MapActorState {
  *   PlayerAnimController, for every renderer.
  */
 export class WebGPUActors {
+    readonly stats = { npcCandidates: 0, npcBoundsTests: 0, npcsCulled: 0,
+        playerCandidates: 0, playerBoundsTests: 0, playersCulled: 0 };
+    private shadow: Frustum | null | undefined = null;
+    private readonly npcBounds = new Map<string, ActorBounds>();
     private readonly writer = new ActorDataWriter();
     private readonly mapStates = new Map<number, MapActorState>();
     private readonly frameMaps: MapActorState[] = [];
@@ -391,9 +397,11 @@ export class WebGPUActors {
         return map;
     }
 
-    update(timeSec: number): void {
+    update(timeSec: number, shadow?: Frustum | null): void {
         const world = this.world;
         if (!world) return;
+        this.shadow = shadow;
+        for (const key of Object.keys(this.stats) as (keyof typeof this.stats)[]) this.stats[key] = 0;
         const deltaSec =
             this.lastUpdateTimeSec >= 0 ? Math.min(1, Math.max(0, timeSec - this.lastUpdateTimeSec)) : 0;
         this.lastUpdateTimeSec = timeSec;
@@ -668,6 +676,7 @@ export class WebGPUActors {
         this.geometry = undefined;
         this.actorData?.destroy();
         this.actorData = undefined;
+        this.npcBounds.clear();
         this.npcPose?.clear();
         this.npcPose = undefined;
         this.dynamicNpcLoader?.clear();
@@ -734,6 +743,7 @@ export class WebGPUActors {
         const client = this.renderer.osrsClient;
         const loader = this.dynamicNpcLoader;
         if (!loader) return;
+        this.stats.npcCandidates++;
         const dataIndex = packNpcActorData(client, this.writer, map, ecsId);
         if (dataIndex < 0) return;
         state.npcByEcsId.set(ecsId, dataIndex);
@@ -752,6 +762,15 @@ export class WebGPUActors {
             } else {
                 const key = this.asyncNpcPoses?.getKey(request, ecsId);
                 if (key) {
+                    const bounds = this.npcBounds.get(key);
+                    if (bounds) {
+                        this.stats.npcBoundsTests++;
+                        if (!this.actorVisible(bounds, map, dataIndex, -modelYOffset,
+                            (client.npcEcs.getWorldViewId(ecsId) | 0) >= 0)) {
+                            this.stats.npcsCulled++;
+                            return;
+                        }
+                    }
                     opaque = this.geometry?.get(`${key}|o`);
                     alpha = this.geometry?.get(`${key}|a`);
                 }
@@ -765,6 +784,11 @@ export class WebGPUActors {
             if (!request) return;
             const geometry = this.asyncNpcPoses?.get(request, ecsId);
             if (geometry) {
+                if (geometry.bounds) {
+                    this.npcBounds.delete(geometry.key);
+                    this.npcBounds.set(geometry.key, geometry.bounds);
+                    if (this.npcBounds.size > ACTOR_GEOMETRY_CACHE_ENTRIES) this.npcBounds.delete(this.npcBounds.keys().next().value!);
+                }
                 opaque = this.geometry?.getOrCreate(`${geometry.key}|o`, geometry.opaqueVertices, geometry.opaqueIndices);
                 alpha = this.geometry?.getOrCreate(`${geometry.key}|a`, geometry.alphaVertices, geometry.alphaIndices);
             } else {
@@ -835,14 +859,23 @@ export class WebGPUActors {
         let indexInMap = 0;
         for (const pid of pids) {
             if (!this.renderer.interactionHost.shouldRenderPlayerIndex(pid)) continue;
+            this.stats.playerCandidates++;
             const dataIndex = packPlayerActorData(client, this.writer, map, pid, indexInMap++);
             if (dataIndex < 0) continue;
             state.playerByPid.set(pid, dataIndex);
 
-            let posed = this.playerPose?.resolve(pid);
+            const visible = (geometry: PosedActorGeometry) => {
+                if (!geometry.bounds) return true;
+                this.stats.playerBoundsTests++;
+                const keep = this.actorVisible(geometry.bounds, map, dataIndex, modelYOffset,
+                    (client.playerEcs.getWorldViewId(pid) | 0) >= 0);
+                if (!keep) this.stats.playersCulled++;
+                return keep;
+            };
+            let posed = this.playerPose?.resolve(pid, true, visible);
             let poseRow = posed?.matrices ? this.poseRowFor(posed.poseKey!, posed.matrices) : -1;
             if (posed?.matrices && poseRow < 0) {
-                posed = this.playerPose?.resolve(pid, false);
+                posed = this.playerPose?.resolve(pid, false, visible);
                 poseRow = -1;
             }
             if (!posed) continue;
@@ -1139,6 +1172,28 @@ export class WebGPUActors {
     }
 
     // ── Culling ────────────────────────────────────────────────────────────────────────────────
+
+    private actorVisible(bounds: ActorBounds, map: WebGPUMapSquare, dataIndex: number,
+        modelYOffset: number, worldEntity: boolean): boolean {
+        // Deck transforms are applied in view space; their local tiles are not world positions.
+        if (worldEntity || !map.heightMapData || !this.renderer.osrsClient.camera) return true;
+        const offset = dataIndex * 8;
+        const localX = (this.writer.data[offset] << 16) >> 16;
+        const localZ = (this.writer.data[offset + 1] << 16) >> 16;
+        const plane = this.writer.data[offset + 2] & 3;
+        const size = map.heightMapSize;
+        const tx = (localX >> 7) + map.borderSize, tz = (localZ >> 7) + map.borderSize;
+        if (tx < 0 || tz < 0 || tx + 1 >= size || tz + 1 >= size) return true;
+        const start = plane * size * size + tz * size + tx;
+        const data = map.heightMapData;
+        const heights = [data[start], data[start + 1], data[start + size], data[start + size + 1]];
+        if (!heights.every(Number.isFinite)) return true;
+        const groundMin = (-Math.max(...heights) * 8 + modelYOffset) / 128;
+        const groundMax = (-Math.min(...heights) * 8 + modelYOffset) / 128;
+        return actorBoundsVisible(bounds, map.getRenderBaseWorldX() + localX / 128,
+            map.getRenderBaseWorldY() + localZ / 128, groundMin, groundMax,
+            this.renderer.osrsClient.camera.frustum, this.shadow);
+    }
 
     private getCullTile(): { x: number; y: number } {
         return {

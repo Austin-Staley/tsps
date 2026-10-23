@@ -237,6 +237,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
     private readonly worldShadowTexture: GPUTexture;
     private readonly worldShadowView: GPUTextureView;
     private readonly shadowFrustum = new Frustum();
+    private shadowPrepared = false;
+    private refreshWorldShadow = false;
     private lastShadow?: { time: number; x: number; z: number; plane: number;
         environment: unknown; distance: number; roof: number };
     /** Binding 9 is a 1x1 placeholder while drawing the shadow map into its own texture. */
@@ -335,12 +337,21 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         return this.isEnabled();
     }
 
+    prepareActorVisibility(renderer: WebGPURenderer): Frustum | undefined {
+        if (this.destroyed) return undefined;
+        this.refreshWorldShadow = this.update(renderer);
+        this.shadowPrepared = true;
+        return this.shadowFrustum;
+    }
+
     /**
      * Cache world depth at 15 Hz, then replace actor depth every frame, as WebGL does.
      */
     beforeScene(renderer: WebGPURenderer, encoder: GPUCommandEncoder): void {
         if (this.destroyed) return;
-        if (this.update(renderer)) {
+        const refreshShadow = this.shadowPrepared ? this.refreshWorldShadow : this.update(renderer);
+        this.shadowPrepared = false;
+        if (refreshShadow) {
             const worldPass = encoder.beginRenderPass({
                 colorAttachments: [],
                 depthStencilAttachment: { view: this.worldShadowView,

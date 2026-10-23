@@ -756,14 +756,17 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         // Same point the WebGL frame loop flushes queued client packets (render.ts login
         // early-out and in-game path).
         flushPackets();
-        this.actors?.update(timeSec);
+        this.frameRoofPlaneLimit = drawScene ? this.interactionHost.getRoofPlaneLimit() : 3;
+        const actorShadow = world.extensionActive && extension?.shaders.depth
+            ? (drawScene ? extension.prepareActorVisibility?.(this) : undefined)
+            : null;
+        this.actors?.update(timeSec, actorShadow);
         this.overlays?.update(time, deltaTime);
         this.ui?.update(time, deltaTime);
 
         const encoder = this.device.createCommandEncoder();
         const visible = drawScene ? this.mapManager.visibleMaps : [];
-        const roofPlaneLimit = drawScene ? this.interactionHost.getRoofPlaneLimit() : 3;
-        this.frameRoofPlaneLimit = roofPlaneLimit;
+        const roofPlaneLimit = this.frameRoofPlaneLimit;
         const camera = this.osrsClient.camera;
         this.frameScenery = {
             tileX: this.playerPosUni[0], tileZ: this.playerPosUni[1],

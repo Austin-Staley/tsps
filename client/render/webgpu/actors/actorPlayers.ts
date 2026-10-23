@@ -1,3 +1,4 @@
+import { packedActorBounds, type ActorBounds } from "../../ActorVisibility";
 import { playerInterpolation } from "../../player/PlayerInterpolation";
 import { applyInterpolatedFrames, interpolationFrame, interpolationKey, type ActorInterpolation } from "../../../rs/model/seq/FrameInterpolation";
 import type { OsrsClient } from "../../../game/OsrsClient";
@@ -35,6 +36,7 @@ export interface PosedActorGeometry {
     matrices?: Float32Array;
     /** The pose's key, shared by every player in the same pose this frame. */
     poseKey?: string;
+    bounds?: ActorBounds;
 }
 
 /** One unshared face corner per label: shared by player and NPC rest meshes. */
@@ -116,7 +118,7 @@ export class PlayerPoseGeometry {
      * Returns the posed geometry for one player this frame, or undefined while it cannot pose.
      * `allowGpu` false forces a CPU-posed mesh (when the frame's pose rows are full).
      */
-    resolve(pid: number, allowGpu: boolean = true): PosedActorGeometry | undefined {
+    resolve(pid: number, allowGpu: boolean = true, visible?: (geometry: PosedActorGeometry) => boolean): PosedActorGeometry | undefined {
         const pe = this.client.playerEcs;
         const actionSeqId = pe.getAnimSeqId(pid) | 0;
         const movementSeqId = pe.getAnimMovementSeqId(pid) | 0;
@@ -173,6 +175,10 @@ export class PlayerPoseGeometry {
         const cycleKey = interpolationKey(interpolation);
         const appKey = app.getCacheKey?.() ?? this.appearanceFallbackKey(app);
         const key = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
+
+        const cpuPose = this.geomCache.get(key);
+        // Only final CPU poses have bounds; rest meshes do not bound a GPU label animation.
+        if (cpuPose && (!allowGpu || this.poseCache.get(key) === null) && visible && !visible(cpuPose)) return undefined;
 
         if (allowGpu) {
             const matrices = this.poseFor(key, base, { seqId, frameIdx, interpolation, overlaySeqId, overlayFrameIdx });
@@ -412,6 +418,7 @@ export class PlayerPoseGeometry {
                 opaqueIndices,
                 alphaVertices,
                 alphaIndices,
+                bounds: packedActorBounds(opaqueVertices, alphaVertices),
             }, animated];
         } catch {
             return undefined;
