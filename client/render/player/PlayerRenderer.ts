@@ -266,7 +266,6 @@ export class PlayerRenderer {
     private indexBuffer?: any;
     private lastLoggedSeqId: number = -1;
     private lastLoggedFrameIndex: number = -1;
-    private playerSoundState: Map<string, { seqId: number; frameIdx: number }> = new Map();
     private skeletalDurationCache: Map<number, number> = new Map();
 
     // Always-on GFX (toolkit request)
@@ -2255,32 +2254,6 @@ export class PlayerRenderer {
                 }
             }
 
-            // Frame sounds: mirror server-driven movement/action unless a local debug override is active.
-            if (!forcedSeq && !unanimatedIdle && (movementSeqId | 0) >= 0) {
-                this.emitPlayerFrameSound(
-                    pid | 0,
-                    movementSeqId | 0,
-                    movementFrameIdx | 0,
-                    px | 0,
-                    py | 0,
-                    plane | 0,
-                    this.isControlledPid(pid),
-                    "movement",
-                );
-            }
-            if (useActionSequence) {
-                this.emitPlayerFrameSound(
-                    pid | 0,
-                    actionSeqId | 0,
-                    actionFrameIdx | 0,
-                    px | 0,
-                    py | 0,
-                    plane | 0,
-                    this.isControlledPid(pid),
-                    "action",
-                );
-            }
-
             // Debug logging moved to tickPass to avoid duplicate logs during rendering
 
             // Appearance is not required for logging, but is required for batching/rendering
@@ -2818,34 +2791,6 @@ export class PlayerRenderer {
             }
             if (r.cullBackFace) r.app.enable(PicoGL.CULL_FACE);
         }
-    }
-
-    private emitPlayerFrameSound(
-        pid: number,
-        seqId: number,
-        frameIdx: number,
-        worldX: number,
-        worldY: number,
-        plane: number,
-        isLocalPlayer: boolean,
-        channel: "movement" | "action",
-    ): void {
-        const key = `${pid | 0}|${channel}`;
-        const last = this.playerSoundState.get(key);
-        if (last && last.seqId === seqId && last.frameIdx === frameIdx) {
-            return;
-        }
-        this.playerSoundState.set(key, { seqId, frameIdx });
-        try {
-            const mv = this.renderer.osrsClient;
-            const seqType = mv.seqTypeLoader.load(seqId);
-            // Check for both modern frameSounds and legacy soundEffects formats
-            if (!seqType || (!seqType.frameSounds?.size && !seqType.soundEffects?.length)) return;
-            mv.handleSeqFrameSounds(seqType, frameIdx, {
-                position: { x: worldX, y: worldY, z: plane * 128 },
-                isLocalPlayer,
-            });
-        } catch {}
     }
 
     private isControlledPid(pid: number): boolean {

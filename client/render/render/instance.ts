@@ -1,3 +1,4 @@
+import { LocAnimated } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -299,6 +300,13 @@ export function replaceSceneWithInstance(host: WebGLOsrsRendererHost, mapData: S
 
         host.pendingInstanceScene = null;
         host.osrsClient.clearMinimapImageUrls();
+        // The scene's loc animations go on in the new one (LocAnimated.carryOver), as a square
+        // rebuilt in place keeps them: a held animation (a collapsed floor) would replay otherwise.
+        host.carriedLocAnimations = [];
+        for (const square of host.mapManager.mapSquares.values()) {
+            const animated = (square as any).locsAnimated as LocAnimated[] | undefined;
+            if (animated) host.carriedLocAnimations.push(...animated);
+        }
         host.clearMaps();
         host.mapManager.loadingMapIds.add(getMapSquareId(mapData.mapX, mapData.mapY));
         // Its NPCs belong to this one square now, wherever in the scene they stand.
