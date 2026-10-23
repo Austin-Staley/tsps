@@ -1,5 +1,10 @@
 # Beginner Treasure Trails
 
+Canonical reward exporter: [osrsreboxed-db PR #10](https://github.com/RSPSApp/osrsreboxed-db/pull/10),
+source commit `1d92ff0c96790df3813eaed5aee25cce62ee0986`. Regenerated reward import SHA256:
+`4bf2d9f7d11432258623ee4c2080a55dd9753aa6e674d21cb4520298e2e2903b`.
+Input provenance hashes normalise CRLF to LF; output is canonical LF.
+
 Beginner clues use cache 241's `cluehelper_*` database catalogue. Nothing is fetched
 from the internet when the game starts or while playing. Higher clue tiers are unchanged.
 
