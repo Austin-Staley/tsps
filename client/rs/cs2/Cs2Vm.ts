@@ -945,7 +945,7 @@ export class Cs2Vm {
             },
             getViewportZoomRange: vm.context.getViewportZoomRange,
             setViewportZoomRange: vm.context.setViewportZoomRange,
-            getViewportFovValues: vm.context.getViewportFovValues,
+            getViewportFovValues: () => vm.context.getViewportFovValues(),
             setViewportFovValues: vm.context.setViewportFovValues,
             setViewportClampFov: vm.context.setViewportClampFov,
 

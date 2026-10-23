@@ -5,12 +5,20 @@ import { processWidgetScrollWheelInput } from "../game/widgets/input/widgetScrol
 import { processWidgetMinimapWheelInput } from "../game/widgets/input/widgetMinimapWheelInput";
 import { processWidgetMenuWheelInput } from "../game/widgets/input/widgetMenuWheelInput";
 import { SCROLL_WHEEL_ZOOM_INCREMENT_EVENT } from "../rs/cs2/zoomCallbacks";
+import { Cs2Vm } from "../rs/cs2/Cs2Vm";
+
+const fovVm = new Cs2Vm({ getViewportFovValues: () => ({ low: 250, high: 314 }) } as any);
+const cachedContext = (fovVm as any).createHandlerContext();
+assert.deepEqual(cachedContext.getViewportFovValues(), { low: 250, high: 314 });
+fovVm.context.getViewportFovValues = () => ({ low: 256, high: 320 });
+assert.deepEqual(cachedContext.getViewportFovValues(), { low: 256, high: 320 },
+    "the cached opcode context must see the scoped precise pinch readback");
 
 function fixture(increment = 25) {
     const input: any = new InputManager();
     input.element = { width: 800, height: 400,
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }) };
-    let distance = 100, zoom = 0, uiCalls = 0, minimapCalls = 0, blocked = false;
+    let distance = 100, zoom = 0, uiCalls = 0, minimapCalls = 0, blocked = false, readbackLoss = 0;
     const event = () => ({ touches: [{ clientX: 100, clientY: 100 },
         { clientX: 100 + distance, clientY: 100 }], preventDefault() {} });
     const camera = { uid: 1, type: 0, eventHandlers: { onScroll: { scriptId: 39 } } };
@@ -22,16 +30,18 @@ function fixture(increment = 25) {
     };
     const vm: any = {
         intStack: [25], intStackSize: 1, scriptCallbackListeners: new Set([plugin]),
+        context: { getViewportFovValues: () => ({ low: 256 + zoom - readbackLoss, high: 320 + zoom - readbackLoss }) },
         invokeEventHandler(w: any, _name: string, context: any) {
             if (w !== camera) { uiCalls++; return; }
             if (blocked) return; // Control-to-zoom returns before its increment callback.
             vm.intStack[0] = 25;
             for (const callback of vm.scriptCallbackListeners) callback({}, SCROLL_WHEEL_ZOOM_INCREMENT_EVENT);
-            zoom += context.mouseY * vm.intStack[0];
+            zoom = vm.context.getViewportFovValues().low - 256 + context.mouseY * vm.intStack[0];
         },
     };
     const deps: any = { getCs2Vm: () => vm, getMinimapZoomEnabled: () => true,
         getMenuOpen: () => false, getRenderer: () => ({}),
+        getVarManager: () => ({ getVarcInt: (id: number) => (id === 73 ? 256 : 320) + zoom }),
         applyMinimapWheelZoom: () => minimapCalls++ };
     input.onTouchStart(event());
     return {
@@ -40,6 +50,7 @@ function fixture(increment = 25) {
         scroll() { processWidgetScrollWheelInput(deps, frame, manager, interaction); },
         get zoom() { return zoom; }, get uiCalls() { return uiCalls; }, get minimapCalls() { return minimapCalls; },
         block(value: boolean) { blocked = value; },
+        setReadbackLoss(value: number) { readbackLoss = value; },
     };
 }
 
@@ -65,6 +76,12 @@ assert.equal(travel(Array(80).fill(0.5)), -50, "subpixel travel carries fraction
 assert.equal(travel([1, -0.5, -0.5]), 0, "reversing direction cancels fractional travel");
 assert.equal(travel(Array(20).fill(1), 50), -50, "the configured Camera plugin step still scales the gesture");
 assert.equal(travel(Array(20).fill(1), -25), 25, "a callback that inverts zoom keeps its direction");
+const rounded = fixture();
+rounded.setReadbackLoss(2);
+const nativeFovGetter = rounded.vm.context.getViewportFovValues;
+for (let i = 0; i < 40; i++) { rounded.move(1); rounded.scroll(); rounded.input.onFrameEnd(); }
+assert.equal(rounded.zoom, -50, "native FOV round-trip rounding must not stall or reverse tiny pinch steps");
+assert.equal(rounded.vm.context.getViewportFovValues, nativeFovGetter, "native FOV reads remain unchanged outside pinch dispatch");
 
 const ordinary = fixture();
 ordinary.input.wheelDeltaY = 100;
@@ -113,9 +130,11 @@ controlled.block(true); controlled.move(5); controlled.scroll();
 assert.equal(controlled.zoom, 0, "Control-to-zoom can still suppress the native script");
 assert.equal(controlled.vm.scriptCallbackListeners.size, 1);
 const throwing = fixture();
+const throwingFovGetter = throwing.vm.context.getViewportFovValues;
 throwing.vm.invokeEventHandler = () => { throw Error("script failure"); };
 throwing.move(1);
 assert.throws(() => throwing.scroll(), /script failure/);
 assert.equal(throwing.vm.scriptCallbackListeners.size, 1, "script failures must remove the temporary scaler");
+assert.equal(throwing.vm.context.getViewportFovValues, throwingFovGetter, "script failures also restore the native FOV getter");
 
 console.log("Continuous camera pinch, native/plugin steps and widget routing passed");

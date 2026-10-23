@@ -4,6 +4,7 @@ import type { WidgetInputControllerDeps, WidgetInputFrame } from "./widgetInputT
 import type { WidgetInteractionController } from "../WidgetInteractionController";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
 import { SCROLL_WHEEL_ZOOM_INCREMENT_EVENT, SCROLL_WHEEL_ZOOM_SCRIPT } from "../../../rs/cs2/zoomCallbacks";
+import { CAMERA_ZOOM_BIG, CAMERA_ZOOM_SMALL } from "../../../runelite/api/gameval/VarClientID";
 
 export function processWidgetScrollWheelInput(
     deps: WidgetInputControllerDeps,
@@ -54,6 +55,7 @@ export function processWidgetScrollWheelInput(
             };
 
             const vm = deps.getCs2Vm();
+            const getFov = vm.context.getViewportFovValues;
             // Scale after plugin callbacks so their zoom step and Control-to-zoom still apply.
             const scalePinch = (_script: unknown, name: string) => {
                 if (name === SCROLL_WHEEL_ZOOM_INCREMENT_EVENT) {
@@ -61,7 +63,15 @@ export function processWidgetScrollWheelInput(
                     vm.intStack[top] = input.consumePinchZoomIncrement(vm.intStack[top]);
                 }
             };
-            if (pinchZoom) vm.scriptCallbackListeners.add(scalePinch);
+            if (pinchZoom) {
+                vm.scriptCallbackListeners.add(scalePinch);
+                // Native FOV readback rounds; accumulate tiny steps from the script's exact targets.
+                vm.context.getViewportFovValues = () => {
+                    const low = deps.getVarManager().getVarcInt(CAMERA_ZOOM_SMALL);
+                    const high = deps.getVarManager().getVarcInt(CAMERA_ZOOM_BIG);
+                    return low >= 0 && high >= 0 ? { low, high } : getFov();
+                };
+            }
             try {
                 if (w.eventHandlers?.onScroll) {
                     vm.invokeEventHandler(w, "onScroll", scrollCtx);
@@ -69,7 +79,10 @@ export function processWidgetScrollWheelInput(
                     deps.executeScriptListener(w, w.onScroll, scrollCtx);
                 }
             } finally {
-                if (pinchZoom) vm.scriptCallbackListeners.delete(scalePinch);
+                if (pinchZoom) {
+                    vm.scriptCallbackListeners.delete(scalePinch);
+                    vm.context.getViewportFovValues = getFov;
+                }
             }
 
             consumedWheel = true;
