@@ -341,10 +341,8 @@ function putOre(player, onlyItemId = null) {
     return;
   }
   const inventory = player.getInventory();
-  const stored = { player, itemId: core.ItemIdentifiers.COAL, amount: 0 };
-  if (onlyItemId === null || onlyItemId === stored.itemId) pluginApi.emitCustomEvent("storage:amount", stored);
   const ores = ORES.filter((ore) => (onlyItemId === null || ore.item === onlyItemId) &&
-    (inventory.getAmount(ore.item) > 0 || ore.item === stored.itemId && stored.amount > 0));
+    inventory.getAmount(ore.item) > 0);
   if (!ores.length) {
     statement(player, "You don't have any suitable ores to place onto the conveyor belt.");
     return;
@@ -356,23 +354,15 @@ function putOre(player, onlyItemId = null) {
       player.sendMessage(`You need to have level ${ore.level} smithing to put ${itemName(ore.item).toLowerCase()} on the conveyor belt.`);
       continue;
     }
-    const carried = inventory.getAmount(ore.item);
-    const held = carried + (ore.item === stored.itemId ? stored.amount : 0);
+    const held = inventory.getAmount(ore.item);
     const room = ore.primary ? PRIMARY_LIMIT - primaryTotal(state) : SECONDARY_LIMIT - (state.ores[ore.item] ?? 0);
     // Leave space for the two copper ores needed by each nickel ore.
     const limit = ore.item === core.ItemIdentifiers.NICKEL_ORE
       ? Math.min(room, Math.max(0, Math.floor((PRIMARY_LIMIT - (state.ores[ore.item] ?? 0) * 3) / 3))) : room;
-    let count = Math.min(held, limit);
+    const count = Math.min(held, limit);
     if (count < held) overflow = true;
     if (count <= 0) continue;
-    const fromInventory = Math.min(carried, count);
-    if (count > fromInventory) {
-      const request = { player, itemId: ore.item, amount: count - fromInventory, taken: 0 };
-      pluginApi.emitCustomEvent("storage:take", request);
-      count = fromInventory + request.taken;
-    }
-    if (fromInventory > 0) inventory.deleteNumber(ore.item, fromInventory);
-    if (count <= 0) continue;
+    inventory.deleteNumber(ore.item, count);
     state.ores[ore.item] = (state.ores[ore.item] ?? 0) + count;
     const npc = pluginApi.spawnNpc({ id: ore.npc, x: BELT_START[0], y: BELT_START[1], z: 0, wanderRadius: 0 });
     npc?.setScriptedMovement?.(true);

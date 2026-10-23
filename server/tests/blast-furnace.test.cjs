@@ -16,7 +16,6 @@ const { Location } = require("../dist/game/model/Location");
 let giantDwarfStarted = false;
 let dwarfOperated = true;
 let playerIndex = 0;
-const storedCoal = new Map();
 const prompts = [];
 const { init, tick, stateOf, putOre, takeBars, take, foremanCondition, foremanPaid, coolWithWater, stairs } = BlastFurnace._test;
 before(async () => {
@@ -32,11 +31,6 @@ before(async () => {
   removeNpc: (npc) => { npc.removed = true; },
   emitCustomEvent(name, request) {
     if (name === "quest:is-started") request.started = giantDwarfStarted;
-    if (name === "storage:amount") request.amount += storedCoal.get(request.player) ?? 0;
-    if (name === "storage:take") {
-      request.taken = Math.min(request.amount, storedCoal.get(request.player) ?? 0);
-      storedCoal.set(request.player, storedCoal.get(request.player) - request.taken);
-    }
   },
   getTaskManager: () => ({ submit: (task) => task.setRunning(true) }),
   sendMultiChatboxPrompt: (player, title, ...choices) => prompts.push({ player, title, choices }),
@@ -72,6 +66,8 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
       getFreeSlots: () => 28 - [...inventory.values()].reduce((sum, n) => sum + n, 0),
       deleteNumber: (id, n) => inventory.set(id, inventory.get(id) - n),
       addItem: (item) => inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()),
+      add: (item) => inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()),
+      refreshItems() {},
     }),
     getEquipment: () => ({ getItems: () => equipment }),
     getSkillManager: () => ({ getCurrentLevel: () => smithing, getMaxLevel: () => smithing, addExperiences: (_, xp) => { p.xp += xp; } }),
@@ -100,7 +96,6 @@ function ticks(count) {
 beforeEach(() => {
   dwarfOperated = true;
   Machinery._test.reset();
-  storedCoal.clear();
   ticks(10); // let anything a previous test left on the belt or pouring finish
   spawned.length = 0;
 });
@@ -114,16 +109,22 @@ function manualTicks(count) {
 
 const station = (player) => ({ player, object: { getLocation: () => player.getLocation() } });
 
-test("the belt loads a carried coal bag after inventory coal without exceeding the pot limit", () => {
+test("coal bags must be emptied before belt loading; excess inventory coal remains carried", () => {
   const p = player({ items: { [ItemIds.COAL]: 10, [ItemIds.MITHRIL_ORE]: 1 } });
   stateOf(p).coffer = 1000;
   stateOf(p).ores[ItemIds.COAL] = 240;
-  storedCoal.set(p, 27);
+  p.setAttribute("storage-items:coal-bag", [[ItemIds.COAL, 27]]);
   putOre(p);
-  assert.equal(stateOf(p).ores[ItemIds.COAL], 254);
-  assert.equal(storedCoal.get(p), 23);
+  assert.equal(stateOf(p).ores[ItemIds.COAL], 250);
+  assert.deepEqual(p.getAttribute("storage-items:coal-bag"), [[ItemIds.COAL, 27]], "Put-ore-on does not auto-empty a bag");
   assert.equal(p.inventory.get(ItemIds.COAL), 0);
   assert.equal(stateOf(p).ores[ItemIds.MITHRIL_ORE], 1);
+  const Storage = require("../plugins/items/storage/Common.StorageItems");
+  Storage.init({ core: PluginManager.getCoreApi() });
+  Storage.emptyToInventory(p, { key: "coal-bag" });
+  putOre(p);
+  assert.equal(stateOf(p).ores[ItemIds.COAL], 254);
+  assert.equal(p.inventory.get(ItemIds.COAL), 23, "unloaded coal remains when the furnace is full");
 });
 
 test("manual worlds require pedals and heat, not a coffer deposit", (t) => {

@@ -53,8 +53,10 @@ base-60 exemption and under-60 permit. The furnace Area blocks PvP, including on
   pumping is capped at the documented 100 minutes. Dwarves are absent from manual worlds;
   Stumpy and Pumpy use their cache machinery idle sequences on dwarf worlds.
 
-The conveyor consumes inventory coal followed by carried coal-bag coal through the shared
-`storage:amount` / `storage:take` events, retaining anything that exceeds pot capacity.
+Coal bags keep the OSRS two-click workflow: empty the bag through the existing StorageItems
+action, then put its inventory coal on the belt. Put-ore-on never automatically empties the
+bag. Coal exceeding the pot's capacity remains in the inventory. This path is regression-tested
+against the real shared storage transfer; no new container store or automatic unloading is added.
 Lead and cupronickel use shared Smithing recipes (two lead ore; two copper and one nickel).
 Nickel loading reserves room for copper. Checking the pot offers contents or confirmed
 destruction of owned ore, including pending conveyor NPCs, without deleting another player's
