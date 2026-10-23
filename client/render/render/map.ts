@@ -289,6 +289,7 @@ export function loadMap(host: WebGLOsrsRendererHost,
             (isLocUpdate || isLocGeometryUpdate || isDoorOnlyUpdate) &&
             existing instanceof WebGLMapSquare
         ) {
+            WebGLMapSquare.cancelPreparedLoad(mapData);
             if (isDoorOnlyUpdate && mapData.doorOnly) {
                 existing.refreshDoorGeometry(
                     host.app,

@@ -4,9 +4,12 @@ import { test } from "node:test";
 import { MapGeometryUpload, mapGeometrySources } from "../render/MapGeometryUpload";
 import { WebGPUMapSquare } from "../render/webgpu/WebGPUMapSquare";
 import { WebGPUInstances } from "../render/webgpu/instances";
+import { getMapSquareId } from "../rs/map/MapFileIndex";
 
 (globalThis as any).self = globalThis;
 const { WebGLMapSquare } = require("../render/WebGLMapSquare");
+const { takePreparedQueuedMap } = require("../render/render/streaming");
+const { loadMap } = require("../render/render/map");
 
 const MiB = 1024 * 1024;
 
@@ -153,4 +156,73 @@ test("an instance remains busy and retains its built scene until its upload fini
     assert.equal(instances.hasPendingWork(), true);
     assert.equal(instances.takeBuiltScene(() => true), scene);
     assert.equal(instances.hasPendingWork(), false);
+});
+
+test("queued WebGL maps reject stale settings before copying and release only their staged buffers", () => {
+    const buffers: any[] = [];
+    const create = () => {
+        const buffer = { released: false, data() {}, delete() { this.released = true; } };
+        buffers.push(buffer);
+        return buffer;
+    };
+    const app = { createInterleavedBuffer: create, createIndexBuffer: create };
+    const d = data(), untouched = data();
+    let valid = false;
+    const queue: any[] = [d];
+    const host = { app, pendingLocUpdates: new Set(), isValidMapData: () => valid,
+        mapsToLoad: { peekFront: () => queue[0], shift: () => queue.shift() } } as any;
+    try {
+        assert.equal(takePreparedQueuedMap(host), d, "invalid data reaches the caller's batch cleanup and rejection");
+        assert.equal(buffers.length, 0, "an already-invalid payload must not allocate or copy geometry");
+        assert.equal(queue.length, 0);
+
+        valid = true;
+        queue.push(d);
+        assert.equal(takePreparedQueuedMap(host), undefined);
+        assert.equal(queue[0], d, "unfinished geometry stays queued");
+        const staged = buffers.slice();
+        assert.ok(staged.length > 0);
+        assert.equal(WebGLMapSquare.prepareLoad(app, untouched), false);
+        const ownedElsewhere = buffers.slice(staged.length);
+
+        valid = false; // A settings/cache change while this payload was copying.
+        assert.equal(takePreparedQueuedMap(host), d);
+        assert.equal(queue.length, 0);
+        assert.ok(staged.every((buffer) => buffer.released), "rejection must release every staged resource");
+        assert.ok(ownedElsewhere.every((buffer) => !buffer.released), "another payload still owns its buffers");
+    } finally {
+        WebGLMapSquare.cancelPreparedLoads(app);
+    }
+});
+
+test("an existing-map refresh releases staging that began before its loc-update flag", () => {
+    const buffers: any[] = [];
+    const create = () => {
+        const buffer = { released: false, data() {}, delete() { this.released = true; } };
+        buffers.push(buffer);
+        return buffer;
+    };
+    const app = { createInterleavedBuffer: create, createIndexBuffer: create };
+    const d = data(), untouched = data(), id = getMapSquareId(d.mapX, d.mapY);
+    assert.equal(WebGLMapSquare.prepareLoad(app, d), false);
+    const staged = buffers.slice();
+    assert.equal(WebGLMapSquare.prepareLoad(app, untouched), false);
+    const ownedElsewhere = buffers.slice(staged.length);
+    let refreshes = 0;
+    const existing = Object.create(WebGLMapSquare.prototype);
+    existing.refreshSceneGeometry = () => { refreshes++; };
+    const host = { app, osrsClient: {}, pendingLocUpdates: new Set([id]),
+        pendingLocGeometryUpdates: new Set(), pendingDoorLocUpdates: new Set(),
+        mapManager: { getMap: () => existing, addMap() {} },
+        registerMinimapData() {}, updateTextureArray() {},
+        rebuildGroundItemsForMap: () => false, groundItemStacks: new Map(),
+    } as any;
+    try {
+        loadMap(host, {}, {}, {}, {}, {}, {}, {}, d);
+        assert.equal(refreshes, 1, "the new loc-update flag still refreshes the resident map");
+        assert.ok(staged.every((buffer) => buffer.released), "refresh allocations replace all staged buffers");
+        assert.ok(ownedElsewhere.every((buffer) => !buffer.released), "another payload keeps its resources");
+    } finally {
+        WebGLMapSquare.cancelPreparedLoads(app);
+    }
 });

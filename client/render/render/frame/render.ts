@@ -2,6 +2,7 @@ import { hintArrow } from "../../../game/HintArrow";
 import { updateSkyColor } from "../environment";
 import { syncCameraViewportUnitScale } from "../quality";
 import { resolveSceneFramebuffer } from "../init/framebuffers";
+import { takePreparedQueuedMap } from "../streaming";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -1615,11 +1616,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // Load new map squares
         profiler.startPhase("mapApply");
         mapApplyCount += host.applyReadyStreamGenerationBatch();
-        const nextMap = host.mapsToLoad.peekFront();
-        const canPrepare = nextMap && !nextMap.doorOnly && !nextMap.locOnly &&
-            !host.pendingLocUpdates.has(getMapSquareId(nextMap.mapX, nextMap.mapY));
-        const mapData = !nextMap || !canPrepare || WebGLMapSquare.prepareLoad(host.app, nextMap)
-            ? host.mapsToLoad.shift() : undefined;
+        const mapData = takePreparedQueuedMap(host);
         if (mapData) {
             const firstMapId = getMapSquareId(mapData.mapX, mapData.mapY);
             const firstBatchId = host.queuedLocReloadBatchByMap.get(firstMapId);
@@ -1640,6 +1637,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
 
             for (const pendingMap of toApply) {
                 if (!host.isValidMapData(pendingMap)) {
+                    WebGLMapSquare.cancelPreparedLoad(pendingMap);
                     console.warn(
                         `[WebGLOsrsRenderer] mapsToLoad rejected: mapX=${pendingMap.mapX} mapY=${pendingMap.mapY} cacheName=${pendingMap.cacheName} loadNpcs=${pendingMap.loadNpcs} smooth=${pendingMap.smoothTerrain}`,
                     );

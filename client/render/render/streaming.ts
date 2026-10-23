@@ -208,6 +208,20 @@ export function cancelPendingMapUploads(host: WebGLOsrsRendererHost): void {
     }
 }
 
+export function takePreparedQueuedMap(host: WebGLOsrsRendererHost): SdMapData | undefined {
+    const nextMap = host.mapsToLoad.peekFront();
+    if (!nextMap) return undefined;
+    if (!host.isValidMapData(nextMap)) {
+        WebGLMapSquare.cancelPreparedLoad(nextMap);
+        // The caller still clears loc-batch bookkeeping and rejects this payload.
+        return host.mapsToLoad.shift();
+    }
+    const canPrepare = !nextMap.doorOnly && !nextMap.locOnly &&
+        !host.pendingLocUpdates.has(getMapSquareId(nextMap.mapX, nextMap.mapY));
+    return !canPrepare || WebGLMapSquare.prepareLoad(host.app, nextMap)
+        ? host.mapsToLoad.shift() : undefined;
+}
+
 export function hasPendingMapStreamingWork(host: WebGLOsrsRendererHost, ): boolean {
 
         if (host.mapsToLoad.length > 0) return true;
