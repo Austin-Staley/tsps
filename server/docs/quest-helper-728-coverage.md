@@ -36,9 +36,9 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **19/106 active scoped main routes (17.92%)**. The count
-is 19/128 against the original inventory; the increase in percentage comes only
-from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Tree Gnome Village and Hazeel Cult routes. Supplemental issue-809 evidence
+of accepted route counts: **20/106 active scoped main routes (18.87%)**. The count
+is 20/128 against the original inventory; the increase in percentage comes only
+from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Tree Gnome Village, Hazeel Cult and Elemental Workshop I routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The draft PR is updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
@@ -272,7 +272,7 @@ deferred quest. No deferred quest is counted as complete.
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
 | Death on the Isle | `DeathOnTheIsle` | Captured item IDs, accusation bit and evidence recovery checkpoint reviewed; full parity review pending | 8 focused dispatch tests pass | Pending |
 | Death Plateau | `DeathPlateau` | Harold’s IOU recovery, ordered condition checks and missing-item handouts use the imported transcript; shared runner now continues explicitly true linear sibling conditions | 47 shared/runtime and quest regressions pass | Accepted linked natural main route, rewards/repeat/relog/offline; certificate full-bag retry exercised ([ledger](quest-helper-728-verification.md)); other recovery/overlay unchecked |
-| Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Pending | Pending | Pending |
+| Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Earned helper state and actual Zanik follower reviewed/pushed; optional tour gaps remain | 16 focused checks pass | Pending natural route |
 | The Depths of Despair | `DepthsOfDespair` | Recovery/dialogue review and cache-backed stepping-stone approach fixed | 14 focused checks pass, including normal movement to the bank | Accepted checkpoint-linked main route, rewards/repeat/relog/offline independently checked; recovery and overlay remain unchecked ([ledger](quest-helper-728-verification.md)) |
 | Devious Minds | `DeviousMinds` | Pending | Pending | Pending |
 | The Dig Site | `DigSite` | Pending | Pending | Pending |
@@ -281,7 +281,7 @@ deferred quest. No deferred quest is counted as complete.
 | Dwarf Cannon | `DwarfCannon` | Pending | Pending | Pending |
 | Eadgar's Ruse | `EadgarsRuse` | Pending | Pending | Pending |
 | Eagles' Peak | `EaglesPeak` | Pending | Pending | Pending |
-| Elemental Workshop I | `ElementalWorkshopI` | Pending | Pending | Pending |
+| Elemental Workshop I | `ElementalWorkshopI` | Wire, entered wall, slashed book, valves, recoverable supplies and actual elemental floor loot reviewed/pushed | 10 focused; 20 combined EW1/EW2 checks pass | Accepted fresh natural main route, rewards/legitimate postcraft/relog/offline ([ledger](quest-helper-728-verification.md)); optional recovery/visuals/base crafting XP unchecked |
 | Elemental Workshop II | `ElementalWorkshopII` | Pending | Pending | Pending |
 | Enakhra's Lament | `EnakhrasLament` | Pending | Pending | Pending |
 | Enlightened Journey | `EnlightenedJourney` | Pending | Pending | Pending |
@@ -304,11 +304,11 @@ deferred quest. No deferred quest is counted as complete.
 | The Grand Tree | `GrandTree` | Pending | Pending | Pending |
 | The Great Brain Robbery | `GreatBrainRobbery` | Pending | Pending | Pending |
 | Grim Tales | `GrimTales` | Pending | Pending | Pending |
-| The Hand in the Sand | `HandInTheSand` | Pending | Pending | Pending |
-| Hazeel Cult | `HazeelCult` | Pending | Pending | Pending |
+| The Hand in the Sand | `HandInTheSand` | Shared bell/Zavistic, canonical wire, single sandpit payment and earned helper auxiliaries reviewed/pushed | 28 combined Hand/Zogre checks pass | Pending natural route; scene/interface gaps remain |
+| Hazeel Cult | `HazeelCult` | Canonical cave/mansion/hidden-room path, helper state and shared ownership reviewed/pushed; postquest NPC follow-up active | 13 focused; 52 shared mansion checks pass | Accepted Hazeel-side main route, rewards/Clivet repeat/relog/offline ([ledger](quest-helper-728-verification.md)); Carnillean/recovery unchecked; missing postquest Alomone open |
 | The Heart of Darkness | `TheHeartOfDarkness` | Pending | Pending | Pending |
 | Holy Grail | `HolyGrail` | Pending | Pending | Pending |
-| Horror from the Deep | `HorrorFromTheDeep` | Pending | Pending | Pending |
+| Horror from the Deep | `HorrorFromTheDeep` | Earned bridge/lighthouse/basement helper state and bootstrap replay reviewed/pushed | 8 focused checks pass | Pending natural route |
 | Icthlarin's Little Helper | `IcthlarinsLittleHelper` | Pending | Pending | Pending |
 | In Aid of the Myreque | `InAidOfTheMyreque` | Pending | Pending | Pending |
 | In Search of the Myreque | `InSearchOfTheMyreque` | Pending | Pending | Pending |
@@ -330,7 +330,7 @@ deferred quest. No deferred quest is counted as complete.
 | Plague City | `PlagueCity` | Pending | Pending | Pending |
 | A Porcine of Interest | `PorcineOfInterest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Priest in Peril | `PriestInPeril` | Pending | Pending | Pending |
-| The Queen of Thieves | `QueenOfThieves` | Pending | Pending | Pending |
+| The Queen of Thieves | `QueenOfThieves` | Actual transformed NPCs, owner chest and delayed reward recovery reviewed/pushed | 16 focused checks pass with isolated AKD dependency and actual worktree | Pending natural route; memoir functionality/recolour/letter interface absent |
 | Rag and Bone Man I | `RagAndBoneManI` | Pending | Pending | Pending |
 | Recruitment Drive | `RecruitmentDrive` | Pending | Pending | Pending |
 | The Ribbiting Tale of a Lily Pad Labour Dispute | `RibbitingTale` | Pending | Pending | Pending |
@@ -352,16 +352,16 @@ deferred quest. No deferred quest is counted as complete.
 | Temple of Ikov | `TempleOfIkov` | Pending | Pending | Pending |
 | The Tourist Trap | `TouristTrap` | Cache transform parents, worn disguise, lost supplies, XP interruption and saved-stage migration reviewed | 21 focused checks pass | Pending |
 | Tower of Life | `TowerOfLife` | Pressure plug rule, pipe piece model/position mirroring, renewable costume pieces, the basement wire step 17 and the mind-meter threshold repaired against the cache and the Quest Helper solver | 22 focused source-contract tests pass | No native playthrough; no completion claimed |
-| Tree Gnome Village | `TreeGnomeVillage` | Tracker/ballista, orb recovery, transformed NPC and post-quest amulet routes reviewed | 7 focused checks pass, including full-bag repeat receipt regression | Pending |
+| Tree Gnome Village | `TreeGnomeVillage` | Lowercase interactions, real owned warlord, correct guide/railing and actual ceremony groups reviewed/pushed | 13 focused; 24 combined Hazeel/Tree checks pass | Accepted linked natural main route, real chorus/rewards/repeat/relog/offline ([ledger](quest-helper-728-verification.md)); optional recovery/scene timing unverified |
 | Tribal Totem | `TribalTotem` | Pending | Pending | Pending |
 | Troll Romance | `TrollRomance` | Pending | Pending | Pending |
 | Troll Stronghold | `TrollStronghold` | Pending | Pending | Pending |
 | Twilight's Promise | `TwilightPromise` | Pending | Pending | Pending |
-| Wanted! | `Wanted` | Pending | Pending | Pending |
+| Wanted! | `Wanted` | Helper state, canonical mage discovery and random trail reviewed/pushed; unsupported Abyss substitute removed | 14 focused checks pass | Pending natural route; exact scan boundaries/damage/optional behavior unverified |
 | Watchtower | `Watchtower` | Pending | Pending | Pending |
 | What Lies Below | `WhatLiesBelow` | Pending | Pending | Pending |
 | Witch's House | `WitchsHouse` | Grounded basement/gloves, key item-use, owned mouse, capacity/retry and reward fixes reviewed/published | 11 focused checks pass | Natural route pending; canonical Nora detection remains unimplemented; guessed proximity rule removed and archived |
-| Zogre Flesh Eaters | `ZogreFleshEaters` | Canonical import needs no source change; the three formerly `unavailable` nodes are now real messages the plugin already references; the Dragon Inn tankard dispatch is verified against the generated page | 11 focused tests pass | Stopped at stage 3 with 25 identical "I can't reach that!" on NPC 1320; cause is core reach (wandering NPC on unreachable counter-row tiles), not the quest plugin; natural completion pending |
+| Zogre Flesh Eaters | `ZogreFleshEaters` | Earned helper/evidence state, recipient distinction and bootstrap replay reviewed/pushed | 14 focused checks pass | Pending natural route; legacy ambiguous evidence not fabricated |
 
 ## Deferred — 22 long or complex quests
 

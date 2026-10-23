@@ -6,13 +6,20 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Nineteen quests have accepted natural main-route completion evidence: **19 / 106 active quests (17.92%)** (q003, q006, q008, q010, q011, q017, q019, q026, q040, q041, q048, q055, q063, q072, q074, q085, q088, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Twenty quests have accepted natural main-route completion evidence: **20 / 106 active quests (18.87%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q072, q074, q085, q088, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
 long or complex quests; all 17 accepted routes are within the retained 106. Against
 the original inventory the count is still 17/128 (13.28%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
+
+### q030 — Elemental Workshop I
+
+- **Revision:** source/loaded epoch24 `d64181f57e14dc5edd984de3e33e01ed9c4f0d482d498ea36d044e15b921bad5`; test `7f96c00679eb7266f68909a2ab777c8cebeb6f9c004b29f6de0b65344a7e8c22` (20 combined EW1/EW2 checks). Root acceptance `/tmp/tsps-728/native/evidence/q030-root-accepted-20261023.json` records the explicit stage0 baseline, three raw-file hashes and five independently checked saves.
+- **Route:** fresh13718=0/QP0; actual bookcase search/read, knife/book and key/wall/stairs, water controls/wheel, bellows/air, bowl/lava/furnace. The mined rock releases a real elemental; ordinary combat/death drops ore and Rock at its tile. Normal ore pickup, four-coal refining and bar/hammer/workbench yield the shield and13718=2.
+- **Rewards/persistence:** QP+1, Crafting+5000, Smithing+5000 and one shield. A second real elemental/normal ore pickup and another bar legitimately make a second shield; the quest rewards do not repeat. Relog preserves both shields, QP and XP; final logout is confirmed. Root checked completion1369 and logout1370/1371/1372 against precompletion1367.
+- **Aids/limits:** before baseline, master/prerequisites, initial bookcase position and ordinary tools/materials; extra ordinary coal for recraft. Each elemental was actually hit/damaged before HP1 aid. No target quest items/progress injected. Optional recovery, exact skill gates, book interface/visuals, ordinary postcraft XP and Java overlay remain unchecked. Durable machine1123070 correctly maps to client1090302 because the private entered-wall bit maps to its canonical client bit.
 
 ### q055 — Hazeel Cult (Hazeel side)
 
