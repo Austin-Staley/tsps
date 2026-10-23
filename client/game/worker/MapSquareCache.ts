@@ -2,6 +2,7 @@ import type { CacheInfo } from "../../rs/cache/CacheInfo";
 import type { SdMapData } from "../../render/loader/SdMapData";
 import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
 import type { VarManager } from "../../rs/config/vartype/VarManager";
+import { Scene } from "../../rs/scene/Scene";
 
 /** Bump when SdMapData or the geometry the loader emits changes, so old entries stop matching. */
 export const CACHE_FORMAT = 5;
@@ -12,26 +13,53 @@ const DB_NAME = "map-square-cache";
 /** [0 = varbit, 1 = varp, id, value] read while building; a hit needs the same values now. */
 export type VarRead = [number, number, number];
 
-const empty = (m?: { size: number }) => !m || m.size === 0;
-
 /**
- * Only plain base builds are cached. Anything layered on top of the cache data (dynamic locs,
- * overrides, instances, partial door/loc rebuilds) is runtime state we do not key on.
+ * Cache base builds with no runtime changes in their source scene. Global changes elsewhere
+ * cannot affect them; changes in the full border can affect lighting, collision and metadata.
  */
 export function isCacheable(input: SdMapLoaderInput): boolean {
-    return (
+    if (!(
         input.persistentCache === true &&
+        Number.isInteger(input.mapX) && Number.isInteger(input.mapY) &&
         !input.doorOnly &&
         !input.locOnly &&
+        !input.minimapOnly &&
         !input.instance &&
         !input.overrideRenderPos &&
         !input.extraLocs?.length &&
-        !input.extraNpcs?.length &&
-        empty(input.locOverrides) &&
-        empty(input.locSpawns) &&
-        empty(input.terrainOverrides) &&
-        empty(input.mapRegionReplacements)
-    );
+        !input.extraNpcs?.length
+    )) return false;
+
+    // SdMapDataLoader builds a 64-tile core with six source tiles on every side.
+    const minX = input.mapX * Scene.MAP_SQUARE_SIZE - 6;
+    const minY = input.mapY * Scene.MAP_SQUARE_SIZE - 6;
+    const maxX = minX + Scene.MAP_SQUARE_SIZE + 12;
+    const maxY = minY + Scene.MAP_SQUARE_SIZE + 12;
+    const affectsPoint = (x: number, y: number) =>
+        !Number.isInteger(x) || !Number.isInteger(y) ||
+        (x >= minX && x < maxX && y >= minY && y < maxY);
+    const affectsKey = (key: string) => {
+        const [x, y, level] = key.split(",").map(Number);
+        return !Number.isInteger(level) || level < 0 || level >= Scene.MAX_LEVELS || affectsPoint(x, y);
+    };
+    for (const [key, override] of input.locOverrides ?? []) {
+        if (affectsKey(key)) return false;
+        if (override.moveToX !== undefined || override.moveToY !== undefined) {
+            if (override.moveToX === undefined || override.moveToY === undefined ||
+                affectsPoint(override.moveToX, override.moveToY)) return false;
+        }
+    }
+    for (const changes of [input.locSpawns, input.terrainOverrides]) {
+        for (const key of changes?.keys() ?? []) if (affectsKey(key)) return false;
+    }
+    for (const regionId of input.mapRegionReplacements?.keys() ?? []) {
+        if (!Number.isInteger(regionId) || regionId < 0 || regionId > 0xffff) return false;
+        const x = (regionId >> 8) * Scene.MAP_SQUARE_SIZE;
+        const y = (regionId & 0xff) * Scene.MAP_SQUARE_SIZE;
+        if (x < maxX && x + Scene.MAP_SQUARE_SIZE > minX &&
+            y < maxY && y + Scene.MAP_SQUARE_SIZE > minY) return false;
+    }
+    return true;
 }
 
 /** A build is storable only if its final pass hit no missing groups (those render as gaps). */
