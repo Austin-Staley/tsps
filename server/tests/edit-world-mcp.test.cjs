@@ -77,7 +77,8 @@ function npcTestSetup() {
     const npc = {
       id, location, radius: null,
       getId: () => id,
-      getLocation: () => location,
+      getLocation: () => npc.location,
+      getSpawnPosition: () => location,
       getMovementCoordinator: () => ({ setRadius: (r) => { npc.radius = r; } }),
     };
     created.push(npc);
@@ -199,7 +200,7 @@ test("remove_npc clears live and file; cache npcs warn", async () => {
   // A live NPC with no file entry still goes, but warns it returns on restart.
   const cacheNpc = {
     getId: () => 20,
-    location: { x: 3230, y: 3220, z: 0 },
+    location: { x: 3230, y: 3220, z: 0, getX: () => 3230, getY: () => 3220, getZ: () => 0 },
     getLocation() { return this.location; },
   };
   t.live.push(cacheNpc);
@@ -299,4 +300,45 @@ test("terrain writes remove a stale sibling pack so a reload keeps one view", as
   await t.call("paint_ground", { x1: 3222, y1: 3218, x2: 3222, y2: 3218, z: 0, overlay: 5 });
   assert.equal(fs.existsSync(stalePack), false, "the .pack must not survive next to a .terrain.dat");
   assert.equal(fs.existsSync(path.join(dir, `${regionId}.terrain.dat`)), true);
+});
+
+// --- live-test follow-ups ----------------------------------------------------
+
+test("remove_npc finds a wandering spawn by its spawn tile", async () => {
+  const t = npcTestSetup();
+  await t.call("spawn_npc", { id: 10, x: 3229, y: 3262, wanderRadius: 1 });
+  const cow = t.created[0];
+  t.live.push(cow);
+  // It wandered one tile west before the removal arrived.
+  cow.location = { x: 3228, y: 3262, z: 0, getX: () => 3228, getY: () => 3262, getZ: () => 0 };
+  const removed = await t.call("remove_npc", { x: 3229, y: 3262, z: 0, id: 10 });
+  assert.deepEqual(removed.removed, [{ id: 10, x: 3228, y: 3262, z: 0 }]);
+  assert.equal(removed.persisted, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(t.file, "utf8")), []);
+});
+
+test("spawn file keeps an untouched entry's own spacing", async () => {
+  const t = npcTestSetup();
+  const original = '[\n  {"id": 6142, "name": "Ernest", "x": 3110, "y": 3365, "level": 2},\n  {"level":0,"name":"Man","x":3222,"y":3218,"id":1}\n]\n';
+  fs.writeFileSync(t.file, original);
+  await t.call("spawn_npc", { id: 10, x: 3240, y: 3240 });
+  t.live.push(t.created[0]);
+  assert.ok(fs.readFileSync(t.file, "utf8").includes('  {"id": 6142, "name": "Ernest", "x": 3110, "y": 3365, "level": 2},'));
+  await t.call("remove_npc", { x: 3240, y: 3240, z: 0 });
+  assert.equal(fs.readFileSync(t.file, "utf8"), original);
+});
+
+test("a region cleared back to the cache stops persisting", async () => {
+  const t = terrainTestSetup();
+  const regionId = (50 << 8) | 50;
+  const file = path.join(t.dir, "regions", `${regionId}.terrain.dat`);
+  await t.call("paint_ground", { x1: 3222, y1: 3218, x2: 3222, y2: 3218, z: 0, overlay: 5 });
+  assert.ok(fs.existsSync(file));
+  assert.equal((await t.call("list_region_packs", {})).regions[0].matchesCache, false);
+  const cleared = await t.call("clear_terrain", { x1: 3222, y1: 3218, x2: 3223, y2: 3218 });
+  assert.equal(cleared.change, "clear 2 tiles on every plane");
+  assert.equal(cleared.regions[0].matchesCache, true);
+  assert.equal(cleared.regions[0].persisted, false);
+  assert.equal(fs.existsSync(file), false, "no file, so nothing loads on restart");
+  assert.equal((await t.call("list_region_packs", {})).regions[0].matchesCache, true);
 });

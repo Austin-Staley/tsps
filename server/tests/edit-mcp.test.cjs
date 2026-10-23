@@ -119,7 +119,7 @@ test("registers the edit toolset", () => {
   const { tools } = setup(fakeCore());
   assert.deepEqual(
     [...tools.keys()],
-    ["search_objects", "describe_object", "place_object", "remove_object", "clear_area", "list_placed_objects"],
+    ["search_objects", "describe_object", "place_object", "remove_object", "clear_area", "restore_area", "list_placed_objects"],
   );
 });
 
@@ -153,7 +153,7 @@ test("clear_area removes objects and npcs, persisting removals", async () => {
   core.MapObjects.mapObjects.set(core.MapObjects.getHash(102, 101, 0), [cacheObject]);
   const npc = { getId: () => 1, getLocation: () => new core.Location(101, 101, 0), getPrivateArea: () => null };
   core.World.getNpcsNear = () => [npc];
-  const cleared = await call("clear_area", { x1: 100, y1: 100, x2: 102, y2: 102 });
+  const cleared = await call("clear_area", { x1: 100, y1: 100, x2: 102, y2: 102, includeCache: true });
   assert.equal(cleared.removedObjects, 2);
   assert.equal(cleared.removedNpcs, 1);
   assert.deepEqual(cleared.unpersistedCacheNpcs, []);
@@ -167,7 +167,7 @@ test("clear_area removes objects and npcs, persisting removals", async () => {
   // Cache NPCs with no file entry are reported as unpersisted.
   const stray = { getId: () => 9, getLocation: () => new core.Location(101, 102, 0), getPrivateArea: () => null };
   core.World.getNpcsNear = () => [stray];
-  const cleared2 = await call("clear_area", { x1: 100, y1: 100, x2: 102, y2: 102 });
+  const cleared2 = await call("clear_area", { x1: 100, y1: 100, x2: 102, y2: 102, includeCache: true });
   assert.equal(cleared2.removedNpcs, 1);
   assert.deepEqual(cleared2.unpersistedCacheNpcs, [{ id: 9, x: 101, y: 102 }]);
   // Oversized rects are rejected.
@@ -304,4 +304,71 @@ test("placing on a razed tile keeps the object after a reload", async () => {
   const entries = JSON.parse(fs.readFileSync(process.env.AGENT_MCP_SPAWNS_FILE, "utf8"));
   assert.equal(entries.length, 1);
   assert.equal(entries[0].remove, undefined, "the stale marker must be gone");
+});
+
+// --- live-test follow-ups ----------------------------------------------------
+
+test("clear_area keeps cache objects by default and drops only spawn-file placements", async () => {
+  const core = fakeCore();
+  const { call, file } = setup(core);
+  await call("place_object", { id: 2, x: 600, y: 600 });
+  // A cache fence on the next tile: not in the spawn file.
+  const fence = new core.GameObject(4, new core.Location(601, 600, 0), 0, 0);
+  core.MapObjects.mapObjects.set(core.MapObjects.getHash(601, 600, 0), [fence]);
+  core.live.push(fence);
+  const cleared = await call("clear_area", { x1: 600, y1: 600, x2: 601, y2: 600, includeNpcs: false });
+  assert.equal(cleared.removedObjects, 1);
+  assert.equal(cleared.removedCacheObjects, 0);
+  assert.equal(cleared.keptObjects, 1);
+  assert.deepEqual(core.live, [fence], "the cache fence still stands");
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), [], "no removal marker for the fence");
+});
+
+test("clear_area dryRun reports without touching the world or the file", async () => {
+  const core = fakeCore();
+  const { call, file } = setup(core);
+  await call("place_object", { id: 2, x: 610, y: 610 });
+  const before = fs.readFileSync(file, "utf8");
+  const cache = new core.GameObject(4, new core.Location(611, 610, 0), 10, 0);
+  core.MapObjects.mapObjects.set(core.MapObjects.getHash(611, 610, 0), [cache]);
+  const plan = await call("clear_area", { x1: 610, y1: 610, x2: 611, y2: 610, includeCache: true, dryRun: true });
+  assert.equal(plan.dryRun, true);
+  assert.equal(plan.removedObjects, 2);
+  assert.equal(plan.removedCacheObjects, 1);
+  assert.equal(plan.droppedOrphanEntries, 0);
+  assert.equal(core.live.length, 1);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("clear_area drops placements a later placement hid on the same tile", async () => {
+  const core = fakeCore();
+  const { call, file } = setup(core);
+  // An entry whose object no longer stands live (it was replaced on its tile).
+  fs.writeFileSync(file, JSON.stringify([
+    { id: 3, position: { x: 620, y: 620, z: 0 }, type: 10, face: 0, source: "agent-mcp" },
+  ]));
+  const cleared = await call("clear_area", { x1: 620, y1: 620, x2: 620, y2: 620, includeNpcs: false });
+  assert.equal(cleared.droppedOrphanEntries, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), []);
+});
+
+test("restore_area puts razed cache objects back and drops their markers", async () => {
+  const core = fakeCore();
+  const { call, file } = setup(core);
+  const fence = new core.GameObject(4, new core.Location(630, 630, 0), 0, 1);
+  core.MapObjects.mapObjects.set(core.MapObjects.getHash(630, 630, 0), [fence]);
+  await call("clear_area", { x1: 630, y1: 630, x2: 630, y2: 630, includeCache: true, includeNpcs: false });
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8"))[0].remove, true);
+  const restored = await call("restore_area", { x1: 629, y1: 629, x2: 631, y2: 631 });
+  assert.equal(restored.restored, 1);
+  assert.deepEqual(core.live.map((object) => [object.getId(), object.getType(), object.getFace()]), [[4, 0, 1]]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), []);
+});
+
+test("place_object drops the entry of the object it replaced on the tile", async () => {
+  const { call, file } = setup(fakeCore());
+  await call("place_object", { id: 2, x: 640, y: 640 });
+  const second = await call("place_object", { id: 3, x: 640, y: 640 });
+  assert.equal(second.replaced, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).map((entry) => entry.id), [3]);
 });

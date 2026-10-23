@@ -42,7 +42,7 @@
       "params": { "size": 3, "body": "battlement", "parapet": "castle_wall" },
       "parts": [
         { "shape": "tower", "material": "$body", "x": 0, "y": 0, "width": "$size", "height": "$size" },
-        { "shape": "box", "material": "$parapet", "x": -1, "y": -1, "width": "$size", "height": "$size", "grow": 2 }
+        { "shape": "box", "material": "$parapet", "x": 0, "y": 0, "width": "$size", "height": "$size", "grow": 2 }
       ]
     },
     "gatehouse": {
@@ -70,19 +70,17 @@
       ]
     },
     "tiered_city": {
-      "about": "Ringed hill city: four concentric walls with east gates, cardinal towers, and a keep at the summit. Pair with set_height terraces for the stepped look.",
+      "about": "Ringed hill city: four concentric walls, each with an east gate and towers on its east and west sides. Pair with set_height terraces for the stepped look.",
       "params": {
         "radii": [8, 13, 18, 23],
         "wall": "castle_wall",
         "tower": "battlement",
-        "gate": "gate",
-        "arch": "arch"
+        "gate": "gate"
       },
       "repeat": { "radius": "$radii" },
       "parts": [
         { "shape": "ring", "material": "$wall", "radius": "$radius", "thickness": 1, "gapDegrees": 20, "gapAngle": 0 },
         { "shape": "column", "material": "$gate", "dx": "$radius", "dy": 0, "face": 1 },
-        { "shape": "column", "material": "$arch", "dx": "$radius", "dy": 0 },
         { "shape": "column", "material": "$tower", "dx": "$radius", "dy": "-2" },
         { "shape": "column", "material": "$tower", "dx": "$radius", "dy": "2" },
         { "shape": "column", "material": "$tower", "dx": "-$radius", "dy": "-2" },

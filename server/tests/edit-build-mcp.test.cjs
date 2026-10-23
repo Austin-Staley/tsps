@@ -237,8 +237,9 @@ test("re-placing the same tile with a new rotation is persisted", async () => {
   await t.call("place_objects", { objects: [{ id: 16519, x: 400, y: 400, face: 0 }] });
   const turned = await t.call("place_objects", { objects: [{ id: 16519, x: 400, y: 400, face: 2 }] });
   assert.equal(turned.persisted, 1, "a different face needs its own entry");
+  assert.equal(turned.replaced, 1, "the turned object replaced the old one live");
   const entries = JSON.parse(fs.readFileSync(t.file, "utf8"));
-  assert.deepEqual(entries.map((entry) => entry.face).sort(), [0, 2]);
+  assert.deepEqual(entries.map((entry) => entry.face), [2], "only the object standing live stays persisted");
 });
 
 test("an invalid placement aborts the batch before anything is registered", async () => {
@@ -260,4 +261,40 @@ test("build_shape accepts material without an id, and rejects neither", async ()
   const neither = await t.callRaw("build_shape", { shape: "line", x: 0, y: 0, x2: 3, y2: 0 });
   assert.equal(neither.isError, true);
   assert.match(neither.content[0].text, /either `id`|and material/);
+});
+
+// --- live-test follow-ups ----------------------------------------------------
+
+test("tower keeps its whole body inside a parapet ring one tile out", async () => {
+  const t = setup();
+  const plan = await t.call("plan_build", { preset: "tower", x: 500, y: 500 });
+  assert.equal(plan.overlapped, 0);
+  assert.deepEqual(plan.byObjectId, { 2832: 9, 16519: 16 });
+  assert.deepEqual(plan.bounds, { x1: 499, y1: 499, x2: 503, y2: 503 });
+});
+
+test("every shipped preset places each tile slot once, bar tiered_city's wall towers", async () => {
+  const t = setup();
+  const { presets } = await t.call("list_presets", {});
+  for (const name of Object.keys(presets)) {
+    const plan = await t.call("plan_build", { preset: name, x: 500, y: 500 });
+    // tiered_city stands its towers in the wall line on purpose: they replace wall tiles.
+    if (name === "tiered_city") {
+      assert.ok(plan.byObjectId[37] === 4, "the gates are not hidden under another part");
+      continue;
+    }
+    assert.equal(plan.overlapped, 0, `${name} has parts on the same tile`);
+  }
+});
+
+test("overlapping placements collapse to the later one, and say so", async () => {
+  const t = setup();
+  const result = await t.call("place_objects", { objects: [
+    { id: 2832, x: 700, y: 700 },
+    { id: 16519, x: 700, y: 700 },
+  ] });
+  assert.equal(result.placed, 1);
+  assert.equal(result.overlapped, 1);
+  const entries = JSON.parse(fs.readFileSync(t.file, "utf8"));
+  assert.deepEqual(entries.map((entry) => entry.id), [16519]);
 });

@@ -32,7 +32,8 @@ Nothing needs a manual restart.
 | `place_object` | Place one object (live + persisted) |
 | `place_objects` | Place a batch in one call, one file write |
 | `remove_object` | Remove object(s) on a tile, persisted |
-| `clear_area` | Raze a rectangle: all objects on all planes + NPCs |
+| `clear_area` | Clear a rectangle on all planes: spawn-file objects (+ NPCs); `includeCache` razes cache scenery too, `dryRun` only reports |
+| `restore_area` | Undo cache-object removals in a rectangle: drop the markers, put the objects back live |
 | `list_placed_objects` | What the spawn file holds, filterable by `source` |
 
 ### Building at a higher level
@@ -56,7 +57,7 @@ Shape semantics, so the coordinates are never a guess:
 - `tower` — `(x, y)` low corner plus `width`, `height`; filled footprint.
 
 Presets ship with `house`, `tower`, `gatehouse`, `plaza` and `tiered_city` (the ringed hill
-city: four concentric walls with east gates, cardinal towers, keep). Example:
+city: four concentric walls, each with an east gate and towers on its east and west sides). Example:
 
 ```jsonc
 // one call: a 7x7 house shell with a south door
@@ -88,10 +89,25 @@ material is `{ "name": { "id": <cache id>, "about": "..." } }`; a preset is a li
 that is how `tiered_city` builds four rings. Keep material ids verified (`search_objects` /
 `yarn dump:loc`); never hard-code ids in tool code.
 
+### Clearing a site
+
+`clear_area` removes what the spawn file placed and leaves the cache map's own scenery
+(fences, ground decoration, unnamed walls `observe` does not list) standing. Pass
+`includeCache: true` to raze those too; that persists a removal marker per object, which
+`restore_area` undoes for a rectangle. Run it with `dryRun: true` first to see the counts.
+It also drops spawn-file placements in the rectangle that no longer stand live.
+
+A tile holds one object per type, so a placement replaces whatever stood in that slot. The
+build tools collapse parts that land on the same tile and type (the later one wins, as it does
+live) and report `overlapped`; a placement that replaces an earlier one drops its entry and
+reports `replaced`, so the file only holds what stands.
+
 ### NPCs
 
 `search_npcs`, `describe_npc`, `spawn_npc`, `remove_npc`, `list_spawned_npcs` — same pattern
 as objects, persisted to `npc-spawns.json` with `level` (plane) and `wanderRadius`.
+`remove_npc` takes the spawn tile from `list_spawned_npcs` and finds the NPC wherever it has
+wandered.
 
 ### Terrain
 
@@ -101,7 +117,12 @@ as objects, persisted to `npc-spawns.json` with `level` (plane) and `wanderRadiu
 | `paint_ground` | Overlay (paths/floors) and/or underlay over a rectangle |
 | `set_height` | Raise/lower/flatten heights, one plane or all |
 | `clear_terrain` | Restore a rectangle to the cache's own terrain |
-| `list_region_packs` | Regions with active replacements |
+| `list_region_packs` | Regions with active replacements; `matchesCache` marks one cleared back to the cache |
+
+A region cleared back to the cache's own bytes (and holding no replaced objects) has its file
+deleted, so it no longer loads as a replacement after a restart. It stays registered for the
+rest of the session, so clients still holding the edited terrain get the cache's on their next
+scene rebuild.
 
 Terrain is **visual only**: collision still comes from objects and the base map. If you level
 a hill, build the floor you want to walk on with objects, or accept that movement follows the
@@ -123,8 +144,10 @@ Cost per edited tile, on top of the cache's own encoding:
 | overlay | 4 bytes |
 | underlay | 4 bytes |
 
-Dense regions (Edgeville, Lumbridge) start near 45 KB from the cache alone, leaving room for
-roughly a few thousand tile edits — not enough to repaint and terrace a 90×71 site.
+Dense regions start close to the cap from the cache alone: Lumbridge (region 12850) is about
+60 KB before any edit, leaving roughly 5 KB, about 1,300 overlay edits — nowhere near enough to
+repaint and terrace a 90×71 site. Every terrain result reports `terrainBytes` per region; read
+it after the first small edit before planning a big one.
 
 What actually works:
 
@@ -184,7 +207,8 @@ client sees, which is far cheaper than rebuilding a city twice.
 
 ```js
 // 1. Site: flatten, then pave a plateau that fits the budget.
-clear_area      { x1, y1, x2, y2 }                 // objects only, keeps terrain
+clear_area      { x1, y1, x2, y2, dryRun: true }   // see what would go first
+clear_area      { x1, y1, x2, y2, includeCache: true } // raze cache scenery too; keeps terrain
 clear_terrain   { x1, y1, x2, y2 }                 // back to cache encoding (frees bytes)
 paint_ground    { x1, y1, x2, y2, overlay: 1 }     // dirt
 set_height      { x1, y1, x2, y2, height: 57 }     // outer terrace
