@@ -538,6 +538,23 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
     syncWarlord(player);
   }
 
+  /** The transcript's directional chorus labels name the actual village cohorts. */
+  function bindCeremonyChorus(request) {
+    const { player, step } = request;
+    if (request.npcId !== KING_BOLREN_NPC_ID || step?.presentation !== "overhead"
+      || !["[Northern Local Gnomes]", "[Southern Local Gnomes]"].includes(step.speaker)
+      || quest.getStage(player) !== STAGE_DEFEATED_WARLORD || !has(player, ORBS_OF_PROTECTION_ITEM_ID)) return;
+    const locals = [...(player.getLocalNpcs?.() ?? [])];
+    const bolren = locals.find(npc => npc.getContentId(player) === KING_BOLREN_NPC_ID);
+    const centre = bolren?.getSpawnPosition();
+    const north = step.speaker === "[Northern Local Gnomes]";
+    request.actors = centre ? locals.filter(npc => {
+      if (npc.getContentId(player) !== NpcIdentifiers.LOCAL_GNOME_2) return false;
+      const home = npc.getSpawnPosition();
+      return home.getZ() === centre.getZ() && (north ? home.getY() > centre.getY() : home.getY() < centre.getY());
+    }) : [];
+  }
+
   function clearWarlord(player) {
     const npc = warlordsByPlayer.get(player);
     if (npc) {
@@ -639,6 +656,7 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onObjectInteraction(handleObjectInteraction);
   api.onCustomEvent("npc-dialogue:line", handleWarlordThreat);
+  api.onCustomEvent("npc-dialogue:line", bindCeremonyChorus);
   api.onCustomEvent("player:bootstrap-complete", handleWarlordBootstrap);
   api.onPlayerLogout(handleWarlordLogout);
   api.onPlayerDeath(handleWarlordLogout);

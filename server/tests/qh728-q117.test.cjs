@@ -8,6 +8,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { NPC } = require('../dist/game/entity/impl/npc/NPC');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
@@ -123,8 +124,9 @@ function harness() {
   const transcripts = [];
   const groundItems = [];
   const spawned = [], logoutHooks = [];
+  const tasks=[];
   const api = new Proxy({
-    core,
+    core:{...core,TaskManager:{submit(task){task.setRunning(true);if(task.isImmediate())task.execute();tasks.push(task);}}},
     persistAttribute: noop,
     onNpcDialogueVariant: (handler) => variants.push(handler),
     onNpcDialogueCondition: (handler) => conditions.push(handler),
@@ -164,7 +166,7 @@ function harness() {
     runtime.startTranscript = originalStart;
   }
   const quest = runtime.getRegisteredQuests().findLast((entry) => entry.key === 'tree_gnome_village');
-  return { events, variants, conditions, objectHooks, deathHooks, loginHooks, transcripts, groundItems, spawned, logoutHooks, quest };
+  return { api,tasks,events, variants, conditions, objectHooks, deathHooks, loginHooks, transcripts, groundItems, spawned, logoutHooks, quest };
 }
 
 function emit(h, name, event) {
@@ -587,4 +589,49 @@ test('warlord fighting visibility replays actual encounter and clears orphan sta
   p.varbits.set(3460,1);emit(h,'player:bootstrap-complete',{player:p});
   assert.equal(p.varbits.get(3460),0);assert.equal(source.getCurrentDefinition(p).getId(),7621);
   assert.equal(p.configs.get(d.baseVar)&~mask,siblings);
+});
+
+
+function ceremonyFixture({missingNorth=false}={}) {
+  const h=harness(),p=makePlayer();h.quest.setStage(p,8);p.getInventory().adds(I.ORBS_OF_PROTECTION,1);
+  const manager=new DialogueManager(p);p.getDialogueManager=()=>manager;p.getFrameUpdater=()=>null;
+  p.getPacketSender().sendInterfaceRemoval=()=>{manager.reset();return p.getPacketSender();};
+  const speeches=[];
+  const king=new NPC(N.KING_BOLREN,new core.Location(2542,3169,0));
+  king.isRegistered=()=>true;king.setVisible(true);
+  const npcs=[king];
+  for(const [x,y]of [[2541,3168],[2542,3167],[2541,3171],[2542,3172]]) {
+    if(missingNorth&&y>3169)continue;
+    const n=new NPC(N.LOCAL_GNOME_2,new core.Location(x,y,0));
+    n.isRegistered=()=>true;n.setVisible(true);
+    const say=n.forceChat.bind(n);n.forceChat=text=>{speeches.push({homeY:y,text});say(text);};
+    npcs.push(n);
+  }
+  // A northern cohort member wandered south: role follows its real spawn, not current drift.
+  npcs.find(n=>n.getSpawnPosition().getY()===3171)?.moveTo(new core.Location(2540,3164,0));
+  p.getLocalNpcs=()=>npcs;
+  runtime.startTranscript(h.api,p,N.KING_BOLREN,PAGE,'return-of-the-orb',undefined,king);
+  const tick=()=>{for(const t of [...h.tasks])if(t.isRunning())t.tick();};
+  const finish=()=>{let limit=100;while(manager.isActive()&&limit-->0){if(!(manager.getCurrent() instanceof core.ActionDialogue))manager.advance();tick();}assert.ok(limit>0);};
+  return {h,p,manager,npcs,speeches,tick,finish};
+}
+
+test('real ceremony runner binds both real gnome cohorts and reaches canonical completion action', () => {
+  const f=ceremonyFixture();f.finish();
+  assert.deepEqual(f.speeches.map(s=>s.text),['Su tana.','Su tana.','En tania.','En tania.','Su tana.','Su tana.','En tania.','En tania.']);
+  for(const s of f.speeches)assert.equal(s.text==='Su tana.',s.homeY>3169);
+  assert.equal(f.h.quest.getStage(f.p),9);assert.equal(f.p.getInventory().getAmount(I.ORBS_OF_PROTECTION),0);
+  assert.equal(f.p.getInventory().getAmount(I.GNOME_AMULET),1);
+  assert.equal(f.p.experience.length,1);
+});
+
+test('missing ceremony cohort or cancelled overhead cannot consume orbs or complete', () => {
+  const missing=ceremonyFixture({missingNorth:true});missing.finish();
+  assert.equal(missing.h.quest.getStage(missing.p),8);assert.equal(missing.p.getInventory().getAmount(I.ORBS_OF_PROTECTION),1);
+  const cancelled=ceremonyFixture();let limit=30;
+  while(cancelled.h.tasks.length===0&&limit-->0)cancelled.manager.advance();
+  assert.ok(limit>0);cancelled.manager.reset();
+  for(let i=0;i<12;i++)cancelled.tick();
+  assert.equal(cancelled.h.quest.getStage(cancelled.p),8);assert.equal(cancelled.p.getInventory().getAmount(I.ORBS_OF_PROTECTION),1);
+  assert.equal(cancelled.p.getInventory().getAmount(I.GNOME_AMULET),0);
 });
