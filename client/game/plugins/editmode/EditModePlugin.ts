@@ -724,13 +724,16 @@ export class EditModePlugin {
 
     refreshMap(): void {
         // Region replacements carry clearing and height changes; rebuilding them
-        // is the only refresh that cannot race the generated locs. Pull server
-        // state first so agent edits show up in the logged-out preview.
-        if (this.host?.syncServerReplacements) {
-            void this.host.syncServerReplacements();
+        // is the only refresh that cannot race the generated locs. Pull server state
+        // first so agent edits show up in the logged-out preview, then always rebuild
+        // this session's own edits: the sync is a no-op in browser-host mode and when
+        // the server has no replacements, and it only covers regions it touched.
+        const sync = this.host?.syncServerReplacements;
+        if (!sync) {
+            this.refreshSpecialRegions(this.config.edits);
             return;
         }
-        this.refreshSpecialRegions(this.config.edits);
+        void sync.call(this.host).finally(() => this.refreshSpecialRegions(this.config.edits));
     }
 
     /** Re-applies every stored edit to the scene, e.g. after a login or map reload. */

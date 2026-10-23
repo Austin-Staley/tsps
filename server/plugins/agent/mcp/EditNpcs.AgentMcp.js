@@ -1,10 +1,10 @@
-const fs = require("fs");
 const path = require("path");
+const { createNpcSpawnStore } = require("./EditSpawnStore.AgentMcp");
 
 // NPC spawning tools for the agent MCP server: search the NPC cache, describe
 // definitions, and spawn/remove live NPCs. Spawns persist in
 // data/definitions/npc-spawns.json, so they survive restarts and show up in the ?edit
-// map editor (spawn overlay after Refresh, full scene for cache-map NPCs).
+// map editor (spawn overlay after a sync, full scene for cache-map NPCs).
 module.exports = function registerEditNpcTools(ctx) {
   const { core, tool, z, sleepTicks } = ctx;
   const { World, NPC, NpcDefinition, CacheDefinitions, Location } = core;
@@ -14,33 +14,11 @@ module.exports = function registerEditNpcTools(ctx) {
     process.env.AGENT_MCP_NPC_SPAWNS_FILE ??
     path.resolve(process.cwd(), "data/definitions/npc-spawns.json");
 
-  const readSpawns = () => {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(spawnsFile(), "utf8"));
-      if (!Array.isArray(parsed)) throw new Error("expected npc spawn array");
-      return parsed;
-    } catch (error) {
-      if (error?.code === "ENOENT") return [];
-      throw new Error(`Cannot read npc-spawns.json: ${error?.message ?? error}`);
-    }
-  };
-  // One compact entry per line, keeping the file's own line endings, so untouched
-  // entries stay byte-identical and diffs show only the agent's lines.
-  const writeSpawns = (spawns) => {
-    let newline = "\n";
-    let trailing = false;
-    try {
-      const original = fs.readFileSync(spawnsFile(), "utf8");
-      if (original.includes("\r\n")) newline = "\r\n";
-      trailing = original.endsWith("\n");
-    } catch {
-      // New file: LF without trailing newline.
-    }
-    const body = spawns.length === 0
-      ? "[]"
-      : `[${newline}${spawns.map((entry) => `  ${JSON.stringify(entry)}`).join(`,${newline}`)}${newline}]`;
-    fs.writeFileSync(spawnsFile(), body + (trailing ? newline : ""));
-  };
+  // Format-preserving read/write (line endings, one entry per line) lives in the
+  // shared store, so this toolset and Edit.AgentMcp.js cannot drift.
+  const store = () => createNpcSpawnStore(spawnsFile());
+  const readSpawns = () => store().read();
+  const writeSpawns = (spawns) => store().write(spawns);
 
   const sameTile = (entry, x, y, z) => entry?.x === x && entry?.y === y && (entry?.level ?? 0) === z;
 
@@ -124,7 +102,7 @@ module.exports = function registerEditNpcTools(ctx) {
       // Registration runs on the next tick; wait so observe-style reads see it.
       await sleepTicks(1);
       const spawns = readSpawns();
-      const already = spawns.some((entry) => entry.id === id && sameTile(entry, x, y, z));
+      const already = store().find(spawns, id, x, y, z) !== undefined;
       if (!already) {
         spawns.push({
           level: z, name: definition.getName(), x, y, id, wanderRadius, source: "agent-mcp",

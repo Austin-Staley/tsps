@@ -264,12 +264,19 @@ module.exports = function registerEditTerrainTools(ctx) {
     let packFile = null;
     let terrainFile = null;
     const pack = MapRegionReplacementManager.getRegionPack(regionId);
+    // Only one file per region may exist: the loader reads both, and a stale sibling
+    // (a .pack object set next to a .terrain.dat, or the reverse) would silently drop
+    // the replaced objects on the next restart.
+    const packPath = path.join(dir, `${regionId}.pack`);
+    const terrainPath = path.join(dir, `${regionId}.terrain.dat`);
     if (pack) {
-      packFile = path.join(dir, `${regionId}.pack`);
+      packFile = packPath;
       fs.writeFileSync(packFile, pack);
+      if (fs.existsSync(terrainPath)) fs.unlinkSync(terrainPath);
     } else {
-      terrainFile = path.join(dir, `${regionId}.terrain.dat`);
+      terrainFile = terrainPath;
       fs.writeFileSync(terrainFile, Buffer.from(terrain));
+      if (fs.existsSync(packPath)) fs.unlinkSync(packPath);
     }
     return { regionId, mapX, mapY, tiles, ...result, packFile, terrainFile, persisted: true };
   };
@@ -319,7 +326,7 @@ module.exports = function registerEditTerrainTools(ctx) {
 
   tool(
     "paint_ground",
-    "Paint ground tiles with an overlay texture (paths, floors, water: overlay 2 is water on this cache) and/or an underlay (grass, sand, rock), or clear tiles back to base. Applies per region; players see it on scene rebuild (walk, teleport, relog; Refresh map in ?edit). Visual only: collision is unchanged.",
+    "Paint ground tiles with an overlay (paths, floors) and/or an underlay (grass, sand, rock), or clear tiles back to base. Overlay ids are cache-specific: overlay 1 is the dirt path the ?edit editor uses as its default (DEFAULT_PATH_OVERLAY_ID), and ids seen in the world can be read back with describe_tile before painting with them. Applies per region; players see it on scene rebuild (walk, teleport, relog; Refresh map in ?edit). Visual only: collision is unchanged.",
     {
       ...rectSchema,
       overlay: z.number().int().min(1).optional().describe("Overlay texture id (omit to keep)"),

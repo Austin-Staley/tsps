@@ -248,3 +248,60 @@ test("list_placed_objects filters by source", async () => {
   const agent = await call("list_placed_objects", { source: "agent-mcp" });
   assert.equal(agent.count, 1);
 });
+
+// --- review follow-ups -------------------------------------------------------
+
+test("clear_area does not write removal markers for objects it placed itself", async () => {
+  const core = fakeCore();
+  const tools = new Map();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "edit-mcp-clear2-"));
+  process.env.AGENT_MCP_SPAWNS_FILE = path.join(dir, "object-spawns.json");
+  process.env.AGENT_MCP_NPC_SPAWNS_FILE = path.join(dir, "npc-spawns.json");
+  fs.writeFileSync(process.env.AGENT_MCP_SPAWNS_FILE, "[]");
+  fs.writeFileSync(process.env.AGENT_MCP_NPC_SPAWNS_FILE, "[]");
+  const tool = (name, _d, _s, handler) => tools.set(name, async (args) => {
+    try {
+      return { content: [{ type: "text", text: JSON.stringify(await handler(args)) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: String(error?.message ?? error) }], isError: true };
+    }
+  });
+  registerEditTools({ core, tool, z });
+  const call = async (name, args) => {
+    const result = await tools.get(name)(args);
+    if (result.isError) throw new Error(result.content[0].text);
+    return JSON.parse(result.content[0].text);
+  };
+  // Place an object through the toolset, then raze the tile.
+  // place_object already registered it live; the fake keeps that in core.live.
+  await call("place_object", { id: 2, x: 500, y: 500 });
+  await call("clear_area", { x1: 500, y1: 500, x2: 500, y2: 500, includeNpcs: false });
+  const entries = JSON.parse(fs.readFileSync(process.env.AGENT_MCP_SPAWNS_FILE, "utf8"));
+  assert.equal(entries.filter((entry) => entry.remove === true).length, 0,
+    "an agent-placed object is dropped, not turned into a cache-map removal marker");
+});
+
+test("placing on a razed tile keeps the object after a reload", async () => {
+  const core = fakeCore();
+  const tools = new Map();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "edit-mcp-replace-"));
+  process.env.AGENT_MCP_SPAWNS_FILE = path.join(dir, "object-spawns.json");
+  process.env.AGENT_MCP_NPC_SPAWNS_FILE = path.join(dir, "npc-spawns.json");
+  fs.writeFileSync(process.env.AGENT_MCP_NPC_SPAWNS_FILE, "[]");
+  fs.writeFileSync(process.env.AGENT_MCP_SPAWNS_FILE, JSON.stringify([
+    { id: 2, position: { x: 700, y: 700, z: 0 }, type: 10, face: 0, remove: true, source: "agent-mcp" },
+  ]));
+  const tool = (name, _d, _s, handler) => tools.set(name, async (args) => {
+    try {
+      return { content: [{ type: "text", text: JSON.stringify(await handler(args)) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: String(error?.message ?? error) }], isError: true };
+    }
+  });
+  registerEditTools({ core, tool, z });
+  const result = await tools.get("place_object")({ id: 2, x: 700, y: 700 });
+  assert.equal(result.isError, undefined);
+  const entries = JSON.parse(fs.readFileSync(process.env.AGENT_MCP_SPAWNS_FILE, "utf8"));
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].remove, undefined, "the stale marker must be gone");
+});

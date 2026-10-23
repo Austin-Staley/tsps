@@ -118,14 +118,14 @@ module.exports = function registerEditTools(ctx) {
       if (!definition) throw new Error(`No definition for object id ${id}`);
       ObjectManager.register(new GameObject(id, new Location(x, y, z), type, face, null), true);
       const spawns = readSpawns();
-      const already = spawns.some(
-        (entry) => entry.id === id && sameTile(entry, x, y, z)
-          && (entry.type ?? 10) === type && (entry.face ?? 0) === face && entry.remove !== true,
-      );
+      // A razed tile keeps a removal marker for this object; clear it, or the marker
+      // deletes the new placement on the next load.
+      objectStore().dropRemoval(spawns, id, x, y, z, type);
+      const already = objectStore().find(spawns, id, x, y, z, type, face) !== undefined;
       if (!already) {
         spawns.push({ id, position: { x, y, z }, type, face, source: "agent-mcp" });
-        writeSpawns(spawns);
       }
+      writeSpawns(spawns);
       return { placed: { id, name: definition.getName(), x, y, z, type, face }, persisted: !already };
     }
   );
@@ -221,23 +221,34 @@ module.exports = function registerEditTools(ctx) {
         }
       }
       const removedObjects = [];
+      // A tile can hold the same loc twice (the cache's MapObjects and a registered
+      // runtime object), so removals are keyed by object identity on the tile: a
+      // second pass would otherwise find the placement entry already dropped and
+      // write a removal marker for something this toolset placed itself.
+      const removedKeys = new Set();
       for (const object of candidates) {
         const at = object.getLocation();
         const x = at.getX();
         const y = at.getY();
         const z = at.getZ();
         const type = object.getType();
+        const identity = `${object.getId()}:${type}:${x},${y},${z}`;
+        if (removedKeys.has(identity)) continue;
+        removedKeys.add(identity);
         ObjectManager.deregister(object, true);
         removedObjects.push({ id: object.getId(), type, x, y, z });
-        objectStore().dropPlacement(spawns, object.getId(), x, y, z, type);
-        spawnsChanged = true;
+        // Compute coverage first: dropPlacement clears the placement entry, so asking
+        // afterwards would report every object as "not from this file" and write a
+        // removal marker even for objects this toolset placed itself.
         const covered = spawns.some((entry) => entry.id === object.getId()
           && sameTile(entry, x, y, z) && (entry.type ?? 10) === type && entry.remove !== true);
+        if (objectStore().dropPlacement(spawns, object.getId(), x, y, z, type)) spawnsChanged = true;
         if (!covered) {
           spawns.push({
             id: object.getId(), position: { x, y, z },
             type, face: object.getFace(), remove: true, source: "agent-mcp",
           });
+          spawnsChanged = true;
         }
       }
       if (spawnsChanged) writeSpawns(spawns);

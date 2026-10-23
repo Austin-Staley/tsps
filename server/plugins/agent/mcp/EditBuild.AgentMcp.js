@@ -161,30 +161,52 @@ module.exports = function registerEditBuildTools(ctx) {
    * Applies placements: registers them live for every player, then writes the
    * definition file once (a per-object write would rewrite a 30k-entry file
    * thousands of times).
+   *
+   * Validation runs over the whole batch before anything is registered: a bad id or
+   * tile partway through must not leave half a structure standing in the world with
+   * nothing persisted, because that divergence lasts until the next restart.
    */
   const applyPlacements = (placements) => {
-    if (placements.length === 0) return { placed: 0, skipped: 0, persisted: 0 };
+    if (placements.length === 0) return { placed: 0, skipped: [], persisted: 0 };
     if (placements.length > MAX_BATCH) {
       throw new Error(`Batch of ${placements.length} exceeds ${MAX_BATCH}; split the build`);
     }
+    const problems = [];
+    placements.forEach((item, index) => {
+      const { id, x, y, z = 0, type = 10, face = 0 } = item;
+      try {
+        validate(id, x, y, z, type, face);
+        if (!ObjectDefinition.forId(id)) throw new Error(`no definition for object id ${id}`);
+      } catch (error) {
+        if (problems.length < 10) problems.push({ index, reason: String(error?.message ?? error) });
+      }
+    });
+    if (problems.length > 0) {
+      throw new Error(
+        `Nothing was placed: ${problems.length} placement(s) are invalid, e.g. ${JSON.stringify(problems)}`,
+      );
+    }
+
     const spawnStore = store();
     const entries = spawnStore.read();
     let placed = 0;
-    let skipped = 0;
+    const skipped = [];
     let persisted = 0;
-    for (const item of placements) {
+    for (const [index, item] of placements.entries()) {
       const { id, x, y, z = 0, type = 10, face = 0 } = item;
-      validate(id, x, y, z, type, face);
-      if (!ObjectDefinition.forId(id)) throw new Error(`No definition for object id ${id}`);
       try {
         ObjectManager.register(new GameObject(id, new Location(x, y, z), type, face, null), true);
         placed++;
-      } catch {
-        skipped++;
+      } catch (error) {
+        // Keep going (one bad tile should not abort a city) but say why.
+        if (skipped.length < 10) skipped.push({ index, x, y, reason: String(error?.message ?? error) });
         continue;
       }
-      const existing = spawnStore.find(entries, id, x, y, z, type);
+      const existing = spawnStore.find(entries, id, x, y, z, type, face);
       if (!existing) {
+        // A razed tile still carries a removal marker for this object; clear it, or the
+        // marker deletes the new placement on the next load.
+        spawnStore.dropRemoval(entries, id, x, y, z, type);
         entries.push({ id, position: { x, y, z }, type, face, source: "agent-mcp" });
         persisted++;
       }
@@ -284,7 +306,7 @@ module.exports = function registerEditBuildTools(ctx) {
       "Shapes: line, ring, box, tower, repeated, avenue, column. For line/avenue/repeated, (x, y) is the start tile and (x2, y2) the end tile; for ring it is the centre; for box/tower it is the low-x/low-y corner.",
     {
       shape: z.enum(["line", "ring", "box", "tower", "repeated", "avenue", "column"]),
-      id: z.number().int().min(0).describe("Object id, or omit and use `material`"),
+      id: z.number().int().min(0).optional().describe("Object id, or omit and use `material`"),
       material: z.string().optional().describe("Material name from list_presets (alternative to id)"),
       x: z.number().int().describe("Origin / centre x"),
       y: z.number().int().describe("Origin / centre y"),
@@ -304,6 +326,9 @@ module.exports = function registerEditBuildTools(ctx) {
       rotation: z.number().int().min(-270).max(270).default(0),
     },
     ({ shape, id, material, x, y, z = 0, rotation = 0, ...options }) => {
+      if (id === undefined && material === undefined) {
+        throw new Error("Give either `id` (a cache object id) or `material` (a name from list_presets)");
+      }
       const catalog = readCatalog();
       // Line-family shapes take absolute start/end tiles; the geometry engine works in
       // offsets from the preset origin, so shift the end point into that space.

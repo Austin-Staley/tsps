@@ -285,3 +285,18 @@ test("terrain validation", async () => {
     x1: 0, y1: 0, x2: 0, y2: 0, z: 0, height: 300,
   })).isError, true);
 });
+
+// --- review follow-ups -------------------------------------------------------
+
+test("terrain writes remove a stale sibling pack so a reload keeps one view", async () => {
+  const t = terrainTestSetup();
+  const regionId = (50 << 8) | 50; // tiles 3200-3263 x 3200-3263
+  const dir = path.join(t.dir, "regions");
+  fs.mkdirSync(dir, { recursive: true });
+  // A leftover full pack next to where a terrain-only file will be written.
+  const stalePack = path.join(dir, `${regionId}.pack`);
+  fs.writeFileSync(stalePack, Buffer.from([1, 2, 3]));
+  await t.call("paint_ground", { x1: 3222, y1: 3218, x2: 3222, y2: 3218, z: 0, overlay: 5 });
+  assert.equal(fs.existsSync(stalePack), false, "the .pack must not survive next to a .terrain.dat");
+  assert.equal(fs.existsSync(path.join(dir, `${regionId}.terrain.dat`)), true);
+});

@@ -208,3 +208,56 @@ test("list_presets exposes materials and preset parameters", async () => {
   assert.ok(catalog.presets.tiered_city.repeat.radius === "$radii");
   assert.ok(catalog.presets.house.params.width === 5);
 });
+
+// --- review follow-ups -------------------------------------------------------
+
+test("re-placing on a razed tile clears the removal marker", async () => {
+  const t = setup();
+  // A tile that was razed earlier: the file holds a removal marker for this object.
+  fs.writeFileSync(t.file, JSON.stringify([
+    { id: 16519, position: { x: 300, y: 300, z: 0 }, type: 10, face: 0, remove: true, source: "agent-mcp" },
+  ]));
+  const res = await t.call("place_objects", { objects: [{ id: 16519, x: 300, y: 300 }] });
+  assert.equal(res.persisted, 1);
+  const entries = JSON.parse(fs.readFileSync(t.file, "utf8"));
+  assert.equal(entries.length, 1, "the marker is replaced by the placement, not kept beside it");
+  assert.equal(entries[0].remove, undefined);
+  assert.deepEqual(entries[0].position, { x: 300, y: 300, z: 0 });
+  // A marker for the same id on another tile is left alone.
+  fs.writeFileSync(t.file, JSON.stringify([
+    { id: 16519, position: { x: 301, y: 301, z: 0 }, type: 10, face: 0, remove: true, source: "agent-mcp" },
+  ]));
+  await t.call("place_objects", { objects: [{ id: 16519, x: 300, y: 300 }] });
+  const after = JSON.parse(fs.readFileSync(t.file, "utf8"));
+  assert.equal(after.filter((entry) => entry.remove === true).length, 1);
+});
+
+test("re-placing the same tile with a new rotation is persisted", async () => {
+  const t = setup();
+  await t.call("place_objects", { objects: [{ id: 16519, x: 400, y: 400, face: 0 }] });
+  const turned = await t.call("place_objects", { objects: [{ id: 16519, x: 400, y: 400, face: 2 }] });
+  assert.equal(turned.persisted, 1, "a different face needs its own entry");
+  const entries = JSON.parse(fs.readFileSync(t.file, "utf8"));
+  assert.deepEqual(entries.map((entry) => entry.face).sort(), [0, 2]);
+});
+
+test("an invalid placement aborts the batch before anything is registered", async () => {
+  const t = setup();
+  // Second item is out of world: the first must NOT be left standing.
+  const bad = await t.callRaw("place_objects", {
+    objects: [{ id: 16519, x: 10, y: 10 }, { id: 16519, x: 999999, y: 10 }],
+  });
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /Nothing was placed/);
+  assert.equal(t.live.length, 0, "no partial batch in the world");
+  assert.deepEqual(JSON.parse(fs.readFileSync(t.file, "utf8")), [], "and nothing persisted");
+});
+
+test("build_shape accepts material without an id, and rejects neither", async () => {
+  const t = setup();
+  const ok = await t.call("build_shape", { shape: "line", material: "castle_wall", x: 0, y: 0, x2: 3, y2: 0 });
+  assert.equal(ok.count, 4);
+  const neither = await t.callRaw("build_shape", { shape: "line", x: 0, y: 0, x2: 3, y2: 0 });
+  assert.equal(neither.isError, true);
+  assert.match(neither.content[0].text, /either `id`|and material/);
+});

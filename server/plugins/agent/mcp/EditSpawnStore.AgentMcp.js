@@ -38,22 +38,39 @@ function writeEntries(file, entries) {
 /** Object spawns: { id, position: { x, y, z }, type, face, remove?, source? }. */
 function createObjectSpawnStore(file) {
   const key = (entry) => `${entry?.position?.x},${entry?.position?.y},${entry?.position?.z}`;
+  const matches = (entry, id, x, y, z, type) =>
+    entry.id === id && key(entry) === `${x},${y},${z}` && (entry.type ?? 10) === type;
   return {
     file,
     read: () => readEntries(file),
     write: (entries) => writeEntries(file, entries),
-    /** The entry for this object on this tile, or undefined. */
-    find: (entries, id, x, y, z, type) => entries.find((entry) =>
-      entry.id === id && key(entry) === `${x},${y},${z}` && (entry.type ?? 10) === type),
+    /**
+     * The placement entry for this object on this tile, or undefined. Removal markers
+     * do not count: the object is not placed by the file, so re-placing it has to add
+     * an entry (and clear the marker) rather than treat it as already saved.
+     */
+    find: (entries, id, x, y, z, type, face) => entries.find((entry) =>
+      matches(entry, id, x, y, z, type) && entry.remove !== true
+      && (face === undefined || (entry.face ?? 0) === face)),
     /** Drops a placement entry, so the object is no longer placed by this file. */
     dropPlacement: (entries, id, x, y, z, type) => {
       const before = entries.length;
       for (let i = entries.length - 1; i >= 0; i--) {
         const entry = entries[i];
-        if (entry.id === id && key(entry) === `${x},${y},${z}`
-          && (entry.type ?? 10) === type && entry.remove !== true) {
-          entries.splice(i, 1);
-        }
+        if (matches(entry, id, x, y, z, type) && entry.remove !== true) entries.splice(i, 1);
+      }
+      return entries.length !== before;
+    },
+    /**
+     * Drops a removal marker for this object on this tile. A razed tile keeps its
+     * marker, which would delete a fresh placement of the same id and type on the
+     * next load; placing therefore clears it first.
+     */
+    dropRemoval: (entries, id, x, y, z, type) => {
+      const before = entries.length;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const entry = entries[i];
+        if (matches(entry, id, x, y, z, type) && entry.remove === true) entries.splice(i, 1);
       }
       return entries.length !== before;
     },
