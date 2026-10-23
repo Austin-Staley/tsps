@@ -934,6 +934,9 @@ module.exports = function registerTheFinalDawnQuest(api) {
       // Cache 14054 transforms to 13694/14377 on varbit 16668; all are the
       // same palace Servius and must be able to offer the start.
       if (!SERVIUS_IDS.has(npcId)) return false;
+      // The Heart of Darkness owns Servius for its own stage-74 hand-in; only
+      // offer the next quest's start once that quest is actually complete.
+      if (!questComplete(player, "the_heart_of_darkness")) return false;
       play(player, npcId, "infiltration-ii-talking-to-servius");
       return true;
     }

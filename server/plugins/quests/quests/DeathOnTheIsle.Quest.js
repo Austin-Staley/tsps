@@ -751,12 +751,27 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     return null;
   }
 
+  // Interrupted conversations resume from the tail of the transcript they died in.
+  const ACCUSATION_AFTERMATH = "the-accusation-fighting-adala";
+  const STAGE_WRAP_UP = "the-stage-attacking-naiatli-again";
+
+  /** The steps after `stepId`, so a conversation cut short can be replayed. */
+  function tailAfter(stepId) {
+    return steps => {
+      if (!Array.isArray(steps)) return steps;
+      const index = steps.findIndex(step => step?.id === stepId);
+      return index === -1 ? steps : steps.slice(index + 1);
+    };
+  }
+
   function selectGuardsVariant(player, npcId) {
     const stage = stageOf(player);
     const hutza = npcId === HUTZA || npcId === HUTZA_2;
     if (quest.isComplete(player)) {
       return hutza ? "post-quest-dialogue-talking-to-hutza" : "post-quest-dialogue-talking-to-stradius";
     }
+    // The case was closed but the wrap-up was cut off: it still has to complete.
+    if (stage >= STAGE_CASE_CLOSED) return STAGE_WRAP_UP;
     if (stage >= STAGE_ON_STAGE) {
       return hasFlag(player, "on.stage")
         ? "the-stage-talking-to-hutza"
@@ -771,6 +786,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       return "the-backstage-talking-to-hutza-or-stradius";
     }
     if (stage >= STAGE_ADALA_GONE) {
+      // Adala was escorted away but the departure was cut short: replay the tail.
+      if (stage < STAGE_ACCUSATION_DONE) return ACCUSATION_AFTERMATH;
       return hutza ? "the-accusation-talking-to-hutza" : "the-accusation-talking-to-stradius";
     }
     if (stage >= STAGE_ACCUSATIONS) {
@@ -858,6 +875,12 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         "the-investigation-talking-to-hutza-or-stradius-after-pickpocketing-everyone",
         selectFromMenu
       );
+    }
+    if (variant === ACCUSATION_AFTERMATH) {
+      return playVariant(player, npcId, variant, tailAfter("k5CJTB"));
+    }
+    if (variant === STAGE_WRAP_UP) {
+      return playVariant(player, npcId, variant, tailAfter("wdaiPu"));
     }
     return playVariant(player, npcId, variant);
   }

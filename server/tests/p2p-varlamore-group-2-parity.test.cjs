@@ -1055,8 +1055,8 @@ test('DOTI starts at 2, gives the uniform instructions at 4, enters the window a
   finish(h, p); assert.equal(h.quest.getStage(p), 4);
   object(54701); assert.equal(h.quest.getStage(p), 6);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [1401, 2967]);
-  p.full = true; object(54723); assert.equal(p.items.get(29914), undefined);
-  p.full = false; object(54723); assert.equal(p.items.get(29914), 1); assert.equal(p.items.get(29915), 1);
+  p.full = true; object(54723); assert.equal(p.items.get(29916), undefined);
+  p.full = false; object(54723); assert.equal(p.items.get(29916), 1); assert.equal(p.items.get(29918), 1);
   finish(h, p); npc(13818);
   h.continueUntil(p, () => p.text.startsWith('Just good fortune.')); p.manager.advance();
   assert.equal(h.quest.getStage(p), 6); h.tick(3); assert.equal(h.quest.getStage(p), 8); h.tick(1);

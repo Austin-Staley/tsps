@@ -334,6 +334,23 @@ test('DOTI destroyed evidence is re-stolen from the same suspect (inventory chec
     'holding the item selects the again variant');
 });
 
+test('DOTI stage 33 interruption: a guard re-talk replays the departure and reaches the theatre', () => {
+  const { h, p } = doti();
+  h.quest.setStage(p, 33);
+  h.npc(p, N.HUTZA, 'Talk-to');
+  h.continueUntil(p, () => h.quest.getStage(p) === 34);
+  assert.equal(h.quest.getStage(p), 34, 'the interrupted escort resumes at the departure message');
+  assert.ok(p.messages.includes('The others depart for the theatre.'), 'the departure message is sent');
+});
+
+test('DOTI stage 49 interruption: a guard re-talk replays the wrap-up and completes the quest', () => {
+  const { h, p } = doti();
+  h.quest.setStage(p, 49);
+  h.npc(p, N.HUTZA, 'Talk-to');
+  h.continueUntil(p, () => h.quest.getStage(p) === 50);
+  assert.equal(h.quest.getStage(p), 50, 'the interrupted wrap-up completes the quest');
+});
+
 test('DOTI post-quest Head Butler replacement gives another mask and tray', () => {
   const { h, p } = doti();
   h.quest.setStage(p, 50);
