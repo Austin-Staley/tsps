@@ -37,6 +37,7 @@
     "376": { "name": "Medium clue scroll warning", "varbit": 10695 },
     "377": { "name": "Hard clue scroll warning", "varbit": 10723 },
     "378": { "name": "Elite clue scroll warning", "varbit": 10724 },
+    "379": { "name": "Master clue scroll warning", "varbit": 10725 },
     "431": { "name": "Update clan 'last seen' records", "varbit": 16118 },
     "433": { "name": "'Did you know?' tips", "varbit": 16235 },
     "451": { "name": "STASH units take equipped items", "varbit": 17938 },
