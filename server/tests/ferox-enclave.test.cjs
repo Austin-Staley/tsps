@@ -108,6 +108,9 @@ test("random events use the captured enclave polygon, leaving the buffer and are
     eligibility(request);
     assert.equal(request.allowed, expected, `${x},${y},${z}`);
   }
+  const blocked = { player: player({ at: new Location(3130, 3631, 0) }), allowed: false };
+  eligibility(blocked);
+  assert.equal(blocked.allowed, false, "an active activity's exclusion wins over Ferox's general permission");
 });
 
 test("the barrier in this cache crosses between the town and the buffer (captured tiles)", () => {

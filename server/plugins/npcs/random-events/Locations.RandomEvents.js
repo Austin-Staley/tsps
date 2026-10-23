@@ -29,13 +29,14 @@ function bank(api, player) {
 
 function available(api, definition, player, following = false) {
   const location = player.getLocation();
+  if (inside(location, DATA.noEvents)) return false;
   const request = { player, kind: definition.kind, following, allowed: null };
   api.emitCustomEvent("random-events:eligibility", request);
   if (request.allowed !== null) return request.allowed;
   if (bank(api, player)) return following && BANK_FOLLOWERS.has(definition.kind);
   const wilderness = api.core.Wilderness.isPvpArea(location);
   const area = player.getArea?.();
-  if (area && !wilderness && !DATA.allowedManagedAreas.includes(area.pluginName)) return false;
+  if (area && !wilderness && !DATA.allowedManagedAreas.includes(area.getName())) return false;
   if (inside(location, DATA.underwater)) return UNDERWATER_KINDS.has(definition.kind);
   if (inside(location, DATA.kalphite)) return KALPHITE_KINDS.has(definition.kind);
   return !TELEPORTING_KINDS.has(definition.kind) ||

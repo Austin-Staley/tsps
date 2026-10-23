@@ -65,6 +65,7 @@ before(async () => {
     request.pickaxe = { id: core.ItemIdentifiers.RUNE_PICKAXE, attemptIntervalTicks: 3, animation: new core.Animation(624) };
   });
   on("shooting-stars:landed", Noticeboard.landed);
+  on("random-events:eligibility", Common.denyRandomEvents);
   on("mining:level-boost", Ring.addBoost);
   Noticeboard.resetForTests();
   Common.isMembersWorld = () => members;
@@ -123,6 +124,28 @@ function runTicks(count, random) {
     Mining.tick(random);
   }
 }
+
+test("crashed stars exclude random events nearby until removal, on their own plane only", () => {
+  const star = Star.land(DATA.sites[VARROCK], 9, VARROCK);
+  const query = (x, y, z = star.z) => {
+    const player = miner({ x, y });
+    player.setLocation(new core.Location(x, y, z));
+    const request = { player, kind: "genie", following: false, allowed: null };
+    fakeApi.emitCustomEvent("random-events:eligibility", request);
+    return request.allowed;
+  };
+  assert.equal(query(star.x - 1, star.y), null, "a falling star has not crashed yet");
+  for (let i = 0; i < DATA.landingTicks; i++) Star.tick(star);
+  assert.equal(query(star.x - 1, star.y), false, "the mining tiles are excluded");
+  assert.equal(query(star.x + 15, star.y + 15), false, "the current vicinity includes its edge");
+  assert.equal(query(star.x + 16, star.y), null, "unrelated players outside the vicinity are untouched");
+  assert.equal(query(star.x - 1, star.y, 1), null, "a different floor stays eligible");
+  const following = { player: miner({ x: star.x - 1, y: star.y }), kind: "mime", following: true, allowed: true };
+  fakeApi.emitCustomEvent("random-events:eligibility", following);
+  assert.equal(following.allowed, false, "the dynamic exclusion also ends existing invitations and overrides general permissions");
+  Star.remove(star);
+  assert.equal(query(star.x - 1, star.y), null, "removal releases the exclusion immediately");
+});
 
 test("the data: every size has its cache loc, and every site is a tile", () => {
   for (const entry of DATA.sizes) {

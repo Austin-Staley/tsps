@@ -14,6 +14,7 @@ module.exports = {
     Common.bind(api);
     Common.persistAttributes(api);
     api.onPlayerLogin(Common.restoreVarbits);
+    api.onCustomEvent("random-events:eligibility", Common.denyRandomEvents);
     require("./shootingstars/Landing.ShootingStars")(api);
     require("./shootingstars/Mining.ShootingStars")(api);
     require("./shootingstars/Prospect.ShootingStars")(api);

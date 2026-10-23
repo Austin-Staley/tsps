@@ -312,7 +312,7 @@ test('transformed players stall and Wilderness selection excludes teleporting ev
 
 test('managed non-Wilderness areas defer the schedule instead of spawning in an unknown zone', t => {
   const h = harness(t), p = h.player();
-  p.area = {};
+  p.area = { getName: () => 'UnknownArea' };
   h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000); h.emit('PlayerProcess', { player: p });
   assert.equal(h.npcs.length, 0);
   assert.ok(p.getAttribute('random-events:next-at') > Date.now());
@@ -333,6 +333,20 @@ test('bank roof footprints block natural spawns, leave the street eligible, and 
   h.roof(() => false);
   const p = h.player(); p.location = new Location(3093, 3244, 0);
   assert.equal(Locations.bank(h.api, p), false, 'a bounding box does not classify unroofed gaps as indoors');
+});
+
+test('Grand Exchange paving blocks invitations, with grass corners and other floors left eligible', t => {
+  const h = harness(t), p = h.player();
+  for (const [x, y, z, allowed] of [[3164, 3487, 0, false], [3145, 3489, 0, false],
+    [3144, 3489, 0, true], [3145, 3506, 0, true], [3164, 3487, 1, true]]) {
+    p.location = new Location(x, y, z);
+    assert.equal(Locations.available(h.api, { kind: 'genie' }, p), allowed, `${x},${y},${z}`);
+  }
+  p.location = new Location(3164, 3487, 0);
+  h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 0);
+  assert.ok(p.getAttribute('random-events:next-at') > Date.now());
 });
 
 test('bank chest standing tiles block spawns while named bank exceptions remain eligible', t => {
@@ -388,10 +402,17 @@ test('the four original Hunter biomes exclude teleport events without suppressin
 
 test('safe managed areas allow events; underwater and Kalphite Lair use their reduced pools', t => {
   const h = harness(t), p = h.player();
-  for (const pluginName of ['GiantsFoundry', 'Darkness', 'SlayerTower', 'CreatureCreation']) {
-    p.area = { pluginName };
-    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, pluginName);
+  for (const name of ['GiantsFoundry', 'DarkArea', 'SlayerTowerBasement', 'CreatureCreationDungeon', 'DogQuestArea']) {
+    p.area = { getName: () => name };
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, name);
   }
+  p.area = { pluginName: 'Quests', getName: () => 'DogQuestArea' };
+  p.location = new Location(3185, 3440, 0);
+  h.roof(() => true);
+  assert.equal(Locations.available(h.api, { kind: 'genie' }, p), false, 'a passive quest Area does not bypass its bank exclusion');
+  p.area = { pluginName: 'Quests', getName: () => 'VanstromArena' };
+  p.location = new Location(3222, 3218, 0);
+  assert.equal(Locations.available(h.api, { kind: 'genie' }, p), false, 'the shared Quests owner does not permit an unrelated arena');
   p.area = undefined;
   for (const [x, y, z, kinds] of [[3732, 10281, 1, ['genie', 'countcheck', 'jekyll', 'certer', 'gift']],
     [3480, 9500, 0, ['genie', 'countcheck', 'jekyll', 'certer', 'gift', 'dwarf', 'drill', 'plant']]]) {
@@ -420,7 +441,7 @@ test('bank footprint classification matches the active cache, including the stre
   const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  if (!CachePipeline.isInitialized()) await CachePipeline.initialize(path.resolve(__dirname, '..'));
   RegionManager.init();
   const api = { core: { MapObjects }, getRegionManager: () => RegionManager };
   for (const [x, y, z, expected] of [[3093, 3244, 0, true], [3085, 3244, 0, false],
@@ -428,6 +449,24 @@ test('bank footprint classification matches the active cache, including the stre
     [3209, 3219, 0, false], [3308, 3120, 0, true], [2465, 2848, 1, false]]) {
     RegionManager.loadMapFiles(x, y);
     assert.equal(Locations.bank(api, { getLocation: () => new Location(x, y, z) }), expected, `${x},${y},${z}`);
+  }
+});
+
+test('Grand Exchange footprint samples use the active cache plaza and paving, excluding grass', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { CacheMaps } = require('../dist/game/cache/CacheMaps');
+  if (!CachePipeline.isInitialized()) await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const terrain = require('../plugins/agent/mcp/EditTerrain.AgentMcp')({
+    core: { CachePipeline, CacheMaps, MapRegionReplacementManager: { getReplacementMapData: () => null } },
+    z: require('zod').z, tool() {},
+  });
+  assert.equal(terrain.tileAt(3164, 3487, 0).underlay, 55);
+  assert.equal(terrain.tileAt(3145, 3489, 0).overlay.id, 173);
+  for (const [x, y] of [[3144, 3489], [3145, 3506]]) {
+    const tile = terrain.tileAt(x, y, 0);
+    assert.equal(tile.overlay, null);
+    assert.notEqual(tile.underlay, 55, 'the grass corners are outside the plaza');
   }
 });
 

@@ -91,14 +91,30 @@ the surrounding towns do not inherit this rule. Underwater and the Kalphite Lair
 use the Wiki's explicit reduced pools, including the Drill Demon exception in
 the latter. Managed Giants' Foundry, the public dark caves, Slayer Tower basement
 and Creature Creation no longer suppress events simply because they are Areas.
+The passive `DogQuestArea` covering Varrock's public streets is also allowed.
+These permissions identify the Area itself: other arenas owned by the shared
+Quests plugin remain excluded, and public-area permission does not bypass banks.
 Other unclassified managed areas remain excluded.
+
+The Grand Exchange plaza is excluded using the active terrain's circular underlay-55
+component and its overlay-173 paving rim (three tiles wide). The stored spans follow
+those painted tiles, retaining grass corners; the exact server cutoff on the outward
+footpaths is uncaptured. The older cannon polygon names an unverified private-server
+source and was not used. Actual-cache tests check the plaza, rim and grass samples.
+
+[Forestry: Part Two](https://oldschool.runescape.wiki/w/Update:Forestry:_Part_Two)
+disabled random events around crashed stars. Shooting Stars answers the same custom
+eligibility event from its current star state, after the crash and until removal,
+on that star's plane. Its existing 15-tile vicinity is used; the live-OSRS radius is
+unverified. The permission is queried live, so no copied landing rectangles or stale
+star zones remain after removal. There is no Forestry-event runtime in this checkout
+(only Forestry tree timers and item storage), hence no active Forestry event to query.
 
 Limits: cache landscape and creature habitats are **not** captured live-OSRS
 server-zone boundaries. Roofless/chest zone edges and the original Hunter edges
 remain approximations; this is not evidence for exact tile-for-tile parity.
-This change does not map every Wiki no-event zone (for example Grand Exchange's
-flagstone perimeter or the radius of active Forestry/Shooting Stars), or prove
-the combat eligibility edge case above. No generated osrsreboxed data is changed.
+The star radius, GE footpath cutoff and combat eligibility edge case above are not
+captured. No generated osrsreboxed data is changed.
 No events spawn while the `random-events:enabled` world config is false; active events
 still expire.
 
@@ -108,8 +124,13 @@ Live checks on worktree MCP 49819 covered Draynor street spawning, Dwarf removal
 on bank entry, retaining Genie on entry while refusing a fresh bank invitation,
 Feldip's Mime refusal/Genie acceptance, and Mime invitations inside Ferox and the
 managed Giants' Foundry. Advancing the natural scheduler at Lumbridge produced a
-Beekeeper invitation without moving the player. The targeted Random Events,
-Ferox and food suites pass 101 tests, including actual-cache bank/street/floor checks.
+Beekeeper invitation without moving the player. Further live checks covered GE
+plaza refusal versus adjacent grass permission inside `DogQuestArea`, removing a
+following Genie on entry to the paving, refusing invitations by a crashed star,
+allowing them beyond its vicinity, and releasing the old exclusion on replacement.
+The targeted Random Events,
+Ferox, Shooting Stars and food suites pass 119 tests, including actual-cache
+bank/street/floor and GE terrain checks, plus the live-star exclusion lifecycle.
 
 Rewards require inventory capacity and retain the event on failure. Stackable gifts
 can join an existing stack; Jekyll's exchange frees its exact herb slot. State clears
@@ -127,7 +148,7 @@ The command replaces your previous event using its normal cleanup, and retains
 location eligibility, traversable spawning, ownership, expiry and reward checks. Its
 description is registered for command search.
 
-Verify after build: `node --test tests/random-events.test.cjs tests/ferox-enclave.test.cjs tests/food-effects.test.cjs`.
+Verify after build: `node --test tests/random-events.test.cjs tests/ferox-enclave.test.cjs tests/food-effects.test.cjs tests/shooting-stars.test.cjs`.
 These tests exercise real plugin registration with controlled lifecycle/collision/
 inventory adapters, plus the real Inventory reward path. From `client/`, run
 `yarn tsx tests/widget-loader.test.ts` to check the plugin's actual selection flags

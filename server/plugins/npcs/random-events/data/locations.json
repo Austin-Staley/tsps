@@ -1,5 +1,5 @@
 {
-  "about": "Random-event location policy. Inclusive [minX,maxX,minY,maxY,plane] boxes. Bank roof boxes enclose connected roof tiles containing cache Bank booth placements (revision 241, dump:loc); only actual roof tiles inside a box count. See ../SOURCES.md for evidence and limits.",
+  "about": "Random-event location policy. Inclusive [minX,maxX,minY,maxY,plane] boxes. Bank roof boxes enclose connected roof tiles containing cache Bank booth placements (revision 241, dump:loc); only actual roof tiles inside a box count. noEvents follows GE plaza underlay55 and its three-tile overlay173 rim from that cache. See ../SOURCES.md for evidence and limits.",
   "bankRoofs": [
     [1243,1245,3120,3122,0],
     [1412,1420,3349,3357,0],
@@ -56,8 +56,38 @@
     [3809,3811,3019,3021,0],
     [1674,1676,3614,3616,0]
   ],
+  "noEvents": [
+    [3158,3171,3470,3470,0],
+    [3156,3173,3471,3471,0],
+    [3175,3175,3471,3471,0],
+    [3154,3174,3472,3472,0],
+    [3176,3177,3472,3472,0],
+    [3152,3175,3473,3473,0],
+    [3179,3179,3473,3473,0],
+    [3151,3180,3474,3474,0],
+    [3148,3148,3475,3475,0],
+    [3150,3181,3475,3475,0],
+    [3148,3180,3476,3476,0],
+    [3147,3180,3477,3478,0],
+    [3182,3182,3477,3478,0],
+    [3147,3181,3479,3479,0],
+    [3183,3183,3479,3479,0],
+    [3147,3182,3480,3480,0],
+    [3146,3183,3481,3482,0],
+    [3145,3184,3483,3496,0],
+    [3146,3183,3497,3498,0],
+    [3147,3182,3499,3500,0],
+    [3148,3181,3501,3502,0],
+    [3149,3181,3503,3503,0],
+    [3150,3181,3504,3504,0],
+    [3151,3180,3505,3505,0],
+    [3152,3179,3506,3506,0],
+    [3154,3175,3507,3507,0],
+    [3156,3173,3508,3508,0],
+    [3158,3171,3509,3509,0]
+  ],
   "oldHunter": {"Feldip": [[2496,2623,2880,2943,0]],"Piscatoris": [[2240,2367,3520,3647,0],[2368,2431,3584,3647,0]],"Rellekka": [[2688,2751,3744,3839,0]],"Uzer": [[3392,3455,3072,3199,0]]},
-  "allowedManagedAreas": ["GiantsFoundry","Darkness","SlayerTower","CreatureCreation"],
+  "allowedManagedAreas": ["GiantsFoundry","DarkArea","SlayerTowerBasement","CreatureCreationDungeon","DogQuestArea"],
   "kalphite": [
     [3456,3519,9472,9535,0]
   ],

@@ -7,7 +7,7 @@ const Ferox = require("./ferox/Common.FeroxEnclave");
 const { isInsideEnclave } = require("./ferox/Bounds.FeroxEnclave");
 
 function allowRandomEvents(request) {
-  if (isInsideEnclave(request.player.getLocation())) request.allowed = true;
+  if (request.allowed !== false && isInsideEnclave(request.player.getLocation())) request.allowed = true;
 }
 
 module.exports = {
