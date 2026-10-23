@@ -131,6 +131,7 @@ export class PlayerSave {
     ];
     /** The name as the player first typed it, capitals included; later logins keep it. */
     private displayName: string;
+    private creationDate: number;
     private passwordHashWithSalt: string;
     private isDiscordLogin: boolean;
     private cachedDiscordAccessToken: string;
@@ -567,6 +568,7 @@ export class PlayerSave {
     }
 
     applyToPlayer(player: Player) {
+        player.setCreationDate(this.creationDate);
         player.setPasswordHashWithSalt(this.passwordHashWithSalt);
         player.setDiscordLogin(this.isDiscordLogin);
         player.setCachedDiscordAccessToken(this.cachedDiscordAccessToken);
@@ -673,6 +675,7 @@ export class PlayerSave {
         let playerSave = new PlayerSave();
 
         playerSave.displayName = player.getUsername();
+        playerSave.creationDate = player.getCreationDate().getTime();
         playerSave.passwordHashWithSalt = (player.getPasswordHashWithSalt() || "").trim();
         playerSave.isDiscordLogin = player.isDiscordLoginReturn();
         playerSave.cachedDiscordAccessToken = player.getCachedDiscordAccessToken();
