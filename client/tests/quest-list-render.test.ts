@@ -6,6 +6,7 @@ const GROUP_ID = 399;
 const LIST_UID = (GROUP_ID << 16) | 7;
 const VIEW_UID = (GROUP_ID << 16) | 6;
 const SCROLLBAR_UID = (GROUP_ID << 16) | 5;
+const ROOT_UID = (GROUP_ID << 16) | 2;
 
 type AnyWidget = any;
 
@@ -28,6 +29,13 @@ const makeRoot = (uid: number): AnyWidget => ({
 widgets.set(LIST_UID, makeRoot(LIST_UID));
 widgets.set(VIEW_UID, makeRoot(VIEW_UID));
 widgets.set(SCROLLBAR_UID, makeRoot(SCROLLBAR_UID));
+// Script 4137's listener: script 1340 reruns the cache's list build (2633) on quest varps.
+widgets.set(ROOT_UID, {
+    ...makeRoot(ROOT_UID),
+    onVarTransmit: [1340, ROOT_UID],
+    varTransmitTriggers: [101, 130],
+    eventHandlers: { onVarTransmit: { scriptId: 1340 } },
+});
 
 let nextDynamicUid = 1;
 const manager = {
@@ -91,6 +99,16 @@ assert.ok(
     textWidgets.some((widget) => widget.text === "Members"),
     "groups after the malformed one are rendered",
 );
+
+const root = widgets.get(ROOT_UID);
+assert.equal(root.onVarTransmit, undefined, "a quest varp no longer rebuilds (and rescrolls) the server's list");
+assert.equal(root.varTransmitTriggers, undefined);
+assert.equal(root.eventHandlers.onVarTransmit, undefined);
+
+// Another listener on 399:2 is left alone.
+root.onVarTransmit = [4030, ROOT_UID];
+applyQuestListWidgetGroups(manager as any, []);
+assert.deepEqual(root.onVarTransmit, [4030, ROOT_UID]);
 
 console.log("quest-list-render.test.ts: all tests passed");
 

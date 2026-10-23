@@ -20,6 +20,7 @@ The client only reports the click. The server sets the variable and sends it bac
 
 | Setting | Id | Variable |
 | --- | --- | --- |
+| Hide roofs | 7 | varbit 12378 `option_hide_rooftops` |
 | Hitsplat tinting | 5 | varbit 10236 `hitsplat_tint_disabled` |
 | Max hit hitsplats | 279 | varbit 14196 `hitsplat_maxhit_disabled` |
 | Show boss health overlay | 10 | varbit 12389 `hpbar_hud_boss_disabled` |

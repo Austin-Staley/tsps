@@ -1,4 +1,4 @@
-import { LocAnimated } from "../loc/LocAnimated";
+import { LocAnimated, type LocFrameSoundHandler } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec3 } from "gl-matrix";
 
@@ -77,6 +77,9 @@ const AUTO_FOG_DEPTH_FACTOR = 0.85;
  * screen are not ported yet; see docs/webgpu-renderer.md.
  */
 export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
+    /** Animated scenery's frame sounds (windmills, machinery), as the WebGL tick plays them. */
+    private readonly locFrameSound: LocFrameSoundHandler = (seqType, frame, at) =>
+        this.osrsClient.handleSeqFrameSounds(seqType, frame, { position: { x: at.x, y: at.y, z: at.level * 128 } });
     type: OsrsRendererType = WEBGPU;
 
     device!: GPUDevice;
@@ -704,8 +707,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             this.updateSkyColor();
             this.syncLocAnimationSmoothing();
             for (const map of this.mapManager.visibleMaps) {
-                map.updateAnimatedLocs(this.osrsClient.seqFrameLoader, cycle);
+                map.updateAnimatedLocs(this.osrsClient.seqFrameLoader, cycle, this.locFrameSound);
             }
+            this.osrsClient.ambientSounds.frame(this.mapManager.visibleMaps);
             // World entity decks are drawn from their own coordinate space; hand each map this
             // frame's placement matrix (identity maps are left untouched).
             for (const map of this.mapManager.visibleMaps) {

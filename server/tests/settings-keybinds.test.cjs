@@ -191,6 +191,15 @@ test('as captured: toggles in a category flip their var; split private chat runs
   assert.deepEqual(click(CLICKZONE, 5), ['varbit 9657=35', 'varp 287=1', 'script 83'], 'Split friends private chat');
 });
 
+test('Hide roofs is saved and sent back on login (the client script flips it too)', () => {
+  const { player, click, logins } = allSettings(4);
+  assert.deepEqual(click(CLICKZONE, 4), ['varbit 9657=7', 'varbit 12378=1'], 'Hide roofs');
+  assert.deepEqual(player.getAttribute('settings:values'), { 'varbit:9656': 4, 'varbit:12378': 1 });
+  player.sent.length = 0;
+  logins.find((login) => login.name === 'restoreSettings')({ player });
+  assert.ok(player.sent.includes('varbit 12378=1'));
+});
+
 test('as captured: a dropdown that sets one varbit to the option, and closing a dropdown', () => {
   const { click, varbit } = allSettings(0);
   click(CLICKZONE, 67);

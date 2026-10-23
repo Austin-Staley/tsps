@@ -252,6 +252,7 @@ import {
 } from "./TransmitCycles";
 import { AudioVarpController } from "./audio/AudioVarpController";
 import { MusicSystem } from "./audio/MusicSystem";
+import { AmbientSoundCollector } from "./audio/AmbientSoundCollector";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
@@ -509,6 +510,12 @@ export class OsrsClient {
     npcTypeLoader!: NpcTypeLoader;
     soundEffectLoader?: SoundEffectLoader;
     soundEffectSystem?: SoundEffectSystem;
+    /** Scenery's looping sounds; each renderer passes it the maps it shows, once per frame. */
+    readonly ambientSounds = new AmbientSoundCollector(
+        () => this.soundEffectSystem,
+        () => this.locTypeLoader,
+        () => this.varManager,
+    );
     musicSystem?: MusicSystem;
 
     // Master volume multiplier (0-1, from deviceoption 19)
@@ -2356,6 +2363,15 @@ export class OsrsClient {
             this.playerEcs,
             this.seqTypeLoader,
             this.seqFrameLoader,
+            (serverId, index, seqType, frame) =>
+                this.handleSeqFrameSounds(seqType, frame, {
+                    position: {
+                        x: this.playerEcs.getX(index) | 0,
+                        y: this.playerEcs.getY(index) | 0,
+                        z: (this.playerEcs.getLevel(index) | 0) * 128,
+                    },
+                    isLocalPlayer: serverId === (this.controlledPlayerServerId | 0),
+                }),
         );
         // PlayerEcs needs SeqType metadata for OSRS-parity movement blocking (sequenceDelay/priority checks).
         this.playerEcs.setSeqTypeLoader?.(this.seqTypeLoader);
@@ -6151,6 +6167,8 @@ export class OsrsClient {
                 this.continuousMovement?.tick();
                 this.playerEcs.updateClient(1);
             } catch {}
+            // Before the frame sounds below: positional sounds are heard from here.
+            this.updateSoundListener();
             try {
                 this.playerAnimController?.tick?.(1);
             } catch {}
@@ -6659,6 +6677,35 @@ export class OsrsClient {
             this.loginState.loginIndex = LoginIndex.WELCOME;
             this.updateGameState(GameState.LOGIN_SCREEN);
         }
+    }
+
+    /**
+     * Positional sounds are heard from the local player (or the actor a spectator follows), or the
+     * camera without one. Every renderer needs it, so it runs on the client tick (the WebGL frame
+     * also calls it every frame).
+     */
+    updateSoundListener(): void {
+        const soundSystem = this.soundEffectSystem;
+        if (!soundSystem) return;
+        try {
+            // A spectator (cam_target) hears from the actor the camera follows.
+            const cameraTarget = this.getCameraTargetPosition();
+            if (cameraTarget) {
+                soundSystem.updateListenerPosition(cameraTarget.x, cameraTarget.y, cameraTarget.level * 128);
+                return;
+            }
+            const index = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+            if (index !== undefined) {
+                soundSystem.updateListenerPosition(
+                    this.playerEcs.getX(index) | 0,
+                    this.playerEcs.getY(index) | 0,
+                    (this.playerEcs.getLevel(index) | 0) * 128,
+                );
+                return;
+            }
+        } catch {}
+        // z is the listener plane (level * 128), not a world height
+        soundSystem.updateListenerPosition(this.camera.getPosX() * 128, this.camera.getPosZ() * 128, 0);
     }
 
     handleSeqFrameSounds(seqType: SeqType, frame: number, context?: SequenceSoundContext): void {
