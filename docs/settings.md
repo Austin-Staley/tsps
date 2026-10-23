@@ -10,7 +10,6 @@ The client only reports the click. The server sets the variable and sends it bac
 
 - **The setting list.** Enum 422 lists the categories, each category's param 745 its setting structs in row order. A setting struct carries its id (param 1077), its type (param 1078: 0 toggle, 2 dropdown, 3 key, 9 colour) and its dropdown's option enum (param 1091). A row's slot is its index in the category shown, or, in search results, its index across every category in turn (search result 301 is setting 315).
 - **Selected setting** (`settings_selected_setting`, varbit 9657). A row click sets it to the setting's id, toggles included. Choosing a dropdown option, closing the dropdown (`settings:dropdown_close`, 134:26) or clicking a category sets it to 0.
-- **The quest list's Settings cog** (`questlist:settings_button`, 399:11; 7 recordings) opens All Settings on the quest list settings' category (Interfaces in rev 241) with `settings_first_load` (9648) set, then runs `settings_search_override` (5968) with "Quest List" and `chatdefault_stopinput`.
 - **A search result clicked** also sets `settings_category` (9656) to the setting's category. The search stays open.
 - **A category clicked while searching** ends the search: `floater_is_searching` and `floater_search_listen_for_keyboard` go to 0, the category and selection are sent, then script 2158 (`chatdefault_restoreinput`) runs, as when All Settings closes.
 - **Reopening** All Settings shows the category shown last; live sends nothing for it.

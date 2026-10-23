@@ -86,23 +86,6 @@ test('as captured: the search bar takes the keyboard, and closing All Settings b
   assert.deepEqual(player.sent, [], 'closing anything else leaves them alone');
 });
 
-test('as captured: the quest list cog opens All Settings searching "Quest List"', () => {
-  const { buttons } = registered();
-  const player = recordingPlayer();
-  const sender = player.getPacketSender();
-  Object.assign(sender, {
-    sendSubInterface: (uid, group) => { player.sent.push(`opensub ${uid >> 16}:${uid & 0xffff}=${group}`); return sender; },
-    sendInterfaceFlagsRange: () => sender,
-    sendClientScript: (id, ...args) => { player.sent.push(`script ${id}${args.length ? ` ${args.join(',')}` : ''}`); return sender; },
-  });
-  player.setInterfaceId = () => {};
-  buttons.get((399 << 16) | 11)({ player });
-  assert.deepEqual(player.sent, [
-    'varbit 9656=6', 'varbit 9648=1', 'opensub 161:16=134', 'script 5968 Quest List', 'script 4020',
-  ], 'Interfaces, where the quest list settings are; then the search');
-  assert.equal(player.getAttribute('settings-view'), -1, 'rows clicked are search results');
-});
-
 test('XP orb mounts the counter only while enabled, and Setup opens the cached settings', () => {
   const { buttons, logins } = registered();
   const player = recordingPlayer();
