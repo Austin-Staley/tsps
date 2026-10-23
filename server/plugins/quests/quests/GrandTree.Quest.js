@@ -319,7 +319,7 @@ module.exports = function registerGrandTreeQuest(api) {
     }
     if (npcId === NpcIdentifiers.FEMI) {
       if (stage === STAGE_NOT_STARTED) {
-        return page("attemping-to-enter-the-tree-gnome-stronghold-for-the-first-time");
+        return { page: "Femi", variant: "attemping-to-enter-the-tree-gnome-stronghold-for-the-first-time" };
       }
       if (stage < STAGE_RELEASED || stage >= STAGE_CHARLIE_CLUE) return null;
       if (stage >= STAGE_LUMBER_ORDER) {

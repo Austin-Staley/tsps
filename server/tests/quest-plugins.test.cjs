@@ -11,7 +11,7 @@ before(async () => {
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const apiMethods = new Set(Object.keys(PluginManager.createApi('QuestTest')));
 
-test('quest event literals register and dispatch through the production API', () => {
+test('quest event names register and dispatch through the production API', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const root = path.resolve(__dirname, '../plugins/quests');
@@ -22,8 +22,13 @@ test('quest event literals register and dispatch through the production API', ()
       if (entry.isDirectory()) scan(file);
       else if (entry.name.endsWith('.js')) {
         const source = fs.readFileSync(file, 'utf8');
+        const constants = new Map([...source.matchAll(/\bconst\s+(\w+)\s*=\s*(['"])([^'"]+)\2/g)]
+          .map((match) => [match[1], match[3]]));
         for (const match of source.matchAll(/\b(?:onCustomEvent|emitCustomEvent)(?:\?\.)?\s*\(\s*(['"])([^'"]+)\1/g)) {
           events.set(match[2], file);
+        }
+        for (const match of source.matchAll(/\b(?:onCustomEvent|emitCustomEvent)(?:\?\.)?\s*\(\s*(\w+)\s*[,)]/g)) {
+          if (constants.has(match[1])) events.set(constants.get(match[1]), file);
         }
       }
     }
@@ -784,6 +789,7 @@ test('While Guthix Sleeps only tracks a shirt through the player’s own broav',
   const attributes = new Map(), moves = [];
   const player = { getLocation: () => new api.core.Location(2519,3249,0),
     getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key,value),
+    getInventory: () => ({ deleteNumber() {} }),
     sendMessage() {}, getPacketSender: () => ({ sendVarbit() {} }) };
   const npc = { getId: () => 13518, getOwner: () => player,
     getMovementQueue: () => ({ addSteps: location => moves.push(location) }) };
@@ -848,11 +854,17 @@ test('quest keys, names and varps are unique', () => {
   const before = getRegisteredQuests().length;
   require('../plugins/quests/Quests.plugin').register(api);
   const quests = getRegisteredQuests().slice(before);
-  const seen = { key: new Map(), name: new Map(), varpId: new Map() };
+  const seen = { key: new Map(), name: new Map(), varpId: new Map(), varbitId: new Map() };
   for (const quest of quests) {
-    for (const field of ['key', 'name', 'varpId']) {
+    for (const field of ['key', 'name', 'varpId', 'varbitId']) {
       const value = quest[field];
+      if ((field === 'varpId' || field === 'varbitId') && value === undefined) continue;
       if (seen[field].has(value)) {
+        // The cache stores both Rag and Bone Man quests in consecutive states of varp 714.
+        if (field === 'varpId' && value === 714) {
+          assert.deepEqual([seen[field].get(value), quest.name].sort(), ['Rag and Bone Man I', 'Rag and Bone Man II']);
+          continue;
+        }
         assert.fail(`duplicate quest ${field} "${value}" (${seen[field].get(value)}, ${quest.name})`);
       }
       seen[field].set(value, quest.name);
@@ -889,7 +901,7 @@ test('each quest varp is sent again on login, so quest-gated locs show after a r
       return () => sender;
     },
   });
-  const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender };
+  const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender, getInventory: () => ({ getAmount: () => 0 }) };
   village.setStage(player, village.completionValue);
   varps.clear();
   varbits.clear();
@@ -14539,7 +14551,7 @@ test('bridge uses the actual cache palace exit and lets a full-inventory handoff
 });
 
 test('Blood Moon native bitfield mapping restores Slepe refinery phase without changing quest stage',()=>{
- const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map([['the-blood-moon-rises:start-dialogue-complete',true]]),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
+ const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map([['the-blood-moon-rises:start-dialogue-complete',true]]),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender,getInventory:()=>({getAmount:()=>0,contains:()=>false})};
  quest.setStage(player,10);assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the stage-10 hideout NPC transform makes Ivan visible');
  handlers.playerLogin.at(-1)({player});assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the hideout NPC transform is restored after relog');
  attrs.set('quest.the_blood_moon_rises.hideout-shrine-inspected',true);quest.setStage(player,10);assert.equal(bits.get(15464),8,'the shrine cutscene advances the native varbit');
@@ -15069,7 +15081,7 @@ test('Dragon Slayer II mirrors compact stages to the cache quest milestones in v
   const sender = new Proxy({}, { get: (_t, key) => (key === 'sendVarbit'
     ? (id, value) => (varbits.set(id, value), sender)
     : () => sender) });
-  const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender };
+  const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender, getInventory: () => ({ getAmount: () => 0 }) };
 
   quest.setStage(player, 1);
   assert.equal(varbits.get(6104), 5, 'after Alec, native stage 5 keeps Dallas visible at Musa Point');
@@ -15112,7 +15124,7 @@ test('Dragon Slayer II mirrors compact stages to the cache quest milestones in v
   sendQuestVarps({ player });
   assert.equal(varbits.get(6104), 205, 'the slain Galvek scene precedes the final Alec hand-in');
   quest.setStage(player, quest.completionValue);
-  assert.equal(varbits.get(6104), 210, 'completion follows the native QuestHelper terminal stage');
+  assert.equal(varbits.get(6104), 215, 'completion matches the cache quest DB threshold');
 });
 
 
@@ -20279,7 +20291,7 @@ test('DT2 Kasonde uses melee/ranged basics, healing, avoidable potions and pilla
   const api=new Proxy(base,{get:(t,k)=>k==='core'?core:k==='registerNpcCombatMethodProvider'?(id,C)=>{if(id===core.NpcIdentifiers.KASONDE_7)Combat=C}:t[k]});
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
   const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1),attrs=new Map([['desert-treasure-ii:vardorvis-progress',19]]);
-  const p={getUsername:()=> 'kasonde-test',isPlayer:()=>true,getAsPlayer(){return this},getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getInventory:()=>({getAmount:()=>0}),
+  const p={getUsername:()=> 'kasonde-test',isPlayer:()=>true,getAsPlayer(){return this},getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getInventory:()=>({getAmount:()=>0,contains:()=>false}),
     moveTo(v){this.location=v},getLocation(){return this.location},sendMessage:t=>messages.push(t),getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}),
     getCombat:()=>({getHitQueue:()=>({addPendingDamage:h=>damage.push(...h)})})};
   quest.setStage(p,7);handlers.objects.find(h => h.name === 'handleObjectInteraction')({player:p,objectId:core.ObjectIdentifiers.ENTRY_21,location:{x:1174,y:3428,z:0}});
@@ -20582,7 +20594,7 @@ test('Song of the Elves battles wait for the briefing and use the real headquart
     let location = new api.core.Location(2537,9745,0);
     const player = { getUsername:()=> 'SoteBattleTest', getLocation:()=> location, moveTo:loc=> {location=loc;},
       getAttribute:key=>attrs.get(key), setAttribute:(key,value)=>attrs.set(key,value), getArea(){return this.area;},
-      getInventory:()=>({getAmount:()=>0}), sendMessage(){}, getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}) };
+      getInventory:()=>({getAmount:()=>0,contains:()=>false}), sendMessage(){}, getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}) };
     const choice=handlers.custom.get('npc-dialogue:choice').find(h=>h.name==='handleDialogueChoice');
     choice({player,option:"I'm ready."});
     assert.equal(spawned.length,0,'the mobs wait for the final briefing page');

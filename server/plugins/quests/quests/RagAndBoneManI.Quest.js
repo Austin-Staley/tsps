@@ -79,7 +79,7 @@ module.exports = function registerRagAndBoneManIQuest(api) {
   const WIRE_COMPLETE = 4; // quest DB row 114, column 19 (script 4029 threshold)
 
   const START_HOOK = "quest:rag-and-bone-man-i:start";
-  const LOAD_SHARED_VINEGAR_BONE_EVENT = "quest:rag-and-bone-man-i:boiler:load-vinegar-bone";
+  const LOAD_SHARED_VINEGAR_BONE_EVENT = "rag-and-bone-man-i:load-vinegar-bone";
 
   const JUG_OF_VINEGAR_ITEM_ID = ItemIdentifiers.JUG_OF_VINEGAR; // 7810
   const POT_OF_VINEGAR_ITEM_ID = ItemIdentifiers.POT_OF_VINEGAR; // 7811

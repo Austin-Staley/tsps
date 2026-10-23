@@ -66,7 +66,7 @@ function fakePlayer(stage, attributes = {}) {
       addItem: () => true,
     }),
     getEquipment: () => ({ get: () => equipmentItem, getItems: () => [], hasItem: () => false }),
-    getSkillManager: () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 99 }),
+    getSkillManager: () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 99, getCombatLevel: () => 126 }),
     getLocation: () => ({ getX: () => 0, getY: () => 0, getZ: () => 0 }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getDialogueManager: () => ({ reset: () => {}, startDialogues: () => {} }),

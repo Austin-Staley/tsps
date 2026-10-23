@@ -538,6 +538,7 @@ test('Femi sneaks the released player inside and takes 1000 coins only for the p
   const plugin = registerPlugin();
   try {
     const newcomer = playerFixture();
+    assert.equal(variant(newcomer, FEMI).page, 'Femi', 'the first-visit variant belongs to Femi\'s own page');
     assert.equal(variant(newcomer, FEMI).variant,
       'attemping-to-enter-the-tree-gnome-stronghold-for-the-first-time',
       'the first conversation offers the canonical box-help choice');

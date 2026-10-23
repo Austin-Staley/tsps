@@ -72,7 +72,7 @@ module.exports = function registerRagAndBoneManIIQuest(api) {
   const STAGE_COMPLETE = 2;
   const PRAYER_XP = 5000;
   const DROP_DENOMINATOR = 4;
-  const LOAD_SHARED_VINEGAR_BONE_EVENT = "quest:rag-and-bone-man-i:boiler:load-vinegar-bone";
+  const LOAD_SHARED_VINEGAR_BONE_EVENT = "rag-and-bone-man-i:load-vinegar-bone";
 
   const BONES_ATTRIBUTE = "quest.rag_and_bone_man_ii.bones";
   const REWARDS_ATTRIBUTE = "quest.rag_and_bone_man_ii.rewards";
