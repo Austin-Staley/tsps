@@ -11,7 +11,6 @@ import { ItemOnGround } from "./ItemOnGround"
 import { State } from "./ItemOnGround"
 import { GroundItemRespawnTask } from '../../../task/impl/GroundItemRespawnTask'
 import { Item } from "../../../model/Item"
-import { MAX_STACK_AMOUNT } from "../../../model/container/StackType"
 import { PrivateArea } from "../../../model/areas/impl/PrivateArea"
 import { Misc } from "../../../../util/Misc"
 import { PathFinder } from "../../../model/movement/path/PathFinder";
