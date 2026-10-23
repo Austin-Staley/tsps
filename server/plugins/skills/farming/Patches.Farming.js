@@ -304,8 +304,9 @@ function harvest(player, patch) {
     if (["CRYSTAL_TREE", "CELASTRUS"].includes(crop.type) && !requireAxe(player)) return false;
     if (["ALLOTMENT", "HERB", "HOPS", "BELLADONNA"].includes(crop.type) && !requireTool(player, "Spade")) return false;
     const level = player.getSkillManager().getCurrentLevel(core.Skill.FARMING);
-    if (crop.type === "BELLADONNA" && !player.getEquipment().getItems().some(i => /gloves|gauntlets|vambraces/i.test(core.CacheDefinitions.getItem(i.getId()).name))) {
-        player.sendMessage("You need to wear gloves to pick poisonous nightshade."); return false;
+    if (crop.type === "BELLADONNA" && !Data.BELLADONNA_HANDWEAR.has(player.getEquipment().get(core.Equipment.HANDS_SLOT)?.getId())) {
+        player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(2, core.HitMask.GREEN)]);
+        player.sendMessage("Your hands are not protected from the poisonous nightshade."); return false;
     }
     const attas = Model.activeAnima(farmFor(player), Date.now()) === "ATTAS";
     let amount = crop.key === "WOAD" ? 3 : crop.key === "LIMPWURT" ? 3 + Math.floor(Math.floor(Math.random() * level) * (hasTool(player, "Magic secateurs") ? 1.1 : 1) * (attas ? 1.05 : 1) / 10)
