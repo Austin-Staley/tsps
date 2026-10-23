@@ -328,6 +328,7 @@ function createIndexBuffer(device: GPUDevice, data: Int32Array): GPUBuffer {
 export class ActorGeometryCache {
     private readonly device: GPUDevice;
     private readonly entries = new Map<string, GpuGeometry>();
+    private readonly emptyEntries = new Set<string>();
     private retired: GPUBuffer[] = [];
     private readonly maxEntries: number;
 
@@ -336,20 +337,38 @@ export class ActorGeometryCache {
         this.maxEntries = maxEntries;
     }
 
+    /** Undefined means evicted/unbuilt; null means this pass was built and has no faces. */
+    get(key: string): GpuGeometry | null | undefined {
+        const geometry = this.entries.get(key);
+        if (geometry) {
+            this.entries.delete(key);
+            this.entries.set(key, geometry);
+            return geometry;
+        }
+        if (this.emptyEntries.delete(key)) {
+            this.emptyEntries.add(key);
+            return null;
+        }
+        return undefined;
+    }
+
     getOrCreate(
         key: string,
         vertices: Uint8Array,
         indices: Int32Array,
         labels?: Uint32Array,
     ): GpuGeometry | undefined {
-        if (vertices.byteLength === 0 || indices.length === 0) return undefined;
-        const existing = this.entries.get(key);
-        if (existing) {
-            // LRU touch.
-            this.entries.delete(key);
-            this.entries.set(key, existing);
-            return existing;
+        if (vertices.byteLength === 0 || indices.length === 0) {
+            this.emptyEntries.delete(key);
+            this.emptyEntries.add(key);
+            if (this.emptyEntries.size > this.maxEntries) {
+                this.emptyEntries.delete(this.emptyEntries.values().next().value!);
+            }
+            return undefined;
         }
+        const existing = this.get(key);
+        if (existing) return existing;
+        this.emptyEntries.delete(key);
         const geometry: GpuGeometry = {
             vertices: createGeometryBuffer(
                 this.device,
@@ -384,6 +403,7 @@ export class ActorGeometryCache {
             entry.labels?.destroy();
         }
         this.entries.clear();
+        this.emptyEntries.clear();
         this.beginFrame();
     }
 

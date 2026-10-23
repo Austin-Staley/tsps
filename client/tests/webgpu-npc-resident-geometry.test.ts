@@ -1,0 +1,152 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { test } from "node:test";
+
+import { DynamicNpcAnimLoader } from "../render/npc/DynamicNpcAnimLoader";
+import { ActorGeometryCache } from "../render/webgpu/actors/actorGpu";
+import { ActorDataWriter } from "../render/webgpu/actors/actorPacking";
+import { SeqType } from "../rs/config/seqtype/SeqType";
+import { Model } from "../rs/model/Model";
+
+require.extensions[".glsl"] = (module, file) => { module.exports = fs.readFileSync(file, "utf8"); };
+for (const ext of [".png", ".jpg", ".webp"]) require.extensions[ext] = (module, file) => { module.exports = file; };
+(globalThis as any).self = globalThis;
+const { WebGPUActors } = require("../render/webgpu/actors/WebGPUActors");
+
+function fixture(alpha = true, capacity = 8) {
+    const model = new Model();
+    model.verticesCount = 4;
+    model.verticesX = new Int32Array([0, 128, 0, 128]);
+    model.verticesY = new Int32Array([0, 0, -128, -128]);
+    model.verticesZ = new Int32Array(4);
+    model.faceCount = 2;
+    model.indices1 = new Int32Array([0, 0]);
+    model.indices2 = new Int32Array([1, 2]);
+    model.indices3 = new Int32Array([2, 3]);
+    model.faceColors1 = model.faceColors2 = model.faceColors3 = new Int32Array([100, 200]);
+    if (alpha) model.faceAlphas = new Int8Array([0, -128]);
+    let variant = 1, typeId = 1, sequence = 1, frame = 0, builds = 0, uploads = 0;
+    const types = new Map<number, any>();
+    for (let id = 1; id <= 3; id++) types.set(id, {
+        id, modelIds: [id === 3 ? 1 : id], widthScale: 128, heightScale: 128, ambient: 0, contrast: 0,
+        getMovementSeqSet: () => ({ idle: -1, walk: -1 }),
+    });
+    types.set(10, { transforms: [1, 2], transform: () => types.get(variant),
+        getMovementSeqSet: () => ({ idle: -1, walk: -1 }) });
+    const seq = new SeqType(1, { game: "oldschool", revision: 241 } as any);
+    seq.frameIds = [1, 2]; seq.frameLengths = [2, 2];
+    const ready = new Set([1, 2]);
+    const typeLoader = { load: (id: number) => types.get(id) };
+    const loader = new DynamicNpcAnimLoader(typeLoader as any, undefined, {} as any,
+        { load: () => seq } as any, { load: (id: number) => ready.has(id) ? {} : undefined } as any,
+        undefined, {} as any);
+    const modelCache = new Map();
+    (loader as any).npcModelLoader = {
+        modelCache, getModel: (type: any) => { modelCache.set(type.id, model); return model; },
+    };
+    loader.setTextureIdIndexMap(new Map());
+    const original = (loader as any).cacheModelGeometry;
+    (loader as any).cacheModelGeometry = function (...args: any[]) { builds++; return original.apply(this, args); };
+    const device: any = { createBuffer: () => ({ destroy() {} }), queue: { writeBuffer: () => uploads++ } };
+    const cache = new ActorGeometryCache(device, capacity);
+    const client: any = {
+        clientPlugins: { smoothsNpcs: () => false }, npcTypeLoader: typeLoader,
+        npcEcs: {
+            getNpcTypeId: () => typeId, getSeqId: () => sequence, getSeqDelay: () => 0,
+            getFrameIndex: () => frame, getMovementFrameIndex: () => 0,
+            getMovementOverrides: () => ({}), getPathLengthLike: () => 0,
+            getRotation: () => 0, getTargetRot: () => 0,
+            getWorldX: () => 64, getWorldY: () => 64, getLevel: () => 0,
+            getServerId: () => 23, getColorOverride: () => ({ amount: 0 }),
+        },
+    };
+    const actors: any = Object.create(WebGPUActors.prototype);
+    Object.assign(actors, { renderer: { osrsClient: client }, dynamicNpcLoader: loader,
+        geometry: cache, writer: new ActorDataWriter(), pipelines: new Map([["npc", [{}, {}]]]),
+        actorEntry: () => 0 });
+    const map = { getRenderBaseTileX: () => 0, getRenderBaseTileY: () => 0,
+        getLocalTileSpan: () => 64, timeLoaded: -1 };
+    const pack = () => {
+        const state = { opaque: [], alpha: [], npcByEcsId: new Map() };
+        actors.packNpc(state, map, 5, 10);
+        return state as any;
+    };
+    const evictCpu = () => { (loader as any).geomCache.clear(); (loader as any).geomCacheBytes = 0; };
+    return { loader, cache, pack, evictCpu, ready, model,
+        setType: (id: number) => { typeId = id; }, setVariant: (id: number) => { variant = id; },
+        setSequence: (id: number) => { sequence = id; }, setFrame: (id: number) => { frame = id; },
+        builds: () => builds, uploads: () => uploads };
+}
+
+for (const alpha of [false, true]) test(`resident NPC passes skip CPU rebuilding (alpha=${alpha})`, () => {
+    const f = fixture(alpha);
+    const first = f.pack();
+    assert.equal(f.builds(), 1);
+    const writes = f.uploads();
+    f.evictCpu();
+    const next = f.pack();
+    assert.equal(f.builds(), 1, "a CPU eviction must not rebuild an already complete GPU pose");
+    assert.equal(f.uploads(), writes, "resident geometry does not upload again");
+    assert.equal(next.opaque[0].geometry, first.opaque[0].geometry);
+    assert.equal(next.alpha.length, alpha ? 1 : 0, "a known-empty alpha pass stays empty");
+    if (alpha) {
+        assert.equal(next.alpha[0].geometry, first.alpha[0].geometry);
+        assert.equal(next.alpha[0].entry, next.opaque[0].entry);
+    }
+});
+
+test("partial GPU eviction rebuilds the missing NPC pass", () => {
+    const f = fixture(true, 2);
+    const first = f.pack();
+    f.cache.getOrCreate("other", new Uint8Array(20), new Int32Array([0]));
+    f.evictCpu();
+    const next = f.pack();
+    assert.equal(f.builds(), 2);
+    assert.notEqual(next.opaque[0].geometry, first.opaque[0].geometry);
+    assert.equal(next.alpha[0].geometry, first.alpha[0].geometry, "the surviving pass remains reusable");
+});
+
+test("NPC resident keys preserve normalization, appearance sharing and live transforms", () => {
+    const f = fixture();
+    const key = f.loader.getFrameGeometryKey(1, 1, 0)!;
+    assert.equal(f.loader.getFrameGeometryKey(1, 1, 2), key);
+    assert.equal(f.loader.getFrameGeometryKey(3, 1, 0), key, "identical appearances still share poses");
+    assert.notEqual(f.loader.getFrameGeometryKey(2, 1, 0), key);
+    assert.equal(f.loader.getFrameGeometryKey(1, 1, -2, 1, -3), f.loader.getFrameGeometry(1, 1, 0, 1, 0)!.key);
+    f.setType(10); f.pack(); f.evictCpu(); f.setVariant(2);
+    f.pack();
+    assert.equal(f.builds(), 3, "a transformed NPC cannot reuse the old appearance's resident mesh");
+});
+
+test("missing next frames use the exact CPU fallback key and recover when ready", () => {
+    const f = fixture();
+    f.ready.delete(2);
+    const blend = { base: { next: 1, alpha: 0.5 } };
+    const key = f.loader.getFrameGeometryKey(1, 1, 0, -1, -1, blend);
+    assert.equal(key, f.loader.getFrameGeometry(1, 1, 0, -1, -1, blend)!.key);
+    f.ready.add(2);
+    const loaded = f.loader.getFrameGeometryKey(1, 1, 0, -1, -1, blend);
+    assert.notEqual(loaded, key, "late frame data must select a fresh pose");
+    assert.equal(loaded, f.loader.getFrameGeometry(1, 1, 0, -1, -1, blend)!.key);
+});
+
+test("unanimated and missing-current NPC frames retain base-geometry fallback", () => {
+    const f = fixture();
+    f.setSequence(-1);
+    assert.equal(f.pack().opaque.length, 1);
+    f.setSequence(1); f.ready.clear(); f.evictCpu();
+    assert.equal(f.pack().opaque.length, 1);
+});
+
+test("empty-pass metadata is bounded, touched on lookup, and cleared with GPU resources", () => {
+    const f = fixture(false, 2), empty = new Uint8Array(), indices = new Int32Array();
+    f.cache.getOrCreate("a", empty, indices); f.cache.getOrCreate("b", empty, indices);
+    assert.equal(f.cache.get("a"), null);
+    f.cache.getOrCreate("c", empty, indices);
+    assert.equal(f.cache.get("b"), undefined);
+    assert.equal(f.cache.get("a"), null);
+    f.cache.getOrCreate("a", new Uint8Array(20), new Int32Array([0]));
+    assert.ok(f.cache.get("a"), "a nonempty replacement supersedes an empty entry");
+    f.cache.destroy();
+    assert.equal(f.cache.get("a"), undefined); assert.equal(f.cache.get("c"), undefined);
+});

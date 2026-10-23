@@ -153,32 +153,10 @@ export class DynamicNpcAnimLoader {
         overlayFrameId: number = -1,
         interpolation?: ActorInterpolation,
     ): DynamicNpcFrameGeometry | undefined {
-        if (!this.isReady()) {
-            return undefined;
-        }
-
-        const meta = this.getSequenceMeta(npcTypeId, seqId);
-        if (!meta) {
-            return undefined;
-        }
-
-        const resolvedNpcType = this.getResolvedNpcType(npcTypeId);
-        if (!resolvedNpcType) {
-            return undefined;
-        }
-
-        const normalizedFrame =
-            meta.frameCount > 0 ? Math.max(0, frameId | 0) % (meta.frameCount | 0) : 0;
-        const normalizedOverlayFrame = Math.max(0, overlayFrameId | 0);
-        const overlayKey =
-            overlaySeqId >= 0 ? `:${overlaySeqId | 0}:${normalizedOverlayFrame | 0}` : "";
-        if (interpolation) {
-            const ready = (id: number, blend: ActorInterpolation["base"]) =>
-                blend?.next !== undefined && !this.isSequenceFrameReady(id, blend.next)
-                    ? { next: undefined, alpha: 0 } : blend;
-            interpolation = { base: ready(seqId, interpolation.base), overlay: ready(overlaySeqId, interpolation.overlay) };
-        }
-        const key = `${this.getGeometryTypeId(resolvedNpcType)}:${seqId}:${normalizedFrame}${interpolationKey(interpolation)}${overlayKey}`;
+        const request = this.resolveFrameRequest(npcTypeId, seqId, frameId, overlaySeqId, overlayFrameId, interpolation);
+        if (!request) return undefined;
+        const { resolvedNpcType, normalizedFrame, normalizedOverlayFrame, key } = request;
+        interpolation = request.interpolation;
         const cached = this.geomCache.get(key);
         if (cached) {
             this.promoteGeometryEntry(key, cached);
@@ -215,6 +193,48 @@ export class DynamicNpcAnimLoader {
             overlaySeqId >= 0 ? overlaySeqId | 0 : undefined,
             overlaySeqId >= 0 ? normalizedOverlayFrame | 0 : undefined,
         );
+    }
+
+    /** The same normalized pose identity used by the CPU cache, without building its mesh. */
+    getFrameGeometryKey(...request: Parameters<DynamicNpcAnimLoader["getFrameGeometry"]>): string | undefined {
+        return this.resolveFrameRequest(...request)?.key;
+    }
+
+    private resolveFrameRequest(
+        npcTypeId: number,
+        seqId: number,
+        frameId: number,
+        overlaySeqId = -1,
+        overlayFrameId = -1,
+        interpolation?: ActorInterpolation,
+    ) {
+        if (!this.isReady()) {
+            return undefined;
+        }
+
+        const meta = this.getSequenceMeta(npcTypeId, seqId);
+        if (!meta) {
+            return undefined;
+        }
+
+        const resolvedNpcType = this.getResolvedNpcType(npcTypeId);
+        if (!resolvedNpcType) {
+            return undefined;
+        }
+
+        const normalizedFrame =
+            meta.frameCount > 0 ? Math.max(0, frameId | 0) % (meta.frameCount | 0) : 0;
+        const normalizedOverlayFrame = Math.max(0, overlayFrameId | 0);
+        const overlayKey =
+            overlaySeqId >= 0 ? `:${overlaySeqId | 0}:${normalizedOverlayFrame | 0}` : "";
+        if (interpolation) {
+            const ready = (id: number, blend: ActorInterpolation["base"]) =>
+                blend?.next !== undefined && !this.isSequenceFrameReady(id, blend.next)
+                    ? { next: undefined, alpha: 0 } : blend;
+            interpolation = { base: ready(seqId, interpolation.base), overlay: ready(overlaySeqId, interpolation.overlay) };
+        }
+        const key = `${this.getGeometryTypeId(resolvedNpcType)}:${seqId}:${normalizedFrame}${interpolationKey(interpolation)}${overlayKey}`;
+        return { resolvedNpcType, normalizedFrame, normalizedOverlayFrame, interpolation, key };
     }
 
     private isSequenceFrameReady(seqId: number, frameId: number): boolean {

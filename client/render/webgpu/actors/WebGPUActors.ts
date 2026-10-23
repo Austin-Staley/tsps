@@ -37,6 +37,7 @@ import {
     ActorDataWriter,
     ActorTileSelection,
     getRenderPlayersForMap,
+    getNpcGeometryRequest,
     packNpcActorData,
     packPlayerActorData,
     packProjectileActorData,
@@ -722,15 +723,26 @@ export class WebGPUActors {
         if (dataIndex < 0) return;
         state.npcByEcsId.set(ecsId, dataIndex);
 
-        const geometry = resolveUnbatchedNpcGeometry(client, loader, ecsId);
-        if (!geometry) return;
+        let request: Parameters<DynamicNpcAnimLoader["getFrameGeometry"]> | undefined;
+        let opaque: GpuGeometry | null | undefined;
+        let alpha: GpuGeometry | null | undefined;
+        try {
+            request = getNpcGeometryRequest(client, ecsId);
+            const key = loader.getFrameGeometryKey(...request);
+            if (key) {
+                opaque = this.geometry?.get(`${key}|o`);
+                alpha = this.geometry?.get(`${key}|a`);
+            }
+        } catch {}
+        // The smaller CPU pose cache may evict a mesh whose two GPU passes are still resident.
+        if (opaque === undefined || alpha === undefined || (!opaque && !alpha)) {
+            const geometry = resolveUnbatchedNpcGeometry(client, loader, ecsId, request);
+            if (!geometry) return;
+            opaque = this.geometry?.getOrCreate(`${geometry.key}|o`, geometry.opaqueVertices, geometry.opaqueIndices);
+            alpha = this.geometry?.getOrCreate(`${geometry.key}|a`, geometry.alphaVertices, geometry.alphaIndices);
+        }
         const timeLoaded = map.timeLoaded;
         let entry: number | undefined;
-        const opaque = this.geometry?.getOrCreate(
-            `${geometry.key}|o`,
-            geometry.opaqueVertices,
-            geometry.opaqueIndices,
-        );
         if (opaque && this.pipelines.get("npc")?.[0]) {
             state.opaque.push({
                 pipeline: this.pipelines.get("npc")![0],
@@ -747,11 +759,6 @@ export class WebGPUActors {
                 ),
             });
         }
-        const alpha = this.geometry?.getOrCreate(
-            `${geometry.key}|a`,
-            geometry.alphaVertices,
-            geometry.alphaIndices,
-        );
         if (alpha && this.pipelines.get("npc")?.[1]) {
             state.alpha.push({
                 pipeline: this.pipelines.get("npc")![1],
