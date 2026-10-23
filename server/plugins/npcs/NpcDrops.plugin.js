@@ -273,6 +273,14 @@ function loadDrops() {
   applyOverrides(dump, subtables, readJson(OVERRIDES_FILE) || {});
   applyWikiCorrections(tableById);
 
+  // The source gives no distribution for these rows; keep this assumption visible.
+  const assumedQuantityRows = Object.values(tableById).reduce((count, table) => count +
+    [...(table.entries || []), ...(table.tertiary || [])]
+      .filter(entry => entry.quantity_selection === "unknown").length, 0);
+  if (assumedQuantityRows > 0) {
+    console.log(`[NpcDrops] ${assumedQuantityRows} rows roll uniformly among their listed quantities (assumed distribution)`);
+  }
+
   for (const [npcId, npc] of Object.entries(dump.npcs)) {
     const id = Number(npcId);
     if (!Number.isInteger(id) || !Array.isArray(npc.tables) || npc.tables.length === 0) {
@@ -330,6 +338,7 @@ function loadDrops() {
     tables: tableCount,
     shared: sharedTables.size,
     unusableSubtableRows,
+    assumedQuantityRows,
   };
 }
 
@@ -337,8 +346,53 @@ function randomInt(bound) {
   return Math.floor(Math.random() * bound);
 }
 
-function rollQuantity(entry) {
-  const quantity = Array.isArray(entry.quantity) ? entry.quantity : parseQuantityRaw(entry.quantity_raw);
+const unknownConditionTypes = new Set();
+
+/**
+ * Whether a source-stated quantity condition holds for this kill. `context` is the kill
+ * context plugins filled through npc-drops:context; a flag nobody set is false, so the
+ * source's first-listed quantity applies.
+ */
+function conditionHolds(condition, context) {
+  if (!condition || !context) return false;
+  switch (condition.type) {
+    case "perfect_kill":
+      return context.perfectKill === true;
+    case "bounty_task":
+      return typeof context.bountyTask === "string" &&
+        context.bountyTask.toLowerCase() === String(condition.monster || "").toLowerCase();
+    case "preferred_method":
+      return context.preferredMethodLocation === condition.location;
+    default:
+      if (!unknownConditionTypes.has(condition.type)) {
+        unknownConditionTypes.add(condition.type);
+        console.warn(`[NpcDrops] unknown quantity condition type '${condition.type}' never applies`);
+      }
+      return false;
+  }
+}
+
+/**
+ * The quantity alternative this kill awards. The export lists the source's quantities in
+ * order with the conditions it states; the first alternative is the default. Rows whose
+ * source publishes no rule (`quantity_selection: "unknown"`) roll uniformly among the listed
+ * quantities: an assumed distribution, counted at load.
+ */
+function chooseAlternative(entry, context) {
+  const alternatives = entry.quantity_alternatives;
+  if (!Array.isArray(alternatives) || alternatives.length === 0) return null;
+  if (entry.quantity_selection === "unknown") return alternatives[randomInt(alternatives.length)];
+  for (const alternative of alternatives.slice(1)) {
+    if (conditionHolds(alternative.condition, context)) return alternative;
+  }
+  return alternatives[0];
+}
+
+function rollQuantity(entry, context = null) {
+  const alternative = chooseAlternative(entry, context);
+  const quantity = alternative
+    ? alternative.quantity
+    : Array.isArray(entry.quantity) ? entry.quantity : parseQuantityRaw(entry.quantity_raw);
   if (!quantity || quantity.length === 0) {
     return 1;
   }
@@ -438,7 +492,7 @@ function rollSharedTable(name, player, depth = 0) {
   return [];
 }
 
-function resolveEntry(entry, player) {
+function resolveEntry(entry, player, context = null) {
   if (entry.nothing) {
     return [];
   }
@@ -448,10 +502,10 @@ function resolveEntry(entry, player) {
   if (!Number.isInteger(entry.item_id)) {
     return [];
   }
-  const drops = [{ itemId: entry.item_id, amount: rollQuantity(entry), noted: entry.noted === true }];
+  const drops = [{ itemId: entry.item_id, amount: rollQuantity(entry, context), noted: entry.noted === true }];
   for (const bonus of entry.bonus_drops || []) {
     if (Number.isInteger(bonus.item_id)) {
-      drops.push({ itemId: bonus.item_id, amount: rollQuantity(bonus), noted: bonus.noted === true });
+      drops.push({ itemId: bonus.item_id, amount: rollQuantity(bonus, context), noted: bonus.noted === true });
     }
   }
   return drops;
@@ -461,7 +515,7 @@ function resolveEntry(entry, player) {
  * One roll on a table: its pre-roll, main roll and separate rolls. Separate rolls marked
  * `once_per_kill` are made on the first of a table's `rolls` only.
  */
-function rollOnce(table, entries, player, first = true) {
+function rollOnce(table, entries, player, first = true, context = null) {
   const drops = [];
   const main = [];
   const separateGroups = new Map();
@@ -472,7 +526,7 @@ function rollOnce(table, entries, player, first = true) {
       continue;
     } else if (entry.pre_roll) {
       if (!preRollHit && hits(entry, rareMultiplier(table, entry))) {
-        drops.push(...resolveEntry(entry, player));
+        drops.push(...resolveEntry(entry, player, context));
         preRollHit = true;
       }
     } else if (entry.separate_roll) {
@@ -482,7 +536,7 @@ function rollOnce(table, entries, player, first = true) {
         group.push(entry);
         separateGroups.set(entry.roll_group, group);
       } else if (hits(entry, rareMultiplier(table, entry))) {
-        drops.push(...resolveEntry(entry, player));
+        drops.push(...resolveEntry(entry, player, context));
       }
     } else if (Number.isInteger(entry.weight)) {
       main.push(entry);
@@ -495,7 +549,7 @@ function rollOnce(table, entries, player, first = true) {
     for (const entry of group) {
       roll -= entry.weight;
       if (roll < 0) {
-        drops.push(...resolveEntry(entry, player));
+        drops.push(...resolveEntry(entry, player, context));
         break;
       }
     }
@@ -509,7 +563,7 @@ function rollOnce(table, entries, player, first = true) {
     for (const entry of main) {
       roll -= entry.weight;
       if (roll < 0) {
-        drops.push(...resolveEntry(entry, player));
+        drops.push(...resolveEntry(entry, player, context));
         break;
       }
     }
@@ -519,21 +573,31 @@ function rollOnce(table, entries, player, first = true) {
 }
 
 /**
+ * Plugins fill source-stated conditions for this kill. `handledItemIds` contains
+ * rewards already owned by a quest/encounter handler, including bundled/shared loot.
+ */
+function killContext(player, npc) {
+  const context = { perfectKill: false, bountyTask: null, preferredMethodLocation: null, handledItemIds: new Set() };
+  pluginApi?.emitCustomEvent("npc-drops:context", { player, npc, npcId: npc?.getId?.() ?? null, context });
+  return context;
+}
+
+/**
  * One kill: guaranteed drops, then a pre-roll (which replaces the main roll when it hits),
  * then a single weighted main-table roll, then independent separate/tertiary rolls. A table
  * with `rolls` repeats everything but the guaranteed, tertiary and `once_per_kill` drops that many times.
  */
-function rollTable(table, player, npc) {
+function rollTable(table, player, npc, context = killContext(player, npc)) {
   const drops = [];
   const entries = Array.isArray(table.entries) ? table.entries : [];
   for (const entry of entries) {
     if (entry.always) {
-      drops.push(...resolveEntry(entry, player));
+      drops.push(...resolveEntry(entry, player, context));
     }
   }
   const rolls = Number.isInteger(table.rolls) && table.rolls > 1 ? table.rolls : 1;
   for (let roll = 0; roll < rolls; roll++) {
-    drops.push(...rollOnce(table, entries, player, roll === 0));
+    drops.push(...rollOnce(table, entries, player, roll === 0, context));
   }
 
   const rules = table.tertiary?.length ? tertiaryRules(player, npc) : [];
@@ -549,11 +613,13 @@ function rollTable(table, player, npc) {
     }
     if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
     if (hits(entry, tertiaryMultiplier(entry, rules) * rareMultiplier(table, entry))) {
-      drops.push(...resolveEntry(entry, player));
+      drops.push(...resolveEntry(entry, player, context));
     }
   }
 
-  return drops;
+  return context?.handledItemIds?.size
+    ? drops.filter(drop => !context.handledItemIds.has(drop.itemId))
+    : drops;
 }
 
 /**
