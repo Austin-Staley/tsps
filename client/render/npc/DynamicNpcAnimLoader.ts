@@ -43,6 +43,8 @@ export interface DynamicNpcFrameGeometry {
     approxBytes: number;
 }
 
+export type NpcFrameRequest = Parameters<DynamicNpcAnimLoader["getFrameGeometry"]>;
+
 const CACHE_CONFIG = {
     /** Cap dynamic current-frame geometry cache to a bounded CPU budget. */
     MAX_GEOMETRY_BYTES: 16 * 1024 * 1024,
@@ -67,11 +69,14 @@ export class DynamicNpcAnimLoader {
         private seqFrameLoader: SeqFrameLoader | undefined,
         private skeletalSeqLoader: SkeletalSeqLoader | undefined,
         private varManager: VarManager | undefined,
+        existingModelLoader?: NpcModelLoader,
     ) {
+        this.npcModelLoader = existingModelLoader;
         this.initLoader();
     }
 
     private initLoader(): void {
+        if (this.npcModelLoader) return;
         if (
             this.npcTypeLoader &&
             this.modelLoader &&
@@ -200,6 +205,22 @@ export class DynamicNpcAnimLoader {
         return this.resolveFrameRequest(...request)?.key;
     }
 
+    /** Shared rest model/sequence implementation for label poses; the model remains immutable. */
+    getModelLoader(): NpcModelLoader | undefined { return this.npcModelLoader; }
+
+    getGpuPoseSource(...request: NpcFrameRequest) {
+        const resolved = this.resolveFrameRequest(...request);
+        if (!resolved || !this.isSequenceFrameReady(request[1], resolved.normalizedFrame) ||
+            ((request[3] ?? -1) >= 0 && !this.isSequenceFrameReady(request[3]!, resolved.normalizedOverlayFrame))) return undefined;
+        const npcType = resolved.resolvedNpcType;
+        if (!this.npcModelLoader?.getModel(npcType, -1, -1)) return undefined;
+        const baseModel = this.npcModelLoader.modelCache.get(npcType.id);
+        if (!baseModel) return undefined;
+        return { key: resolved.key, baseKey: `${this.getGeometryTypeId(npcType)}:base`, npcType, baseModel,
+            interpolation: resolved.interpolation, frameId: resolved.normalizedFrame,
+            overlayFrameId: resolved.normalizedOverlayFrame };
+    }
+
     private resolveFrameRequest(
         npcTypeId: number,
         seqId: number,
@@ -212,8 +233,9 @@ export class DynamicNpcAnimLoader {
             return undefined;
         }
 
-        const meta = this.getSequenceMeta(npcTypeId, seqId);
-        if (!meta) {
+        const sequence = this.seqTypeLoader?.load(seqId);
+        const frameCount = sequence ? this.getFrameCount(sequence) : 0;
+        if (frameCount <= 0) {
             return undefined;
         }
 
@@ -223,7 +245,7 @@ export class DynamicNpcAnimLoader {
         }
 
         const normalizedFrame =
-            meta.frameCount > 0 ? Math.max(0, frameId | 0) % (meta.frameCount | 0) : 0;
+            Math.max(0, frameId | 0) % frameCount;
         const normalizedOverlayFrame = Math.max(0, overlayFrameId | 0);
         const overlayKey =
             overlaySeqId >= 0 ? `:${overlaySeqId | 0}:${normalizedOverlayFrame | 0}` : "";
@@ -347,7 +369,7 @@ export class DynamicNpcAnimLoader {
     }
 
     /** Identical appearances share poses and GPU keys, while NPC identity stays per instance. */
-    private getGeometryTypeId(type: NpcType): number {
+    getGeometryTypeId(type: NpcType): number {
         const cached = this.geometryTypeCache.get(type);
         if (cached !== undefined) return cached;
         // These are all NPC properties used by NpcModelLoader to build the body model.
@@ -365,7 +387,7 @@ export class DynamicNpcAnimLoader {
         return id;
     }
 
-    private getResolvedNpcType(npcTypeId: number): NpcType | undefined {
+    getResolvedNpcType(npcTypeId: number): NpcType | undefined {
         const npcType = this.npcTypeLoader?.load(npcTypeId);
         if (!npcType) {
             return undefined;

@@ -153,3 +153,20 @@ test("empty-pass metadata is bounded, touched on lookup, and cleared with GPU re
     f.cache.destroy();
     assert.equal(f.cache.get("a"), undefined); assert.equal(f.cache.get("c"), undefined);
 });
+
+test("NPC pose identity does not validate or build a CPU mesh", () => {
+    const f = fixture();
+    (f.loader.getModelLoader() as any).getModel = () => { throw new Error("CPU mesh work on the render thread"); };
+    assert.ok(f.loader.getFrameGeometryKey(1, 1, 0));
+});
+
+test("GPU NPC sources share the existing unscaled rest model and normalized pose identity", () => {
+    const f = fixture();
+    const source = f.loader.getGpuPoseSource(1, 1, 2)!;
+    assert.equal(source.baseModel, f.model);
+    assert.equal(source.baseKey, "1:base");
+    assert.equal(source.frameId, 0);
+    assert.equal(source.key, f.loader.getFrameGeometryKey(1, 1, 0));
+    f.ready.clear();
+    assert.equal(f.loader.getGpuPoseSource(1, 1, 0), undefined, "streamed current frames must be ready");
+});
