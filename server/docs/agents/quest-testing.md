@@ -57,6 +57,24 @@ Agree these before touching an account. They stop most time loss.
 4. **The cache** is the final id authority: names, placements, transforms, DB rows, action/menu
    data and bit layouts.
 
+## Find missing capture evidence quickly
+
+Search the [RSProx archive](https://rsprox.net/database) for a distinctive scene NPC or
+object before downloading recordings. The archive client uses this read-only search:
+
+```bash
+curl -sS https://rsprox.net/api/search -H 'Content-Type: application/json' \
+  --data '{"conditions":[{"type":0,"query":"11438"}],"mode":"ALL"}'
+```
+
+Types include NPC `0`, location/object `2`, varp `5`, varbit `6` and text `14`.
+Download a returned submission from `https://rsprox.net/download/<id>`, then use the
+existing decoder to extract the relevant packet range. Record the archive id/revision,
+file hash, packet numbers and exact actor ids, coordinates, speech and state transitions;
+map captured ids to the active cache before implementing. Keep raw account-bearing
+captures outside Git. Old TSPS MCP `native*.raw.log` files prove our server's behavior;
+they are never evidence of how live OSRS behaves.
+
 ## Set up (worktree, ports, identity)
 
 ```bash
@@ -149,6 +167,9 @@ Verified schema limits: `radius` 1-32 (default 15), `maxTicks` 1-50, `varbits`/`
 ids, `widgets` up to 100 packed ids, `ticks` 1-50. Do not guess property names; read
 `listTools` once and cache the shape in your own notes.
 
+Supply ordinary items with `command { player, text: "item 2351 1", ticks: 1 }`,
+not public chat. The tool temporarily grants developer rights for that call and restores them.
+
 `dialogue_continue` and `dialogue_choose` already sleep one tick. Do not add generic extra
 sleeps. `interact`/`walk_to` settle on arrival, a dialogue/interface, or two idle ticks; still
 assert the resulting position/state before the next action. Climbing or scene task completion
@@ -185,6 +206,12 @@ door is usable. It supports main-world, same-plane destinations within 319 tiles
 longer journeys at real intermediate destinations and use guide-required transports.
 Use `exact: true` when targeting a specific approach tile beside a counter or staircase;
 the default proximity route can finish nearby on the other side of a wall.
+
+An object's anchor tile may be occupied: an exact walk onto a ladder is not an access
+test. Approach a reachable adjacent tile and send its normal object action. Inspect
+actual wall geometry before deciding which side is outside; the planner may correctly
+route through a different entrance. Follow the helper's route instructions as well as
+its destination marker, including required back doors, stiles and other crossings.
 
 Supply ordinary commodities such as beer, raw meat, nails, tools, food and travel items as
 declared setup aids when sourcing them would distract from the quest. Record optional shop
