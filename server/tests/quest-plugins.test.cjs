@@ -112,6 +112,35 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   assert.doesNotThrow(() => plugin.register(api));
 });
 
+test('Family Crest only handles gold rocks in Witchaven and Mining recognizes the shared gold-rock object', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/FamilyCrest.Quest')(api);
+  const handleObjectInteraction = handlers.objects.at(-1);
+  const messages = [];
+  const player = { getAttribute: () => 0, sendMessage: message => messages.push(message) };
+  const interact = (x, y, z) => {
+    const event = {
+      player,
+      objectId: api.core.ObjectIdentifiers.GOLD_ROCKS_2,
+      clickType: 1,
+      definition: { getInteractions: () => ['Mine'] },
+      location: { x, y, z },
+      handled: false,
+    };
+    handleObjectInteraction(event);
+    return event;
+  };
+
+  assert.equal(interact(2933, 3288, 0).handled, false, 'Crafting Guild rocks must be left to Mining');
+  const witchavenRock = interact(2732, 9680, 0);
+  assert.equal(witchavenRock.handled, true, 'Witchaven rocks retain the Family Crest interaction');
+  assert.equal(messages.at(-1), 'This gold does not look special to you.');
+
+  const { ROCKS } = require('../plugins/skills/Mining.plugin');
+  const { GOLD_ROCKS_2 } = api.core.ObjectIdentifiers;
+  assert.ok(ROCKS.find(rock => rock.objectName === 'Gold rocks').objectIds.includes(GOLD_ROCKS_2));
+});
+
 test('a shop version named after a quest opens once its quest state matches (#831)', () => {
   const { api } = mockApi();
   require('../plugins/quests/Quests.plugin').register(api);
