@@ -49,7 +49,7 @@ function fixture() {
     } as any);
     // Image decoding is unrelated to sparse-cache readiness and needs a browser canvas.
     (renderer as any).decodeWorldMapSprite = async () => new Int32Array(4096).fill(0xabcdef);
-    return { renderer, area, present, requested };
+    return { renderer, area, present, requested, indexes };
 }
 
 test("cold geography and ground requests start together and finish in the original tile load", async (t) => {
@@ -108,4 +108,91 @@ test("all legacy chunk misses are queued in one attempt", async (t) => {
     });
     assert.throws(() => (renderer as any).loadGeography({ data1, dynamicIcons: [] }), GroupMissingError);
     assert.deepEqual(requested, [1, 2, 3]);
+});
+
+test("transferred world-map pixels have one backing allocation and are never reused detached", async () => {
+    const { renderer, area } = fixture();
+    (renderer as any).options.maxRenderedRegionBytes = 0;
+    const rgb = Int32Array.from([0x123456, 0xff0080]);
+    const rgba = (renderer as any).convertRgbToRgba(rgb);
+    assert.strictEqual(rgba.buffer, rgb.buffer, "convert in place instead of retaining two full tile buffers");
+    assert.deepEqual([...rgba], [0x12, 0x34, 0x56, 255, 255, 0, 128, 255]);
+    const first = (await renderer.loadTile(area, 50, 50, 1))!;
+    const copy = structuredClone(first, { transfer: [first.pixels.buffer] });
+    assert.equal(first.pixels.byteLength, 0);
+    const second = (await renderer.loadTile(area, 50, 50, 1))!;
+    assert.deepEqual(second, copy, "the worker retains geography, not transferred output buffers");
+    assert.equal((renderer as any).renderedRegionCache.size, 0);
+});
+
+test("cancel and clear stop an awaiting raster without publishing stale pixels", async () => {
+    for (const clear of [false, true]) {
+        const { renderer, area } = fixture();
+        let entered!: () => void, release!: () => void;
+        const rasterStarted = new Promise<void>(resolve => { entered = resolve; });
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        (renderer as any).options.beforeRaster = () => { entered(); return gate; };
+        const pending = renderer.loadTile(area, 50, 50, 1);
+        await rasterStarted;
+        if (clear) renderer.clear(); else renderer.cancelLoads();
+        assert.equal(await pending, undefined, "cancellation releases the request without waiting for the raster slot");
+        assert.equal((renderer as any).activeRegions.size, 0);
+        assert.equal((renderer as any).renderedRegionCache.size, 0);
+        (renderer as any).options.beforeRaster = undefined;
+        const next = await renderer.loadTile(area, 50, 50, 1);
+        assert.ok(next);
+        release();
+        await setImmediate();
+        assert.strictEqual(await renderer.loadTile(area, 50, 50, 1), next);
+    }
+});
+
+test("decoded geography and ground caches stay bounded while panning and repair evicted regions", async () => {
+    const { renderer, area, indexes } = fixture();
+    (renderer as any).options.maxRenderedRegionBytes = 0;
+    area.regionHighX = 89;
+    const composite = [0, 40];
+    for (let x = 50; x <= 89; x++) composite.push(0, 0, 1, 0, x, 0, 50, 0, x, 0, 50, 0, x - 41, 0, 0);
+    composite.push(0, 0, 0, 0);
+    indexes[19].getArchive = () => ({ getFileNamed: () => ({ data: Int8Array.from(composite) }) });
+    indexes[18].getFile = (groupId: number) => ({ data: Int8Array.from([0, groupId + 41, 50, 1, 0, 1, ...new Array(4095).fill(0)]) });
+    const tiles = await Promise.all(Array.from({ length: 40 }, (_, i) => renderer.loadTile(area, i + 50, 50, 1)));
+    assert.ok(tiles.every(tile => tile?.pixels.length === 64 * 64 * 4));
+    const decoded = (renderer as any).areaCache.get(area.id).data0.filter((entry: any) => entry.geographyLoaded);
+    assert.equal(decoded.length, 16, "area metadata must not retain arrays evicted from the region LRU");
+    assert.ok((renderer as any).decodedRegions.size <= 16);
+    assert.ok((renderer as any).groundSpriteCache.size <= 32);
+    assert.deepEqual(await renderer.loadTile(area, 50, 50, 1), tiles[0]);
+    assert.ok((renderer as any).decodedRegions.size <= 16);
+});
+
+test("large legacy chunk regions obey the byte budget without losing rendered output", async () => {
+    const { renderer, area, indexes } = fixture();
+    (renderer as any).options.maxRenderedRegionBytes = 0;
+    const composite = [0, 0, 0, 64];
+    for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+        composite.push(1, 0, 4, 0, 50, 0, 50, x, y, 0, 50, 0, 50, x, y, 0, 9 + x * 8 + y, 0, 0);
+    }
+    composite.push(0, 0);
+    indexes[19].getArchive = () => ({ getFileNamed: () => ({ data: Int8Array.from(composite) }) });
+    indexes[18].getFile = (groupId: number) => ({ data: Int8Array.from([
+        1, 50, 50, (groupId - 9) >> 3, (groupId - 9) & 7, ...new Array(64).fill(0),
+    ]) });
+    const tile = await renderer.loadTile(area, 50, 50, 1);
+    assert.equal(tile?.pixels.length, 64 * 64 * 4);
+    assert.ok((renderer as any).decodedRegionBytes <= 8 * 1024 * 1024,
+        "one region can hold 64 large chunk records; a region count alone does not bound memory");
+    assert.equal((renderer as any).decodedRegions.size, 0, "oversized input is released after its synchronous raster");
+    assert.deepEqual(await renderer.loadTile(area, 50, 50, 1), tile);
+});
+
+test("an image decode failure retries instead of caching a blank ground tile", async () => {
+    const { renderer, area } = fixture();
+    const decode = (renderer as any).decodeWorldMapSprite;
+    (renderer as any).decodeWorldMapSprite = async () => undefined;
+    assert.equal(await renderer.loadTile(area, 50, 50, 1), undefined);
+    (renderer as any).decodeWorldMapSprite = decode;
+    const tile = await renderer.loadTile(area, 50, 50, 1);
+    assert.ok(tile);
+    assert.deepEqual([...tile.pixels.slice(63 * 64 * 4, 63 * 64 * 4 + 4)], [0xab, 0xcd, 0xef, 255]);
 });

@@ -1301,6 +1301,7 @@ export class OsrsClient {
             getMapElementTypeLoader: () => this.mapElementTypeLoader,
             getTextureLoader: () => this.textureLoader,
             getVarManager: () => this.varManager,
+            getWorkerPool: () => this.workerPool,
             getWidgetManager: () => this.widgetManager,
             getCs2Vm: () => this.cs2Vm,
             getRenderer: () => this.renderer,

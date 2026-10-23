@@ -61,6 +61,7 @@ import { Scene } from "../../rs/scene/Scene";
 import { RenderDataLoader, renderDataLoaderSerializer } from "./RenderDataLoader";
 import { runWithSparseRetry } from "./SparseRetry";
 import type { MinimapData } from "./MinimapData";
+import { WorldMapTileJob, type WorldMapTileInput, type WorldMapTileReply } from "./WorldMapTileJob";
 
 registerSerializer(renderDataLoaderSerializer);
 
@@ -105,6 +106,8 @@ export type WorkerState = {
     minimapImageRenderer: MinimapImageRenderer;
 
     npcInstances: NpcInstance[];
+    sceneJobs: number;
+    worldMapTiles?: WorldMapTileJob;
 };
 
 let workerStatePromise: Promise<WorkerState> | undefined;
@@ -285,6 +288,7 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
         minimapImageRenderer,
 
         npcInstances,
+        sceneJobs: 0,
     };
 }
 
@@ -339,6 +343,7 @@ const worker = {
     },
     initCache(cache: LoadedCache, npcInstances: NpcInstance[]) {
         registerInstanceModelOverrides(npcInstances);
+        void workerStatePromise?.then(state => state.worldMapTiles?.dispose());
         workerStatePromise = initWorker(cache, npcInstances);
     },
     initDataLoader<I, D>(dataLoader: RenderDataLoader<I, D>) {
@@ -397,6 +402,7 @@ const worker = {
         // A stored build must carry every texture, whatever this session has already uploaded.
         const buildInput = cacheable ? { ...sdInput, loadedTextureIds: new Set<number>() } : input;
         const run = async () => {
+            workerState.sceneJobs++;
             try {
                 return await runWithSparseRetry(
                     workerState,
@@ -405,6 +411,7 @@ const worker = {
                     outcome,
                 );
             } finally {
+                workerState.sceneJobs--;
                 if (dataLoader.shouldClearWorkerCacheAfterLoad?.(input) ?? true) clearCache(workerState);
             }
         };
@@ -431,6 +438,19 @@ const worker = {
         try { return await loadMinimapFloor(state, input, level); }
         finally { clearCache(state); }
     },
+    async loadWorldMapTile(input: WorldMapTileInput): Promise<TransferDescriptor<WorldMapTileReply>> {
+        const state = await workerStatePromise;
+        if (!state) throw new Error("Worker not initialized");
+        const jobs = state.worldMapTiles ??= new WorldMapTileJob(state);
+        const reply = await jobs.load(input);
+        return Transfer(reply, reply.tile ? [reply.tile.pixels.buffer] : []);
+    },
+    async cancelWorldMapTiles(epoch: number, clearCache: boolean): Promise<void> {
+        const state = await workerStatePromise;
+        if (!state) return;
+        const jobs = state.worldMapTiles ??= new WorldMapTileJob(state);
+        jobs.cancel(epoch, clearCache);
+    },
     async loadNpcGeometry(
         mapX: number,
         mapY: number,
@@ -443,6 +463,7 @@ const worker = {
             throw new Error("Worker not initialized");
         }
 
+        workerState.sceneJobs++;
         try {
             const { data, transferables } = await runWithSparseRetry(workerState, () =>
                 npcGeometryLoader.loadNpcGeometry(workerState, {
@@ -455,6 +476,7 @@ const worker = {
             );
             return Transfer<NpcGeometryData>(data, transferables);
         } finally {
+            workerState.sceneJobs--;
             clearCache(workerState);
         }
     },
@@ -487,6 +509,7 @@ const worker = {
             throw new Error("Worker not initialized");
         }
         workerState.varManager.set(values);
+        workerState.worldMapTiles?.setVars(values);
     },
     async exportSpritesToZip(): Promise<Blob> {
         const workerState = await workerStatePromise;

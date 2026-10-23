@@ -12,6 +12,7 @@ import { RenderDataLoader } from "./RenderDataLoader";
 import type { RenderDataWorker } from "./RenderDataWorker";
 import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
 import type { MinimapData } from "./MinimapData";
+import type { WorldMapTileInput, WorldMapTileReply } from "./WorldMapTileJob";
 
 type RenderDataWorkerThread = ModuleThread<RenderDataWorker>;
 
@@ -25,6 +26,11 @@ function spawnWorker(): Promise<RenderDataWorkerThread> {
 }
 
 export class RenderDataWorkerPool {
+    private worldMapEpoch = 0;
+    private readonly worldMapRequests = new Set<() => void>();
+    private disposed = false;
+
+    get pendingWorldMapTiles(): number { return this.worldMapRequests.size; }
     static create(size: number): RenderDataWorkerPool {
         // ponytail: serial map builds without sharing; shared buffers avoid ~200 MB per worker.
         size = canUseSharedArrayBuffer() ? size : 1;
@@ -49,6 +55,7 @@ export class RenderDataWorkerPool {
                 ] });
             });
         }
+        this.cancelWorldMapTiles(true);
     }
 
     /** A dat2 chunk the main thread created after initCache (sparse caches). */
@@ -103,6 +110,27 @@ export class RenderDataWorkerPool {
         return this.pool.queue((worker) => worker.loadMinimap(input, level));
     }
 
+    loadWorldMapTile(input: Omit<WorldMapTileInput, "epoch">): Promise<WorldMapTileReply> {
+        if (this.disposed) return Promise.reject(new Error("Worker pool disposed"));
+        const epoch = this.worldMapEpoch;
+        // Concurrent reads preserve geography/ground overlap on single-worker Android.
+        // Keep one decoded world-map cache, on an existing worker, rather than one per slot.
+        return new Promise((resolve, reject) => {
+            const cancel = () => resolve({ supported: true });
+            this.worldMapRequests.add(cancel);
+            void this.workers[0].init.then(worker => worker.loadWorldMapTile({ ...input, epoch }))
+                .then(reply => resolve(epoch === this.worldMapEpoch ? reply : { supported: true }), reject)
+                .finally(() => this.worldMapRequests.delete(cancel));
+        });
+    }
+
+    cancelWorldMapTiles(clearCache = false): void {
+        const epoch = ++this.worldMapEpoch;
+        for (const cancel of this.worldMapRequests) cancel();
+        this.worldMapRequests.clear();
+        if (!this.disposed) void this.workers[0].init.then(worker => worker.cancelWorldMapTiles(epoch, clearCache)).catch(() => {});
+    }
+
     queueLoadTexture(
         id: number,
         size: number,
@@ -127,6 +155,8 @@ export class RenderDataWorkerPool {
     }
 
     terminate(): Promise<void> {
+        this.cancelWorldMapTiles(true);
+        this.disposed = true;
         return this.pool.terminate();
     }
 }
