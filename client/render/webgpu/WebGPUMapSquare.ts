@@ -6,6 +6,7 @@ import { Scene } from "../../rs/scene/Scene";
 import type { DrawRange } from "../DrawRange";
 import { sceneryBoundsVisible, sceneryRangeVisible } from "../SceneryVisibility";
 import { LocAnimated, type LocFrameSoundHandler } from "../loc/LocAnimated";
+import { LocAnimationUpdater, type LocAnimationGeometry } from "../loc/LocAnimationUpdater";
 import { hasSunkenLocs, sunkenRangeIndices } from "../loc/SunkenLocs";
 import type { SeqFrameLoader } from "../../rs/model/seq/SeqFrameLoader";
 import type { SeqTypeLoader } from "../../rs/config/seqtype/SeqTypeLoader";
@@ -384,7 +385,8 @@ export class WebGPUMapSquare implements MapSquare {
     /** Animated locs: each swaps its draw range in the loc batch for its current frame. */
     locsAnimated: LocAnimated[] = [];
     /** The loc geometry's draw ranges (shared with the loc batches), which animations rewrite. */
-    private locRanges?: { opaque: DrawRange[]; alpha: DrawRange[]; opaqueLod: DrawRange[]; alphaLod: DrawRange[] };
+    private locRanges?: LocAnimationGeometry;
+    private readonly locAnimationUpdater = new LocAnimationUpdater();
     private worldEntity = false;
     private transformCount = 1;
 
@@ -558,7 +560,10 @@ export class WebGPUMapSquare implements MapSquare {
     /** (Re)builds one geometry group from `mapData`, destroying the group it replaces. */
     private setGroup(kind: GeometryGroupKind, mapData: RenderMapData): void {
         this.destroyGroup(kind);
-        if (kind === "loc") this.locRanges = undefined;
+        if (kind === "loc") {
+            this.locAnimationUpdater.clear();
+            this.locRanges = undefined;
+        }
         const input = WebGPUMapSquare.groupInput(kind, mapData);
         const geometry = input
             ? createPendingGeometry(
@@ -646,8 +651,10 @@ export class WebGPUMapSquare implements MapSquare {
             this.groups.set(kind, group);
             if (kind === "loc" && mapData.loc) {
                 this.locRanges = {
-                    opaque: mapData.loc.drawRanges, alpha: mapData.loc.drawRangesAlpha,
-                    opaqueLod: mapData.loc.drawRangesLod, alphaLod: mapData.loc.drawRangesLodAlpha,
+                    drawCall: { drawRanges: mapData.loc.drawRanges },
+                    drawCallAlpha: { drawRanges: mapData.loc.drawRangesAlpha },
+                    drawCallLod: { drawRanges: mapData.loc.drawRangesLod },
+                    drawCallLodAlpha: { drawRanges: mapData.loc.drawRangesLodAlpha },
                 };
             }
         }
@@ -724,29 +731,11 @@ export class WebGPUMapSquare implements MapSquare {
 
     /**
      * Advances animated locs (Client.cycle timing) and points their ranges at the frame (draw2.ts).
-     * `onFrameSound` plays their frame sounds; the shadow pass advances them again without it.
+     * All passes share a pose; sounds are delivered only when the square becomes visible.
      */
     updateAnimatedLocs(seqFrameLoader: SeqFrameLoader, cycle: number, onFrameSound?: LocFrameSoundHandler): void {
-        const ranges = this.locRanges;
-        if (!ranges) return;
-        for (const loc of this.locsAnimated) {
-            loc.update(seqFrameLoader, cycle, onFrameSound);
-            for (const alpha of [false, true]) {
-                const frame = (alpha ? loc.anim.framesAlpha : loc.anim.frames)?.[loc.drawFrame()];
-                for (const lod of [false, true]) {
-                    const index = loc.getDrawRangeIndex(alpha, false, lod);
-                    const target = lod ? (alpha ? ranges.alphaLod : ranges.opaqueLod)
-                        : (alpha ? ranges.alpha : ranges.opaque);
-                    const range = index !== -1 ? target?.[index] : undefined;
-                    // Frames are shared; retain each loc's own chunk identity for exclusive LOD.
-                    if (frame && range) {
-                        range[0] = frame[0];
-                        range[1] = frame[1];
-                        range[2] = frame[2];
-                    }
-                }
-            }
-        }
+        if (this.locRanges) this.locAnimationUpdater.update(
+            this.locsAnimated, this.locRanges, seqFrameLoader, cycle, onFrameSound);
     }
 
     canRender(frameCount: number): boolean {

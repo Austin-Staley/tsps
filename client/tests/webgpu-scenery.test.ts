@@ -168,6 +168,7 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     const f = fixture(full, far);
     const frame = range(48, 12, 24);
     f.square.locsAnimated = [{ frame: 0, anim: { frames: [frame] }, update() {}, drawFrame: () => 0,
+        drawRangeIndex: 0, drawRangeLodIndex: 0, drawRangeAlphaIndex: -1, drawRangeLodAlphaIndex: -1,
         getDrawRangeIndex: (alpha: boolean) => alpha ? -1 : 0 } as any];
     f.square.updateAnimatedLocs({} as any, 10);
     assert.equal(full[0], fullRange);
@@ -179,6 +180,42 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     f.square.delete();
 });
 
+test("WebGPU advances and selects scenery once per cycle across high-FPS and shadow passes", () => {
+    const full = [range(0, 6, 0)], far = [range(24, 6, 24)];
+    const f = fixture(full, far);
+    let advances = 0, selections = 0, sounds = 0;
+    const loc = { anim: { frames: [range(48, 12, 24)] },
+        update(_loader: unknown, _cycle: number, sound?: () => void) { advances++; sound?.(); },
+        drawFrame() { selections++; return 0; },
+        drawRangeIndex: 0, drawRangeLodIndex: 0, drawRangeAlphaIndex: -1, drawRangeLodAlphaIndex: -1,
+        getDrawRangeIndex: (alpha: boolean) => alpha ? -1 : 0 } as any;
+    f.square.locsAnimated = [loc];
+    const sound = () => sounds++;
+    for (let frame = 0; frame < 5; frame++) {
+        f.square.updateAnimatedLocs({} as any, 10, sound);
+        f.square.updateAnimatedLocs({} as any, 10);
+    }
+    assert.equal(advances, 1, "240 FPS and HD shadows share one 20 ms animation update");
+    assert.equal(selections, 1, "full/far opaque/alpha share the same baked-frame selection");
+    assert.equal(sounds, 1);
+    f.square.updateAnimatedLocs({} as any, 11);
+    f.square.updateAnimatedLocs({} as any, 11, sound);
+    assert.equal(advances, 3, "a visible pass may deliver sound after a shadow-only update");
+    assert.equal(selections, 2, "a late sound callback need not rewrite geometry");
+    assert.equal(sounds, 2);
+    f.square.locsAnimated = [{ ...loc }];
+    f.square.updateAnimatedLocs({} as any, 11, sound);
+    assert.equal(selections, 3, "replacing the loc list invalidates within the same cycle");
+    const replacement = range(72, 18, 0);
+    f.square.refreshPartial({ ...f.data, locOnly: true,
+        loc: { ...f.data.loc, drawRanges: [replacement] } } as any, {} as any, 1);
+    f.square.locsAnimated = [loc];
+    f.square.updateAnimatedLocs({} as any, 11, sound);
+    assert.deepEqual(replacement.slice(0, 3), [48, 12, 1], "new geometry is repaired in the same cycle");
+    assert.equal(selections, 4);
+    f.square.delete();
+});
+
 test("WebGPU partial loc rebuilds replace animation bounds and keep them while frames advance", () => {
     const f = fixture([range(0, 6, 0)], []);
     f.square.drawOpaque(f.pass, 3, f.context);
@@ -187,6 +224,7 @@ test("WebGPU partial loc rebuilds replace animation bounds and keep them while f
     f.square.refreshPartial({ ...f.data, locOnly: true,
         loc: { ...f.data.loc, drawRanges: [replacement] } } as any, {} as any, 1);
     f.square.locsAnimated = [{ anim: { frames: [range(48, 6, 80)] }, update() {}, drawFrame: () => 0,
+        drawRangeIndex: 0, drawRangeLodIndex: -1, drawRangeAlphaIndex: -1, drawRangeLodAlphaIndex: -1,
         getDrawRangeIndex: (alpha: boolean, _interact: boolean, lod: boolean) => alpha || lod ? -1 : 0 } as any];
     f.square.updateAnimatedLocs({} as any, 10);
     assert.deepEqual(replacement.bounds, [80, -1, 0, 88, 1, 8]);

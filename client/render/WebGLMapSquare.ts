@@ -24,7 +24,8 @@ import { DrawRange, newDrawRange } from "./DrawRange";
 import type { GroundItemGeometryBuildData } from "./ground/GroundItemMeshBuilder";
 import { NpcGeometryData } from "./loader/NpcGeometryData";
 import { type LocGeometryData, SdMapData } from "./loader/SdMapData";
-import { LocAnimated } from "./loc/LocAnimated";
+import { LocAnimated, type LocFrameSoundHandler } from "./loc/LocAnimated";
+import { LocAnimationUpdater } from "./loc/LocAnimationUpdater";
 
 const FRAME_RENDER_DELAY = 0;
 
@@ -366,6 +367,7 @@ export class WebGLMapSquare {
     private locTypeRotsAtLocalBuffer: number[] = [];
     /** Static loc ambient sound emitters; built lazily by the renderer, cleared on scene data refresh. */
     private loc?: DoorGeometryResources;
+    private readonly locAnimationUpdater = new LocAnimationUpdater();
     private locDrawRangePlanes?: NonNullable<DoorGeometryResources["planes"]>;
     private door?: DoorGeometryResources;
     private doorDrawRangePlanes?: NonNullable<DoorGeometryResources["planes"]>;
@@ -1198,6 +1200,10 @@ export class WebGLMapSquare {
         }
     }
 
+    updateAnimatedLocs(seqFrameLoader: SeqFrameLoader, cycle: number, onFrameSound?: LocFrameSoundHandler): void {
+        this.locAnimationUpdater.update(this.locsAnimated, this.loc, seqFrameLoader, cycle, onFrameSound);
+    }
+
     getLocDrawCall(
         isAlpha: boolean,
         isInteract: boolean,
@@ -1401,6 +1407,7 @@ export class WebGLMapSquare {
     }
 
     private clearLocGeometry(): void {
+        this.locAnimationUpdater.clear();
         const loc = this.loc;
         if (!loc) return;
         releaseDrawCallRange(loc.drawCall);

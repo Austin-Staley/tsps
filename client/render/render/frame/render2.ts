@@ -218,6 +218,7 @@ export function renderGeometryPass(host: WebGLOsrsRendererHost, transparent: boo
         let lodVisibleMapCount = 0;
         let fullDetailVisibleMapCount = 0;
         let distanceCulledVisibleMapCount = 0;
+        const cycle = getClientCycle() | 0;
 
         for (let i = start; i !== end; i += step) {
             const map = maps[i];
@@ -234,6 +235,8 @@ export function renderGeometryPass(host: WebGLOsrsRendererHost, transparent: boo
                 distanceCulledVisibleMapCount++;
                 continue;
             }
+
+            map.updateAnimatedLocs(host.osrsClient.seqFrameLoader, cycle);
 
             // GPU interaction readback removed - always use non-interact draw calls
             const isInteract = false;
@@ -279,14 +282,6 @@ export function renderGeometryPass(host: WebGLOsrsRendererHost, transparent: boo
                     locBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
                     locBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
                     locBatch.drawCall.uniform("u_worldEntityOpacity", 1.0);
-                    host.updateAnimatedDrawRanges(
-                        map,
-                        locBatch.drawCall,
-                        locBatch.drawRanges,
-                        transparent,
-                        isInteract,
-                        isLod,
-                    );
                     host.drawWithRoofPlaneFilter(
                         locBatch.drawCall,
                         locBatch.drawRanges,
@@ -419,7 +414,6 @@ function renderSunkenLocs(host: WebGLOsrsRendererHost): void {
                     batch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
                     batch.drawCall.uniform("u_worldEntityTransform", WebGLMapSquare.IDENTITY_MAT4);
                     batch.drawCall.uniform("u_worldEntityOpacity", 1.0);
-                    host.updateAnimatedDrawRanges(map, batch.drawCall, batch.drawRanges, true, false, false);
                 }
                 draws.push({ drawCall: batch.drawCall, drawRanges: batch.drawRanges, indices, punchOnly: alpha });
             }

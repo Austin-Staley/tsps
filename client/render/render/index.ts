@@ -305,7 +305,6 @@ export { getFrameHitsplatMaxEntries } from "./draw2";
 export { getFrameHealthBarMaxEntries } from "./draw2";
 export { getFrameOverheadTextMaxEntries } from "./draw2";
 export { getFrameOverheadPrayerMaxEntries } from "./draw2";
-export { updateAnimatedDrawRanges } from "./draw2";
 export { updateGroundItemMeshes } from "./draw3";
 export { hashGroundStacks } from "./draw3";
 export { rebuildGroundItemsForMap } from "./draw3";

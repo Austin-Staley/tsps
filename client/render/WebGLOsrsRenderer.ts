@@ -2373,17 +2373,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.getFrameOverheadPrayerMaxEntries(this);
     }
 
-    public updateAnimatedDrawRanges(
-        map: WebGLMapSquare,
-        drawCall: DrawCall,
-        drawRanges: DrawRange[],
-        transparent: boolean,
-        isInteract: boolean,
-        isLod: boolean,
-    ): void {
-        return render.updateAnimatedDrawRanges(this, map, drawCall, drawRanges, transparent, isInteract, isLod);
-    }
-
     public renderGeometryPass(transparent: boolean): void {
         return render.renderGeometryPass(this, transparent);
     }
