@@ -1754,6 +1754,7 @@ export class SceneBuilder {
         const archives = this.loadInstanceRegionArchives(templateChunks, this.xteasMap);
 
         // Phase 2: Decode terrain chunk-by-chunk
+        const terrainRowOffsets = new Map<Int8Array, Uint32Array>();
         for (let plane = 0; plane < PLANE_COUNT; plane++) {
             for (let cx = 0; cx < INSTANCE_CHUNK_COUNT; cx++) {
                 for (let cy = 0; cy < INSTANCE_CHUNK_COUNT; cy++) {
@@ -1778,6 +1779,11 @@ export class SceneBuilder {
                     const sourceChunkY = (chunkY & 7) * CHUNK_SIZE;
                     const noiseXOffset = (chunkX - cx) * CHUNK_SIZE;
                     const noiseYOffset = (chunkY - cy) * CHUNK_SIZE;
+                    let rowOffsets = terrainRowOffsets.get(archive.terrain);
+                    if (!rowOffsets) {
+                        rowOffsets = this.indexTerrainRows(scene, archive.terrain);
+                        terrainRowOffsets.set(archive.terrain, rowOffsets);
+                    }
                     this.decodeInstanceTerrainChunk(
                         scene,
                         archive.terrain,
@@ -1790,6 +1796,7 @@ export class SceneBuilder {
                         rotation,
                         noiseXOffset,
                         noiseYOffset,
+                        rowOffsets,
                     );
                 }
             }
@@ -1883,11 +1890,19 @@ export class SceneBuilder {
         return archives;
     }
 
-    /**
-     * Decode an 8×8 terrain chunk from a source region archive with rotation.
-     * Reads the full 4×64×64 terrain buffer but only applies tiles within the
-     * source chunk bounds.
-     */
+    private indexTerrainRows(scene: Scene, data: Int8Array): Uint32Array {
+        const offsets = new Uint32Array(Scene.MAX_LEVELS * Scene.MAP_SQUARE_SIZE ** 2 / CHUNK_SIZE);
+        const buffer = new ByteBuffer(data);
+        for (let row = 0; row < offsets.length; row++) {
+            offsets[row] = buffer.offset;
+            for (let tile = 0; tile < CHUNK_SIZE; tile++) {
+                this.decodeTerrainTile(scene, buffer, -1, -1, -1, 0, 0, 0, false);
+            }
+        }
+        return offsets;
+    }
+
+    /** Decode only the selected 8×8 terrain tiles, retaining destination height/noise rules. */
     private decodeInstanceTerrainChunk(
         scene: Scene,
         regionMapData: Int8Array,
@@ -1900,6 +1915,7 @@ export class SceneBuilder {
         rotation: number,
         noiseXOffset: number,
         noiseYOffset: number,
+        rowOffsets: Uint32Array,
     ): void {
         // Clear bridge collision flags in the chunk area before decoding
         const collisionMap = scene.collisionMaps[targetPlane];
@@ -1915,38 +1931,27 @@ export class SceneBuilder {
 
         const buffer = new ByteBuffer(regionMapData);
 
-        for (let level = 0; level < Scene.MAX_LEVELS; level++) {
-            for (let x = 0; x < Scene.MAP_SQUARE_SIZE; x++) {
-                for (let y = 0; y < Scene.MAP_SQUARE_SIZE; y++) {
-                    if (
-                        level === sourcePlane &&
-                        x >= sourceChunkX &&
-                        x < sourceChunkX + CHUNK_SIZE &&
-                        y >= sourceChunkY &&
-                        y < sourceChunkY + CHUNK_SIZE
-                    ) {
-                        const localX = x & 7;
-                        const localY = y & 7;
-                        const destX = chunkSceneX + rotateChunkX(localX, localY, rotation);
-                        const destY = chunkSceneY + rotateChunkY(localX, localY, rotation);
-                        const noiseX = chunkSceneX + localX + noiseXOffset;
-                        const noiseY = chunkSceneY + localY + noiseYOffset;
-                        this.decodeTerrainTile(
-                            scene,
-                            buffer,
-                            targetPlane,
-                            destX,
-                            destY,
-                            noiseX - destX,
-                            noiseY - destY,
-                            rotation,
-                            true,
-                        );
-                    } else {
-                        // Skip this tile's data without applying it
-                        this.decodeTerrainTile(scene, buffer, -1, -1, -1, 0, 0, 0, false);
-                    }
-                }
+        for (let x = sourceChunkX; x < sourceChunkX + CHUNK_SIZE; x++) {
+            const sourceTile = (sourcePlane * Scene.MAP_SQUARE_SIZE + x) * Scene.MAP_SQUARE_SIZE + sourceChunkY;
+            buffer.offset = rowOffsets[sourceTile / CHUNK_SIZE];
+            for (let y = sourceChunkY; y < sourceChunkY + CHUNK_SIZE; y++) {
+                const localX = x & 7;
+                const localY = y & 7;
+                const destX = chunkSceneX + rotateChunkX(localX, localY, rotation);
+                const destY = chunkSceneY + rotateChunkY(localX, localY, rotation);
+                const noiseX = chunkSceneX + localX + noiseXOffset;
+                const noiseY = chunkSceneY + localY + noiseYOffset;
+                this.decodeTerrainTile(
+                    scene,
+                    buffer,
+                    targetPlane,
+                    destX,
+                    destY,
+                    noiseX - destX,
+                    noiseY - destY,
+                    rotation,
+                    true,
+                );
             }
         }
     }
