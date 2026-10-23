@@ -53,7 +53,7 @@ function killCountLine(player, entry) {
 
 function wildernessLine(entry) {
   const level = Destinations.wildernessLevel(entry);
-  if (level <= 0) return "<col=7fbf6f>Outside the Wilderness</col>";
+  if (level <= 0) return "";
   const [x, y, z] = entry.tile;
   return `<col=ff5f5f>Level ${level} Wilderness${core.Wilderness.isMulti(x, y, z) ? ", multi-combat" : ""}</col>`;
 }
@@ -76,13 +76,15 @@ function showPanel(player) {
         uid(COMPONENT.PANEL_DESCRIPTION));
     return;
   }
+  // The Wilderness and kill-count lines fill from the top, so a missing one leaves no gap.
+  const [infoLine, secondInfoLine = ""] = [wildernessLine(entry), killCountLine(player, entry)].filter(Boolean);
   const icon = Destinations.iconId(entry);
   if (icon >= 0) sender.sendItemOnInterface(uid(COMPONENT.PANEL_ICON), icon, 0, 1);
   else sender.clearItemOnInterface(uid(COMPONENT.PANEL_ICON));
   sender.sendString(entry.name, uid(COMPONENT.PANEL_TITLE))
     .sendString(entry.group ?? TAB_LABELS[entry.tabs[0]], uid(COMPONENT.PANEL_SUBTITLE))
-    .sendString(wildernessLine(entry), uid(COMPONENT.PANEL_WILDERNESS))
-    .sendString(killCountLine(player, entry), uid(COMPONENT.PANEL_KILLS))
+    .sendString(infoLine ?? "", uid(COMPONENT.PANEL_WILDERNESS))
+    .sendString(secondInfoLine, uid(COMPONENT.PANEL_KILLS))
     .sendString(entry.description ?? "", uid(COMPONENT.PANEL_DESCRIPTION))
     .sendString(favourites(player).includes(entry.key) ? "Unfavourite" : "Favourite", uid(COMPONENT.FAVOURITE_LABEL));
 }

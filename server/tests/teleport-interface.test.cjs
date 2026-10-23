@@ -129,8 +129,13 @@ test("selecting fills the panel; the panel and right-click both teleport", () =>
   assert.equal(p.hidden.get(uid(COMPONENT.TELEPORT_BUTTON)), true, "nothing selected, no buttons");
   clickRow(p, "zulrah", OP.SELECT);
   assert.equal(p.texts.get(uid(COMPONENT.PANEL_TITLE)), "Zulrah");
-  assert.equal(p.texts.get(uid(COMPONENT.PANEL_KILLS)), "Kill count: <col=ffffff>12</col>");
-  assert.equal(p.texts.get(uid(COMPONENT.PANEL_WILDERNESS)), "<col=7fbf6f>Outside the Wilderness</col>");
+  assert.equal(p.texts.get(uid(COMPONENT.PANEL_WILDERNESS)), "Kill count: <col=ffffff>12</col>",
+    "outside the Wilderness the kill count takes the first line");
+  assert.equal(p.texts.get(uid(COMPONENT.PANEL_KILLS)), "");
+  clickRow(p, "callisto", OP.SELECT);
+  assert.match(p.texts.get(uid(COMPONENT.PANEL_WILDERNESS)), /^<col=ff5f5f>Level \d+ Wilderness/);
+  assert.equal(p.texts.get(uid(COMPONENT.PANEL_KILLS)), "Kill count: <col=ffffff>0</col>");
+  clickRow(p, "zulrah", OP.SELECT);
   assert.equal(p.items.get(uid(COMPONENT.PANEL_ICON)), Destinations.iconId(Destinations.byKey("zulrah")));
   assert.equal(p.hidden.get(uid(COMPONENT.TELEPORT_BUTTON)), false);
   teleports.length = 0;
