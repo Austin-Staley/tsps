@@ -88,7 +88,7 @@ const resource = () => {
 const values = new Map<string, unknown>();
 let programBinds = 0;
 const program = { bind() { programBinds++; }, uniform: (name: string, value: unknown) => values.set(name, value), samplers: { u_textures: 0 } as Record<string, number> };
-let rebuilds = 0;
+let rebuilds = 0, terrainSamples = 0;
 let finishRebuild = () => {};
 const app = {
     createTexture2D: resource, createTextureArray: resource, createFramebuffer: resource,
@@ -103,7 +103,7 @@ const renderer = {
     playerPosUni: [0, 0], getFrameRenderDistanceTiles: () => 50, getPlayerRawPlane: () => 0,
     osrsClient: { camera: { viewMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] } },
     mapManager: { visibleMapCount: 0 }, textureIdIndexMap: new Map(),
-    sampleHeightAtExactPlane: () => 0, shouldUseDirectTextureScenePass: () => true,
+    sampleHeightAtExactPlane: () => { terrainSamples++; return 0; }, shouldUseDirectTextureScenePass: () => true,
     framebuffer: {}, textureFramebuffer: {},
     // The swap lands when the test calls finishRebuild (a real compile takes frames).
     rebuildScenePrograms: () => { rebuilds++; return { then: (done: () => void) => { finishRebuild = done; } }; },
@@ -135,6 +135,7 @@ programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(programBinds, 2, "Bind once for shadow uniforms and once to restore the scene pass");
 assert.equal(shadows, 1);
+assert.equal(terrainSamples, 82, "first frame samples 81 mist points and the shadow target");
 const programFog = values.get("u_hdFog") as number[];
 const expectedFog = resolveFogRange({ renderDistance: 50, autoFogDepth: true,
     autoFogDepthFactor: 0.85, manualFogDepth: 24, hd: true });
@@ -152,6 +153,7 @@ renderer.playerPosUni[0] = 0.1;
 programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 1, "Reuse the shadow map between 15 Hz updates");
+assert.equal(terrainSamples, 163, "sub-tile movement resamples the mist target");
 assert.equal(actorShadows, 2, "Moving actor shadows must use the current pose every frame");
 assert.equal(shadowCopies, 2, "Replace previous actor depth with cached world depth");
 assert.equal(programBinds, 2);
@@ -160,6 +162,7 @@ assert.equal((values.get("u_hdLightPositions[0]") as Float32Array).length, 16 * 
 frameTime = 68;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 2, "Refresh moving shadows at the next deadline");
+assert.equal(terrainSamples, 164, "stationary frames reuse mist samples while refreshing the shadow target");
 renderer.playerPosUni[0] = 10;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 3, "Teleporting must refresh shadows immediately");
