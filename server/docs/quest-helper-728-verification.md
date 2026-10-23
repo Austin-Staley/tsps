@@ -6,11 +6,11 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Fourteen quests have accepted natural main-route completion evidence: **14 / 106 active quests (13.21%)** (q003, q006, q008, q011, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Fifteen quests have accepted natural main-route completion evidence: **15 / 106 active quests (14.15%)** (q003, q006, q008, q011, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
-long or complex quests; all 14 accepted routes are within the retained 106. Against
-the original inventory the count is still 14/128 (10.94%). Deferral changes scope,
+long or complex quests; all 15 accepted routes are within the retained 106. Against
+the original inventory the count is still 15/128 (11.72%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
 
@@ -38,6 +38,13 @@ lists the exact active and deferred sets and preserves their prior evidence.
 - **Revision:** plugin/source = loaded = peer-reviewed `1d22033d066ba1af26f833f3146da6e6a5f0bf50063bbac952822ff6ea6487a7`; focused test `f4bad7f8406e5731a82a9c5f12a561eb3b09c648df45aed7c5a16f02b8208205`; exact-hash review `/tmp/tsps-728/reviews/q006.json` passed.
 - **Natural route and result:** one linked fresh-stage-0 route on `q728a006r1`: the epoch-3 report naturally reached stage 20, and epoch 14 resumed from that saved stage-20 checkpoint (not a stage-40 baseline), naturally reaching stage 40 before continuing to stage 65. The account inflated two observed swamp toads through the `Inflate` NPC option, killed its private Chompy in real combat and used `Pluck`, completed Rantz's hunt/cooking route, exited the cave, and handed in the seasoned chompy. Quest Points increased 0→2 on the same target-only account; Cooking +1,470, Ranged +735, Fletching +262. A normal Rantz repeat did not duplicate rewards; relog preserved stage 65, QP 2, XP and inventory; official completion/logout snapshots were recorded and the account ended offline. Root accepted this scoped checkpoint-linked main route.
 - **Limits:** no visual overlay proof, no all-branches or recovery claim, and no separate QP varp-101 reading at stage 60; the fresh stage-0 and final relog values reconcile to QP 2. Evidence: `/tmp/tsps-728/native/jobs/q006-r1-epoch3.report.json`, `/tmp/tsps-728/native/jobs/q006-epoch9.raw.jsonl`, `/tmp/tsps-728/native/jobs/q006-epoch10.raw.jsonl`, `/tmp/tsps-728/native/jobs/q006-epoch14-acceptance.md`, `/tmp/tsps-728/native/evidence/q006-root-accepted-20261023.json`.
+
+### q019 — The Depths of Despair
+
+- **Revision:** source and epoch21 loaded plugin SHA-256 `04f08867fb1532609349020e71cdc396ecd1063caa9334f3c40ceed1b5702581`; focused test `a0418ee9a1b5532abd1705719e96a3b41cde6fa06a5ddea9e6d920b8f81bff8a` (14 checks). Root independently matched the loaded capture and disk source.
+- **Natural route and result:** the same account began at stage0 in epoch19, earned/read the assigned library book, and continued its saved checkpoint through epochs20/21. The cave crevice, stepping stones, rocks, tunnel, Artur, Sand Snake, chest/Accord and ordinary cave exit were played. Lord Kandur's real hand-in reached durable stage9 and client varbit6027=11 / reward6028=1. QP increased1→2, Agility XP increased1,500, coins increased4,000, the lunch book was awarded and the Accord consumed. Post-quest Lord dialogue did not repeat rewards. Relog preserved rewards and a final logout confirmed offline.
+- **Independent persistence:** root checked SQLite snapshots1278 (before hand-in),1281 (completion),1282/1286 (relog/logout),1294 (post-quest repeat/logout). The completed saves retain stage9/QP2/Agility13,035,931 and exactly4,000 coins/one lunch book. Evidence: `/tmp/tsps-728/native/evidence/q019-root-accepted-20261023.json`; epoch19/20 prefix and epoch21 continuation raw paths/hashes are recorded there.
+- **Limits/aids:** initial master/prerequisite/position setup was declared before target progress. Earlier real crab encounters used invulnerability and HP1 after hits; the Sand Snake died before its attempted HP aid, which was rejected. Ordinary Kourend travel supplies were used. No target quest-item/stage injection or admin movement after baseline. Alternate branches, canonical recovery and the visual overlay remain unchecked.
 
 ### q026 — Druidic Ritual
 
