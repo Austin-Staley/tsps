@@ -247,49 +247,70 @@ module.exports = function registerEditTerrainTools(ctx) {
   const sameBytes = (a, b) => a.length === b.length && a.every((value, index) => value === b[index]);
 
   // Streams one region's bytes to players and persists it so the server loads it on
-  // startup. Terrain-only: clients keep the cache's objects, which keeps dense regions
-  // under the replacement packet limit. A region that already carries replaced objects
-  // keeps them; those persist as a full .pack, terrain-only ones as .terrain.dat.
+  // startup.
+  //
+  // Persistence uses the editor's format: data/regions/<regionId>.pack (header + object
+  // archive + terrain archive), so agent edits and map-editor exports look the same on
+  // disk and the /regions/<id>.pack endpoint serves either.
+  //
+  // Streaming is a different question. A REGION_REPLACEMENT packet carries 7 + terrain +
+  // objects bytes against a 65,533-byte ceiling, and dense regions (Lumbridge is ~60 KB
+  // of terrain from the cache alone) do not fit objects on top. Those stream terrain-only
+  // - the client falls back to the cache's objects - while still persisting a .pack,
+  // because a .pack is a whole region rather than a patch, and the objects in it are the
+  // cache's, so the reloaded world matches what players were shown.
   const commitRegion = (regionId, terrain, tiles) => {
     const mapX = regionId >> 8;
     const mapY = regionId & 0xff;
     const prior = MapRegionReplacementManager.getReplacementMapData(regionId);
-    const objectData = prior?.objectData ? toU8(prior.objectData) : null;
+    const cacheObjects = CacheMaps.getRegion(regionId)?.objectData ?? null;
+    // An existing replacement may carry objects from an editor .pack; keep those in
+    // preference to the cache's, so an export's object edits are not thrown away.
+    const objects = prior?.objectData ? toU8(prior.objectData) : (cacheObjects ? toU8(cacheObjects) : null);
+
     let result;
+    let streamed = "pack";
     try {
-      result = MapRegionReplacementManager.replaceMapRegionData(regionId, terrain, objectData, "agent-mcp");
+      result = MapRegionReplacementManager.replaceMapRegionData(regionId, terrain, objects, "agent-mcp");
     } catch (error) {
-      throw new Error(`Region ${regionId}: ${error?.message ?? error}`);
+      // Dense region: the packet with objects is too large. Stream the terrain alone; the
+      // client keeps the cache's objects, and the .pack on disk still carries them.
+      if (!objects || !/too large/i.test(String(error?.message ?? error))) {
+        throw new Error(`Region ${regionId}: ${error?.message ?? error}`);
+      }
+      streamed = "terrain";
+      result = MapRegionReplacementManager.replaceMapRegionData(regionId, terrain, null, "agent-mcp");
     }
+
     const dir = regionsDir();
     fs.mkdirSync(dir, { recursive: true });
-    let packFile = null;
-    let terrainFile = null;
-    const pack = MapRegionReplacementManager.getRegionPack(regionId);
-    // Only one file per region may exist: the loader reads both, and a stale sibling
-    // (a .pack object set next to a .terrain.dat, or the reverse) would silently drop
-    // the replaced objects on the next restart.
     const packPath = path.join(dir, `${regionId}.pack`);
     const terrainPath = path.join(dir, `${regionId}.terrain.dat`);
-    // Back to the cache's own terrain with no replaced objects: nothing to persist, so
-    // the region stops loading as a replacement on restart. The live replacement stays
-    // for this session, so clients still holding the edited terrain get the cache's on
-    // their next scene rebuild.
-    const cache = CacheMaps.getRegion(regionId)?.terrainData;
-    if (!objectData && cache && sameBytes(terrain, toU8(cache))) {
+
+    // Back to the cache's own terrain and its own objects: nothing to persist, so the
+    // region stops loading as a replacement on restart. The live replacement stays for
+    // this session, so clients still holding the edited terrain get the cache's on their
+    // next scene rebuild.
+    const cacheTerrain = CacheMaps.getRegion(regionId)?.terrainData;
+    const objectsAreCache = !objects || !cacheObjects || sameBytes(objects, toU8(cacheObjects));
+    if (objectsAreCache && cacheTerrain && sameBytes(terrain, toU8(cacheTerrain))) {
       for (const file of [packPath, terrainPath]) if (fs.existsSync(file)) fs.unlinkSync(file);
-      return { regionId, mapX, mapY, tiles, ...result, packFile, terrainFile, persisted: false, matchesCache: true };
+      return { regionId, mapX, mapY, tiles, ...result, packFile: null, terrainFile: null,
+        persisted: false, matchesCache: true, streamed };
     }
+
+    const pack = MapRegionReplacementManager.getRegionPack(regionId, objects ?? undefined);
     if (pack) {
-      packFile = packPath;
-      fs.writeFileSync(packFile, pack);
+      fs.writeFileSync(packPath, pack);
       if (fs.existsSync(terrainPath)) fs.unlinkSync(terrainPath);
-    } else {
-      terrainFile = terrainPath;
-      fs.writeFileSync(terrainFile, Buffer.from(terrain));
-      if (fs.existsSync(packPath)) fs.unlinkSync(packPath);
+      return { regionId, mapX, mapY, tiles, ...result, packFile: packPath, terrainFile: null,
+        persisted: true, streamed };
     }
-    return { regionId, mapX, mapY, tiles, ...result, packFile, terrainFile, persisted: true };
+    // No object archive for this region in the cache (nothing to build a pack from).
+    fs.writeFileSync(terrainPath, Buffer.from(terrain));
+    if (fs.existsSync(packPath)) fs.unlinkSync(packPath);
+    return { regionId, mapX, mapY, tiles, ...result, packFile: null, terrainFile: terrainPath,
+      persisted: true, streamed };
   };
 
   // Patches every touched region, streams it to players, and persists the pack so the
@@ -430,7 +451,7 @@ module.exports = function registerEditTerrainTools(ctx) {
 
   tool(
     "list_region_packs",
-    "Regions with active agent/editor replacements (regionId, map tile range). These persist as data/regions/<regionId>.pack or .terrain.dat and load on startup; matchesCache marks one cleared back to the cache, which has no file and is gone after a restart.",
+    "Regions with active agent/editor replacements (regionId, map tile range). These persist as data/regions/<regionId>.pack - the map editor's own format - and load on startup; matchesCache marks one cleared back to the cache, which has no file and is gone after a restart.",
     {},
     () => ({
       count: MapRegionReplacementManager.getRegionIds().length,
@@ -439,7 +460,12 @@ module.exports = function registerEditTerrainTools(ctx) {
         const mapY = regionId & 0xff;
         const replacement = MapRegionReplacementManager.getReplacementMapData(regionId);
         const cache = CacheMaps.getRegion(regionId)?.terrainData;
-        const matchesCache = Boolean(replacement && !replacement.objectData && cache
+        const cacheObjects = CacheMaps.getRegion(regionId)?.objectData;
+        // A replacement is back to the cache only when both halves match: its terrain
+        // and its objects (a .pack carries the cache's objects, a live edit may too).
+        const objectsAreCache = !replacement?.objectData || !cacheObjects
+          || sameBytes(toU8(replacement.objectData), toU8(cacheObjects));
+        const matchesCache = Boolean(replacement && objectsAreCache && cache
           && sameBytes(toU8(replacement.terrainData), toU8(cache)));
         return {
           regionId, mapX, mapY, x1: mapX * 64, y1: mapY * 64, x2: mapX * 64 + 63, y2: mapY * 64 + 63, matchesCache,

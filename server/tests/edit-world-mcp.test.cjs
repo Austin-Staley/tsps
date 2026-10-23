@@ -131,12 +131,15 @@ function terrainTestSetup() {
         replaced.push({ regionId, source });
         return { regionId, source, terrainBytes: terrainData.length, objectBytes: objectData?.length ?? 0 };
       },
-      getRegionPack: (regionId) => {
+      // Mirrors the real manager: a pack needs objects, and a caller may supply them
+      // for a region whose live replacement is terrain-only.
+      getRegionPack: (regionId, objectDataOverride) => {
         const entry = stored.get(regionId);
-        if (!entry?.objectData) return null;
+        const objects = objectDataOverride ?? entry?.objectData;
+        if (!entry || !objects) return null;
         const header = Buffer.alloc(28);
         header.writeInt32BE(1, 0);
-        return Buffer.concat([header, Buffer.from(entry.objectData), Buffer.from(entry.terrainData)]);
+        return Buffer.concat([header, Buffer.from(objects), Buffer.from(entry.terrainData)]);
       },
       getRegionIds: () => [...stored.keys()].sort((a, b) => a - b),
     },
@@ -148,7 +151,7 @@ function terrainTestSetup() {
     return JSON.parse(result.content[0].text);
   };
   const callRaw = (name, args) => tools.get(name)(args);
-  return { tools, call, callRaw, stored, replaced, dir };
+  return { tools, call, callRaw, stored, replaced, dir, manager: core.MapRegionReplacementManager };
 }
 
 test("npc tools register", () => {
@@ -229,11 +232,12 @@ test("paint_ground round-trips through describe_tile and persists a pack", async
   assert.equal(painted.regions[0].persisted, true);
   // Region of tile (3222,3218): map 50,50 -> id 50<<8|50.
   assert.equal(painted.regions[0].regionId, (50 << 8) | 50);
-  // Terrain-only: no object bytes ride along, persisted as .terrain.dat.
-  assert.equal(painted.regions[0].packFile, null);
-  const terrainFile = path.join(t.dir, "regions", `${painted.regions[0].regionId}.terrain.dat`);
-  assert.equal(painted.regions[0].terrainFile, terrainFile);
-  assert.ok(fs.existsSync(terrainFile));
+  // Persisted in the map editor's format: a full .pack, not a terrain-only file.
+  const packFile = path.join(t.dir, "regions", `${painted.regions[0].regionId}.pack`);
+  assert.equal(painted.regions[0].packFile, packFile);
+  assert.equal(painted.regions[0].terrainFile, null);
+  assert.ok(fs.existsSync(packFile));
+  assert.equal(painted.regions[0].streamed, "pack");
   const after = await t.call("describe_tile", { x: 3222, y: 3218, z: 0 });
   assert.deepEqual(after.overlay, { id: 5, shape: 0, rotation: 0 });
   assert.equal(after.underlay, 3);
@@ -289,17 +293,18 @@ test("terrain validation", async () => {
 
 // --- review follow-ups -------------------------------------------------------
 
-test("terrain writes remove a stale sibling pack so a reload keeps one view", async () => {
+test("terrain writes leave exactly one region file, in the editor's pack format", async () => {
   const t = terrainTestSetup();
   const regionId = (50 << 8) | 50; // tiles 3200-3263 x 3200-3263
   const dir = path.join(t.dir, "regions");
   fs.mkdirSync(dir, { recursive: true });
-  // A leftover full pack next to where a terrain-only file will be written.
-  const stalePack = path.join(dir, `${regionId}.pack`);
-  fs.writeFileSync(stalePack, Buffer.from([1, 2, 3]));
+  // A leftover terrain-only file from an older build of these tools.
+  const staleTerrain = path.join(dir, `${regionId}.terrain.dat`);
+  fs.writeFileSync(staleTerrain, Buffer.from([1, 2, 3]));
   await t.call("paint_ground", { x1: 3222, y1: 3218, x2: 3222, y2: 3218, z: 0, overlay: 5 });
-  assert.equal(fs.existsSync(stalePack), false, "the .pack must not survive next to a .terrain.dat");
-  assert.equal(fs.existsSync(path.join(dir, `${regionId}.terrain.dat`)), true);
+  assert.equal(fs.existsSync(staleTerrain), false, "the .terrain.dat must not survive next to a .pack");
+  assert.equal(fs.existsSync(path.join(dir, `${regionId}.pack`)), true);
+  assert.deepEqual(fs.readdirSync(dir).sort(), [`${regionId}.pack`]);
 });
 
 // --- live-test follow-ups ----------------------------------------------------
@@ -331,7 +336,8 @@ test("spawn file keeps an untouched entry's own spacing", async () => {
 test("a region cleared back to the cache stops persisting", async () => {
   const t = terrainTestSetup();
   const regionId = (50 << 8) | 50;
-  const file = path.join(t.dir, "regions", `${regionId}.terrain.dat`);
+  // Edits persist in the editor's pack format now, not a terrain-only file.
+  const file = path.join(t.dir, "regions", `${regionId}.pack`);
   await t.call("paint_ground", { x1: 3222, y1: 3218, x2: 3222, y2: 3218, z: 0, overlay: 5 });
   assert.ok(fs.existsSync(file));
   assert.equal((await t.call("list_region_packs", {})).regions[0].matchesCache, false);
@@ -341,4 +347,26 @@ test("a region cleared back to the cache stops persisting", async () => {
   assert.equal(cleared.regions[0].persisted, false);
   assert.equal(fs.existsSync(file), false, "no file, so nothing loads on restart");
   assert.equal((await t.call("list_region_packs", {})).regions[0].matchesCache, true);
+});
+
+test("a dense region streams terrain-only but still persists a .pack", async () => {
+  const t = terrainTestSetup();
+  const regionId = (50 << 8) | 50;
+  // Behave like the real manager on a region too dense to carry objects in one packet.
+  const manager = t.manager;
+  const realReplace = manager.replaceMapRegionData;
+  manager.replaceMapRegionData = (id, terrain, objects, source) => {
+    if (objects) throw new Error(`region replacement is too large: region=${id} bytes=99999 max=65533`);
+    return realReplace(id, terrain, objects, source);
+  };
+  const painted = await t.call("paint_ground", {
+    x1: 3222, y1: 3218, x2: 3222, y2: 3218, z: 0, overlay: 5,
+  });
+  assert.equal(painted.regions[0].streamed, "terrain", "players get terrain; the client keeps cache objects");
+  assert.equal(painted.regions[0].objectBytes, 0);
+  // The file is still the editor's format, carrying the cache's objects.
+  assert.equal(painted.regions[0].packFile, path.join(t.dir, "regions", `${regionId}.pack`));
+  assert.ok(fs.existsSync(painted.regions[0].packFile));
+  assert.equal(fs.existsSync(path.join(t.dir, "regions", `${regionId}.terrain.dat`)), false);
+  manager.replaceMapRegionData = realReplace;
 });

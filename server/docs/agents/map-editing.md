@@ -15,7 +15,7 @@ Three separate stores, and it matters which one you are touching:
 | --- | --- | --- |
 | Live objects/NPCs | the running world (`ObjectManager`, `World`) | players connected now |
 | Persisted spawns | `data/definitions/object-spawns.json`, `npc-spawns.json` | everyone, after a server restart |
-| Terrain | `data/regions/<id>.terrain.dat` or `<id>.pack` | players on scene rebuild; editor after sync |
+| Terrain | `data/regions/<id>.pack` (the map editor's format) | players on scene rebuild; editor after sync |
 
 A placement tool does the first two together: it registers the object immediately *and*
 appends it to the spawn file. Terrain tools register a region replacement and write the pack.
@@ -151,19 +151,30 @@ it after the first small edit before planning a big one.
 
 What actually works:
 
-1. **Terrain-only replacements** — the tools never send object bytes for terrain edits, and the
-   client falls back to the cache's objects. Keeps regions ~8 KB smaller.
-2. **Clear first** — `clear_terrain` restores the cache encoding, the smallest form, freeing
+1. **Persist like the editor** — edits are written as `data/regions/<id>.pack` (header + object
+   archive + terrain archive), the same format the map editor exports and the server loads, so
+   the `/regions/<id>.pack` endpoint serves either.
+2. **Stream terrain-only when it does not fit** — the *file* always carries the region's
+   objects (the cache's, or a previously loaded pack's), but the *packet* drops them when
+   `7 + terrain + objects` would exceed the ceiling. The client then falls back to the cache's
+   objects, and because the pack holds those same objects, the reloaded world matches what
+   players were shown. `streamed` on the tool result says which happened (`pack` | `terrain`).
+3. **Clear first** — `clear_terrain` restores the cache encoding, the smallest form, freeing
    everything the previous edits added.
-3. **Edit a smaller footprint** — paint the plateau and terraces, not every tile of a rectangle.
-4. **Use more regions** — each region has its own budget and its own packet. Spreading a city
+4. **Edit a smaller footprint** — paint the plateau and terraces, not every tile of a rectangle.
+5. **Use more regions** — each region has its own budget and its own packet. Spreading a city
    across regions buys space linearly.
 
-When a region overflows, the tool fails with
+When even terrain alone overflows, the tool fails with
 `region replacement is too large: region=<id> bytes=<n> max=65533`; nothing is half-applied.
 Clean up with `clear_terrain` and try a smaller footprint. Removing the cap entirely would need
 a chunked replacement protocol (split the terrain stream, reassemble client-side) — not
 implemented here.
+
+A `.pack` here does **not** bake in objects placed with `place_object`/`build_preset`: those
+stay as entries in `object-spawns.json` and are applied on top of the region at runtime. Baking
+them would need the client's loc-stream encoder on the server, and would turn mergeable spawn
+entries into binary data — deliberately out of scope.
 
 ## Persistence format rules
 
