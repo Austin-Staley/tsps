@@ -183,10 +183,20 @@ function action(h, player, npcId, stepId) {
 
 function object(h, player, objectId, option) {
   const event = {
-    player, object: { getId: () => objectId }, objectId, option,
+    player, object: { getId: () => objectId }, objectId,
+    definition: core.ObjectDefinition.forId(objectId),
+    // ObjectActionPacketListener sends the selected menu option in lowercase.
+    option: option.toLowerCase(),
     location: player.getLocation(), handled: false, clickType: 1,
   };
-  for (const handler of h.objectHooks) handler(event);
+  const start = PluginManager.objectInteractionHooks.length;
+  try {
+    const api = PluginManager.createApi('qh728-q117-object-dispatch');
+    for (const handler of h.objectHooks) api.onObjectInteraction(handler);
+    PluginManager.emitObjectInteraction(event);
+  } finally {
+    PluginManager.objectInteractionHooks.length = start;
+  }
   return event;
 }
 

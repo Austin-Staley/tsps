@@ -505,19 +505,20 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   }
 
   function handleObjectInteraction(event) {
-    const { player, objectId, option } = event;
-    if (objectId === BALLISTA_OBJECT_ID && option === "Fire") {
+    const { player, objectId } = event;
+    const option = String(event.option ?? "").toLowerCase();
+    if (objectId === BALLISTA_OBJECT_ID && option === "fire") {
       fireBallista(player);
       event.handled = true;
       return;
     }
     if ((objectId === CLOSED_CHEST_OBJECT_ID || objectId === OPEN_CHEST_OBJECT_ID)
-      && (option === "Open" || option === "Search")) {
+      && (option === "open" || option === "search")) {
       openChest(player);
       event.handled = true;
       return;
     }
-    if (objectId === CRUMBLED_WALL_OBJECT_ID && option === "Climb-over") {
+    if (objectId === CRUMBLED_WALL_OBJECT_ID && option === "climb-over") {
       const location = player.getLocation();
       player.moveTo((location.y < WALL_NORTH_LANDING.y ? WALL_NORTH_LANDING : WALL_SOUTH_LANDING).clone());
       event.handled = true;
