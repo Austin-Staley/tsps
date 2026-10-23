@@ -85,8 +85,9 @@ module.exports = function registerWorldTools(ctx) {
   tool(
     "plan_route",
     "Read-only same-plane walking plan using the existing long-distance collision planner. Returns waypoints and closed door/gate candidates; follow with walk_to and normal object interactions. Door locks, quest requirements, ladders and transports are not solved. Main world only; destination within 319 tiles.",
-    { player, x: z.number().int().min(0).max(16383), y: z.number().int().min(0).max(16383) },
-    ({ player: username, x, y }) => {
+    { player, x: z.number().int().min(0).max(16383), y: z.number().int().min(0).max(16383),
+      exact: z.boolean().default(false).describe("Require the exact stand tile; prevents stopping nearby across a wall") },
+    ({ player: username, x, y, exact }) => {
       const p = find(username);
       if (p.getPrivateArea?.()) throw new Error("Plan main-world routes outside private areas.");
       const from = tile(p.getLocation());
@@ -114,6 +115,7 @@ module.exports = function registerWorldTools(ctx) {
       };
       const plan = planRoute({
         from, to: { x, y },
+        ...(exact ? { goalReach: 0, exactOnly: true } : {}),
         getFlag: (x, y, z) => RegionManager.getClipping(x, y, z, null),
         isDoor: (x, y, z) => doorsAt(x, y, z).length > 0,
       });

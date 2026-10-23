@@ -168,6 +168,8 @@ waypoints plus closed door/gate candidates at crossings. Walk each leg and open 
 observed door normally before crossing; the plan does not establish that a locked quest
 door is usable. It supports main-world, same-plane destinations within 319 tiles; split
 longer journeys at real intermediate destinations and use guide-required transports.
+Use `exact: true` when targeting a specific approach tile beside a counter or staircase;
+the default proximity route can finish nearby on the other side of a wall.
 
 Supply ordinary commodities such as beer, raw meat, nails, tools, food and travel items as
 declared setup aids when sourcing them would distract from the quest. Record optional shop
