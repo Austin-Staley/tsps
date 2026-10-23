@@ -166,6 +166,23 @@ for (const consumer of ["none", "filter", "handler"] as const) {
     }
 }
 
+// A held modifier's auto-repeated keydown is not queued again as an onKey press (#845).
+{
+    const held = new InputManager();
+    const ctrl = { code: "ControlLeft", key: "Control", keyCode: 17, ctrlKey: true, preventDefault() {} } as KeyboardEvent;
+    held.onKeyDown(ctrl);
+    assert.equal(held.keyEvents.length, 1);
+    held.keyEvents.length = 0;
+    held.osrsKeyPressedThisFrame.clear();
+    for (let i = 0; i < 30; i++) held.onKeyDown({ ...ctrl, repeat: true } as KeyboardEvent);
+    assert.equal(held.keyEvents.length, 0, "repeats queue no key presses");
+    assert.equal(held.isKeyHeld(82), true);
+    assert.equal(ClientState.isCtrlPressed(), true, "Ctrl stays held for Ctrl-click running");
+    held.onKeyDown({ code: "KeyW", key: "w", keyCode: 87, repeat: true, preventDefault() {} } as KeyboardEvent);
+    assert.equal(held.keyEvents.length, 1, "other keys still repeat");
+    (held as any).onKeyUp(ctrl);
+}
+
 const action = { param0: 0, param1: 0, opcode: 57, identifier: 1, itemId: -1, option: "Click", target: "", screenX: 0, screenY: 0 };
 let clicks = 0, native = 0;
 const dispose = setMenuEventHooks({ build: entries => entries, opened: entries => entries, shouldOpen: open => open,

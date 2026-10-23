@@ -1072,6 +1072,10 @@ export class InputManager {
         this.idleTime = 0;
         this.lastInputTimeMs = this.nowMs();
 
+        // A held Shift/Ctrl/Alt auto-repeats keydown. It is already held; queueing each repeat as a
+        // key press re-ran every onKey script and redrew all widgets many times a second (#845).
+        if (event.repeat && (event.keyCode === 16 || event.keyCode === 17 || event.keyCode === 18)) return;
+
         if (!prioritizeChat) {
             for (const handler of this.keyHandlers) if (handler.onKeyDown?.(event)) return;
         }
