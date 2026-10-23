@@ -330,7 +330,7 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | A Taste of Hope | `TasteOfHope` | Pending | Pending | Pending |
 | Tears of Guthix | `TearsOfGuthix` | Pending | Pending | Pending |
 | Temple of Ikov | `TempleOfIkov` | Pending | Pending | Pending |
-| The Tourist Trap | `TouristTrap` | Pending | Pending | Pending |
+| The Tourist Trap | `TouristTrap` | Cache transform parents, worn disguise, lost supplies, XP interruption and saved-stage migration reviewed | 21 focused checks pass | Pending |
 | Tower of Life | `TowerOfLife` | Pressure plug rule, pipe piece model/position mirroring, renewable costume pieces, the basement wire step 17 and the mind-meter threshold repaired against the cache and the Quest Helper solver | 22 focused source-contract tests pass | No native playthrough; no completion claimed |
 | Tree Gnome Village | `TreeGnomeVillage` | Tracker/ballista, orb recovery, transformed NPC and post-quest amulet routes reviewed | 7 focused checks pass, including full-bag repeat receipt regression | Pending |
 | Tribal Totem | `TribalTotem` | Pending | Pending | Pending |
