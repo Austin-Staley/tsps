@@ -53,7 +53,8 @@ export class ItemDefinition {
         definition.bonuses = [...(base.bonuses ?? new Array(14).fill(0))];
         definition.requirements = [...(base.requirements ?? new Array(23).fill(0))];
         for (const key of ["equipmentType", "weaponInterface", "doubleHanded", "stackable",
-            "tradeable", "dropable", "sellable", "value", "grandExchangeValue", "highAlch", "lowAlch", "dropValue",
+            "tradeable", "dropable", "sellable", "value", "grandExchangeValue", "grandExchangeSellValue",
+            "grandExchangeVolume", "buyLimit", "highAlch", "lowAlch", "dropValue",
             "bloodMoneyValue", "blockAnim", "standAnim", "walkAnim", "runAnim", "standTurnAnim",
             "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "attackAnim", "equipSound", "bonuses",
             "requirements", "combatRequirement"]) {
@@ -79,6 +80,9 @@ export class ItemDefinition {
     private noted: boolean;
     private value: number;
     private grandExchangeValue: number;
+    private grandExchangeSellValue: number;
+    private grandExchangeVolume: number = 0;
+    private buyLimit: number = 0;
     private bloodMoneyValue: number;
     private highAlch: number;
     private lowAlch: number;
@@ -173,6 +177,21 @@ export class ItemDefinition {
     /** OSRS Grand Exchange quote from data/definitions/item-prices.json; falls back to the store value. */
     public getGrandExchangeValue(): number {
         return this.grandExchangeValue > 0 ? this.grandExchangeValue : this.value;
+    }
+
+    /** The guide sell quote, falling back to the buy quote when there is none. */
+    public getGrandExchangeSellValue(): number {
+        return this.grandExchangeSellValue > 0 ? this.grandExchangeSellValue : this.getGrandExchangeValue();
+    }
+
+    /** Trades over the last 24 hours (buy and sell volume). */
+    public getGrandExchangeVolume(): number {
+        return this.grandExchangeVolume;
+    }
+
+    /** The 4-hour buy limit; 0 means unlimited. */
+    public getGrandExchangeBuyLimit(): number {
+        return this.buyLimit;
     }
 
     public getBloodMoneyValue(): number {

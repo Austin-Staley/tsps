@@ -32,7 +32,13 @@ const COLLECTIONS = [518, 519, 520, 521, 522, 523, 539, 540];
 const MARKET_BASE = 7900;
 const MARKET_STRIDE = 7;
 const FINISHED = 5;
-const OFFER_DELAY_MS = 5000;
+const OFFERS_ATTRIBUTE = "grand-exchange-offers";
+const LIMITS_ATTRIBUTE = "grand-exchange-limits";
+const LIMIT_WINDOW_MS = 4 * 60 * 60 * 1000;
+const OFFER_MIN_DELAY_MS = 5_000;
+const OFFER_MAX_DELAY_MS = 10 * 60_000;
+const OFFER_ILLIQUID_MIN_MS = 60_000;
+const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
 const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
 // OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
@@ -62,6 +68,55 @@ function price(id) {
   return Math.max(1, Math.min(MAX, Math.floor(ItemDefinition.forId(base).getGrandExchangeValue()) || 1));
 }
 
+/** The price a sell offer receives: the live low, or the buy price where there is no split. */
+function sellPrice(id) {
+  const base = ItemDefinition.forId(id).unNote();
+  const definition = ItemDefinition.forId(base);
+  const value = definition.getGrandExchangeSellValue?.() ?? definition.getGrandExchangeValue();
+  return Math.max(1, Math.min(MAX, Math.floor(value) || 1));
+}
+
+function fillDelayMs(offer, random = Math.random) {
+  const definition = ItemDefinition.forId(ItemDefinition.forId(offer.itemId).unNote());
+  const volume = definition.getGrandExchangeVolume?.() ?? 0;
+  if (!Number.isFinite(volume) || volume <= 0) {
+    return OFFER_ILLIQUID_MIN_MS + random() * (OFFER_ILLIQUID_MAX_MS - OFFER_ILLIQUID_MIN_MS);
+  }
+  const quantity = Math.max(1, Number(offer.quantity) || 1);
+  const expectedMinutes = quantity / (volume / 1440);
+  const delay = expectedMinutes * 60_000 * (0.75 + 0.75 * random());
+  return Math.max(OFFER_MIN_DELAY_MS, Math.min(OFFER_MAX_DELAY_MS, delay));
+}
+
+function limitKey(itemId) {
+  return ItemDefinition.forId(itemId).unNote();
+}
+
+function limitEntry(player, itemId, now) {
+  const entry = player.getAttribute(LIMITS_ATTRIBUTE)?.[limitKey(itemId)];
+  return entry && now - entry.start < LIMIT_WINDOW_MS ? entry : undefined;
+}
+
+function itemLimit(itemId) {
+  const limit = ItemDefinition.forId(limitKey(itemId)).getGrandExchangeBuyLimit?.() ?? 0;
+  return Number.isFinite(limit) && limit > 0 ? limit : Infinity;
+}
+
+function remainingLimit(player, itemId, now = Date.now()) {
+  const limit = itemLimit(itemId);
+  if (limit === Infinity) return Infinity;
+  return Math.max(0, limit - (limitEntry(player, itemId, now)?.amount ?? 0));
+}
+
+function recordLimit(player, itemId, amount, now = Date.now()) {
+  let limits = player.getAttribute(LIMITS_ATTRIBUTE);
+  if (!limits) player.setAttribute(LIMITS_ATTRIBUTE, limits = {});
+  const key = limitKey(itemId);
+  const entry = limits[key];
+  if (entry && now - entry.start < LIMIT_WINDOW_MS) entry.amount += amount;
+  else limits[key] = { start: now, amount };
+}
+
 let quotedPrices;
 
 /**
@@ -86,8 +141,8 @@ function active(player, offer) {
 }
 
 function completedOffers(player) {
-  let slots = player.getAttribute("grand-exchange-offers");
-  if (!slots) player.setAttribute("grand-exchange-offers", slots = {});
+  let slots = player.getAttribute(OFFERS_ATTRIBUTE);
+  if (!slots) player.setAttribute(OFFERS_ATTRIBUTE, slots = {});
   return slots;
 }
 
@@ -124,7 +179,7 @@ function marketVarps(slot, offer) {
   return {
     [OFFER_ITEMS[slot]]: -1,
     [base + 6]: offer?.itemId ?? -1,
-    [base]: offer ? price(offer.itemId) : 0,
+    [base]: offer ? (offer.sell ? sellPrice(offer.itemId) : price(offer.itemId)) : 0,
     [base + 1]: offer?.quantity ?? 0,
     // An aborted offer traded nothing (the client draws its bar red).
     [base + 2]: offer?.finished && !offer.aborted ? offer.quantity : 0,
@@ -174,7 +229,7 @@ function refresh(player, offer) {
     .sendConfig(SELECTED_ITEM, offer.itemId)
     .sendVarbit(SELL, offer.sell ? 1 : 0)
     .sendVarbit(QUANTITY, offer.quantity)
-    .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? price(offer.itemId) : 1)
+    .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? (offer.sell ? sellPrice(offer.itemId) : price(offer.itemId)) : 1)
     .sendVarbit(SELECTED_SLOT, offer.slot + 1)
     .sendString(examine(offer.itemId), SETUP_DESC);
 }
@@ -260,10 +315,15 @@ function start(player, sell, slot = 0, itemId = -1) {
 function confirm(player, offer) {
   if (!active(player, offer) || !exchangeable(offer.itemId)) return;
   const amount = offer.quantity;
-  const total = amount * price(offer.itemId);
+  const total = amount * (offer.sell ? sellPrice(offer.itemId) : price(offer.itemId));
   const sender = player.getPacketSender();
   if (!Number.isInteger(amount) || amount < 1 || amount > MAX || !Number.isSafeInteger(total) || total > MAX) {
     sender.sendMessage("Choose a smaller quantity (maximum trade value is 2,147,483,647 coins).");
+    return;
+  }
+  const remaining = remainingLimit(player, offer.itemId);
+  if (amount > remaining) {
+    sender.sendMessage(`You can only buy or sell ${itemLimit(offer.itemId)} of that item every 4 hours (${remaining} remaining).`);
     return;
   }
   const inventory = player.getInventory();
@@ -289,8 +349,9 @@ function confirm(player, offer) {
     return;
   }
   inventory.setItems(result.getItems()).refreshItems();
-  const finished = { ...offer, total, finished: false, completesAt: Date.now() + OFFER_DELAY_MS };
+  const finished = { ...offer, total, finished: false, completesAt: Date.now() + fillDelayMs(offer) };
   completedOffers(player)[offer.slot] = finished;
+  recordLimit(player, offer.itemId, amount);
   saveOffers(player);
   offers.delete(player);
   viewing.set(player, offer.slot);
@@ -300,7 +361,7 @@ function confirm(player, offer) {
       { [SELECTED_SLOT]: offer.slot + 1 },
       { [COLLECTIONS[offer.slot]]: collection(finished) })
     .sendString(examine(offer.itemId), DETAILS_DESC)
-    .sendMessage("Offer placed. It will complete in five seconds.");
+    .sendMessage("Offer placed. It will fill when the market meets your price.");
   scheduleCompletion(player, finished);
 
 }
@@ -420,7 +481,7 @@ function openGrandExchange({ player }) {
     .sendInterfaceFlagsRange(uid(23), 0, 1, 2)
     // Same item operations as the normal inventory panel.
     .sendInterfaceFlagsRange(SIDE_ITEMS, 0, 27, 1086);
-  sender.sendMessage("Instant GE: search for an item to buy, or sell from your inventory. Fixed guide prices; no fees.");
+  sender.sendMessage("Grand Exchange: live guide prices. Buy offers pay the high quote, sells receive the low; fills depend on trade volume and each item has a four-hour limit.");
   return true;
 }
 
@@ -527,9 +588,20 @@ const EXCHANGE_BUTTONS = [uid(4), uid(6), uid(23), uid(24), uid(26), uid(30), ..
 
 module.exports = {
   name: "GrandExchange",
+  _test: {
+    price,
+    sellPrice,
+    fillDelayMs,
+    remainingLimit,
+    recordLimit,
+    LIMITS_ATTRIBUTE,
+    LIMIT_WINDOW_MS,
+    OFFERS_ATTRIBUTE,
+  },
   register(api) {
     pluginApi = api;
-    api.persistAttribute("grand-exchange-offers", {});
+    api.persistAttribute(OFFERS_ATTRIBUTE, {});
+    api.persistAttribute(LIMITS_ATTRIBUTE, {});
     api.onPlayerLogin(({ player }) => {
       for (const offer of Object.values(completedOffers(player))) scheduleCompletion(player, offer);
     });

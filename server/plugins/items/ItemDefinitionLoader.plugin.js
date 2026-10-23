@@ -83,31 +83,59 @@ function loadItemPrices() {
     "item-prices.json"
   );
   if (!fs.existsSync(filePath)) {
-    return { filePath, loaded: 0 };
+    return { filePath, loaded: 0, alchOverrides: 0 };
   }
   const { data } = JSON.parse(fs.readFileSync(filePath, "utf8"));
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid item-prices.json: expected a data object");
   }
+  const count = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
   let loaded = 0;
+  let alchOverrides = 0;
   for (const [key, quote] of Object.entries(data)) {
     const id = Number(key);
     if (!Number.isInteger(id) || id < 0) continue;
-    const price = [quote?.high, quote?.low].find(
-      (value) => Number.isSafeInteger(value) && value > 0
-    );
-    if (price === undefined) continue;
     const definition = ItemDefinition.forId(id);
     if (definition === ItemDefinition.DEFAULT) continue;
-    definition.grandExchangeValue = price;
-    const noteId = definition.getNoteId();
-    if (!definition.isNoted() && noteId >= 0) {
-      const note = ItemDefinition.forId(noteId);
-      if (note.isNoted() && note.getNoteId() === id) note.grandExchangeValue = price;
+
+    const limit = count(quote?.limit);
+    definition.buyLimit = limit;
+
+    const prices = [quote?.high, quote?.low].filter(
+      (value) => Number.isSafeInteger(value) && value > 0
+    );
+    if (prices.length) {
+      // Some live quotes are inverted (high below low). Charge the higher guide price
+      // as the buy and the lower as the sell so the spread cannot be arbitraged.
+      const buy = Math.max(...prices);
+      const sell = Math.min(...prices);
+      const volume = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        count(quote.highVolume) + count(quote.lowVolume)
+      );
+      definition.grandExchangeValue = buy;
+      definition.grandExchangeSellValue = sell;
+      definition.grandExchangeVolume = volume;
+      const noteId = definition.getNoteId();
+      if (!definition.isNoted() && noteId >= 0) {
+        const note = ItemDefinition.forId(noteId);
+        if (note.isNoted() && note.getNoteId() === id) {
+          note.grandExchangeValue = buy;
+          note.grandExchangeSellValue = sell;
+          note.grandExchangeVolume = volume;
+          note.buyLimit = limit;
+        }
+      }
+      loaded += 1;
     }
-    loaded += 1;
+
+    if (quote && typeof quote === "object" && ("highAlch" in quote || "lowAlch" in quote)) {
+      definition.highAlch = count(quote.highAlch);
+      definition.lowAlch = count(quote.lowAlch);
+      alchOverrides += 1;
+    }
   }
-  return { filePath, loaded };
+  return { filePath, loaded, alchOverrides };
 }
 
 function loadItemDefinitions() {
@@ -267,6 +295,7 @@ function sendCustomItems({ player }) {
 
 module.exports = {
   name: "ItemDefinitionLoader",
+  _test: { loadItemPrices },
   register(api) {
     const startedAt = Date.now();
     const result = loadItemDefinitions();
