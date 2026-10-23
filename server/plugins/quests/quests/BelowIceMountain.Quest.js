@@ -981,6 +981,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     training.set(player, scene);
     player.setAttribute(TRAINING_ATTRIBUTE, 1);
     scene.enter(player);
+    player.moveTo(scene.sourceTile(3253, 3393));
     player.getMovementQueue().reset().setBlockMovement(true);
     player.setUntargetable(true);
     player.getPacketSender().sendInterfaceRemoval();

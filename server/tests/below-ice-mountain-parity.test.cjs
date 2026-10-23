@@ -125,6 +125,8 @@ test('RPS third-round cheat beats the actual shown sign for every player pick', 
 test('workout lasts 206 ticks, unlocks Flex at its end and cleans up logout', () => {
   const h = setup(), N = h.core.NpcIdentifiers; h.quest.setStage(h.player, 1); h.attrs.set(CHECKAL, 10);
   h.action(N.ATLAS, '_RwWTk'); assert.equal(h.player.getPrivateArea().getName(), 'Barbarian Workout');
+  const workoutEntry = h.player.getPrivateArea().sourceTile(3253, 3393);
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [workoutEntry.getX(), workoutEntry.getY()], 'Atlas enters the workout scene before its first scheduled action');
   assert.equal(h.attrs.get('below-ice-mountain:training'), 1); assert.equal(h.varbits.get(12062), 0);
   const cancelledScene = h.player.getPrivateArea();
   const cancelledTasks = [...h.tasks];
