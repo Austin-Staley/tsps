@@ -286,6 +286,29 @@ function answerGetStage(request) {
   if (quest && request.player) request.stage = quest.getStage(request.player);
 }
 
+/** A shop version named after a quest: "Fremennik Isles", "After Lunar Diplomacy", "Before Contact!". */
+const QUEST_SHOP_VERSION = /\((?:(After|During|Before) )?([^()]+)\)$/;
+
+function questNamed(name) {
+  const plain = (text) => text.toLowerCase().replace(/^the /, "");
+  return quests.find((quest) => plain(quest.name) === plain(name));
+}
+
+function questShopVersionApplies(name, player) {
+  const match = QUEST_SHOP_VERSION.exec(name);
+  const quest = match && questNamed(match[2]);
+  if (!quest) return false;
+  if (match[1] === "Before") return !quest.isComplete(player);
+  if (match[1] === "During") return quest.isStarted(player) && !quest.isComplete(player);
+  return quest.isComplete(player);
+}
+
+/** npc-dialogue:shop: picks the version of a shop that the player's quest progress unlocks. */
+function pickQuestShopVersion(request) {
+  if (request.shop || !request.player) return;
+  request.shop = request.shops.find((name) => questShopVersionApplies(name, request.player)) ?? null;
+}
+
 function registerQuestWidgets(api) {
   coreApi = api.core;
   if (widgetsRegistered) return;
@@ -315,6 +338,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-complete", answerIsComplete);
   api.onCustomEvent("quest:is-started", answerIsStarted);
   api.onCustomEvent("quest:get-stage", answerGetStage);
+  api.onCustomEvent("npc-dialogue:shop", pickQuestShopVersion);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
   api.onPlayerLogin(sendQuestVarps);
@@ -580,6 +604,7 @@ module.exports = {
   QUEST_COMPLETE_JINGLE,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  pickQuestShopVersion,
   sendQuestVarps,
   refreshQuestList,
   openJournal,
