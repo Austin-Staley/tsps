@@ -79,7 +79,8 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
   const SWAMP_BUBBLE = ObjectIdentifiers.SWAMP_BUBBLES;
   const SWAMP_BUBBLE_2 = ObjectIdentifiers.SWAMP_BUBBLES_2;
   const CAVE_ENTRANCE = ObjectIdentifiers.CAVE_ENTRANCE_18;
-  const CAVE_EXIT = ObjectIdentifiers.CAVE_EXIT_9;
+  // Loc 3380/3381 are the paired "Cave exit" tiles at (2646/2647,9377), both Walk through.
+  const CAVE_EXITS = new Set([ObjectIdentifiers.CAVE_EXIT_8, ObjectIdentifiers.CAVE_EXIT_9]);
   const LOCKED_CHEST = ObjectIdentifiers.LOCKED_OGRE_CHEST;
   const OPEN_CHEST = ObjectIdentifiers.UNLOCKED_OGRE_CHEST;
   // MULTI_CHOMPYBIRD_SPITROAST_ENTITY has no generated ObjectIdentifiers entry.
@@ -122,8 +123,11 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
   // interior footprint (2629-2631,9398-9399) is blocked terrain (clip 0x220100), so the
   // mouth's westmost walkable tile is (2635,9397); the chest's south approach
   // (2637,9397) is reachable from there. q006 native landed at the blocked 2630,9398.
+  // The exit lands on the walkable south step of that same surface entrance (2630,2997).
+  // The old -6400 mirror (2647,2977) is a separate collision-enclosed pocket: the real
+  // routefinder cannot reach Rantz, the toad clearing or the swamp from it.
   const CAVE_INSIDE = { x: 2635, y: 9397, z: 0 };
-  const CAVE_SURFACE = { x: 2647, y: 2977, z: 0 };
+  const CAVE_SURFACE = { x: 2630, y: 2997, z: 0 };
   const TOAD_CLEARING = { x: 2635, y: 2966, z: 0 };
   const SPIT_ROAST_TILE = { x: 2630, y: 2990, z: 0 };
   const BOW_RECLAIM_COST = 500;
@@ -372,7 +376,7 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
       player.moveTo(new api.core.Location(CAVE_INSIDE.x, CAVE_INSIDE.y, CAVE_INSIDE.z));
       return;
     }
-    if (objectId === CAVE_EXIT) {
+    if (CAVE_EXITS.has(objectId)) {
       if (quest.getStage(player) < STAGE_KIDS_EXPLAINED_TOADS) return;
       event.handled = true;
       player.moveTo(new api.core.Location(CAVE_SURFACE.x, CAVE_SURFACE.y, CAVE_SURFACE.z));

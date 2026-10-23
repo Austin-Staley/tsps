@@ -222,6 +222,56 @@ test('real cave entrance Enter lands on the cache mouth tile and reaches the che
   assert.ok(chest.getDefinition().getActions().includes('Unlock'), 'the chest Unlock action is present');
 });
 
+test('real cave exit lands on the canonical surface step and routes to Rantz, clearing and bubbles', () => {
+  const { RegionManager } = require(root + '/dist/game/collision/RegionManager');
+  const { MapObjects } = require(root + '/dist/game/entity/impl/object/MapObjects');
+  const { RsmodRouteFinding } = require(root + '/dist/game/model/movement/path/RsmodRouteFinding');
+  const O = core.ObjectIdentifiers;
+  if (!global.__q006RealCave) {
+    require(root + '/plugins/quests/quests/BigChompyBirdHunting.Quest')(
+      PluginManager.createApi('BigChompyQ006Cave'));
+    global.__q006RealCave = true;
+  }
+  const quest = runtime.getRegisteredQuests().findLast(entry => entry.key === 'big_chompy_bird_hunting');
+  const p = player();
+  quest.setStage(p, 20);
+
+  RegionManager.loadMapFiles(2647, 9377);
+  RegionManager.loadMapFiles(2629, 2998);
+  const exit = MapObjects.get(O.CAVE_EXIT_9, new core.Location(2647, 9377, 0), null);
+  assert.ok(exit, 'cache loc 3381 is placed at 2647,9377');
+  assert.equal(exit.getDefinition().getActions()[0], 'Walk through');
+
+  const event = { player: p, object: exit, objectId: exit.getId(), clickType: 1, option: 'Walk through', handled: false };
+  assert.equal(PluginManager.emitObjectInteraction(event), true, 'the registered Walk through action claims cave exit 3381');
+  assert.deepEqual(p.moves.at(-1), [2630, 2997, 0], 'lands on the south step of the surface entrance');
+  assert.equal(RegionManager.blocked(new core.Location(2630, 2997, 0), null), false, 'exit landing is walkable');
+
+  const right = MapObjects.get(O.CAVE_EXIT_8, new core.Location(2646, 9377, 0), null);
+  assert.ok(right, 'paired cache loc 3380 is placed at 2646,9377');
+  const p2 = player();
+  quest.setStage(p2, 20);
+  const rightEvent = { player: p2, object: right, objectId: right.getId(), clickType: 1, option: 'Walk through', handled: false };
+  assert.equal(PluginManager.emitObjectInteraction(rightEvent), true, 'paired exit 3380 is handled');
+  assert.deepEqual(p2.moves.at(-1), [2630, 2997, 0], 'paired exit uses the same canonical landing');
+
+  const route = new RsmodRouteFinding();
+  const path = (srcX, srcY, destX, destY, moveNear = false) => route.findRoute({
+    level: 0, srcX, srcY, srcSize: 1, destX, destY, moveNear, maxWaypoints: 100,
+  });
+  assert.equal(path(2630, 2997, 2631, 2982).success, true, 'exit reaches Rantz exactly');
+  assert.equal(path(2630, 2997, 2635, 2966).success, true, 'exit reaches the toad clearing exactly');
+  assert.equal(path(2631, 2982, 2630, 2997).success, true, 'Rantz can walk back to the cave entrance');
+  assert.equal(path(2635, 9397, 2647, 9378).success, true, 'cave landing reaches the exit 3381 stand tile');
+  assert.equal(path(2647, 9378, 2635, 9397).success, true, 'exit stand returns to the cave entrance landing');
+  const bubbles = path(2630, 2997, 2601, 2967, true);
+  assert.equal(bubbles.success, true, 'exit reaches the swamp bubbles approach');
+  assert.deepEqual([bubbles.endX, bubbles.endY], [2602, 2967], 'bubble interaction tile is one step east');
+
+  assert.equal(path(2647, 2977, 2631, 2982).success, false, 'the old -6400 landing cannot reach Rantz');
+  assert.equal(path(2647, 2977, 2601, 2967, true).success, false, 'the old landing cannot reach the swamp');
+});
+
 test('fresh stage 0 accepts the start on the resolved Rantz content id 14793', () => {
   const { api, hooks, quest } = questHarness();
   const p = dialoguePlayer();
