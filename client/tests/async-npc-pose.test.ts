@@ -25,7 +25,7 @@ function fixture() {
         { load: () => seq } as any, { load: () => ({}) } as any, undefined, {} as any, models);
     loader.setTextureIdIndexMap(new Map([[10, 1]]));
     const calls: Array<{ input: any; resolve: (result: any) => void; reject: (error: any) => void; signal: AbortSignal }> = [];
-    const pool = { npcPoseGeneration: 0, loadNpcPose: (input: any, signal: AbortSignal) =>
+    const pool = { npcPoseGeneration: 0, npcPoseConcurrency: 1, loadNpcPose: (input: any, signal: AbortSignal) =>
         new Promise<any>((resolve, reject) => calls.push({ input, resolve, reject, signal })) };
     const queue = new AsyncNpcPoseCache(loader, pool);
     const geometry = (input: any) => ({ key: input.key, npcTypeId: input.request[0], seqId: input.request[1], frameId: input.request[2],
@@ -387,4 +387,93 @@ test("active NPC base geometry and empty-pass metadata survive animated-pose LRU
         for (let i = 0; i < 4; i++) upload(`unrelated-${i}`);
         assert.equal(resident(base), false, "inactive actors do not pin entries outside the existing cache budget");
     } finally { queue.dispose(); f.queue.dispose(); gpu.destroy(); }
+});
+
+test("two existing worker slots serve two poses concurrently and older replies cannot rewind published fallbacks", async t => {
+    const f = fixture();
+    f.pool.npcPoseConcurrency = 2;
+    t.mock.method(performance, "now", () => 100); // Reduced precision must not make reply ordering ambiguous.
+    const request = (frame: number): [number, number, number, number, number, any] =>
+        [1, 1, frame, -1, -1, { base: { next: (frame + 1) % 4, alpha: 0.5 } }];
+    try {
+        f.queue.get(request(0), 7); await turn();
+        assert.equal(f.calls.length, 2, "base and current pose use the two available slots");
+        f.calls[0].resolve(f.geometry(f.calls[0].input));
+        f.calls[1].resolve(f.geometry(f.calls[1].input)); await turn();
+        f.queue.get(request(1), 7); await turn();
+        const first = f.calls.find(call => call.input.request[1] === 1 && call.input.request[2] === 1)!;
+        assert.ok(first);
+        f.queue.get(request(2), 7); await turn();
+        const newer = f.calls.find(call => call.input.request[1] === 1 && call.input.request[2] === 2)!;
+        assert.ok(newer, "a second pose starts while the older one remains in flight");
+        f.queue.get(request(3), 7); // Both replies are fallbacks to a now-newer requested frame.
+        newer.resolve(f.geometry(newer.input)); await turn();
+        const published = f.queue.getFallbackKey(request(3), 7);
+        first.resolve(f.geometry(first.input)); await turn();
+        assert.equal(f.queue.getFallbackKey(request(3), 7), published,
+            "an older completion cannot replace the newer worker-published fallback even before an exact render hit");
+        assert.ok(f.loader.getCachedGeometry(first.input.key), "out-of-order data remains reusable in the canonical cache");
+        assert.ok((f.queue as any).active.size <= 2);
+        f.queue.dispose();
+        assert.ok(f.calls.every(call => call.signal.aborted || f.loader.getCachedGeometry(call.input.key)));
+    } finally { f.queue.dispose(); }
+});
+
+test("parallel cancellation aborts both requests and stale replies cannot remove or publish a reused key", async () => {
+    const f = fixture(); f.pool.npcPoseConcurrency = 2;
+    try {
+        f.queue.get([1, 1, 0], 7); await turn();
+        const old = f.calls.slice();
+        f.loader.clear(); f.queue.get([1, 1, 0], 7); await turn();
+        assert.ok(old.every(call => call.signal.aborted));
+        assert.equal((f.queue as any).active.size, 2);
+        for (const call of old) call.resolve(f.geometry(call.input)); await turn();
+        assert.equal((f.queue as any).active.size, 2, "old finally handlers must not release new-generation slots");
+        assert.ok(old.every(call => !f.loader.getCachedGeometry(call.input.key)));
+        f.queue.dispose();
+        for (const call of f.calls.slice(2)) call.resolve(f.geometry(call.input)); await turn();
+        assert.equal((f.queue as any).active.size, 0);
+    } finally { f.queue.dispose(); }
+});
+
+test("pool reserves distinct existing descriptors, retains in-flight occupancy after cancellation and reuses it after completion", async () => {
+    const pending: Array<{ worker: number; resolve: (value: any) => void }> = [];
+    let wakes = 0;
+    const descriptors = Array.from({ length: 4 }, (_, worker) => ({ runningTasks: [] as Promise<any>[],
+        init: Promise.resolve({ setCustomContent: async () => {}, loadNpcPose: () =>
+            new Promise(resolve => pending.push({ worker, resolve })) }) }));
+    const pool = new RenderDataWorkerPool({ scheduleWork: () => wakes++ }, descriptors, 4);
+    const input: any = { context: "test", key: "test", appearance: "[]", request: [1, -1, 0], textures: [] };
+    const abort = new AbortController();
+    const a = pool.loadNpcPose(input, abort.signal), b = pool.loadNpcPose(input);
+    await turn();
+    assert.equal(pool.npcPoseConcurrency, 2);
+    assert.deepEqual(pending.map(job => job.worker), [0, 1]);
+    assert.equal(descriptors[2].runningTasks.length + descriptors[3].runningTasks.length, 0, "other workers remain available for foreground maps");
+    assert.deepEqual(await pool.loadNpcPose(input), { busy: true });
+    const foreground = Promise.resolve();
+    descriptors[0].runningTasks = [...descriptors[0].runningTasks, foreground];
+    abort.abort(); assert.equal(await a, undefined);
+    assert.equal(descriptors[0].runningTasks.length, 2, "caller cancellation does not free a still-running RPC or foreground task");
+    pending[0].resolve(undefined); await turn();
+    assert.deepEqual(descriptors[0].runningTasks, [foreground], "completion removes only its own marker from the current tasks array");
+    descriptors[0].runningTasks = [];
+    const c = pool.loadNpcPose(input); await turn();
+    assert.equal(pending[2].worker, 0);
+    pending[1].resolve(undefined); pending[2].resolve(undefined); await Promise.all([b, c]);
+    assert.ok(descriptors.every(worker => worker.runningTasks.length === 0));
+    assert.ok(wakes > 0, "releasing a reservation wakes normal queued pool work");
+    const single = new RenderDataWorkerPool({}, [descriptors[0]], 1);
+    assert.equal(single.npcPoseConcurrency, 1);
+    const only = single.loadNpcPose(input); await turn();
+    assert.deepEqual(await single.loadNpcPose(input), { busy: true });
+    pending[3].resolve(undefined); await only;
+    let initialized!: (worker: any) => void, shutdownWakes = 0;
+    const shutdown = new RenderDataWorkerPool({ scheduleWork: () => shutdownWakes++, terminate: async () => {} },
+        [{ init: new Promise(resolve => { initialized = resolve; }), runningTasks: [] }], 1);
+    const unstarted = shutdown.loadNpcPose(input);
+    await shutdown.terminate();
+    assert.equal(await unstarted, undefined);
+    assert.equal(shutdownWakes, 0, "terminating an undispatched reservation must not start queued foreground work");
+    initialized({ setCustomContent: async () => {} });
 });

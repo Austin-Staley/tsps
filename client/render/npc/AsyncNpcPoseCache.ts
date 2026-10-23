@@ -3,8 +3,8 @@ import type { NpcPoseInput } from "../../game/worker/NpcPoseJob";
 import { DynamicNpcAnimLoader, type DynamicNpcFrameGeometry, type NpcFrameRequest } from "./DynamicNpcAnimLoader";
 
 type PoseRequest = ReturnType<DynamicNpcAnimLoader["getAsyncPoseRequest"]>;
-type Job = { input: NpcPoseInput; priority: number; touched: number; created: number; owners: Set<number> };
-type ActorRequest = { key: string; appearance: string; sequence: number; overlay: number; waitingSince: number; lastExactAt: number };
+type Job = { input: NpcPoseInput; priority: number; touched: number; created: number; order: number; owners: Set<number> };
+type ActorRequest = { key: string; appearance: string; sequence: number; overlay: number; waitingSince: number; lastPublishedOrder: number };
 
 /** Bounded current-first CPU fallback. No model lighting, animation or geometry packing runs here. */
 export class AsyncNpcPoseCache {
@@ -14,9 +14,8 @@ export class AsyncNpcPoseCache {
     private context = "";
     private generation = 0;
     private textures: Array<[number, number]> = [];
-    private active?: AbortController;
-    private activeKey?: string;
-    private activeJob?: Job;
+    private readonly active = new Map<string, { controller: AbortController; job: Job }>();
+    private requestOrder = 0;
     private readonly actorRequests = new Map<number, ActorRequest>();
     private timer?: ReturnType<typeof setTimeout>;
     private disposed = false;
@@ -26,7 +25,7 @@ export class AsyncNpcPoseCache {
     private firstRequestAt?: number;
 
     constructor(private readonly loader: DynamicNpcAnimLoader,
-        private readonly pool: Pick<RenderDataWorkerPool, "loadNpcPose" | "npcPoseGeneration">,
+        private readonly pool: Pick<RenderDataWorkerPool, "loadNpcPose" | "npcPoseGeneration" | "npcPoseConcurrency">,
         private readonly gpuResident?: (key: string) => boolean) {}
 
     private syncContext(): void {
@@ -59,7 +58,7 @@ export class AsyncNpcPoseCache {
         const key = pose ? this.key(pose.key, pose.appearance) : undefined;
         if (key && actorIdentity !== undefined && this.gpuResident?.(key)) {
             const actor = this.actorRequests.get(actorIdentity);
-            if (actor) actor.lastExactAt = actor.waitingSince = performance.now();
+            if (actor) { actor.waitingSince = performance.now(); actor.lastPublishedOrder = ++this.requestOrder; }
             this.remember(this.fallbackIdentity(pose!, actorIdentity), key);
         }
         return key;
@@ -94,7 +93,7 @@ export class AsyncNpcPoseCache {
         const cached = this.loader.getCachedGeometry(key);
         if (cached) {
             const actor = actorIdentity === undefined ? undefined : this.actorRequests.get(actorIdentity);
-            if (actor) actor.lastExactAt = actor.waitingSince = performance.now();
+            if (actor) { actor.waitingSince = performance.now(); actor.lastPublishedOrder = ++this.requestOrder; }
             this.stats.displayedFrame = cached.frameId;
             this.stats.poseAgeMs = 0;
             this.remember(fallbackIdentity, key);
@@ -128,7 +127,7 @@ export class AsyncNpcPoseCache {
             this.actorRequests.delete(actorIdentity);
             this.actorRequests.set(actorIdentity, { key, appearance: pose.appearance, sequence: pose.request[1],
                 overlay: pose.request[3] ?? -1, waitingSince: previous?.waitingSince ?? performance.now(),
-                lastExactAt: previous?.lastExactAt ?? -Infinity });
+                lastPublishedOrder: previous?.lastPublishedOrder ?? 0 });
             if (this.actorRequests.size > 256) this.actorRequests.delete(this.actorRequests.keys().next().value!);
         }
     }
@@ -166,34 +165,45 @@ export class AsyncNpcPoseCache {
 
     private enqueue(pose: NonNullable<PoseRequest>, priority: number, owner?: number): void {
         const key = this.key(pose.key, pose.appearance), now = performance.now();
-        if (key === this.activeKey) { if (owner !== undefined) this.activeJob?.owners.add(owner); return; }
+        const active = this.active.get(key);
+        if (active) { active.job.priority = Math.min(active.job.priority, priority);
+            if (owner !== undefined) active.job.owners.add(owner); return; }
         if (this.gpuResident?.(key) || this.loader.getCachedGeometry(key) || (this.retryAt.get(key) ?? 0) > now) return;
         const queued = this.queued.get(key);
         if (queued) { queued.priority = Math.min(queued.priority, priority); queued.touched = now;
             if (owner !== undefined) queued.owners.add(owner); return; }
         this.queued.set(key, { input: { context: this.context, key, appearance: pose.appearance,
-            request: pose.request, textures: this.textures }, priority, touched: now, created: now,
+            request: pose.request, textures: this.textures }, priority, touched: now, created: now, order: ++this.requestOrder,
             owners: new Set(owner === undefined ? [] : [owner]) });
         if (this.queued.size > 24) {
             const newest = [...this.queued].reverse().sort((a, b) => b[1].priority - a[1].priority || b[1].created - a[1].created)[0];
             this.queued.delete(newest[0]);
         }
-        if (!this.active && this.timer === undefined) this.timer = setTimeout(() => { this.timer = undefined; void this.pump(); }, 0);
+        this.schedule();
     }
 
-    private async pump(): Promise<void> {
-        if (this.disposed || this.active) return;
+    private schedule(): void {
+        if (!this.disposed && this.queued.size && this.active.size < this.pool.npcPoseConcurrency && this.timer === undefined)
+            this.timer = setTimeout(() => { this.timer = undefined; this.pump(); }, 0);
+    }
+
+    private pump(): void {
+        if (this.disposed) return;
         for (const [key, job] of this.queued) if (performance.now() - job.touched > 500) this.queued.delete(key);
         const waitingSince = (job: Job) => job.owners.size
             ? Math.min(...[...job.owners].map(owner => this.actorRequests.get(owner)?.waitingSince ?? job.created)) : job.created;
-        const next = [...this.queued].sort((a, b) => a[1].priority - b[1].priority || waitingSince(a[1]) - waitingSince(b[1]))[0];
-        if (!next) return;
-        const [key, job] = next;
-        this.queued.delete(key);
-        const generation = this.generation, controller = new AbortController();
-        this.active = controller;
-        this.activeKey = key;
-        this.activeJob = job;
+        while (this.active.size < this.pool.npcPoseConcurrency) {
+            const next = [...this.queued].sort((a, b) => a[1].priority - b[1].priority || waitingSince(a[1]) - waitingSince(b[1]))[0];
+            if (!next) return;
+            const [key, job] = next;
+            this.queued.delete(key);
+            const controller = new AbortController();
+            this.active.set(key, { controller, job });
+            void this.run(key, job, controller, this.generation);
+        }
+    }
+
+    private async run(key: string, job: Job, controller: AbortController, generation: number): Promise<void> {
         const started = performance.now();
         try {
             const result = await this.pool.loadNpcPose(job.input, controller.signal);
@@ -211,10 +221,11 @@ export class AsyncNpcPoseCache {
                         const current = this.actorRequests.get(owner);
                         if (!current || current.appearance !== job.input.appearance ||
                             (job.input.request[1] >= 0 && (current.sequence !== job.input.request[1] || current.overlay !== (job.input.request[3] ?? -1)))) continue;
-                        if (current.key !== key && job.created <= current.lastExactAt) continue;
+                        if (current.key !== key && job.order <= current.lastPublishedOrder) continue;
                         const identity = `${owner}:${current.appearance}:${current.sequence}:${current.overlay}`;
                         if (job.input.request[1] < 0) this.remember(`${owner}:${current.appearance}:base`, result.key);
                         if (job.input.request[1] >= 0 || !this.previous.has(identity)) this.remember(identity, result.key);
+                        current.lastPublishedOrder = current.key === key ? ++this.requestOrder : job.order;
                         if (job.input.request[1] >= 0) current.waitingSince = performance.now();
                     }
                     if (!job.owners.size) {
@@ -227,20 +238,16 @@ export class AsyncNpcPoseCache {
             // Downloads, lost RPCs and transient worker errors stay retryable on a later frame.
             if (!controller.signal.aborted) this.retryAt.set(key, performance.now() + 250);
         } finally {
-            if (this.active === controller) { this.active = undefined; this.activeKey = undefined; this.activeJob = undefined; }
+            if (this.active.get(key)?.controller === controller) this.active.delete(key);
             while (this.retryAt.size > 128) this.retryAt.delete(this.retryAt.keys().next().value!);
-            if (!this.disposed && this.queued.size && !this.active) {
-                this.timer = setTimeout(() => { this.timer = undefined; void this.pump(); }, 0);
-            }
+            this.schedule();
         }
     }
 
     private cancel(): void {
         this.generation++;
-        this.active?.abort();
-        this.active = undefined;
-        this.activeKey = undefined;
-        this.activeJob = undefined;
+        for (const { controller } of this.active.values()) controller.abort();
+        this.active.clear();
         clearTimeout(this.timer);
         this.timer = undefined;
         this.queued.clear(); this.previous.clear(); this.retryAt.clear(); this.actorRequests.clear();
@@ -248,7 +255,7 @@ export class AsyncNpcPoseCache {
 
     forgetActor(actorIdentity: number): void {
         this.actorRequests.delete(actorIdentity);
-        this.activeJob?.owners.delete(actorIdentity);
+        for (const { job } of this.active.values()) job.owners.delete(actorIdentity);
         for (const [key, job] of this.queued) {
             if (job.owners.delete(actorIdentity) && !job.owners.size && job.priority <= 0) this.queued.delete(key);
         }

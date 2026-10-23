@@ -16,6 +16,7 @@ import type { WorldMapTileInput, WorldMapTileReply } from "./WorldMapTileJob";
 import type { NpcPoseInput, NpcPoseResult } from "./NpcPoseJob";
 
 type RenderDataWorkerThread = ModuleThread<RenderDataWorker>;
+type PoseReservation = { worker: WorkerDescriptor<RenderDataWorkerThread>; task: Promise<void>; finish: () => void };
 
 function spawnWorker(): Promise<RenderDataWorkerThread> {
     // Keep this exact `new Worker(new URL(...))` shape so webpack emits a real
@@ -34,6 +35,17 @@ export class RenderDataWorkerPool {
     private npcPoseModelsRevision = -1;
     private npcPoseContentReady: Promise<void> = Promise.resolve();
     private readonly npcPoseRequests = new Set<() => void>();
+    private readonly npcPoseWorkers = new Map<WorkerDescriptor<RenderDataWorkerThread>, PoseReservation>();
+
+    get npcPoseConcurrency(): number { return Math.max(1, Math.min(2, this.size)); }
+
+    private releasePoseWorker(reservation: PoseReservation, wake = true): void {
+        if (this.npcPoseWorkers.get(reservation.worker) !== reservation) return;
+        this.npcPoseWorkers.delete(reservation.worker);
+        reservation.worker.runningTasks = reservation.worker.runningTasks.filter(task => task !== reservation.task);
+        reservation.finish();
+        if (wake && !this.disposed) (this.pool as any).scheduleWork?.();
+    }
 
     get pendingWorldMapTiles(): number { return this.worldMapRequests.size; }
     static create(size: number): RenderDataWorkerPool {
@@ -54,6 +66,7 @@ export class RenderDataWorkerPool {
         this.npcPoseGeneration++;
         this.npcPoseModelsRevision = -1;
         for (const cancel of this.npcPoseRequests) cancel();
+        for (const reservation of this.npcPoseWorkers.values()) this.releasePoseWorker(reservation, false);
         for (const worker of this.workers) {
             worker.init.then((w) => {
                 w.initCache(cache, npcInstances);
@@ -64,6 +77,7 @@ export class RenderDataWorkerPool {
             });
         }
         this.cancelWorldMapTiles(true);
+        queueMicrotask(() => { if (!this.disposed) (this.pool as any).scheduleWork?.(); });
     }
 
     /** A dat2 chunk the main thread created after initCache (sparse caches). */
@@ -140,7 +154,15 @@ export class RenderDataWorkerPool {
     }
 
     loadNpcPose(input: NpcPoseInput, signal?: AbortSignal): Promise<NpcPoseResult | undefined> {
-        if (this.disposed || signal?.aborted || this.npcPoseRequests.size >= 8) return Promise.resolve(undefined);
+        if (this.disposed || signal?.aborted) return Promise.resolve(undefined);
+        if (this.npcPoseWorkers.size >= this.npcPoseConcurrency) return Promise.resolve({ busy: true });
+        const available = this.workers.filter(worker => !this.npcPoseWorkers.has(worker));
+        const descriptor = available.find(worker => !worker.runningTasks?.length) ?? available[0];
+        if (!descriptor) return Promise.resolve({ busy: true });
+        let finishReservation!: () => void;
+        const reservation = { worker: descriptor, task: new Promise<void>(resolve => { finishReservation = resolve; }), finish: () => finishReservation() };
+        this.npcPoseWorkers.set(descriptor, reservation);
+        (descriptor.runningTasks ??= []).push(reservation.task);
         const generation = this.npcPoseGeneration;
         if (this.npcPoseModelsRevision !== CustomModelRegistry.revision) {
             this.npcPoseModelsRevision = CustomModelRegistry.revision;
@@ -152,17 +174,19 @@ export class RenderDataWorkerPool {
                 .catch(error => { this.npcPoseModelsRevision = -1; throw error; });
         }
         return new Promise((resolve, reject) => {
-            let settled = false;
+            let settled = false, dispatched = false;
             const finish = (geometry?: NpcPoseResult) => { if (settled) return; settled = true; cleanup(); resolve(geometry); };
             const cancel = () => finish();
             const timeout = setTimeout(() => finish(), 3000);
-            const cleanup = () => { clearTimeout(timeout); signal?.removeEventListener("abort", cancel); this.npcPoseRequests.delete(cancel); };
+            const cleanup = () => { clearTimeout(timeout); signal?.removeEventListener("abort", cancel); this.npcPoseRequests.delete(cancel);
+                if (!dispatched) this.releasePoseWorker(reservation); };
             this.npcPoseRequests.add(cancel);
             signal?.addEventListener("abort", cancel, { once: true });
-            void this.npcPoseContentReady.then(() =>
-                (this.workers.find(worker => !worker.runningTasks?.length) ?? this.workers[0]).init).then(worker => {
+            void this.npcPoseContentReady.then(() => descriptor.init).then(async worker => {
                 if (settled || this.disposed || signal?.aborted || generation !== this.npcPoseGeneration) return undefined;
-                return worker.loadNpcPose(input);
+                dispatched = true;
+                try { return await worker.loadNpcPose(input); }
+                finally { this.releasePoseWorker(reservation); }
             }).then(geometry => finish(generation === this.npcPoseGeneration && !signal?.aborted ? geometry : undefined),
                 error => { if (!settled) { settled = true; cleanup(); reject(error); } });
         });
@@ -192,10 +216,11 @@ export class RenderDataWorkerPool {
     }
 
     terminate(): Promise<void> {
+        this.disposed = true;
         this.npcPoseGeneration++;
         for (const cancel of this.npcPoseRequests) cancel();
         this.cancelWorldMapTiles(true);
-        this.disposed = true;
+        for (const reservation of this.npcPoseWorkers.values()) this.releasePoseWorker(reservation, false);
         return this.pool.terminate();
     }
 }
