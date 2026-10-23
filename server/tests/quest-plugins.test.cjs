@@ -112,6 +112,36 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   assert.doesNotThrow(() => plugin.register(api));
 });
 
+test('a shop version named after a quest opens once its quest state matches (#831)', () => {
+  const { api } = mockApi();
+  require('../plugins/quests/Quests.plugin').register(api);
+  const { getRegisteredQuests, pickQuestShopVersion } = require('../plugins/quests/QuestRuntime');
+  const named = (name) => getRegisteredQuests().find((quest) => quest.name === name);
+  const attributes = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const pick = (shops) => {
+    const request = { player, shops, shop: null };
+    pickQuestShopVersion(request);
+    return request.shop;
+  };
+  const ned = ["Ned's Handmade Rope (100% Wool) (Default)", "Ned's Handmade Rope (100% Wool) (Fremennik Isles)"];
+  const babaYaga = ["Baba Yaga's Magic Shop. (After Lunar Diplomacy)", "Baba Yaga's Magic Shop. (During Lunar Diplomacy)"];
+  assert.equal(pick(ned), null, 'Default and Karamja gloves versions are left to the dialogue runtime');
+  assert.equal(pick(babaYaga), null);
+  const isles = named('The Fremennik Isles');
+  isles.setStage(player, isles.completionValue ?? 2);
+  assert.equal(pick(ned), ned[1], '"Fremennik Isles" names The Fremennik Isles');
+  const lunar = named('Lunar Diplomacy');
+  lunar.setStage(player, lunar.startedValue ?? 1);
+  assert.equal(pick(babaYaga), babaYaga[1]);
+  lunar.setStage(player, lunar.completionValue ?? 2);
+  assert.equal(pick(babaYaga), babaYaga[0]);
+});
+
 test('DT2 medallions cannot be banked while ordinary items remain bankable', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
