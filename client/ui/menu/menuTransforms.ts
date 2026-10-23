@@ -32,6 +32,16 @@ export function setMenuTransform(next: MenuTransform | undefined): void {
 }
 
 /**
+ * Plugins see world and inventory menus, and the opened right-click menu of an item in any
+ * other interface (worn equipment, the bank's inventory side, a shop's inventory side...), as
+ * RuneLite's MenuOpened does. Other widget menus, and an item's left-click/hover order outside
+ * the inventory, stay with the widget layer.
+ */
+function reachesPlugins(context: MenuTransformContext): boolean {
+    return context.surface !== "widget" || (context.menu && context.itemId > 0);
+}
+
+/**
  * The menu as the client plugins want it. Applied on every use (not cached), so a change of
  * settings or of held keys shows at once; the input array and its entries are never modified.
  */
@@ -41,7 +51,7 @@ export function applyMenuTransform(
     prepared: boolean = false,
 ): SimpleMenuEntry[] {
     if (!prepared) entries = preparePluginMenu(entries, context);
-    if (!transform || context.surface === "widget") return buildPluginMenu(entries, context);
+    if (!transform || !reachesPlugins(context)) return buildPluginMenu(entries, context);
     try {
         return buildPluginMenu(transform(entries, context), context);
     } catch (err) {

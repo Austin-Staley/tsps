@@ -11,6 +11,7 @@ import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItems
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight/InteractHighlightConfig";
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
+import { InventoryTagsPlugin } from "../../../game/plugins/inventorytags/InventoryTagsPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
@@ -43,6 +44,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     InteractHighlightPlugin,
     TileMarkersPlugin,
     MenuSwapperPlugin,
+    // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
+    InventoryTagsPlugin,
     NotesPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
