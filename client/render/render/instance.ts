@@ -300,7 +300,6 @@ export function replaceSceneWithInstance(host: WebGLOsrsRendererHost, mapData: S
         host.pendingInstanceScene = null;
         host.osrsClient.clearMinimapImageUrls();
         host.clearMaps();
-        host.skipMapFadeIn = true;
         host.mapManager.loadingMapIds.add(getMapSquareId(mapData.mapX, mapData.mapY));
         // Its NPCs belong to this one square now, wherever in the scene they stand.
         host.instanceSceneMap = { mapX: mapData.mapX | 0, mapY: mapData.mapY | 0 };

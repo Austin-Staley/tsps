@@ -330,7 +330,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public observedGridRevision: number = -1;
     // Skip the 1-second fog fade-in for maps loaded after a cross-region
     // teleport so the destination appears instantly.
-    public skipMapFadeIn: boolean = false;
     public activeStreamGeneration: number = 0;
     public activeStreamExpectedMapIds: Set<number> = new Set();
     public pendingStreamMapsByGeneration: Map<number, StreamMapBatch> = new Map();
@@ -1439,8 +1438,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.queueStreamMapData(this, mapData, streamGeneration);
     }
 
-    public applyReadyStreamGenerationBatch(time: number): number {
-        return render.applyReadyStreamGenerationBatch(this, time);
+    public applyReadyStreamGenerationBatch(): number {
+        return render.applyReadyStreamGenerationBatch(this);
     }
 
     initMaterialsTexture(): void {
@@ -1636,9 +1635,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         waterTextures: Texture,
         sceneUniformBuffer: UniformBuffer,
         mapData: SdMapData,
-        time: number,
     ): void {
-        return render.loadMap(this, mainProgram, mainAlphaProgram, npcProgram, textureArray, textureMaterials, waterTextures, sceneUniformBuffer, mapData, time);
+        return render.loadMap(this, mainProgram, mainAlphaProgram, npcProgram, textureArray, textureMaterials, waterTextures, sceneUniformBuffer, mapData);
     }
 
     isValidMapData(mapData: SdMapData): boolean {

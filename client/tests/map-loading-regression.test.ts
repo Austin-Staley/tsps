@@ -104,7 +104,6 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
         maxLevel: 3, loadNpcs: false, smoothTerrain: false, hasMultiDraw: true, loadedTextureIds: new Set(),
         getInstanceExtraLocs: () => undefined,
         clearMaps() { cleared++; drawn.clear(); },
-        skipMapFadeIn: false,
     };
     host.doInstanceSceneBuild = (...args: any[]) => (doInstanceSceneBuild as any)(host, ...args);
     host.addedLocs.set("a", { locId: 1 });
@@ -127,7 +126,6 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
 
     replaceSceneWithInstance(host, host.pendingInstanceScene);
     assert.equal(cleared, 1);
-    assert.equal(host.skipMapFadeIn, true, "the new scene appears without the fog fade-in");
     assert.equal(host.pendingInstanceScene, null);
     // Every NPC in the scene now belongs to the square it is built as (Gauntlet monsters in
     // other 64x64 squares were drawn offset and could not be clicked).

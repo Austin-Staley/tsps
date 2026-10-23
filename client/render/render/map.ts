@@ -258,7 +258,6 @@ export function loadMap(host: WebGLOsrsRendererHost,
         waterTextures: Texture,
         sceneUniformBuffer: UniformBuffer,
         mapData: SdMapData,
-        time: number,
     ): void {
 
         const { mapX, mapY } = mapData;
@@ -414,7 +413,6 @@ export function clearMaps(host: WebGLOsrsRendererHost, ): void {
         host.mapsToLoad.clear();
         host.pendingStreamMapsByGeneration.clear();
         host.observedGridRevision = -1;
-        host.skipMapFadeIn = false;
         host.activeStreamGeneration = 0;
         host.activeStreamExpectedMapIds.clear();
         host.pendingLocUpdates.clear();

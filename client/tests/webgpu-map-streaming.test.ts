@@ -189,7 +189,7 @@ test("WebGPU does not report idle while a required region waits for retry backof
     assert.equal(f.renderer.pendingMapBuilds, 0);
     assert.equal(f.maps.loadingMapIds.has(f.mapId), false, "backoff has no active request marker");
     assert.equal(WebGPURenderer.prototype.hasPendingMapStreamingWork.call(f.renderer), true,
-        "the unfinished target scene must keep background prefetch waiting");
+        "the unfinished target scene still counts as streaming work");
 });
 
 test("both backends stay busy when off-screen scenery waits for retry backoff", () => {
@@ -204,7 +204,7 @@ test("both backends stay busy when off-screen scenery waits for retry backoff", 
     const webgl = { mapManager: f.maps, mapsToLoad: new Denque(), stats: { frameCount: 10 },
         getPendingStreamMapCount: () => 0 };
     assert.equal(WebGPURenderer.prototype.hasPendingMapStreamingWork.call(f.renderer), true);
-    assert.equal(hasPendingWebGLStreaming(webgl), true, "prefetch must wait for unfinished background scenery");
+    assert.equal(hasPendingWebGLStreaming(webgl), true, "background scenery stays visible in full streaming diagnostics");
     f.maps.addInvalidMap(49, 55);
     assert.equal(WebGPURenderer.prototype.hasPendingMapStreamingWork.call(f.renderer), false);
     assert.equal(hasPendingWebGLStreaming(webgl), false);
@@ -238,4 +238,48 @@ test("WebGPU rechecks the target before uploading a completed region", () => {
     assert.equal(f.renderer.mapsToLoad.length, 0);
     assert.equal(f.maps.loadingMapIds.has(f.mapId), false);
     assert.equal(f.maps.getMap(48, 55), existing, "a stale build must not replace existing scenery");
+});
+
+test("both backends publish new squares without per-upload fades and preserve replacement timing", (t) => {
+    const { WebGPUMapSquare } = require("../render/webgpu/WebGPUMapSquare");
+    const { WebGLMapSquare } = require("../render/WebGLMapSquare");
+    const { loadMap } = require("../render/render/map");
+    const square = (timeLoaded: number) => ({
+        id: getMapSquareId(48, 55), mapX: 48, mapY: 55, timeLoaded, frameLoaded: 5,
+        canRender: () => true, delete() {}, initAnimatedLocs() {},
+    });
+    const glTimes: number[] = [], gpuTimes: number[] = [];
+    t.mock.method(WebGLMapSquare, "load", (...args: any[]) => {
+        glTimes.push(args[13]);
+        return square(args[13]);
+    });
+    t.mock.method(WebGPUMapSquare, "load", (...args: any[]) => {
+        gpuTimes.push(args[3]);
+        return square(args[3]);
+    });
+    for (const previousTime of [undefined, 0.25]) {
+        const f = loaderFixture();
+        f.maps.removeMap(48, 55);
+        if (previousTime !== undefined) {
+            f.maps.addMap(48, 55, Object.assign(Object.create(WebGLMapSquare.prototype), square(previousTime)));
+        }
+        const glHost: any = {
+            mapManager: f.maps, stats: { frameCount: 10 },
+            osrsClient: {}, registerMinimapData() {}, rebuildGroundItemsForMap: () => false,
+            groundItemStacks: new Map(), updateTextureArray() {},
+            pendingLocUpdates: new Set(), pendingLocGeometryUpdates: new Set(), pendingDoorLocUpdates: new Set(),
+        };
+        const data = { mapX: 48, mapY: 55 };
+        loadMap(glHost, undefined, undefined, undefined, undefined, undefined, undefined, undefined, data);
+
+        const g = loaderFixture();
+        g.maps.removeMap(48, 55);
+        if (previousTime !== undefined) g.maps.addMap(48, 55, square(previousTime));
+        g.renderer.world = { uploadMapTextures() {} };
+        g.renderer.worldEntityOverlays = new Map();
+        g.renderer.mapsToLoad.push({ mapData: data });
+        WebGPURenderer.prototype.applyReadyMaps.call(g.renderer, 10);
+    }
+    assert.deepEqual(glTimes, [-1, 0.25], "new WebGL squares appear with their group; replacements keep their timing");
+    assert.deepEqual(gpuTimes, glTimes, "WebGPU uses the same publication policy");
 });

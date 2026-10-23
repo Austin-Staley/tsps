@@ -1626,7 +1626,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         let mapApplyCount = 0;
         // Load new map squares
         profiler.startPhase("mapApply");
-        mapApplyCount += host.applyReadyStreamGenerationBatch(timeSec);
+        mapApplyCount += host.applyReadyStreamGenerationBatch();
         const mapData = host.mapsToLoad.shift();
         if (mapData) {
             const firstMapId = getMapSquareId(mapData.mapX, mapData.mapY);
@@ -1667,7 +1667,6 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     host.waterTextures,
                     host.sceneUniformBuffer,
                     pendingMap,
-                    host.skipMapFadeIn ? -1.0 : timeSec,
                 );
 
                 // Configure world entity overlay maps: set interactionPlane + deck height

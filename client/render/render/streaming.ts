@@ -230,19 +230,6 @@ export function syncStreamGenerationFromMapManager(host: WebGLOsrsRendererHost, 
         }
         host.observedGridRevision = revision;
 
-        // Detect cross-region teleport: if none of the new maps are loaded,
-        // skip the fog fade-in so they appear instantly.
-        let hasOverlap = false;
-        for (const mapId of nextExpected) {
-            if (host.mapManager.mapSquares.has(mapId)) {
-                hasOverlap = true;
-                break;
-            }
-        }
-        if (!hasOverlap && nextExpected.size > 0) {
-            host.skipMapFadeIn = true;
-        }
-
         host.activeStreamGeneration = revision;
         host.activeStreamExpectedMapIds = nextExpected;
         if (carryForward && carryForward.size > 0) {
@@ -286,7 +273,7 @@ export function queueStreamMapData(host: WebGLOsrsRendererHost, mapData: SdMapDa
     
 }
 
-export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, time: number): number {
+export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost): number {
 
         const generation = host.activeStreamGeneration | 0;
         const expected = host.activeStreamExpectedMapIds;
@@ -360,15 +347,11 @@ export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, tim
                 waterTextures,
                 sceneUniformBuffer,
                 mapData,
-                time,
             );
             logMapApplied(mapData, applyStartedAt);
         }
         if (allReady || pending.size === 0) {
             host.pendingStreamMapsByGeneration.delete(generation);
-        }
-        if (allReady) {
-            host.skipMapFadeIn = false;
         }
         return applied | 0;
     

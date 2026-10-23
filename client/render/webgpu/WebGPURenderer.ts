@@ -573,6 +573,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 continue;
             }
             if (queued.locVersion !== undefined) this.locUpdates.applied(mapX, mapY);
+            // Foreground groups publish together; per-upload fades would reveal squares separately.
             const timeLoaded = existing ? existing.timeLoaded : -1;
             if (existing) {
                 this.mapManager.removeMap(mapX, mapY);
