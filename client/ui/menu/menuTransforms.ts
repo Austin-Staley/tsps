@@ -33,12 +33,15 @@ export function setMenuTransform(next: MenuTransform | undefined): void {
 }
 
 /**
- * Plugins see world and inventory menus, and the opened right-click menu of a skill on the
- * stats tab (RuneLite's MenuEntryAdded for the Stats interface). Other widget menus, and their
- * left-click/hover order, stay with the widget layer.
+ * Plugins see world and inventory menus, the opened right-click menu of an item in any other
+ * interface (worn equipment, the bank's inventory side, a shop's inventory side...), as
+ * RuneLite's MenuOpened does, and the opened menu of a skill on the stats tab (RuneLite's
+ * MenuEntryAdded for the Stats interface). Other widget menus, and their left-click/hover
+ * order, stay with the widget layer.
  */
 function reachesPlugins(context: MenuTransformContext): boolean {
-    return context.surface !== "widget" || (context.menu && context.widgetId >>> 16 === STATS);
+    if (context.surface !== "widget") return true;
+    return context.menu && (context.itemId > 0 || context.widgetId >>> 16 === STATS);
 }
 
 /**
