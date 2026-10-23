@@ -52,6 +52,7 @@ Object.assign(renderer, {
         getMap: () => undefined, getMapForWorldTile: () => undefined,
     },
     stats: { frameCount: 1 },
+    sceneBuilds: new Map(),
     cameraShakeEnabled: Array(5).fill(false),
     cameraShakeRandomAmplitude: Array(5).fill(0),
     cameraShakeWaveAmplitude: Array(5).fill(0),

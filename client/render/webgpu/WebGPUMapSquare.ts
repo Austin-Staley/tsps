@@ -49,7 +49,7 @@ type MapDrawBatch = {
     uniformsBindGroup: GPUBindGroup;
     uniformBase: number;
     uniformEntries: number;
-    bundles?: [SceneryDrawBundle, SceneryDrawBundle];
+    bundles?: [SceneryDrawBundle[], SceneryDrawBundle[]];
 };
 
 /**
@@ -1108,10 +1108,9 @@ export class WebGPUMapSquare implements MapSquare {
             if (batch.lod && (depth || this.worldEntity)) continue;
             if (!this.worldEntity && batch.bounds && !sceneryBoundsVisible(batch.bounds, baseX, baseZ,
                 visibility.tileX, visibility.tileZ, visibility.distance, visibility.camera, visibility.shadow)) continue;
-            batch.bundles ??= [new SceneryDrawBundle(), new SceneryDrawBundle()];
-            const bundle = batch.bundles[depth ? 1 : 0];
-            const commands = bundle.commands;
-            commands.length = 0;
+            batch.bundles ??= [[], []];
+            const bundles = batch.bundles[depth ? 1 : 0];
+            for (const bundle of bundles) if (bundle) bundle.commands.length = 0;
             const planes = batch.planes;
             const visible = (i: number): boolean => {
                 const range = batch.ranges[i];
@@ -1129,7 +1128,7 @@ export class WebGPUMapSquare implements MapSquare {
                 const first = i;
                 // Identical terrain instance data can share the first range's drawId, as on WebGL.
                 if (range.batchKey !== undefined && instances === 1) {
-                    while (i + 1 < batch.ranges.length) {
+                    while (i + 1 < batch.ranges.length && ((i + 1) >>> 5) === (first >>> 5)) {
                         const next = batch.ranges[i + 1];
                         if (!next || next.batchKey !== range.batchKey || next[2] !== 1 ||
                             next[0] !== range[0] + elements * DRAW_RANGE_INDEX_BYTES || !visible(i + 1)) break;
@@ -1137,6 +1136,8 @@ export class WebGPUMapSquare implements MapSquare {
                         i++;
                     }
                 }
+                // One animated loc must not invalidate the rest of a large scenery batch.
+                const commands = (bundles[first >>> 5] ??= new SceneryDrawBundle()).commands;
                 for (let copy = 0; copy < this.transformCount; copy++) {
                     commands.push(
                         (copy * batch.uniformEntries + batch.uniformBase + first) * MAP_UNIFORM_STRIDE,
@@ -1144,25 +1145,28 @@ export class WebGPUMapSquare implements MapSquare {
                     );
                 }
             }
-            if (commands.length === 0) continue;
-            const bindings = [resources.sceneBindGroup, worldTextures, batch.bindGroup, batch.uniformsBindGroup];
-            bundle.draw(this.device, pass, pipeline, bindings, {
-                colorFormats: depth ? [] : [resources.extensionActive
-                    ? resources.extension?.sceneColorFormat ?? resources.canvasFormat : resources.canvasFormat],
-                depthStencilFormat: depth ? resources.extension?.depthFormat ?? SCENE_DEPTH_FORMAT : SCENE_DEPTH_FORMAT,
-                sampleCount: depth ? 1 : resources.sampleCount,
-            }, (encoder) => {
-                encoder.setPipeline(pipeline);
-                encoder.setBindGroup(SCENE_GROUP, bindings[0]);
-                encoder.setBindGroup(WORLD_TEXTURES_GROUP, bindings[1]);
-                encoder.setBindGroup(MAP_TEXTURES_GROUP, bindings[2]);
-                encoder.setVertexBuffer(0, batch.vertexBuffer);
-                encoder.setIndexBuffer(batch.indexBuffer, "uint32");
-                for (let i = 0; i < commands.length; i += 4) {
-                    encoder.setBindGroup(MAP_UNIFORMS_GROUP, bindings[3], [commands[i]]);
-                    encoder.drawIndexed(commands[i + 1], commands[i + 2], commands[i + 3], 0, 0);
-                }
-            });
+            for (const bundle of bundles) {
+                if (!bundle || bundle.commands.length === 0) continue;
+                const commands = bundle.commands;
+                const bindings = [resources.sceneBindGroup, worldTextures, batch.bindGroup, batch.uniformsBindGroup];
+                bundle.draw(this.device, pass, pipeline, bindings, {
+                    colorFormats: depth ? [] : [resources.extensionActive
+                        ? resources.extension?.sceneColorFormat ?? resources.canvasFormat : resources.canvasFormat],
+                    depthStencilFormat: depth ? resources.extension?.depthFormat ?? SCENE_DEPTH_FORMAT : SCENE_DEPTH_FORMAT,
+                    sampleCount: depth ? 1 : resources.sampleCount,
+                }, (encoder) => {
+                    encoder.setPipeline(pipeline);
+                    encoder.setBindGroup(SCENE_GROUP, bindings[0]);
+                    encoder.setBindGroup(WORLD_TEXTURES_GROUP, bindings[1]);
+                    encoder.setBindGroup(MAP_TEXTURES_GROUP, bindings[2]);
+                    encoder.setVertexBuffer(0, batch.vertexBuffer);
+                    encoder.setIndexBuffer(batch.indexBuffer, "uint32");
+                    for (let i = 0; i < commands.length; i += 4) {
+                        encoder.setBindGroup(MAP_UNIFORMS_GROUP, bindings[3], [commands[i]]);
+                        encoder.drawIndexed(commands[i + 1], commands[i + 2], commands[i + 3], 0, 0);
+                    }
+                });
+            }
         }
     }
 }

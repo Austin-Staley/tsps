@@ -259,36 +259,23 @@ test("WebGPU wall previews give each placement its own uniform slot", () => {
 
 test("WebGPU bundles replay exact draws and invalidate for animation, roofs, pipelines and partial reloads", () => {
     const f = fixture([range(0, 6, 0, false), range(24, 12, 8, false)], [], new Uint8Array([0, 1]));
-    let builds = 0, executions = 0;
-    const descriptors: any[] = [];
-    (f.device as any).createRenderBundleEncoder = (descriptor: any) => {
-        descriptors.push(descriptor);
-        const calls: [string, any[]][] = [];
-        return Object.fromEntries([
-            ...["setPipeline", "setBindGroup", "setVertexBuffer", "setIndexBuffer", "drawIndexed"].map(name =>
-                [name, (...args: any[]) => { calls.push([name, args]); }]),
-            ["finish", () => { builds++; return calls; }],
-        ]);
-    };
-    (f.pass as any).executeBundles = (bundles: [string, any[]][][]) => {
-        executions++;
-        for (const bundle of bundles) for (const [name, args] of bundle) (f.pass as any)[name](...args);
-    };
+    const tracker = enableBundles(f);
+    const descriptors = tracker.descriptors;
     Object.assign(f.resources, { opaquePipeline: {}, alphaPipeline: {}, canvasFormat: "bgra8unorm", sampleCount: 4 });
     const draw = () => { f.draws.length = 0; f.square.drawOpaque(f.pass, 3, f.context); return f.draws.map(d => ({ ...d })); };
     const direct = draw();
     assert.deepEqual(draw(), direct);
     assert.deepEqual(draw(), direct);
-    assert.equal(builds, 1);
-    assert.equal(executions, 2);
+    assert.equal(tracker.builds, 1);
+    assert.equal(tracker.executions, 2);
     assert.deepEqual(descriptors[0], { colorFormats: ["bgra8unorm"], depthStencilFormat: "depth32float", sampleCount: 4 });
     const batch = (f.square as any).opaqueBatches[0];
     batch.ranges[1][0] = 96;
     const animated = draw();
     assert.notDeepEqual(animated, direct, "animated frame's index offset is part of the command signature");
-    assert.equal(executions, 2, "changed lists use immediate commands before being cached");
+    assert.equal(tracker.executions, 2, "changed lists use immediate commands before being cached");
     assert.deepEqual(draw(), animated);
-    assert.equal(builds, 2);
+    assert.equal(tracker.builds, 2);
     f.draws.length = 0;
     f.square.drawOpaque(f.pass, 0, f.context);
     assert.equal(f.draws.length, 1, "roof change never replays an obsolete second draw");
@@ -298,14 +285,50 @@ test("WebGPU bundles replay exact draws and invalidate for animation, roofs, pip
     assert.equal(descriptors.at(-1).sampleCount, 1);
     assert.deepEqual(descriptors.at(-1).colorFormats, ["rgba16float"]);
     f.square.refreshPartial({ ...f.data, locOnly: true } as any, {} as any, 1);
-    const before = builds;
+    const before = tracker.builds;
     draw();
-    assert.equal(builds, before, "replacement GPU resources do not reuse the old bundle");
+    assert.equal(tracker.builds, before, "replacement GPU resources do not reuse the old bundle");
     draw();
-    assert.equal(builds, before + 1);
+    assert.equal(tracker.builds, before + 1);
     f.square.drawDepth(f.pass, 3, f.context);
     f.square.drawDepth(f.pass, 3, f.context);
     assert.deepEqual(descriptors.at(-1).colorFormats, []);
     assert.equal(descriptors.at(-1).sampleCount, 1);
+    f.square.delete();
+});
+
+function enableBundles(f: ReturnType<typeof fixture>) {
+    const tracker = { builds: 0, executions: 0, descriptors: [] as any[] };
+    (f.device as any).createRenderBundleEncoder = (descriptor: any) => {
+        tracker.descriptors.push(descriptor);
+        const calls: [string, any[]][] = [];
+        return Object.fromEntries([
+            ...["setPipeline", "setBindGroup", "setVertexBuffer", "setIndexBuffer", "drawIndexed"].map(name =>
+                [name, (...args: any[]) => { calls.push([name, args]); }]),
+            ["finish", () => { tracker.builds++; return calls; }],
+        ]);
+    };
+    (f.pass as any).executeBundles = (bundles: [string, any[]][][]) => {
+        tracker.executions++;
+        for (const bundle of bundles) for (const [name, args] of bundle) (f.pass as any)[name](...args);
+    };
+    return tracker;
+}
+
+test("one animated range only invalidates its small bundle section", () => {
+    const f = fixture(Array.from({ length: 65 }, (_, i) => range(i * 24, 6, 0, false)), []);
+    const tracker = enableBundles(f);
+    Object.assign(f.resources, { opaquePipeline: {}, canvasFormat: "bgra8unorm", sampleCount: 1 });
+    for (let i = 0; i < 3; i++) f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(tracker.builds, 2, "two 32-range bundles; the final single draw stays direct");
+    const batches = (f.square as any).opaqueBatches;
+    batches[0].ranges[0][0] = 4000;
+    f.draws.length = 0;
+    const before = tracker.executions;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(tracker.executions, before + 1, "unchanged section still replays");
+    assert.equal(f.draws.length, 65);
+    assert.equal(f.draws[0].first, 1000);
+    assert.equal(f.draws[64].first, 384);
     f.square.delete();
 });
