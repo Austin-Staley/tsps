@@ -2,7 +2,7 @@
 
 // Content is Jagex's clue-helper catalogue in the installed cache. Keep row identities,
 // targets, text and equipment together rather than maintaining a second list of clues.
-const MAP_INTERFACES = ["trail_map01", "trail_map06", "trail_map15", "trail_map05", "trail_map03"];
+const MAP_INTERFACES = ["trail_map01", "trail_map02", "trail_map03", "trail_map06", "trail_map11"];
 const CHARLIE_ITEMS = ["TROUT", "PIKE", "RAW_HERRING", "RAW_TROUT", "IRON_ORE", "IRON_DAGGER", "LEATHER_BODY", "LEATHER_CHAPS"];
 const EMOTE_SLOTS = [19, 2, 7, 20, 18, 14];
 const EMOTE_RADII = [2, 3, 3, 3, 16, 3];

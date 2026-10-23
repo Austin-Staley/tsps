@@ -809,6 +809,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
                 npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
+        this.osrsClient.sceneGeometry = {
+            tileHeight: (x, y, plane) => this.getTileHeightAtPlane(x, y, plane),
+            worldToScreen: (x, height, y) => {
+                const p = this.worldToScreen(x, height, y);
+                return p ? [p[0], p[1]] : undefined;
+            },
+            npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
+            npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+        };
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);

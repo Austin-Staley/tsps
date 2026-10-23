@@ -254,6 +254,7 @@ export class PluginManager {
   private static nextObjectHookOrder = 0;
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeNpcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static beforeObjectInteractionHooks: PluginHook<PluginObjectInteractionEvent>[] = [];
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -977,7 +978,7 @@ export class PluginManager {
     if (!event || !event.player || !event.object || event.handled) {
       return false;
     }
-    if (PluginManager.nextObjectHookOrder === 0) {
+    if (PluginManager.nextObjectHookOrder === 0 && !PluginManager.beforeObjectInteractionHooks.length) {
       return false;
     }
 
@@ -986,6 +987,13 @@ export class PluginManager {
     }
 
     event.option ??= event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "";
+
+    for (const hook of PluginManager.beforeObjectInteractionHooks) {
+      if (event.handled) {
+        return true;
+      }
+      PluginManager.executeHook(hook, event, "object_interaction", "object_interaction");
+    }
 
     const hooks = [
       ...PluginManager.objectInteractionHooks,
@@ -2943,6 +2951,9 @@ export class PluginManager {
       },
       onBeforeNpcInteraction: (handler) => {
         if (typeof handler === "function") PluginManager.beforeNpcInteractionHooks.push({ pluginName, handler });
+      },
+      onBeforeObjectInteraction: (handler) => {
+        if (typeof handler === "function") PluginManager.beforeObjectInteractionHooks.push({ pluginName, handler });
       },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),

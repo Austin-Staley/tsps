@@ -299,6 +299,44 @@ void main(){
         this.appendSolidRect(x, y, w, h, color);
     }
 
+    /** Fills a convex polygon (points in order, device pixels) as a triangle fan. */
+    drawPolygon(points: ReadonlyArray<readonly [number, number]>, color: [number, number, number, number]) {
+        if (points.length < 3 || !(color[3] > 0)) return;
+        this.flushTextureBatch();
+        const [x0, y0] = points[0];
+        for (let i = 1; i + 1 < points.length; i++) {
+            this.appendSolidTriangle(x0, y0, points[i][0], points[i][1], points[i + 1][0], points[i + 1][1], color);
+        }
+    }
+
+    /**
+     * Strokes a line through the points, `width` device pixels wide (each segment a quad with
+     * square caps so corners meet), closing back to the first point when `closed`.
+     */
+    drawPolyline(
+        points: ReadonlyArray<readonly [number, number]>,
+        width: number,
+        color: [number, number, number, number],
+        closed: boolean = true,
+    ) {
+        if (points.length < 2 || !(width > 0) || !(color[3] > 0)) return;
+        this.flushTextureBatch();
+        const half = width / 2;
+        const count = closed ? points.length : points.length - 1;
+        for (let i = 0; i < count; i++) {
+            const [ax, ay] = points[i];
+            const [bx, by] = points[(i + 1) % points.length];
+            const len = Math.hypot(bx - ax, by - ay);
+            if (!(len > 0)) continue;
+            const ux = (bx - ax) / len, uy = (by - ay) / len;
+            const nx = -uy * half, ny = ux * half;
+            const sx = ax - ux * half, sy = ay - uy * half;
+            const ex = bx + ux * half, ey = by + uy * half;
+            this.appendSolidTriangle(sx + nx, sy + ny, ex + nx, ey + ny, ex - nx, ey - ny, color);
+            this.appendSolidTriangle(sx + nx, sy + ny, ex - nx, ey - ny, sx - nx, sy - ny, color);
+        }
+    }
+
     /**
      * Draw a vertical gradient rectangle
      * Reference: Rasterizer2D.Rasterizer2D_fillRectangleGradient (fillMode=1)
@@ -622,6 +660,26 @@ void main(){
 
         // Reset to texture unit 0
         gl.activeTexture(gl.TEXTURE0);
+    }
+
+    private appendSolidTriangle(
+        ax: number, ay: number, bx: number, by: number, cx: number, cy: number,
+        color: [number, number, number, number],
+    ) {
+        if (this.solidBatchFloatCount + 18 > this.solidBatchData.length) {
+            this.flushSolidBatch();
+        }
+        const data = this.solidBatchData;
+        let o = this.solidBatchFloatCount;
+        for (const [x, y] of [[ax, ay], [bx, by], [cx, cy]]) {
+            data[o++] = x;
+            data[o++] = y;
+            data[o++] = color[0];
+            data[o++] = color[1];
+            data[o++] = color[2];
+            data[o++] = color[3];
+        }
+        this.solidBatchFloatCount = o;
     }
 
     private appendSolidRect(
