@@ -193,7 +193,7 @@ function confirmExchange(api, event, slot) {
 }
 
 function useCurrencyOnBanker(api, event) {
-  if (event.target?.getDefinition?.()?.getName?.() === "Banker") confirmExchange(api, event, event.slot);
+  if ((event.definition ?? event.target?.getDefinition?.())?.getName?.() === "Banker") confirmExchange(api, event, event.slot);
 }
 
 function useCurrencyOnBankObject(api, event) {
