@@ -19,6 +19,7 @@ import {
 } from "./GameRenderers";
 import { OsrsClient } from "./OsrsClient";
 import { profiler } from "../render/PerformanceProfiler";
+import { HudDebugPanel } from "../components/common";
 
 interface OsrsClientControlsProps {
     renderer: GameRenderer;
@@ -47,6 +48,14 @@ export const DebugControls = memo(
         setDownloadProgress,
     }: OsrsClientControlsProps): JSX.Element => {
         const osrsClient = renderer.osrsClient;
+        const [activeRendererType, setActiveRendererType] = useState(osrsClient.renderer.type);
+
+        useEffect(() => {
+            const update = () => setActiveRendererType(osrsClient.renderer.type);
+            update();
+            const timer = window.setInterval(update, 250);
+            return () => window.clearInterval(timer);
+        }, [osrsClient]);
 
         const [projectionType, setProjectionType] = useState<ProjectionType>(
             osrsClient.camera.projectionType,
@@ -619,6 +628,11 @@ export const DebugControls = memo(
 
         return (
             <>
+                {!hidden && (
+                    <HudDebugPanel position="right-bottom" minWidth={140}>
+                        <strong>Renderer:</strong> {getRendererName(activeRendererType)}
+                    </HudDebugPanel>
+                )}
                 <div className={`leva-left${levaCollapsed ? " leva-collapsed" : ""}`}>
                     <Leva
                         titleBar={{ filter: false }}

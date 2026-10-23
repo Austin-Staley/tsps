@@ -230,6 +230,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
         this.ensureDepthTexture(this.canvas.width, this.canvas.height);
 
+        // Title/download progress must draw while cache and world resources are still loading.
+        this.ui = new WebGPUUi(this);
+        await this.ui.init();
+
         (window as unknown as { __WEBGPU_RENDERER__?: WebGPURenderer }).__WEBGPU_RENDERER__ = this;
         console.info("[webgpu] device ready", adapter.info ?? {});
     }
@@ -250,10 +254,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             this.ensureSceneColorTexture(this.canvas.width, this.canvas.height);
             this.actors = new WebGPUActors(this);
             this.overlays = new WebGPUOverlays(this);
-            this.ui = new WebGPUUi(this);
             await this.actors.init();
             await this.overlays.init();
-            await this.ui.init();
         } catch (error) {
             console.error("[webgpu] world resources init failed", error);
         }
@@ -653,10 +655,14 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     override render(time: number, deltaTime: number, _resized: boolean): void {
         const world = this.world;
-        if (!this.device || !world || !this.depthView) return;
+        if (!this.device || !this.depthView) return;
         const width = this.canvas.width;
         const height = this.canvas.height;
         if (width < 1 || height < 1) return;
+        if (!world) {
+            this.ui?.update(time, deltaTime);
+            return;
+        }
 
         const timeSec = time / 1000;
         const loggedIn = this.osrsClient.isLoggedIn();
