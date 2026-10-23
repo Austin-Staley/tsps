@@ -80,6 +80,11 @@ module.exports = function attachCapacity(pluginApi) {
   api.persistAttribute(MINOR_ATTRIBUTE, false);
   api.persistAttribute(MAJOR_ATTRIBUTE, false);
   api.onCustomEvent("treasure-trails:can-receive", canReceive);
+  api.onCustomEvent("treasure-trails:milestone-rewards", request => {
+    if (request.handled || !request.player || !Array.isArray(request.milestones) || !Array.isArray(request.drops)) return;
+    request.drops.push(...milestoneRewards(request.player, request.completed, request.milestones));
+    request.handled = true;
+  });
   api.onCustomEvent("npc-drops:roll", filterDrops);
   api.onItemAction("Scroll box (beginner)", { Open: openBox });
   api.onItemAction("Minor beginner scroll case", { Open: openCase });

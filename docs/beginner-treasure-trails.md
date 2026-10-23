@@ -63,8 +63,15 @@ consumes one casket, grants the actual rewards and increments the saved
 completion/collection-log count. Overflow uses the existing `forceAdd` ground
 reward path. Caskets cannot be opened on Entrana.
 
-**Intentional private-game exception:** the online game's anti-bot restriction
-on unique rewards for accounts under ten hours is omitted. Every local account
+Opening prepares normal and milestone rewards before consuming anything. Every
+base and credited note definition must resolve to its exact cache ID; the cache's
+DEFAULT fallback is rejected. Missing milestone service, invalid reward data or
+invalid saved progress leaves the casket and completion count unchanged. The
+clicked stack is rechecked after preparation callbacks, and recursive callbacks
+cannot open it twice.
+
+**Unresolved fidelity gap:** the online game's anti-bot restriction
+on unique rewards for accounts under ten hours is not implemented. Every local account
 uses the same complete published reward table from its first casket. The Wiki
 does not describe the online replacement policy, and this implementation does
 not invent one or silently discard a unique reward.
@@ -91,6 +98,10 @@ used for behavior evidence. The reward exporter preserves its reviewed capture,
 input hashes and reproducible output. No generated JSON was edited by hand.
 
 ## Verification
+
+`tests/beginner-casket-safety.test.cjs` adds real cache/Inventory regressions for
+DEFAULT lookups, credited notes, milestone failure, stale/reentrant callbacks
+and invalid saved completion counts.
 
 From `server/`, `node --test tests/beginner-treasure-trails.test.cjs` exercises every step
 family against the real cache, all Charlie requests, all map and hot/cold
