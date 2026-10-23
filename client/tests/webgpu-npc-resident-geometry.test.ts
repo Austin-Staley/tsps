@@ -192,6 +192,12 @@ test("alpha-only GPU NPC rest meshes keep their pose row and do not trigger CPU 
     assert.equal(f.builds(), 1);
 });
 
+test("missing sequence configuration still requests the ready NPC base mesh", () => {
+    const f = fixture();
+    f.client.npcTypeLoader.load(1).getMovementSeqSet = () => { throw new Error("Sequence configuration still downloading"); };
+    assert.equal(f.pack().opaque.length, 1, "sparse animation metadata must not hide an otherwise ready NPC");
+});
+
 test("NPC pose identity does not validate or build a CPU mesh", () => {
     const f = fixture();
     (f.loader.getModelLoader() as any).getModel = () => { throw new Error("CPU mesh work on the render thread"); };

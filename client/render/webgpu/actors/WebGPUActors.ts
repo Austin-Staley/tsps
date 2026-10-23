@@ -756,7 +756,9 @@ export class WebGPUActors {
                     alpha = this.geometry?.get(`${key}|a`);
                 }
             }
-        } catch {}
+        } catch {
+            request ??= [client.npcEcs.getNpcTypeId(ecsId) | 0, -1, 0];
+        }
         // The smaller CPU pose cache may evict a mesh whose two GPU passes are still resident.
         if (opaque === undefined || alpha === undefined || (!opaque && !alpha)) {
             poseRow = -1;
