@@ -289,7 +289,7 @@ deferred quest. No deferred quest is counted as complete.
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
 | Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
-| Murder Mystery | `MurderMystery` | Pending | Pending | Pending |
+| Murder Mystery | `MurderMystery` | Shared guard and Salesman ownership, actual culprit alibi, native suspect replay, receipts and evidence hand-in reviewed/published | 9 focused checks pass; shared guard regression fails against old published King's Ransom and passes with its minimal prerequisite fix | Natural route pending; banked silver cleanup remains open |
 | My Arm's Big Adventure | `MyArmsBigAdventure` | Pending | Pending | Pending |
 | Nature Spirit | `NatureSpirit` | Pending | Pending | Pending |
 | Observatory Quest | `ObservatoryQuest` | Pending | Pending | Pending |
@@ -327,7 +327,7 @@ deferred quest. No deferred quest is counted as complete.
 | Wanted! | `Wanted` | Pending | Pending | Pending |
 | Watchtower | `Watchtower` | Pending | Pending | Pending |
 | What Lies Below | `WhatLiesBelow` | Pending | Pending | Pending |
-| Witch's House | `WitchsHouse` | Pending | Pending | Pending |
+| Witch's House | `WitchsHouse` | Grounded basement/gloves, key item-use, owned mouse, capacity/retry and reward fixes reviewed/published | 11 focused checks pass | Natural route pending; canonical Nora detection remains unimplemented; guessed proximity rule removed and archived |
 | Zogre Flesh Eaters | `ZogreFleshEaters` | Canonical import needs no source change; the three formerly `unavailable` nodes are now real messages the plugin already references; the Dragon Inn tankard dispatch is verified against the generated page | 11 focused tests pass | Stopped at stage 3 with 25 identical "I can't reach that!" on NPC 1320; cause is core reach (wandering NPC on unreachable counter-row tiles), not the quest plugin; natural completion pending |
 
 ## Deferred — 22 long or complex quests
