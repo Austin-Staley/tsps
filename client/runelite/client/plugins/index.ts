@@ -14,6 +14,7 @@ import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight
 import { InventoryTagsPlugin } from "../../../game/plugins/inventorytags/InventoryTagsPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
+import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
@@ -48,6 +49,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
     InventoryTagsPlugin,
     NotesPlugin,
+    NpcIndicatorsPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,

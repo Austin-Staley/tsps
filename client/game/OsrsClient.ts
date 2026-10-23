@@ -1,3 +1,4 @@
+import type { MinimapGeometry, SceneGeometry } from "./scene/SceneGeometry";
 import { vec3 } from "gl-matrix";
 import { closeOpenModal } from "./widgets/input/widgetKeyboardInput";
 import { getNpcMenuActions } from "./menu/WorldMenuBuilder";
@@ -837,6 +838,10 @@ export class OsrsClient {
 
     // ECS stores
     npcEcs: NpcEcs = new NpcEcs();
+    /** The active renderer's scene geometry, for plugins drawing over the scene in 2D. */
+    sceneGeometry?: SceneGeometry;
+    /** The minimap as last drawn, for plugins marking it. */
+    minimapGeometry?: MinimapGeometry;
     playerEcs: PlayerEcs = new PlayerEcs();
     private continuousMovement?: ContinuousMovement;
     playerAnimController!: PlayerAnimController;

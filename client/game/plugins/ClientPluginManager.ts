@@ -88,6 +88,9 @@ export type WidgetOverlayDrawContext = {
     place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
 };
 
+/** An NPC model outline a plugin asks for: colour 0xRRGGBB, alpha 0-1, width in pixels. */
+export type NpcOutline = { ecsId: number; serverId: number; color: number; alpha: number; width: number };
+
 /** A movable overlay's top left in device pixels, and the device pixels per layout unit. */
 export type OverlayPlacement = { x: number; y: number; scaleX: number; scaleY: number };
 
@@ -102,6 +105,11 @@ export interface WidgetOverlay {
      * Used by overlays that sit over the side panel (status bars) so tooltips still win.
      */
     drawAtAnchor?: boolean;
+    /**
+     * Draw over the scene but under every widget (RuneLite's ABOVE_SCENE), e.g. NPC highlights
+     * that interfaces should cover.
+     */
+    drawBelowWidgets?: boolean;
     /**
      * Makes it a RuneLite movable overlay: Alt-drag moves it, Alt + right-click resets it. The
      * name keys its saved position (RuneLite's overlay class name); position is its default
@@ -240,6 +248,8 @@ export interface ClientPlugin {
     tileMarkersConfig?(): TileMarkersPluginConfig | undefined;
     /** Hover and interaction outlines on world objects (first answer wins). */
     interactHighlightConfig?(): InteractHighlightPluginConfig | undefined;
+    /** NPC model outlines to draw every frame (RuneLite's ModelOutlineRenderer.drawOutline). */
+    npcOutlines?(): NpcOutline[];
     /** Ground item labels around a tile (first answer wins). */
     groundItemOverlayEntries?(
         tileX: number,
@@ -500,6 +510,12 @@ export class ClientPluginManager {
             if (config) return config;
         }
         return DISABLED_TILE_MARKERS_CONFIG;
+    }
+
+    npcOutlines(): NpcOutline[] {
+        const outlines: NpcOutline[] = [];
+        for (const plugin of this.implementing("npcOutlines")) outlines.push(...plugin.npcOutlines!());
+        return outlines;
     }
 
     interactHighlightConfig(): InteractHighlightPluginConfig | undefined {
