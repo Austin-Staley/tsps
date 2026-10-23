@@ -490,7 +490,7 @@ function reclaimLine(p) {
 }
 const LOST_PAGE_VARIANT = 'if-the-player-lost-the-memoir-page-before-using-it-on-the-memoir';
 test('reclaim waits for Continue, retries full bags and guards bank, equipment and recorded pages', () => {
-  const banks = [], p = makePlayer({ banks }); h.quest.setStage(p, 11);
+  const banks = [null], p = makePlayer({ banks }); h.quest.setStage(p, 11);
   const variant = () => h.variants[0]({ player: p, npcId: 7909 });
   assert.equal(variant()?.variant, LOST_PAGE_VARIANT);
   const cancelled = reclaimLine(p);

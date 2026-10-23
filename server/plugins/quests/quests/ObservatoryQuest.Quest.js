@@ -140,7 +140,7 @@ module.exports = function registerObservatoryQuest(api) {
 
   function ownsMould(player) {
     return has(player, LENS_MOULD)
-      || (player.getBanks?.() ?? []).some(bank => bank.getAmount(LENS_MOULD) > 0);
+      || (player.getBanks?.() ?? []).some(bank => (bank?.getAmount(LENS_MOULD) ?? 0) > 0);
   }
 
   function syncMouldPresence(player) {

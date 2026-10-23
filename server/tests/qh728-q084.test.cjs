@@ -108,7 +108,7 @@ function setup({ realWire = false, realTranscript = false } = {}) {
     getAttribute: (key) => attributes.get(key),
     setAttribute(key, value) { attributes.set(key, value); },
     getInventory: () => inventory,
-    getBanks: () => [{ getAmount: id => bankItems.get(id) ?? 0 }],
+    getBanks: () => [null, { getAmount: id => bankItems.get(id) ?? 0 }, null],
     getSession: () => ({ sendClientPacket() {} }),
     getPacketSender: () => sender,
     getSkillManager: () => ({

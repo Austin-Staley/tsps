@@ -625,7 +625,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
   }
 
   function ownsItem(player, itemId) {
-    return held(player, itemId) || (player.getBanks?.() ?? []).some(bank => bank.getAmount(itemId) > 0)
+    return held(player, itemId) || (player.getBanks?.() ?? []).some(bank => (bank?.getAmount(itemId) ?? 0) > 0)
       || (player.getBank?.()?.getAmount?.(itemId) ?? 0) > 0
       || (player.getEquipment?.()?.getItems?.() ?? []).some(item => item?.getId?.() === itemId);
   }

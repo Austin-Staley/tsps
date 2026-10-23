@@ -596,6 +596,8 @@ retain their original case. Exercise the registered dispatch with actual definit
 where possible. A fixture that injects `"Fire"` can pass while a real `"fire"` click does
 nothing. Likewise, inventory `adds` returns a container: verify the resulting quantity
 rather than treating its return value as a successful receipt.
+`Player.getBanks()` also returns lazily initialized tabs containing `null`; recovery
+fixtures must include those empty tabs and bank ownership checks must skip them.
 
 For shared quest locations, run the real startup object installation before checking
 collision, menus and routes. Bare cache geometry can pass while another quest's duplicate
