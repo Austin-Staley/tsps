@@ -12,6 +12,7 @@ import { SeqBase } from "../rs/model/seq/SeqBase";
 import { SeqFrame } from "../rs/model/seq/SeqFrame";
 import { SeqTransformType } from "../rs/model/seq/SeqTransformType";
 import { SeqType } from "../rs/config/seqtype/SeqType";
+import { CustomModelRegistry } from "../custom/items/CustomModelRegistry";
 
 const info = loadCacheList(loadCacheInfos()).latest;
 const factory = getCacheLoaderFactory(info, CacheSystem.fromFiles(info, loadCache(info).files));
@@ -113,6 +114,43 @@ try {
 assert.equal(poses.resolve([3106, movement.walk, 0, -1, -1, { base: { next: 1, alpha: 0.5 } }], true), undefined,
     "HD humanoid joints retain rebuilt posed normals rather than transformed rest normals");
 assert.equal(poses.resolve([3106, movement.walk, 0], false), undefined, "integer CPU animation keeps its truncation behavior");
+const contextRequest: Parameters<DynamicNpcAnimLoader["getFrameGeometry"]> = [3106, movement.walk, 0, -1, -1, { base: { next: 1, alpha: 0.5 } }];
+let previous = poses.resolve(contextRequest, false)!;
+for (const invalidate of [() => loader.clear(), () => CustomModelRegistry.clear(), () => loader.setTextureIdIndexMap(new Map(textureIds))]) {
+    invalidate();
+    const fresh = poses.resolve(contextRequest, false)!;
+    assert.notEqual(fresh.key, previous.key, "content/session/texture changes create a fresh GPU identity");
+    assert.notEqual(fresh.opaqueVertices, previous.opaqueVertices);
+    assert.notEqual(fresh.matrices, previous.matrices);
+    previous = fresh;
+}
+const originalWidth = man.widthScale;
+try {
+    man.widthScale = 144;
+    const fresh = poses.resolve(contextRequest, false)!;
+    assert.notEqual(fresh.key, previous.key, "in-place appearance changes cannot reuse the old rest mesh");
+    assert.notEqual(fresh.opaqueVertices, previous.opaqueVertices);
+    assert.equal(poses.resolve(contextRequest, false)!.opaqueVertices, fresh.opaqueVertices, "the new appearance stays warm after invalidation");
+} finally { man.widthScale = originalWidth; }
+const rawModels = loader.getModelLoader()!;
+const savedGetModel = rawModels.getModel;
+poses.resolve(contextRequest, false);
+let repeatedModelBuilds = 0;
+rawModels.getModel = (...request) => { repeatedModelBuilds++; return savedGetModel.apply(rawModels, request); };
+try { poses.resolve(contextRequest, false); assert.equal(repeatedModelBuilds, 0, "cache hits never clone or relight the base model"); }
+finally { rawModels.getModel = savedGetModel; }
+const remapped = new Map(textureIds);
+remapped.set(0, (remapped.get(0) ?? 1) + 1);
+loader.setTextureIdIndexMap(remapped);
+const retextured = poses.resolve([2702, 808, 0, -1, -1, { base: { next: 1, alpha: 0.5 } }], false)!;
+const retextureWords = new Uint32Array(retextured.opaqueVertices.buffer, retextured.opaqueVertices.byteOffset, retextured.opaqueVertices.byteLength / 4);
+let mappedTexture = false;
+for (let i = 0; i < retextureWords.length; i += 5) if (retextureWords[i + 1] >>> 31) {
+    assert.equal(((retextureWords[i + 1] >>> 22) & 511) | (((retextureWords[i + 2] >>> 5) & 1) << 9), remapped.get(0));
+    mappedTexture = true;
+}
+assert.ok(mappedTexture, "the retextured fixture exercises the replacement texture-index map");
+loader.setTextureIdIndexMap(textureIds);
 const savedSource = loader.getGpuPoseSource;
 const savedFrames = client.seqFrameLoader;
 let rejectedSourceCalls = 0;

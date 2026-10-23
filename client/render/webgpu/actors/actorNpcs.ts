@@ -29,6 +29,7 @@ export class NpcPoseGeometry {
     resolve(request: NpcFrameRequest, requireRigidNormals: boolean): PosedActorGeometry | undefined {
         const context = this.loader.getContextKey();
         if (context !== this.context) { this.clear(); this.context = context; }
+        const revision = this.loader.revision;
         if (!request[5]?.base) return undefined;
         if (requireRigidNormals) {
             const cached = this.loader.peekBaseModel(request[0]);
@@ -41,6 +42,7 @@ export class NpcPoseGeometry {
             (overlayType && !this.supportedFrames(overlayType, request[4] ?? 0, request[5].overlay?.next, true))) return undefined;
         const source = this.loader.getGpuPoseSource(...request);
         if (!source) return undefined;
+        if (this.loader.revision !== revision) { this.clear(); this.context = this.loader.getContextKey(); }
         const key = `npc-pose:${source.key}`;
         let pose = this.poses.get(key);
         if (pose !== undefined) {
@@ -95,7 +97,7 @@ export class NpcPoseGeometry {
             model.scale(source.npcType.widthScale, source.npcType.heightScale, source.npcType.widthScale);
             if ([model.verticesX, model.verticesY, model.verticesZ].some(axis => axis.some(v => Math.abs(v) >= 16384))) return undefined;
             rest = buildLabelledActorRestMesh(restKey, model, this.rigFor(source.baseModel).rig!,
-                this.client.textureLoader, this.textureIdIndexMap);
+                this.client.textureLoader, this.loader.getTextureIdIndexMap?.() ?? this.textureIdIndexMap);
             this.rest.set(restKey, rest);
             this.restBytes += this.meshBytes(rest);
             while (this.rest.size > MAX_REST_MESHES || (this.restBytes > MAX_CACHE_BYTES && this.rest.size > 1)) {
