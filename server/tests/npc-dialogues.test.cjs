@@ -974,7 +974,7 @@ test('an explicitly bound overhead scene actor is still local, visible, register
     player.manager = new DialogueManager(player);
     const api = {
       core: PluginManager.getCoreApi(),
-      emitCustomEvent(name, request) { if (name === 'npc-dialogue:line') request.actor = actor; },
+      emitCustomEvent(name, request) { if (name === 'npc-dialogue:line') request.actors = [actor]; },
     };
     const event = { player, npc: null, npcId: 14303, definition: { getId: () => 14303, getName: () => 'Captain Vibia' } };
     startDialogue(api, event, transcript, {}, { ...event, pages: [], speakerIdByName: new Map() });
@@ -992,6 +992,58 @@ test('an explicitly bound overhead scene actor is still local, visible, register
     assert.deepEqual(run({ local: false }).chats, [], 'an actor absent from the local NPC list is rejected');
     assert.deepEqual(run({ z: 1 }).chats, [], 'an actor on another plane is rejected');
   } finally {
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+  }
+});
+
+test('a collective overhead validates the entire local cast before any actor speaks', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const chats = [];
+  const sender = new Proxy({}, { get: (_target, _key) => (..._args) => sender });
+  const area = {};
+  const location = { getZ: () => 0, getDistance: () => 1 };
+  const player = {
+    isRegistered: () => true,
+    getLocation: () => location,
+    getPrivateArea: () => area,
+    sendMessage: () => {},
+    getPacketSender: () => sender,
+    getDialogueManager() { return this.manager; },
+  };
+  const actors = Array.from({ length: 4 }, (_, index) => ({
+    isRegistered: () => true,
+    isVisible: () => true,
+    isOwnerOnly: () => true,
+    getOwner: () => player,
+    getPrivateArea: () => area,
+    getLocation: () => location,
+    getCurrentDefinition: () => ({ getName: () => `Scene actor ${index}` }),
+    forceChat: text => chats.push([index, text]),
+  }));
+  player.getLocalNpcs = () => actors;
+  player.manager = new DialogueManager(player);
+  const event = { player, npc: null, npcId: 11437, definition: { getId: () => 11437, getName: () => 'Wizard Persten' } };
+  const step = { type: 'line', speaker: 'Persten and co.', text: 'Saris! Val! Curak! Belito!', presentation: 'overhead' };
+  const run = cast => {
+    player.manager.reset();
+    chats.length = 0;
+    startDialogue({
+      core: PluginManager.getCoreApi(),
+      emitCustomEvent(name, request) { if (name === 'npc-dialogue:line') request.actors = cast; },
+    }, event, [step], {}, { ...event, pages: [], speakerIdByName: new Map() });
+    return [...chats];
+  };
+  try {
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+    assert.deepEqual(run(actors), actors.map((_, index) => [index, step.text]));
+    assert.deepEqual(run([actors[0], actors[1], undefined, actors[3]]), [], 'a partial cast cannot chant as if all actors were present');
+    assert.deepEqual(run([...actors.slice(0, 3), undefined]), [], 'an incomplete group does not speak');
+  } finally {
+    TaskManager.cancelTasks(player);
     TaskManager.pendingTasks.clear();
     TaskManager.activeTasks.length = 0;
   }

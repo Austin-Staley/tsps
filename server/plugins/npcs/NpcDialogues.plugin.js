@@ -9,7 +9,7 @@
  * game logic (set stage, hand in items) without re-authoring the words, and each
  * speech line emits "npc-dialogue:line" with a mutable `skip` so a quest can drop
  * lines that no longer apply (e.g. handing over an item the player does not have), a
- * mutable `text` to fill in blanks, an optional bound scene `actor` for overhead lines, and
+ * mutable `text` to fill in blanks, optional bound scene `actors` for overhead lines, and
  * an `after` callback run once the player continues
  * past it. A message step's "npc-dialogue:action" (`kind: "message"`) can set
  * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
@@ -69,6 +69,11 @@ function explicitlyBoundActorAvailable(player, actor) {
     && (actor === player || localNpcs(player).includes(actor));
 }
 
+function explicitlyBoundActorsAvailable(player, actors) {
+  return Array.isArray(actors) && actors.length > 0
+    && actors.every(actor => explicitlyBoundActorAvailable(player, actor));
+}
+
 function localNpcs(player) {
   const list = player?.getLocalNpcs?.();
   return Array.isArray(list) ? list : list ? [...list.values()] : [];
@@ -94,18 +99,22 @@ function nearestNamedNpc(player, name) {
   return matches[0]?.npc;
 }
 
-function overheadActor(step, event, typedLine, player, boundActor) {
-  if (boundActor) return explicitlyBoundActorAvailable(player, boundActor) ? boundActor : undefined;
-  if (typeof step.player === "string") return player;
-  if (typedLine && PLAYER_SPEAKER.test(step.speaker ?? "")) return player;
+function overheadActors(step, event, typedLine, player, boundActors) {
+  if (boundActors !== undefined) {
+    return explicitlyBoundActorsAvailable(player, boundActors) ? boundActors : undefined;
+  }
+  if (typeof step.player === "string") return [player];
+  if (typedLine && PLAYER_SPEAKER.test(step.speaker ?? "")) return [player];
   if (typeof step.npc === "string") {
     const name = event.definition?.getName?.() ?? "";
-    return currentNpcAvailable(player, event.npc, name) ? event.npc : nearestNamedNpc(player, name);
+    const actor = currentNpcAvailable(player, event.npc, name) ? event.npc : nearestNamedNpc(player, name);
+    return actor ? [actor] : undefined;
   }
   if (!typedLine) return undefined;
   const speaker = String(step.speaker ?? "");
   if (!speaker) return undefined;
-  return currentNpcAvailable(player, event.npc, speaker) ? event.npc : nearestNamedNpc(player, speaker);
+  const actor = currentNpcAvailable(player, event.npc, speaker) ? event.npc : nearestNamedNpc(player, speaker);
+  return actor ? [actor] : undefined;
 }
 
 // These NPCs have executable plugin conversations, not an imported prose transcript.
@@ -784,20 +793,24 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             if (manager.getCurrent?.() !== overheadAction) return;
             // Resolve here, after before and its identity check: ordinary speech
             // earlier in the chain must already be showing before a miss stops it.
-            const actor = overheadActor(step, event, typedLine, player, request.actor);
-            if (!actorAvailable(player, actor)) {
+            const isExplicitCast = request.actors !== undefined;
+            const actors = overheadActors(step, event, typedLine, player, request.actors);
+            const actorsAvailable = () => !!actors && actors.every(actor => isExplicitCast
+              ? explicitlyBoundActorAvailable(player, actor)
+              : actorAvailable(player, actor));
+            if (!actorsAvailable()) {
               unavailable();
               manager.reset?.();
               return;
             }
             playedAny = true;
-            actor.forceChat(formatted);
+            actors.forEach(actor => actor.forceChat(formatted));
             // shortcut: generic 2-tick cadence, not a captured OSRS overhead timing.
             api.core.TaskManager.submit(new api.core.CountdownTask(player, OVERHEAD_CONTINUATION_TICKS, () => {
               const current = manager.getCurrent?.();
               // A replacement dialogue owns the chat now; never close or continue it.
               if (current !== overheadAction) return;
-              if (!actorAvailable(player, actor)) {
+              if (!actorsAvailable()) {
                 unavailable();
                 manager.reset?.();
                 return;

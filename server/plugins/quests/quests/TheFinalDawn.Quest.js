@@ -2471,7 +2471,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     if (player && quest.getStage(player) === STAGE_TRAP && VIBIA_IDS.has(npcId) && event.step?.speaker === "Guard Dog"
       && event.pages?.some(page => page.page === PAGE && page.variants?.includes("home-invasion-talking-to-captain-vibia-2"))
       && Scenes.get(player)?.name === "safehouse-trap") {
-      event.actor = tracked(player, "guard-dog") ?? undefined;
+      const actor = tracked(player, "guard-dog");
+      event.actors = actor ? [actor] : [];
     }
     if (!player || !ITZLA_IDS.has(npcId)) return;
     const line = String(text ?? "");
