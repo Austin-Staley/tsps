@@ -2025,6 +2025,7 @@ export class Cs2Vm {
         } else if (eventType === "onVarTransmit") {
             (widget as any).varTransmitTriggers = transmitTriggers ?? undefined;
         }
+        if (eventType === "onTimer") this.context.widgetManager.updateTimerWidget(widget);
         markWidgetInteractionDirty(widget);
     }
 
@@ -2080,6 +2081,7 @@ export class Cs2Vm {
         } else if (eventType === "onVarTransmit") {
             (widget as any).varTransmitTriggers = transmitTriggers ?? undefined;
         }
+        if (eventType === "onTimer") this.context.widgetManager.updateTimerWidget(widget);
         markWidgetInteractionDirty(widget);
     }
 
