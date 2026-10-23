@@ -228,6 +228,16 @@ function worldIdFromPath(): string | undefined {
  * use the host control channel. Signalled by `browser-host-origin`, with the
  * legacy `browser-host-client=1` still accepted.
  */
+/**
+ * The standalone map editor lives behind an opt-in URL flag. `?edit` is the
+ * canonical form (`?edit=1` also works); `?editor` is accepted as an alias.
+ */
+export function isMapEditorUrl(): boolean {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("edit") || params.has("editor");
+}
+
 export function isBrowserHostClient(): boolean {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);

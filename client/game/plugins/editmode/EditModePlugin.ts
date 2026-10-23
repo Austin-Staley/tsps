@@ -724,7 +724,12 @@ export class EditModePlugin {
 
     refreshMap(): void {
         // Region replacements carry clearing and height changes; rebuilding them
-        // is the only refresh that cannot race the generated locs.
+        // is the only refresh that cannot race the generated locs. Pull server
+        // state first so agent edits show up in the logged-out preview.
+        if (this.host?.syncServerReplacements) {
+            void this.host.syncServerReplacements();
+            return;
+        }
         this.refreshSpecialRegions(this.config.edits);
     }
 

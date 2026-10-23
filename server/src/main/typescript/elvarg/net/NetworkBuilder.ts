@@ -246,6 +246,22 @@ export class NetworkBuilder {
         response.end(JSON.stringify({ regions: MapRegionReplacementManager.getRegionIds() }));
         return;
       }
+      // Terrain-only replacements have no pack (the .pack format needs object
+      // data too); the map editor fetches their raw terrain bytes here instead.
+      const terrainMatch = /^\/regions\/(\d+)\.terrain$/.exec(request.url ?? "");
+      if (terrainMatch) {
+        const terrain = MapRegionReplacementManager.getReplacementMapData(
+          Number(terrainMatch[1]))?.terrainData;
+        if (!terrain) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader("Content-Length", terrain.length);
+        response.end(Buffer.from(terrain));
+        return;
+      }
       const match = /^\/regions\/(\d+)\.pack$/.exec(request.url ?? "");
       const pack = match ? MapRegionReplacementManager.getRegionPack(Number(match[1])) : null;
       if (!pack) {

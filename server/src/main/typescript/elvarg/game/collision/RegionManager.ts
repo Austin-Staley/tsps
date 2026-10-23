@@ -43,14 +43,20 @@ export class RegionManager {
         const replacementDir = path.resolve(process.cwd(), "data", "regions");
         if (fs.existsSync(replacementDir)) {
             for (const name of fs.readdirSync(replacementDir).sort()) {
-                const match = /^(\d+)\.pack$/.exec(name);
-                if (!match) continue;
-                const packPath = path.join(replacementDir, name);
+                const packMatch = /^(\d+)\.pack$/.exec(name);
+                const terrainMatch = /^(\d+)\.terrain\.dat$/.exec(name);
+                if (!packMatch && !terrainMatch) continue;
+                const filePath = path.join(replacementDir, name);
                 try {
-                    MapRegionReplacementManager.replaceMapRegion(Number(match[1]), packPath);
+                    if (packMatch) {
+                        MapRegionReplacementManager.replaceMapRegion(Number(packMatch[1]), filePath);
+                    } else {
+                        MapRegionReplacementManager.replaceMapRegionTerrain(
+                            Number(terrainMatch![1]), new Uint8Array(fs.readFileSync(filePath)), filePath);
+                    }
                 } catch (err) {
                     console.warn(
-                        `[collision] skipping region replacement pack (falling back to cache region): ${packPath}`,
+                        `[collision] skipping region replacement (falling back to cache region): ${filePath}`,
                         (err as Error)?.message ?? err
                     );
                 }

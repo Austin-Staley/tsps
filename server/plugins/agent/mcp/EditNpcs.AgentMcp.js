@@ -1,0 +1,192 @@
+const fs = require("fs");
+const path = require("path");
+
+// NPC spawning tools for the agent MCP server: search the NPC cache, describe
+// definitions, and spawn/remove live NPCs. Spawns persist in
+// data/definitions/npc-spawns.json, so they survive restarts and show up in the ?edit
+// map editor (spawn overlay after Refresh, full scene for cache-map NPCs).
+module.exports = function registerEditNpcTools(ctx) {
+  const { core, tool, z, sleepTicks } = ctx;
+  const { World, NPC, NpcDefinition, CacheDefinitions, Location } = core;
+
+  // Overridable for tests; the server resolves it against its own working directory.
+  const spawnsFile = () =>
+    process.env.AGENT_MCP_NPC_SPAWNS_FILE ??
+    path.resolve(process.cwd(), "data/definitions/npc-spawns.json");
+
+  const readSpawns = () => {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(spawnsFile(), "utf8"));
+      if (!Array.isArray(parsed)) throw new Error("expected npc spawn array");
+      return parsed;
+    } catch (error) {
+      if (error?.code === "ENOENT") return [];
+      throw new Error(`Cannot read npc-spawns.json: ${error?.message ?? error}`);
+    }
+  };
+  // One compact entry per line, keeping the file's own line endings, so untouched
+  // entries stay byte-identical and diffs show only the agent's lines.
+  const writeSpawns = (spawns) => {
+    let newline = "\n";
+    let trailing = false;
+    try {
+      const original = fs.readFileSync(spawnsFile(), "utf8");
+      if (original.includes("\r\n")) newline = "\r\n";
+      trailing = original.endsWith("\n");
+    } catch {
+      // New file: LF without trailing newline.
+    }
+    const body = spawns.length === 0
+      ? "[]"
+      : `[${newline}${spawns.map((entry) => `  ${JSON.stringify(entry)}`).join(`,${newline}`)}${newline}]`;
+    fs.writeFileSync(spawnsFile(), body + (trailing ? newline : ""));
+  };
+
+  const sameTile = (entry, x, y, z) => entry?.x === x && entry?.y === y && (entry?.level ?? 0) === z;
+
+  const npcCount = () => CacheDefinitions.getCounts().npcs;
+
+  const checkTile = (x, y, z) => {
+    for (const [name, value] of [["x", x], ["y", y]]) {
+      if (!Number.isInteger(value) || value < 0 || value > 16383) {
+        throw new Error(`Tile ${name}=${value} is outside the world (0-16383)`);
+      }
+    }
+    if (!Number.isInteger(z) || z < 0 || z > 3) throw new Error(`Plane z=${z} is outside 0-3`);
+  };
+
+  tool(
+    "search_npcs",
+    "Find NPCs by name: guards, goblins, shopkeepers, fishing spots. Matches substrings case-insensitively; a numeric query matches ids by prefix. Returns up to `limit` {id, name} pairs for spawn_npc.",
+    { query: z.string().min(1).describe("Name fragment (e.g. \"guard\") or id prefix"), limit: z.number().int().min(1).max(50).default(20) },
+    ({ query, limit }) => {
+      const trimmed = query.trim().toLowerCase();
+      const byId = Number(trimmed);
+      const results = [];
+      const total = npcCount();
+      for (let id = 0; id < total; id++) {
+        let entry;
+        try {
+          entry = CacheDefinitions.getNpc(id);
+        } catch {
+          continue;
+        }
+        const name = entry?.name;
+        if (!name || name === "null") continue;
+        if (Number.isInteger(byId) && byId >= 0) {
+          if (id !== byId && !String(id).startsWith(trimmed)) continue;
+        } else if (!name.toLowerCase().includes(trimmed)) {
+          continue;
+        }
+        results.push({ id, name });
+        if (results.length >= limit) break;
+      }
+      return { query, count: results.length, results };
+    }
+  );
+
+  tool(
+    "describe_npc",
+    "NPC definition details for spawning well: combat level, size, whether it can be attacked, and its options.",
+    { id: z.number().int().min(0).describe("NPC id from search_npcs") },
+    ({ id }) => {
+      if (id >= npcCount()) throw new Error(`Unknown NPC id ${id}`);
+      const definition = NpcDefinition.forId(id);
+      return {
+        id,
+        name: definition.getName(),
+        combatLevel: definition.getCombatLevel(),
+        size: definition.getSize(),
+        attackable: definition.isAttackable(),
+        aggressive: definition.isAggressive(),
+        options: definition.getActions() ?? [],
+      };
+    }
+  );
+
+  tool(
+    "spawn_npc",
+    "Spawn an NPC live in the main world: every online player (and the ?edit map editor after Refresh) sees it at once. Persists to npc-spawns.json, so it survives restarts. wanderRadius 0 roots it to its tile.",
+    {
+      id: z.number().int().min(0).describe("NPC id from search_npcs"),
+      x: z.number().int().describe("World tile x"),
+      y: z.number().int().describe("World tile y"),
+      z: z.number().int().min(0).max(3).default(0).describe("Plane, 0 is ground level"),
+      wanderRadius: z.number().int().min(0).max(32).default(5),
+    },
+    async ({ id, x, y, z = 0, wanderRadius = 5 }) => {
+      checkTile(x, y, z);
+      if (id >= npcCount()) throw new Error(`Unknown NPC id ${id}; search_npcs finds valid ids`);
+      const definition = NpcDefinition.forId(id);
+      const npc = NPC.create(id, new Location(x, y, z));
+      npc.getMovementCoordinator().setRadius(wanderRadius);
+      World.getAddNPCQueue().push(npc);
+      // Registration runs on the next tick; wait so observe-style reads see it.
+      await sleepTicks(1);
+      const spawns = readSpawns();
+      const already = spawns.some((entry) => entry.id === id && sameTile(entry, x, y, z));
+      if (!already) {
+        spawns.push({
+          level: z, name: definition.getName(), x, y, id, wanderRadius, source: "agent-mcp",
+        });
+        writeSpawns(spawns);
+      }
+      return { spawned: { id, name: definition.getName(), x, y, z, wanderRadius }, persisted: !already };
+    }
+  );
+
+  tool(
+    "remove_npc",
+    "Remove live NPC(s) on a tile (optionally only this id) and drop their persisted spawns, so they stay gone after a restart. NPCs that come from the cache map rather than the spawn file cannot be removed this way.",
+    {
+      x: z.number().int().describe("World tile x"),
+      y: z.number().int().describe("World tile y"),
+      z: z.number().int().min(0).max(3).default(0),
+      id: z.number().int().min(0).optional().describe("Only remove this NPC id"),
+    },
+    ({ x, y, z = 0, id }) => {
+      checkTile(x, y, z);
+      const matches = World.getNpcsNear(new Location(x, y, z), 0, null)
+        .filter((npc) => id === undefined || npc.getId() === id);
+      if (matches.length === 0) {
+        const present = World.getNpcsNear(new Location(x, y, z), 2, null)
+          .map((npc) => ({ id: npc.getId(), x: npc.getLocation().getX(), y: npc.getLocation().getY() }));
+        throw new Error(
+          `No matching NPC on ${x},${y},${z}; nearby: ${JSON.stringify(present.slice(0, 10)) || "none"}`,
+        );
+      }
+      const spawns = readSpawns();
+      let changed = false;
+      const removed = [];
+      for (const npc of matches) {
+        World.getRemoveNPCQueue().push(npc);
+        removed.push({ id: npc.getId(), x, y, z });
+        for (let i = spawns.length - 1; i >= 0; i--) {
+          const entry = spawns[i];
+          if (entry.id === npc.getId() && sameTile(entry, x, y, z)) {
+            spawns.splice(i, 1);
+            changed = true;
+          }
+        }
+      }
+      if (changed) writeSpawns(spawns);
+      return {
+        removed,
+        persisted: changed,
+        note: changed
+          ? undefined
+          : "No spawn-file entry covered these; they are gone for this session and return on restart.",
+      };
+    }
+  );
+
+  tool(
+    "list_spawned_npcs",
+    "NPCs persisted in npc-spawns.json (the file the ?edit editor overlays). Filter by source: agent-mcp entries are this toolset's, others are hand- or capture-made.",
+    { source: z.string().optional().describe("Only entries with this source tag") },
+    ({ source }) => {
+      const spawns = readSpawns().filter((entry) => source === undefined || entry.source === source);
+      return { count: spawns.length, npcs: spawns };
+    }
+  );
+};

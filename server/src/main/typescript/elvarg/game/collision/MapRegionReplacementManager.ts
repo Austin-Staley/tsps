@@ -83,6 +83,18 @@ export class MapRegionReplacementManager {
     };
   }
 
+  /** Terrain-only replacement: clients keep the cache's objects for the region. */
+  public static replaceMapRegionTerrain(
+    regionId: number,
+    terrainData: Uint8Array,
+    source: string = "runtime"
+  ): ReplaceMapRegionResult {
+    if (!Number.isInteger(regionId) || regionId < 0 || regionId > 0xffff) {
+      throw new Error(`invalid regionId: ${regionId}`);
+    }
+    return this.register(regionId, terrainData, null, source);
+  }
+
   public static getReplacementMapData(
     regionId: number
   ): { terrainData: Uint8Array; objectData: Uint8Array | null } | null {
