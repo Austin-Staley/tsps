@@ -14,6 +14,8 @@ export const POSE_ROWS = 256;
 export const POSE_WIDTH = 255 * 3;
 const IDENTITY_MAT4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
+export type ActorPose = { row: number; matrices: Float32Array };
+
 /** Dynamic-offset stride; 256 matches bindings.ts, grown if the device needs more. */
 export function actorUniformStride(device: GPUDevice): number {
     return Math.max(256, device.limits.minUniformBufferOffsetAlignment || 1);
@@ -26,6 +28,8 @@ export class ActorDataTexture {
     readonly bindGroup: GPUBindGroup;
     private uploaded = new Uint16Array(0);
     private uploadedRows = 0;
+    private readonly uploadedPoseKeys: string[] = [];
+    private readonly uploadedPoseMatrices: Float32Array[] = [];
 
     constructor(device: GPUDevice, layout: GPUBindGroupLayout, label: string) {
         this.texture = device.createTexture({
@@ -49,15 +53,30 @@ export class ActorDataTexture {
         });
     }
 
-    /** Uploads the first `texels` texels of `rows` POSE_WIDTH-texel rows packed in `data`. */
-    updatePoses(device: GPUDevice, data: Float32Array, texels: number, rows: number): void {
-        if (rows <= 0 || texels <= 0) return;
+    hasPose(key: string, row: number, matrices: Float32Array): boolean {
+        return this.uploadedPoseKeys[row] === key && this.uploadedPoseMatrices[row] === matrices;
+    }
+
+    /** Streaming can finish a pose at the same key, so compare its immutable matrix array too. */
+    updatePoses(device: GPUDevice, data: Float32Array, texels: number, poses: ReadonlyMap<string, ActorPose>): void {
+        let first = POSE_ROWS, last = -1;
+        for (const [key, { row, matrices }] of poses) {
+            if (this.hasPose(key, row, matrices)) continue;
+            first = Math.min(first, row);
+            last = Math.max(last, row);
+        }
+        if (last < first || texels <= 0) return;
+        const rows = last - first + 1;
         device.queue.writeTexture(
-            { texture: this.poseTexture },
-            data,
+            { texture: this.poseTexture, origin: { x: 0, y: first } },
+            data.subarray(first * POSE_WIDTH * 4, (last + 1) * POSE_WIDTH * 4),
             { bytesPerRow: POSE_WIDTH * 16, rowsPerImage: rows },
             { width: texels, height: rows, depthOrArrayLayers: 1 },
         );
+        for (const [key, { row, matrices }] of poses) {
+            this.uploadedPoseKeys[row] = key;
+            this.uploadedPoseMatrices[row] = matrices;
+        }
     }
 
     /** Uploads `count` actors (8 uint16 each) from the start of `data`. */
@@ -87,6 +106,8 @@ export class ActorDataTexture {
         this.texture.destroy();
         this.poseTexture.destroy();
         this.uploaded = new Uint16Array(0);
+        this.uploadedPoseKeys.length = 0;
+        this.uploadedPoseMatrices.length = 0;
     }
 }
 
@@ -137,6 +158,8 @@ export class MapActorUniforms {
     private bindGroup: GPUBindGroup | undefined;
     private scratch: Float32Array;
     private view: DataView;
+    private uploaded = new Uint32Array(0);
+    private uploadedCount = -1;
     /** View-space deck placement, shared by every entry on this map (identity otherwise). */
     private worldEntityTransform: Float32Array = IDENTITY_MAT4;
 
@@ -210,6 +233,14 @@ export class MapActorUniforms {
     flush(): void {
         if (!this.buffer) return;
         if (this.entryCount > 0) {
+            const words = new Uint32Array(this.scratch.buffer, 0, this.entryCount * this.stride / 4);
+            if (this.uploadedCount === this.entryCount) {
+                let equal = true;
+                for (let i = 0; i < words.length; i++) {
+                    if (words[i] !== this.uploaded[i]) { equal = false; break; }
+                }
+                if (equal) return;
+            }
             this.device.queue.writeBuffer(
                 this.buffer,
                 0,
@@ -217,6 +248,9 @@ export class MapActorUniforms {
                 0,
                 this.entryCount * this.stride,
             );
+            if (this.uploaded.length < words.length) this.uploaded = new Uint32Array(words.length);
+            this.uploaded.set(words);
+            this.uploadedCount = this.entryCount;
         }
     }
 
@@ -233,10 +267,13 @@ export class MapActorUniforms {
         this.buffer?.destroy();
         this.buffer = undefined;
         this.bindGroup = undefined;
+        this.uploaded = new Uint32Array(0);
+        this.uploadedCount = -1;
     }
 
     private grow(capacity: number): void {
         this.capacity = capacity;
+        this.uploadedCount = -1;
         const scratch = new Float32Array(capacity * (this.stride / 4));
         scratch.set(this.scratch);
         this.scratch = scratch;

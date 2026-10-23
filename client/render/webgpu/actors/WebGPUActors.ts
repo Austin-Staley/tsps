@@ -31,6 +31,7 @@ import {
     POSE_WIDTH,
     actorUniformStride,
     type GpuGeometry,
+    type ActorPose,
 } from "./actorGpu";
 import { POSE_FLOATS_PER_LABEL } from "../../player/LabelPose";
 import {
@@ -124,7 +125,7 @@ export class WebGPUActors {
     >();
     private playerPipelines = new Set<GPURenderPipeline>();
     /** This frame's GPU player poses: pose key -> pose texture row, packed into poseUpload. */
-    private readonly poseRows = new Map<string, number>();
+    private readonly poseRows = new Map<string, ActorPose>();
     private readonly poseUpload = new Float32Array(POSE_ROWS * POSE_WIDTH * 4);
     private poseTexels = 0;
 
@@ -455,7 +456,7 @@ export class WebGPUActors {
         }
         writer.data.fill(0, writer.count * 8, paddedU16);
         this.actorData?.update(this.renderer.device, writer.data, writer.count);
-        this.actorData?.updatePoses(this.renderer.device, this.poseUpload, this.poseTexels, this.poseRows.size);
+        this.actorData?.updatePoses(this.renderer.device, this.poseUpload, this.poseTexels, this.poseRows);
     }
 
     drawOpaque(pass: GPURenderPassEncoder): void {
@@ -837,12 +838,14 @@ export class WebGPUActors {
     /** The frame's pose texture row for a GPU pose, shared by players in the same pose; -1 when full. */
     private poseRowFor(poseKey: string, matrices: Float32Array): number {
         const existing = this.poseRows.get(poseKey);
-        if (existing !== undefined) return existing;
+        if (existing !== undefined) return existing.row;
         const row = this.poseRows.size;
         if (row >= POSE_ROWS) return -1;
-        this.poseUpload.set(matrices, row * POSE_WIDTH * 4);
+        if (!this.actorData?.hasPose(poseKey, row, matrices)) {
+            this.poseUpload.set(matrices, row * POSE_WIDTH * 4);
+        }
         this.poseTexels = Math.max(this.poseTexels, (matrices.length / POSE_FLOATS_PER_LABEL) * 3);
-        this.poseRows.set(poseKey, row);
+        this.poseRows.set(poseKey, { row, matrices });
         return row;
     }
 
