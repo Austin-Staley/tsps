@@ -703,6 +703,13 @@ export class Player extends Mobile {
         return this.creationDate;
     }
 
+    /** Restore account identity without accepting corrupt or future save dates. */
+    public setCreationDate(timestamp: number): void {
+        if (Number.isSafeInteger(timestamp) && timestamp > 0 && timestamp <= Date.now()) {
+            this.creationDate = new Date(timestamp);
+        }
+    }
+
     public getAudioSettings(): Readonly<Record<number, number>> {
         return this.audioSettings;
     }

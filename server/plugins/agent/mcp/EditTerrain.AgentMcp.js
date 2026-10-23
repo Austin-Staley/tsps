@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const geometry = require("./EditGeometry.AgentMcp");
 
 // Ground-tile tools for the agent MCP server: inspect and repaint terrain overlays and
 // underlays, raise/lower/flatten height, and clear tiles back to base. Changes apply per
@@ -473,4 +474,27 @@ module.exports = function registerEditTerrainTools(ctx) {
       }),
     })
   );
+
+  // Templates read and write terrain through these, so a pasted floor goes through the
+  // same patching, budget check and persistence as paint_ground.
+  const tileAt = (x, y, z) => decodeTile(
+    toU8(baseBytes(regionIdFor(x, y)).terrainData), z, x & 0x3f, y & 0x3f, wideTerrain(),
+  );
+  /**
+   * Height edits that level a building's footprint and blend its edge (levelPlan), read from
+   * the live terrain on plane 0. Callers apply them with their own edits, before placing.
+   */
+  const levelEdits = (x0, y0, x1, y1, options = {}) => {
+    // Tiles on or next to an indoor floor (flag 4) belong to a building already standing:
+    // its walls sit on those corners, so the blend leaves them be.
+    const indoor = (x, y) => ((tileAt(x, y, 0).flag ?? 0) & 4) !== 0;
+    const keep = (x, y) => {
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (indoor(x + dx, y + dy)) return true;
+      return false;
+    };
+    const plan = geometry.levelPlan((x, y) => tileAt(x, y, 0).height, x0, y0, x1, y1, { keep, ...options });
+    const edits = plan.tiles.map((tile) => ({ kind: "height", tileX: tile.x, tileY: tile.y, plane: 0, locId: tile.height }));
+    return { edits, level: plan.level, spread: plan.spread, moved: plan.moved, unknown: plan.unknown };
+  };
+  return { applyEdits, tileAt, levelEdits };
 };

@@ -598,6 +598,12 @@ export interface PluginItemOnPlayerEvent {
 export interface PluginItemOnNpcEvent {
   player: any;
   target: any;
+  /**
+   * The definition this player sees (the transform-resolved form, as NPC options get).
+   * Match names on this: `target.getDefinition()` is the spawned parent, nameless for many
+   * revision 241 NPCs such as the second Lumbridge banker.
+   */
+  definition?: any;
   /** The target NPC's content id (its varbit-resolved cache variant), for quest id sets. */
   npcId: number;
   targetIndex: number;
@@ -860,6 +866,8 @@ export interface PluginApi {
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** Conditional interaction ownership before normal NPC handlers. Leave unclaimed events untouched. */
+  onBeforeNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
   /** World entity (static ship/boat) options, by op number (1-6). */
   onWorldEntityInteraction(handler: (event: PluginWorldEntityInteractionEvent) => void): void;
   /** Set a non-combat NPC option's approach range before movement starts. */
