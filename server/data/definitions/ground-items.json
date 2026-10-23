@@ -899,7 +899,7 @@
   {"id":697,"location":{"x":1377,"y":3723,"z":0},"amt":1,"respawn":100,"description":"Kebos Lowlands"},
   {"id":697,"location":{"x":1392,"y":3717,"z":0},"amt":1,"respawn":100,"description":"Kebos Lowlands"},
   {"id":697,"location":{"x":1376,"y":3714,"z":0},"amt":1,"respawn":100,"description":"Kebos Lowlands"},
-  {"id":1467,"location":{"x":2784,"y":3289,"z":0},"amt":1,"respawn":0,"description":"UNDIFINED"},
+  {"id":1467,"location":{"x":2784,"y":3289,"z":0},"amt":1,"respawn":1,"description":"UNDIFINED"},
   {"id":11940,"location":{"x":2998,"y":3705,"z":0},"amt":1,"respawn":55,"description":"Wilderness"},
   {"id":11940,"location":{"x":2988,"y":3683,"z":0},"amt":1,"respawn":55,"description":"Wilderness"},
   {"id":22426,"location":{"x":3732,"y":3361,"z":0},"amt":1,"respawn":100,"description":"Slepe"},

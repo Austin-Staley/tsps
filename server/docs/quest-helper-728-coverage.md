@@ -218,15 +218,15 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | --- | --- | --- | --- | --- |
 | Animal Magnetism | `AnimalMagnetism` | Pending | Pending | Pending |
 | Another Slice of H.A.M. | `AnotherSliceOfHAM` | Pending | Pending | Pending |
-| The Ascent of Arceuus | `AscentOfArceuus` | Sins scope, memoir, ordered trail and Karuulm route reviewed by root; fresh peer pending | 8 quest and 9 shared focused tests pass | Prior opening incomplete; edited route pending |
+| The Ascent of Arceuus | `AscentOfArceuus` | Sins scope, memoir, ordered trail and Karuulm route reviewed by root; fresh peer pending | 8 quest and 9 shared focused tests pass | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | At First Light | `AtFirstLight` | Mandatory route, hammer tools, report recovery, Fox cleanup and leaf guards reviewed; canonical ground spawns added | 9 focused tests pass; spawn JSON/uniqueness/cache placements checked | Stage 12, rewards once and relog observed; a separate south-side hammer pickup/relog contract was accepted, while the latest peer review found three interruption/recovery defects still needing source repair |
 | Between a Rock... | `BetweenARock` | Pending | Pending | Pending |
-| Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Pending |
+| Big Chompy Bird Hunting | `BigChompyBirdHunting` | Hunting, recovery, condition scope and combat/timer fixes reviewed | 14 focused tests pass | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Biohazard | `Biohazard` | Recovery and canonical receipts corrected; premature Guidor advancement returned to owner | Scoped source evidence; correction pending | Incomplete at stage 1; logged out |
-| Bone Voyage | `BoneVoyage` | Pending | Pending | Pending |
+| Bone Voyage | `BoneVoyage` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
 | Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |
-| Clock Tower | `ClockTower` | Cog handling, shared lever, trough scope, surface exit and completion wire reviewed | 13 focused tests pass | Incomplete at door crossing after red-cog pickup; edited route pending |
+| Clock Tower | `ClockTower` | Cog handling, shared lever, trough scope, surface exit and completion wire reviewed | 13 focused tests pass | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Cold War | `ColdWar` | Pending | Pending | Pending |
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
@@ -241,7 +241,7 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | The Dig Site | `DigSite` | Pending | Pending | Pending |
 | Dragon Slayer II | `DragonSlayerII` | Pending | Pending | Pending |
 | Dream Mentor | `DreamMentor` | Pending | Pending | Pending |
-| Druidic Ritual | `DruidicRitual` | Pending | Pending | Pending |
+| Druidic Ritual | `DruidicRitual` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Dwarf Cannon | `DwarfCannon` | Pending | Pending | Pending |
 | Eadgar's Ruse | `EadgarsRuse` | Pending | Pending | Pending |
 | Eagles' Peak | `EaglesPeak` | Pending | Pending | Pending |
@@ -255,15 +255,15 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Fairytale II - Cure a Queen | `FairytaleIICureAQueen` | Pending | Pending | Pending |
 | Family Crest | `FamilyCrest` | Pending | Pending | Pending |
 | The Feud | `TheFeud` | Pending | Pending | Pending |
-| Fight Arena | `FightArena` | Pending | Pending | Pending |
-| Fishing Contest | `FishingContest` | Pass/trophy recovery, Morris pass ownership, scoped pass gates and post-quest dialogue | 12 scoped tests pass; current-hash peer review clean | Natural stage 1–5 completion across epoch 3–5; QP and Fishing XP awarded once, relog persisted, post-quest tunnel accessible. Lost-item recovery, full-bag cases, interrupted dialogue and visual Quest Helper remain unchecked |
+| Fight Arena | `FightArena` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
+| Fishing Contest | `FishingContest` | Pass/trophy recovery, Morris pass ownership, scoped pass gates and post-quest dialogue | 12 scoped tests pass; current-hash peer review clean | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Forgettable Tale... | `ForgettableTale` | Pending | Pending | Pending |
 | The Forsaken Tower | `ForsakenTower` | Pending | Pending | Pending |
 | The Fremennik Isles | `TheFremennikIsles` | Pending | Pending | Pending |
 | The Fremennik Trials | `FremennikTrials` | Pending | Pending | Pending |
 | The Garden of Death | `GardenOfDeath` | Pending | Pending | Pending |
 | Garden of Tranquillity | `GardenOfTranquillity` | Pending | Pending | Pending |
-| Gertrude's Cat | `GertrudesCat` | Pending | Pending | Pending |
+| Gertrude's Cat | `GertrudesCat` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Getting Ahead | `GettingAhead` | Lost-head recrafting and interrupted flour-pour recovery reviewed | 9 focused tests pass, including registered sink filling | Pending |
 | Ghosts Ahoy | `GhostsAhoy` | Pending | Pending | Pending |
 | The Grand Tree | `GrandTree` | Pending | Pending | Pending |
@@ -278,7 +278,7 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Icthlarin's Little Helper | `IcthlarinsLittleHelper` | Pending | Pending | Pending |
 | In Aid of the Myreque | `InAidOfTheMyreque` | Pending | Pending | Pending |
 | In Search of the Myreque | `InSearchOfTheMyreque` | Pending | Pending | Pending |
-| Jungle Potion | `JunglePotion` | Bounded natural stage 9→12 route, including lost-herb re-search; no full-quest completion claim | QP, quest Herb XP and cleaning XP, repeat/relog and save snapshot verified | Epoch 8 continuation accepted; final offline. Full route/recovery and Quest Helper overlay remain unchecked |
+| Jungle Potion | `JunglePotion` | Bounded natural stage 9→12 route, including lost-herb re-search; no full-quest completion claim | QP, quest Herb XP and cleaning XP, repeat/relog and save snapshot verified | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | King's Ransom | `KingsRansom` | Pending | Pending | Pending |
 | A Kingdom Divided | `AKingdomDivided` | Pending | Pending | Pending |
 | Legends' Quest | `LegendsQuest` | Pending | Pending | Pending |
@@ -287,9 +287,9 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Lunar Diplomacy | `LunarDiplomacy` | Pending | Pending | Pending |
 | Making Friends with My Arm | `MakingFriendsWithMyArm` | Pending | Pending | Pending |
 | Making History | `MakingHistory` | Pending | Pending | Pending |
-| Meat and Greet | `MeatAndGreet` | Pending | Pending | Pending |
+| Meat and Greet | `MeatAndGreet` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
-| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Natural completion, full-bag floor-drop timing, interrupted/relogged completion and exact once-only rewards were accepted in the offline native run; Quest Helper overlay and uncaptured dialogue cadence remain unchecked |
+| Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Monkey Madness I | `MonkeyMadnessI` | Pending | Pending | Pending |
 | Monkey Madness II | `MonkeyMadnessII` | Pending | Pending | Pending |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
@@ -300,10 +300,10 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Nature Spirit | `NatureSpirit` | Pending | Pending | Pending |
 | A Night at the Theatre | `ANightAtTheTheatre` | Pending | Pending | Pending |
 | Observatory Quest | `ObservatoryQuest` | Pending | Pending | Pending |
-| Olaf's Quest | `OlafsQuest` | Pending | Pending | Pending |
+| Olaf's Quest | `OlafsQuest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | One Small Favour | `OneSmallFavour` | Pending | Pending | Pending |
 | Plague City | `PlagueCity` | Pending | Pending | Pending |
-| A Porcine of Interest | `PorcineOfInterest` | Pending | Pending | Pending |
+| A Porcine of Interest | `PorcineOfInterest` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Priest in Peril | `PriestInPeril` | Pending | Pending | Pending |
 | The Queen of Thieves | `QueenOfThieves` | Pending | Pending | Pending |
 | Rag and Bone Man I | `RagAndBoneManI` | Pending | Pending | Pending |
@@ -317,10 +317,10 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | A Ruff Situation | `ARuffSituation` | Pending | Pending | Pending |
 | Rum Deal | `RumDeal` | Pending | Pending | Pending |
 | Scorpion Catcher | `ScorpionCatcher` | Pending | Pending | Pending |
-| Sea Slug | `SeaSlug` | Pending | Pending | Pending |
+| Sea Slug | `SeaSlug` | Stage-aware wall menu, crane reach, Holgart and canonical torch/sticks recovery reviewed | 15 focused cache/handler checks pass | Pending |
 | Sheep Herder | `SheepHerder` | Pending | Pending | Pending |
 | Shilo Village | `ShiloVillage` | Pending | Pending | Pending |
-| Sleeping Giants | `SleepingGiants` | Pending | Pending | Pending |
+| Sleeping Giants | `SleepingGiants` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | The Slug Menace | `SlugMenace` | Pending | Pending | Pending |
 | Song of the Elves | `SongOfTheElves` | Pending | Pending | Pending |
 | A Soul's Bane | `SoulsBane` | Pending | Pending | Pending |
@@ -332,7 +332,7 @@ collision analysis only, not by a live interaction; natural completion stays pen
 | Temple of Ikov | `TempleOfIkov` | Pending | Pending | Pending |
 | The Tourist Trap | `TouristTrap` | Pending | Pending | Pending |
 | Tower of Life | `TowerOfLife` | Pressure plug rule, pipe piece model/position mirroring, renewable costume pieces, the basement wire step 17 and the mind-meter threshold repaired against the cache and the Quest Helper solver | 22 focused source-contract tests pass | No native playthrough; no completion claimed |
-| Tree Gnome Village | `TreeGnomeVillage` | Pending | Pending | Pending |
+| Tree Gnome Village | `TreeGnomeVillage` | Tracker/ballista, orb recovery, transformed NPC and post-quest amulet routes reviewed | 7 focused checks pass, including full-bag repeat receipt regression | Pending |
 | Tribal Totem | `TribalTotem` | Pending | Pending | Pending |
 | Troll Romance | `TrollRomance` | Pending | Pending | Pending |
 | Troll Stronghold | `TrollStronghold` | Pending | Pending | Pending |
