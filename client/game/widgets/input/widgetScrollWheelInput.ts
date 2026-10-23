@@ -26,12 +26,6 @@ export function processWidgetScrollWheelInput(
             const wUid = (w.uid ?? 0) | 0;
             if (widgetManager.isEffectivelyHidden(wUid)) continue;
 
-            // noScrollThrough blocks scroll from reaching widgets behind
-            if (w.noScrollThrough && w.isIf3 !== false) {
-                if (pinchDelta !== 0) input.clearWheel();
-                break;
-            }
-
             // Camera zoom blocking is based on actual visible widget surfaces.
             // Listener-only widgets (for example buff_bar transmit children) must not block.
             if (!blockedByVisibleWidget && getVisibleWidgetSurfaceReason(w)) {
@@ -41,13 +35,29 @@ export function processWidgetScrollWheelInput(
             const hasScrollHandler =
                 w.eventHandlers?.onScroll ||
                 (Array.isArray(w.onScroll) && w.onScroll.length > 0);
-            if (!hasScrollHandler) continue;
+            if (!hasScrollHandler) {
+                // A blocker still owns the wheel when its content has no listener (or is at
+                // a boundary). Otherwise the unconsumed delta reaches camera zoom below it.
+                if (w.noScrollThrough && w.isIf3 !== false) {
+                    blockedByVisibleWidget = true;
+                    break;
+                }
+                continue;
+            }
 
             const scriptId = w.eventHandlers?.onScroll?.scriptId ?? w.onScroll?.[0];
-            const pinchZoom = scriptId === SCROLL_WHEEL_ZOOM_SCRIPT &&
+            const isViewportZoom = scriptId === SCROLL_WHEEL_ZOOM_SCRIPT;
+            if (isViewportZoom && blockedByVisibleWidget) break;
+
+            const pinchZoom = isViewportZoom &&
                 (pinchDelta !== 0 || input.getCameraZoomDelta() !== wheelDelta);
-            if (!pinchZoom && wheelDelta === 0) continue;
-            if (pinchZoom && blockedByVisibleWidget) break;
+            if (!pinchZoom && wheelDelta === 0) {
+                if (w.noScrollThrough && w.isIf3 !== false) {
+                    blockedByVisibleWidget = true;
+                    break;
+                }
+                continue;
+            }
             const wheelStep = (pinchZoom ? input.getCameraZoomDelta() : wheelDelta) > 0 ? 1 : -1;
             const scrollCtx: Partial<ScriptEvent> = {
                 mouseX: mx - (w._absX ?? w.x ?? 0),
@@ -86,6 +96,10 @@ export function processWidgetScrollWheelInput(
             }
 
             consumedWheel = true;
+            // Preserve the original delta only for a gesture that reached the viewport.
+            // HD applies its follow-camera feel after UI dispatch; settings/list listeners
+            // must never contribute to that separate camera path.
+            if (isViewportZoom) input.viewportWheelDeltaY = input.getCameraZoomDelta();
             break;
         }
 

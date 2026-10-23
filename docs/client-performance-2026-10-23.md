@@ -306,3 +306,13 @@ and back cancelled two obsolete builds and returned to 3104,3508 with scene read
 zero pending/loading jobs and zero GPU errors. Final-build WebGPU world-map pixels
 and icons also matched all three reference runs. Temporary benchmark servers and
 browsers were stopped; the user's 3102 stack stays running.
+
+### Main sync after the benchmark
+
+Main advanced to `14f83a1b4` (PR #869, contextual camera controls) after the
+`f3ab3c172` comparison above was captured. The controls were merged while preserving
+continuous fractional pinch, foreground widget wheel ownership and the camera
+performance changes. Focused validation passed all 11 contextual controls, native
+Settings wheel, first-person reticle, viewport, pinch and camera test files, plus
+client typecheck. The table remains the captured `f3ab3c172` comparison; it was not
+rebenchmarked after merging the contextual controls.

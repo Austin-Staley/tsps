@@ -59,6 +59,7 @@ small.move(1);
 assert.equal(small.input.wheelDeltaY, 0, "widgets still wait for a complete pinch notch");
 small.scroll();
 assert.equal(small.zoom, -1, "the camera must respond before 20 px of finger travel");
+assert.equal(small.input.viewportWheelDeltaY, -5, "HD receives the continuous accepted delta before gesture clearing");
 assert.equal(small.vm.scriptCallbackListeners.size, 1, "the temporary scaler leaves the plugin listener intact");
 small.input.onFrameEnd();
 small.move(1);

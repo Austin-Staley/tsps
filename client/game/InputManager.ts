@@ -225,6 +225,8 @@ export class InputManager {
 
     /** Accumulated wheel delta for current frame */
     wheelDeltaY: number = 0;
+    /** Continuous wheel/pinch delta accepted by viewport zoom, after foreground UI ownership. */
+    viewportWheelDeltaY: number = 0;
     wheelCamDeltaX: number = 0;
     wheelCamDeltaY: number = 0;
 
@@ -902,6 +904,13 @@ export class InputManager {
         // mouse wheel input resets idle timer (prevents AFK logout while scrolling).
         this.idleTime = 0;
         this.lastInputTimeMs = this.nowMs();
+        // Keyboard interface selection can park mouseX/Y on a focused control between
+        // wheel events. A stationary physical cursor must still scroll the list beneath it.
+        if (this.element && !this.isPointerLock() && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+            const [x, y] = getMousePos(this.element, event);
+            this.mouseX = x;
+            this.mouseY = y;
+        }
         if (this.mouseWheelDown) {
             this.wheelCamDeltaX += event.deltaX;
             this.wheelCamDeltaY += event.deltaY;
@@ -1195,6 +1204,7 @@ export class InputManager {
      * ```
      */
     onFrameStart() {
+        this.viewportWheelDeltaY = 0;
         // Transfer click state for this frame
         this.clickMode3 = this.clickMode1;
         this.saveClickX = this.clickX;
@@ -1242,6 +1252,7 @@ export class InputManager {
         this.deltaMouseX = 0;
         this.deltaMouseY = 0;
         this.clearWheel();
+        this.viewportWheelDeltaY = 0;
         this.wheelCamDeltaX = 0;
         this.wheelCamDeltaY = 0;
         this._cameraDragDeltaX = 0;
