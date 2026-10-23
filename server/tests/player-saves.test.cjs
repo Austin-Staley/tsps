@@ -363,6 +363,22 @@ const persistenceBackends = [
 ];
 
 for (const [name, backend] of persistenceBackends) {
+  test(`${name}: account creation time survives committed save and login load`, async () => {
+    const original = player(`Account Date ${name}`);
+    const created = Date.now() - 36_000_001;
+    original.getCreationDate().setTime(created);
+    backend.save(original, "logout");
+    await backend.flush();
+    const loggedIn = player(original.getUsername());
+    backend.load(original.getUsername()).applyToPlayer(loggedIn);
+    assert.equal(loggedIn.getCreationDate().getTime(), created);
+    backend.save(loggedIn, "logout");
+    await backend.flush();
+    const reloaded = player(original.getUsername());
+    backend.load(original.getUsername()).applyToPlayer(reloaded);
+    assert.equal(reloaded.getCreationDate().getTime(), created);
+  });
+
   test(`${name}: non-default combat styles survive a committed save and login load`, async () => {
     for (const [index, fightType] of [FightType.UNARMED_BLOCK, FightType.UNARMED_PUNCH].entries()) {
       const original = player(`Style ${name} ${index}`);

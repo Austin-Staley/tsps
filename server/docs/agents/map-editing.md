@@ -89,6 +89,123 @@ material is `{ "name": { "id": <cache id>, "about": "..." } }`; a preset is a li
 that is how `tiered_city` builds four rings. Keep material ids verified (`search_objects` /
 `yarn dump:loc`); never hard-code ids in tool code.
 
+### Templates: copying real buildings
+
+The game's own buildings already get corners, door frames, roofs and floors right. Copy one
+and paste it anywhere instead of designing from scratch:
+
+| Tool | Purpose |
+| --- | --- |
+| `find_buildings` | Roofed buildings in an area (up to 256×256), each with a capture rectangle |
+| `capture_template` | Save every loc (all planes) and the terrain in a rectangle as a template |
+| `list_templates` | Templates in `plugins/agent/data/templates/` |
+| `paste_template` | Place one at a tile, rotated 0/90/180/270; `dryRun` reports first |
+
+```jsonc
+find_buildings   { "x1": 3180, "y1": 3380, "x2": 3290, "y2": 3480 }   // Varrock
+capture_template { "name": "varrock-house-west", "x1": 3190, "y1": 3400, "x2": 3200, "y2": 3408 }
+paste_template   { "name": "varrock-house-west", "x": 3416, "y": 2956, "rotation": 180 }
+```
+
+- Capture with the one-tile margin `find_buildings` suggests: walls often sit on the tile
+  just outside the roof. A building that shares a wall (with a neighbour, or a city wall)
+  loses it in a tight capture and gains that neighbour's piece in a wide one; check the
+  paste with a screenshot.
+- Rotation turns every loc's position, footprint and facing, and floor overlays with them.
+- Interactive locs (doors, ladders, stairs, furniture with options) are skipped by default
+  (`interactive: "keep"` keeps them): their handlers belong to the place they came from.
+- Terrain: `floors` (default) copies floor overlays and indoor/roof tile flags; `all` also
+  underlays and heights, shifted so the template's corner sits at `baseHeight`; `none` skips
+  it. The blocked and bridge flags are never copied.
+- Templates are one file each, one loc per line. Commit the good ones: they are the catalog.
+
+### Styles and walls in a style
+
+A style is the set of wall pieces one real building uses, by role, so new structures can be
+drawn in its look:
+
+| Tool | Purpose |
+| --- | --- |
+| `capture_style` | Read a building's pieces into `plugins/agent/data/edit-styles.json`: wall, corner, post, diagonal, door, gate, floor (most common wins; `roles` overrides) |
+| `list_styles` | Captured styles, with the variants (windows, decorated walls) left to assign by hand |
+| `build_wall` | A wall in a style along a path of tile corners: city walls, palisades, enclosures |
+
+```jsonc
+// A Falador-stone fort: closed square, a gateway on the south side, 3x3 towers every 6 tiles.
+build_wall { "style": "falador-white", "closed": true, "facing": "out",
+             "points": [[3400,2992],[3412,2992],[3412,3004],[3400,3004]],
+             "gates": [[3406,2992]], "towerEvery": 6, "towerSize": 3 }
+```
+
+- Points are tile **corners**: (x, y) is the south-west corner of tile x, y. Straight runs
+  become wall pieces on tile edges, 45-degree runs diagonal pieces.
+- Many walls have a finished face on one side only. `facing` (`out`/`in`) picks it for a
+  closed wall, `side` (`left`/`right` of the walking direction) for an open one. A wall that
+  renders black in a screenshot is showing its back: flip it.
+- `gates` are corners whose next edge stays open; the style's gate or door hangs there unless
+  `gateDoors: false`.
+
+Shipped styles: `falador-white`, `varrock-city-wall`, `varrock-house` (walls, door, slate roof),
+`lumbridge-castle`, `emir-sandstone` (low wall), `lumbridge-fence`.
+
+### Generators
+
+New structures in a captured style, laid out by rules read off real ones. Decoration ids come
+from `plugins/agent/data/edit-sets.json` (hand-maintained, every id checked).
+
+| Tool | Builds |
+| --- | --- |
+| `build_house` | Walls on the ring round the inside, a door, window frames, floors and a hip roof; 1-2 storeys |
+| `build_graveyard` | A fenced or walled yard with a gate, a path up the middle, rows of gravestones, a tombstone, dead trees |
+| `build_farm` | A fenced field of crops (wheat, cabbage, potato) in rows with walkways, a scarecrow and hay |
+
+```jsonc
+build_house     { "style": "varrock-house", "x": 3440, "y": 2978, "width": 7, "height": 6, "door": "south" }
+build_graveyard { "style": "lumbridge-fence", "x": 3440, "y": 2988, "width": 9, "height": 8 }
+build_farm      { "style": "lumbridge-fence", "x": 3440, "y": 2999, "width": 9, "height": 6, "crop": "wheat" }
+```
+
+- `build_house` needs a style with `roof` (capture it round a real roofed building); its (x, y)
+  is the footprint's low corner, walls included. The roof is Varrock's hip roof rule: eaves,
+  then a ring of slopes per plane, flat tops where it runs out. Floors get the indoor flag, so
+  the roof hides when a player walks in. The door is the style's own and opens.
+  Storeys and roof rings get their plane gaps from the wall's and roof's sizes, so storeys stand
+  on the walls and the roof sits on them; outside corners get the style's shape-1 corner piece.
+- **Furnished, with a ladder that climbs.** `furnish` (default on) keeps a corridor from the door
+  straight across, puts a ladder at its far end (two storeys: `ladderUp` below, `ladderDown`
+  above on the same tile; the generic climb handler pairs them), and sets `house.ground`,
+  `house.upstairs` or `house.single` from `edit-sets.json` along the walls (turned away from
+  them, footprint turning too), in corners and in the middle. What does not fit is reported in
+  `furnitureSkipped`.
+- **Neighbours.** Levelling never blends into tiles on or next to an indoor floor (flag 4), so a
+  house built beside another does not tilt its walls.
+- The graveyard and farm take (x, y) as the low corner *inside* the fence.
+- **Uneven ground.** A wall stands on the ground height at its two end corners, so on small
+  hills a building's walls come out at different heights. `build_house` and `paste_template`
+  level the footprint first by default (`flatten`): the median height over the footprint and
+  the corners its north and east walls stand on, with two rings round it blended back into the
+  ground. The result reports the level, the tiles changed and the spread; a spread over 16 adds
+  a "steep ground" note (that is a terrace cut into a hillside). Graveyards and farms leave the
+  ground alone unless `flatten: true`: fences follow the land in the game too.
+
+### Loc sizes
+
+`plugins/agent/data/loc-sizes.json` holds every loc's model size per shape: width, depth,
+height and top (how high it reaches), in model units, 128 to a tile, after the loc's resize.
+It is generated from the cache; regenerate it after a cache update:
+
+```bash
+cd client && npx tsx scripts/cache/dump-loc-sizes.ts
+```
+
+| Tool | Purpose |
+| --- | --- |
+| `find_similar_locs` | Locs of the same shape within `tolerance` of a loc's size in every dimension, closest first: stand-ins that keep a building's proportions |
+| `describe_object` | Now also reports `sizes` per shape |
+| `capture_style` | Returns `wallSize` and `sizeWarnings` when a corner, post, diagonal, door or gate is far taller or shorter than the wall |
+
+Size narrows the candidates; it says nothing about colour or material. Screenshot the pick.
+
 ### Clearing a site
 
 `clear_area` removes what the spawn file placed and leaves the cache map's own scenery
@@ -198,21 +315,13 @@ state on open and on **Refresh map**:
 So an agent build appears in the editor without a login, and the same edits appear in-game to
 logged-in players on scene rebuild (walk, teleport, relog).
 
-## What the cache will and will not give you
+## What looks right
 
-Verified by building with them in-game; save yourself the round trip:
-
-| Object | Verdict |
-| --- | --- |
-| `Castle wall` (16519), `Battlement` (2832) | Looks like proper grey crenellated stone |
-| `Pillar` (6283, 3×3), `Column` (5228) | Render as huge dark monoliths — avoid at scale |
-| `Marble wall` (5907) | Player-owned-house object; renders as brown wood outside |
-| `Tower` (1939) | Brown ruined wooden cone, not a stone tower |
-| `Fountain` (153) | Dark spiky shape |
-| `White Tree patch` (9210) | A black spiky bush, not a tree |
-
-Screenshot before committing to a look: the `vision_screenshot` tool captures what a headless
-client sees, which is far cheaper than rebuilding a city twice.
+Read [map-building-notes.md](map-building-notes.md) before building anything bigger than a test
+piece: which objects render well and which don't, how to place walls so they join, how terrain
+height reads in game, screenshot workflow, sites and their budgets. Before you report a build
+done, add anything it taught you to that file: a build isn't finished until its findings are
+written down.
 
 ## A worked build
 

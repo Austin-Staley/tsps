@@ -134,7 +134,13 @@ export class ItemOnGroundManager {
 
             // Modify the existing item.
             if (item_.getItem().getId() === item.getItem().getId()) {
+                if (JSON.stringify(item_.getItem().getMeta() ?? null) !== JSON.stringify(item.getItem().getMeta() ?? null)) {
+                    continue;
+                }
                 let oldAmount = item_.getItem().getAmount();
+                if (oldAmount + item.getItem().getAmount() > MAX_STACK_AMOUNT) {
+                    continue;
+                }
                 item_.getItem().incrementAmountBy(item.getItem().getAmount());
                 item_.setOldAmount(oldAmount);
                 item_.setTick(0);

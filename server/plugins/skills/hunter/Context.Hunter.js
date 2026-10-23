@@ -207,7 +207,7 @@ function removeObject(object) {
 }
 
 function ownsClue(player, tier) {
-  const request = {player, tier, allowed: null};
+  const request = { player, tier, allowed: null };
   H.api?.emitCustomEvent?.("treasure-trails:can-receive", request);
   if (typeof request.allowed === "boolean") return !request.allowed;
   const names = [`Clue scroll (${tier.toLowerCase()})`, `Clue bottle (${tier.toLowerCase()})`,
