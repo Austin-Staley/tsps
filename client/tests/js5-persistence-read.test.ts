@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { openCache } from "../rs/cache/CacheFiles";
 import { Js5Persistence } from "../rs/cache/js5/Js5Persistence";
 import { Sector } from "../rs/cache/store/Sector";
 import { SparseDat2 } from "../rs/cache/store/SparseDat2";
@@ -25,6 +26,114 @@ const cache = {
     },
 };
 (globalThis as any).caches = { open: async () => cache };
+
+async function idbFallbackKeepsRangeBodiesLazy(): Promise<void> {
+    const globals = globalThis as any;
+    const original = { caches: globals.caches, indexedDB: globals.indexedDB,
+        IDBKeyRange: globals.IDBKeyRange, Response: globals.Response };
+    const records = new Map<string, any>();
+    const cacheName = "http-range-cache";
+    const prefix = "/caches/dat2/range/";
+    let denyWrites = false;
+    const request = (read: () => unknown, complete?: () => void): any => {
+        const result: any = {};
+        queueMicrotask(() => {
+            result.result = read();
+            result.onsuccess?.({ target: result });
+            complete?.();
+        });
+        return result;
+    };
+    // IndexedDB structured-clones values. Blob payloads stay out of JS ArrayBuffers while
+    // the cursor enumerates range headers; legacy records still clone their ArrayBuffers.
+    const db = { transaction: () => {
+        const tx: any = {};
+        tx.objectStore = () => ({
+            get: (key: string) => request(() => structuredClone(records.get(key))),
+            put: (value: any) => {
+                if (denyWrites) throw new Error("storage full");
+                return request(() => records.set(value.key, structuredClone(value)), () => tx.oncomplete?.());
+            },
+            index: () => ({ openCursor: (name: string) => {
+                const values = [...records.values()].filter(value => value.cacheName === name);
+                const cursorRequest: any = {};
+                let index = 0;
+                const advance = () => queueMicrotask(() => {
+                    cursorRequest.result = index === values.length ? null : {
+                        get value() { return structuredClone(values[index]); },
+                        continue() { index++; advance(); },
+                    };
+                    cursorRequest.onsuccess?.({ target: cursorRequest });
+                });
+                advance();
+                return cursorRequest;
+            } }),
+        });
+        return tx;
+    } };
+    try {
+        globals.caches = undefined;
+        globals.indexedDB = { open: () => request(() => db) };
+        globals.IDBKeyRange = { only: (value: unknown) => value };
+        const fallback = await openCache(cacheName);
+        const payload = new Uint8Array(512 * 1024).fill(42);
+        for (let i = 0; i < 4; i++) {
+            await fallback.put(`${prefix}?s=${i}`, new Response(payload, {
+                status: 206, statusText: "Partial Content", headers: {
+                    "Content-Type": "application/octet-stream", "Range-Start": String(i * payload.byteLength),
+                    "Content-Length": String(payload.byteLength),
+                },
+            }));
+        }
+        let copiedBytes = 0;
+        globals.Response = class extends Response {
+            constructor(body?: BodyInit | null, init?: ResponseInit) {
+                if (body instanceof ArrayBuffer) copiedBytes += body.byteLength;
+                super(body, init);
+            }
+        };
+        const listed = await fallback.matchAll!(prefix, { ignoreSearch: true });
+        assert.equal(listed.length, 4);
+        assert.equal(copiedBytes, 0, "listing saved range headers must not copy every payload into a Response");
+        for (let i = 0; i < listed.length; i++) {
+            assert.equal(listed[i].headers.get("Range-Start"), String(i * payload.byteLength));
+            assert.equal(listed[i].status, 206);
+            assert.equal(listed[i].statusText, "Partial Content");
+            assert.deepEqual(new Uint8Array(await listed[i].arrayBuffer()), payload);
+        }
+        globals.Response = original.Response;
+        // Consuming one response must not consume the stored Blob or another response.
+        for (let i = 0; i < 2; i++) {
+            const hit = await fallback.match(`${prefix}?s=0`);
+            assert.equal(hit?.url, `${prefix}?s=0`);
+            assert.equal(hit?.headers.get("Content-Type"), "application/octet-stream");
+            assert.deepEqual(new Uint8Array(await hit!.arrayBuffer()), payload);
+        }
+        const legacyUrl = "/legacy-cache-entry";
+        records.set(`${cacheName}::${legacyUrl}`, { key: `${cacheName}::${legacyUrl}`, cacheName,
+            requestUrl: legacyUrl, body: Uint8Array.of(3, 7, 9).buffer,
+            headers: [["X-Legacy", "yes"]], status: 201, statusText: "Created" });
+        for (const hit of [await fallback.match(legacyUrl), ...(await fallback.matchAll!(legacyUrl))]) {
+            assert.equal(hit?.status, 201);
+            assert.equal(hit?.statusText, "Created");
+            assert.equal(hit?.headers.get("X-Legacy"), "yes");
+            assert.deepEqual([...new Uint8Array(await hit!.arrayBuffer())], [3, 7, 9]);
+        }
+        denyWrites = true;
+        const memoryFallback = await openCache("storage-full");
+        await memoryFallback.put("/memory", new Response("still readable", { status: 202 }));
+        assert.equal((await memoryFallback.match("/memory"))?.status, 202);
+        assert.equal(await (await memoryFallback.match("/memory"))?.text(), "still readable");
+        const native = { provider: "CacheStorage" };
+        globals.caches = { open: async (name: string) => {
+            assert.equal(name, `osrs-typescript::cache::${cacheName}`);
+            return native;
+        } };
+        assert.equal(await openCache(cacheName), native, "secure contexts retain the native CacheStorage provider");
+    } finally {
+        Object.assign(globals, original);
+    }
+}
 
 (async () => {
     const dat2 = new SparseDat2(Sector.SIZE * 100, false);
@@ -77,6 +186,7 @@ const cache = {
     await unavailable.flush();
     unavailable.queue(Sector.SIZE * 21, Sector.SIZE);
     await unavailable.flush();
+    await idbFallbackKeepsRangeBodiesLazy();
     console.log("js5 persistence read ok");
 })().catch((error) => {
     console.error(error);
