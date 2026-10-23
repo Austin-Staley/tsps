@@ -1,5 +1,6 @@
 const path = require("path");
 const { createObjectSpawnStore, createNpcSpawnStore } = require("./EditSpawnStore.AgentMcp");
+const { sizesOf } = require("./EditSizes.AgentMcp");
 
 // Map-editing tools for the agent MCP server: search the object (loc) cache, describe
 // definitions, and place/remove live objects.
@@ -104,7 +105,7 @@ module.exports = function registerEditTools(ctx) {
 
   tool(
     "describe_object",
-    "Object definition details for placing well: footprint (sizeX/sizeY), whether it blocks movement (solid) or projectiles, whether it is interactive and its options.",
+    "Object definition details for placing well: footprint (sizeX/sizeY), whether it blocks movement (solid) or projectiles, whether it is interactive and its options, and its model size per shape (width, depth, height, top; 128 units to a tile).",
     { id: z.number().int().min(0).describe("Object id from search_objects") },
     ({ id }) => {
       if (id >= objectCount()) throw new Error(`Unknown object id ${id}`);
@@ -119,6 +120,8 @@ module.exports = function registerEditTools(ctx) {
         blocksProjectiles: definition.isImpenetrable(),
         interactive: definition.hasActions(),
         options: definition.getInteractions() ?? [],
+        // Model size per shape, 128 units to a tile (loc-sizes.json); null if not measured.
+        sizes: sizesOf(id),
       };
     }
   );
@@ -218,6 +221,12 @@ module.exports = function registerEditTools(ctx) {
       let spawnsChanged = false;
       // Cache objects live in MapObjects, runtime ones in ObjectManager: clear both.
       // Player-owned (fires, traps) and private-area objects are left alone.
+      // Regions load lazily; one nobody has visited has no MapObjects to clear yet.
+      for (let x = minX; x <= maxX + 63; x += 64) {
+        for (let y = minY; y <= maxY + 63; y += 64) {
+          core.RegionManager?.loadMapFiles?.(Math.min(x, maxX), Math.min(y, maxY), false);
+        }
+      }
       const candidates = [];
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
@@ -300,10 +309,12 @@ module.exports = function registerEditTools(ctx) {
           if (dryRun) continue;
           World.getRemoveNPCQueue().push(npc);
           let covered = false;
+          // The file records the spawn tile, not where the NPC has wandered to.
+          const spawn = npc.getSpawnPosition?.() ?? at;
           for (let i = npcSpawns.length - 1; i >= 0; i--) {
             const entry = npcSpawns[i];
-            if (entry.id === npc.getId() && entry.x === at.getX() && entry.y === at.getY()
-              && (entry.level ?? 0) === at.getZ()) {
+            if (entry.id === npc.getId() && entry.x === spawn.getX() && entry.y === spawn.getY()
+              && (entry.level ?? 0) === spawn.getZ()) {
               npcSpawns.splice(i, 1);
               npcsChanged = true;
               covered = true;
