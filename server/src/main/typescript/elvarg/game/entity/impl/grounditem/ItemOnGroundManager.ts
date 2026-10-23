@@ -11,6 +11,7 @@ import { ItemOnGround } from "./ItemOnGround"
 import { State } from "./ItemOnGround"
 import { GroundItemRespawnTask } from '../../../task/impl/GroundItemRespawnTask'
 import { Item } from "../../../model/Item"
+import { MAX_STACK_AMOUNT } from "../../../model/container/StackType"
 import { PrivateArea } from "../../../model/areas/impl/PrivateArea"
 import { Misc } from "../../../../util/Misc"
 import { PathFinder } from "../../../model/movement/path/PathFinder";
@@ -132,7 +133,13 @@ export class ItemOnGroundManager {
 
             // Modify the existing item.
             if (item_.getItem().getId() === item.getItem().getId()) {
+                if (JSON.stringify(item_.getItem().getMeta() ?? null) !== JSON.stringify(item.getItem().getMeta() ?? null)) {
+                    continue;
+                }
                 let oldAmount = item_.getItem().getAmount();
+                if (oldAmount + item.getItem().getAmount() > MAX_STACK_AMOUNT) {
+                    continue;
+                }
                 item_.getItem().incrementAmountBy(item.getItem().getAmount());
                 item_.setOldAmount(oldAmount);
                 item_.setTick(0);
