@@ -19,14 +19,18 @@ runtime.startTranscript = (_api, _player, npcId, page, variant) => {
   return true;
 };
 
-const PIANO_TILE = { x: 2904, y: 9869, z: 0 };
+const PIANO_TILE = { x: 2907, y: 9870, z: 0 };
 const MUSIC_STAND_TILE = { x: 2900, y: 9875, z: 0 };
 const PENDANT_TILE = { x: 2262, y: 5516, z: 3 };
 const MOUSE_HOLE_ENTRY = { x: 2275, y: 5530, z: 0 };
 
 function setup() {
+  const registeredObjects = [];
   const stubs = {
-    ObjectManager: { register() {}, deregister() {} },
+    ObjectManager: {
+      register(object) { registeredObjects.push(object); },
+      deregister(object) { const index = registeredObjects.indexOf(object); if (index !== -1) registeredObjects.splice(index, 1); },
+    },
     GameObject: class {
       constructor(id, location, type, rotation) {
         this.id = id;
@@ -54,6 +58,7 @@ function setup() {
   const itemOnNpc = [];
   const itemOnObject = [];
   const itemActions = new Map();
+  const interfaceButtons = [];
   const npcInteractions = new Map();
   const prompts = [];
   const spawned = [];
@@ -84,6 +89,7 @@ function setup() {
     onNpcInteraction(name, actions) { npcInteractions.set(name, actions); },
     onPlayerLogin(handler) { loginHandlers.push(handler); },
     onPlayerLogout(handler) { logoutHandlers.push(handler); },
+    onInterfaceActionButton(ids, handler) { interfaceButtons.push({ ids: [].concat(ids), handler }); },
     onCustomEvent(name, handler) {
       const handlers = custom.get(name) ?? [];
       handlers.push(handler);
@@ -112,13 +118,6 @@ function setup() {
     },
     getItemOnGroundManager() {
       return { registerLocation(player, item) { groundItems.push({ player, item }); } };
-    },
-    sendMultiChatboxPrompt(_player, title, ...args) {
-      const options = [];
-      for (let index = 0; index < args.length; index += 2) {
-        options.push({ label: args[index], run: args[index + 1] });
-      }
-      prompts.push({ title, options });
     },
   }, { get(target, key) { return key in target ? target[key] : () => {}; } });
 
@@ -158,7 +157,21 @@ function setup() {
     sendVarbit(id, value) { varbits.set(id, value); return sender; },
     sendConfig(id, value) { configs.set(id, value); return sender; },
     sendString(text, uid) { messages.push({ text, uid }); return sender; },
+    sendInterface(id) { prompts.push({ interfaceId: id }); return sender; },
   }, { get(target, key) { return key in target ? target[key] : () => sender; } });
+
+  function otherPlayer() {
+    const otherAttributes = new Map();
+    const otherVarbits = new Map();
+    const otherSender = new Proxy({
+      sendVarbit(id, value) { otherVarbits.set(id, value); return otherSender; },
+    }, { get(target, key) { return key in target ? target[key] : () => otherSender; } });
+    const other = Object.create(player);
+    other.getAttribute = (key) => otherAttributes.get(key);
+    other.setAttribute = (key, value) => otherAttributes.set(key, value);
+    other.getPacketSender = () => otherSender;
+    return { player: other, attributes: otherAttributes, varbits: otherVarbits };
+  }
 
   const attributes = new Map();
   const player = {
@@ -207,10 +220,11 @@ function setup() {
     for (const handler of custom.get('npc-dialogue:action') ?? []) handler(event);
     return event;
   };
-  const object = (objectId, { clickType = 1, location: tile = location } = {}) => {
+  const object = (objectId, { clickType = 1, location: tile = location, player: targetPlayer = player, definition } = {}) => {
     const event = {
-      player,
+      player: targetPlayer,
       objectId,
+      definition,
       clickType,
       location: { x: tile.getX?.() ?? tile.x, y: tile.getY?.() ?? tile.y, z: tile.getZ?.() ?? tile.z },
       handled: false,
@@ -236,16 +250,16 @@ function setup() {
     for (const handler of itemOnItem) handler(event);
     return event;
   };
-  const playNote = (label) => {
-    const prompt = prompts.at(-1);
-    assert.ok(prompt, `no piano prompt open for ${label}`);
-    const option = prompt.options.find((entry) => entry.label === label);
-    assert.ok(option, `piano prompt is missing ${label}`);
-    option.run();
+  const playNote = (child, targetPlayer = player) => {
+    const buttonId = (535 << 16) | child;
+    for (const registration of interfaceButtons) {
+      if (registration.ids.includes(buttonId)) registration.handler({ player: targetPlayer, buttonId, handled: false });
+    }
   };
 
   return {
-    quest, player, attributes, itemAmounts, varbits, configs, messages, prompts, spawned,
+    quest, player, attributes, itemAmounts, varbits, configs, messages, prompts, spawned, registeredObjects,
+    otherPlayer,
     groundItems, xp, variant, condition, line, choice, action, object, onObject, onNpc, useItems,
     playNote,
     drink: (itemId) => itemActions.get('Shrink-me-quick').Drink({ player, itemId }),
@@ -255,7 +269,7 @@ function setup() {
     setWeapon(item) { weapon = item; },
     give(id, amount = 1) { itemAmounts.set(id, (itemAmounts.get(id) ?? 0) + amount); },
     completeQuest(key) { completedQuests.add(key); },
-    login() { for (const handler of loginHandlers) handler({ player }); },
+    login(targetPlayer = player) { for (const handler of loginHandlers) handler({ player: targetPlayer }); },
     logout() { for (const handler of logoutHandlers) handler({ player }); },
     killGlod() {
       const npc = spawned.find((entry) => entry.id === core.NpcIdentifiers.GLOD);
@@ -313,6 +327,7 @@ function routeToCompletion(h) {
   h.object(O.DRAIN_PIPE, { clickType: 1 });
   h.object(O.DRAIN_PIPE, { clickType: 1 });
   h.action(5122, 'aLgFIp');
+  assert.equal(h.varbits.get(3711), 1, 'cache Rupert transform is enabled after the beard dialogue');
   h.setLocation(2966, 3464, 0);
   h.object(O.BEARD);
   assert.equal(h.getLocation().getZ(), 2, 'the beard climbs to the tower top');
@@ -337,8 +352,9 @@ function routeToCompletion(h) {
 
   // Piano: EFEDC then AEGA opens the compartment; search gives the recipe set.
   h.object(O.PIANO_5, { location: PIANO_TILE });
-  for (const [index, note] of ['Upper E', 'Upper F', 'Upper E', 'Upper D', 'Upper C', 'A', 'E', 'G', 'A'].entries()) {
-    h.playNote(note);
+  assert.equal(h.prompts.at(-1).interfaceId, 535, 'piano opens the cache/QH piano widget');
+  for (const [index, child] of [77, 78, 77, 76, 75, 73, 70, 72, 73].entries()) {
+    h.playNote(child);
     if (index === 0) assert.equal(h.varbits.get(3697), 1, 'piano track varbit mirrors accepted notes');
   }
   assert.equal(h.varbits.get(3698), 1, 'piano-used flag reaches the cache/QH varbit');
@@ -527,13 +543,51 @@ test('Grim Tales full-bag finishing branch is recoverable', () => {
   assert.equal(h.itemAmounts.get(I.DWARVEN_HELMET), 1);
 });
 
+test('Grim Tales piano progress uses the cache widget and resumes after relog', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 4);
+  h.setLocation(2907, 9876, 0);
+  h.object(O.PIANO_5, { location: PIANO_TILE });
+  h.playNote(77);
+  assert.equal(h.varbits.get(3697), 1);
+  h.logout();
+  h.login();
+  assert.equal(h.varbits.get(3697), 1, 'accepted piano notes survive logout/login');
+  h.object(O.PIANO_5, { location: PIANO_TILE });
+  h.playNote(70);
+  assert.equal(h.varbits.get(3697), 0, 'a wrong next note resets the tune');
+  for (const child of [77, 78, 77, 76, 75, 73, 70, 72, 73]) h.playNote(child);
+  assert.equal(h.varbits.get(3698), 1, 'the cache sequence opens the piano compartment');
+});
+
+test('solving the piano does not replace the cache object for another player', () => {
+  const h = setup();
+  const other = h.otherPlayer();
+  h.login();
+  h.login(other.player);
+  h.quest.setStage(h.player, 4);
+  h.quest.setStage(other.player, 4);
+  assert.equal(h.registeredObjects.some((object) => [O.PIANO_5, O.PIANO_6].includes(object.getId())), false,
+    'the plugin leaves the piano multi-loc to the per-player cache transform');
+
+  h.object(O.PIANO_5, { location: PIANO_TILE });
+  for (const child of [77, 78, 77, 76, 75, 73, 70, 72, 73]) h.playNote(child);
+  assert.equal(h.varbits.get(3698), 1, 'the first player has solved the tune');
+  assert.equal(other.varbits.get(3698), 0, 'the second player keeps their own locked cache state');
+
+  h.object(O.PIANO_5, { location: PIANO_TILE, player: other.player });
+  h.playNote(77, other.player);
+  assert.equal(other.varbits.get(3697), 1, 'the second player can still begin the tune');
+  assert.equal(other.varbits.get(3698), 0);
+});
+
 test('Grim Tales piano rewards and pendant remain recoverable when inventory is full', () => {
   const h = setup();
   h.quest.setStage(h.player, 4);
   h.setLocation(2907, 9876, 0);
   h.object(O.PIANO_5, { location: PIANO_TILE });
-  for (const note of ['Upper E', 'Upper F', 'Upper E', 'Upper D', 'Upper C', 'A', 'E', 'G', 'A']) {
-    h.playNote(note);
+  for (const child of [77, 78, 77, 76, 75, 73, 70, 72, 73]) {
+    h.playNote(child);
   }
 
   h.setFull(true);
@@ -632,13 +686,41 @@ test('Grim Tales resumes the helmet exchange after the hand-in action and a relo
   assert.equal(h.varbits.get(2783), 20);
 });
 
-test('Grim Tales does not spawn a second Grimgnash over the cache transform spawn', () => {
+test('Grim Tales does not duplicate cache-spawned tower NPCs', () => {
   const h = setup();
   h.login();
   assert.equal(h.spawned.some((npc) => npc.id === N.GRIMGNASH), false,
     'cache spawn 6274 already transforms to the awake Grimgnash');
-  assert.ok(h.spawned.some((npc) => npc.id === N.RUPERT_THE_BEARD),
-    'the tower Rupert still needs its plugin spawn');
+  assert.equal(h.spawned.some((npc) => npc.id === N.RUPERT_THE_BEARD), false,
+    'cache spawn 6276 transforms from hidden to visible using varbit 3711');
+  assert.equal(h.varbits.get(3711), 0, 'Rupert begins hidden in the tower');
+});
+
+test('the actual cache piano parent opens the widget and exposes the solved search', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  RegionManager.init();
+  RegionManager.loadMapFiles(PIANO_TILE.x, PIANO_TILE.y, false);
+  const h = setup();
+  h.quest.setStage(h.player, 4);
+  const piano = MapObjects.get(24881, new core.Location(PIANO_TILE.x, PIANO_TILE.y, 0), null);
+  assert.ok(piano, 'the placed piano is parent24881 at2907,9870');
+  const cachePlayer = { getPacketSender: () => ({
+    getVarbit: id => h.varbits.get(id) ?? 0,
+    getVarp: id => h.configs.get(id) ?? 0,
+  }) };
+  let definition = core.ObjectDefinition.forPlayer(piano.getId(), cachePlayer);
+  assert.equal(definition.id, O.PIANO_5);
+  assert.equal(h.object(piano.getId(), { definition, location: piano.getLocation() }).handled, true);
+  assert.equal(h.prompts.at(-1).interfaceId, 535);
+  for (const child of [77, 78, 77, 76, 75, 73, 70, 72, 73]) h.playNote(child);
+  definition = core.ObjectDefinition.forPlayer(piano.getId(), cachePlayer);
+  assert.equal(definition.id, O.PIANO_6, 'only this player sees the searchable cache form');
+  assert.equal(definition.getInteractions()[2], 'Search');
+  assert.equal(h.object(piano.getId(), { definition, location: piano.getLocation(), clickType: 3 }).handled, true);
 });
 
 after(() => {

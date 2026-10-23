@@ -124,6 +124,7 @@ module.exports = function registerGrimTalesQuest(api) {
     headFound: 3716,
     pianoTrack: 3697,
     pianoUsed: 3698,
+    rupertTowerVisible: 3711,
     featherGiven: 3719,
     pendantHeld: 3721,
   };
@@ -193,8 +194,7 @@ module.exports = function registerGrimTalesQuest(api) {
   const BEARD_GROUND_TILE = { x: 2966, y: 3464, z: 0 };
   const BEARD_TOP_TILE = { x: 2966, y: 3468, z: 2 };
   const TOWER_TOP_TILE = { x: 2968, y: 3468, z: 2 };
-  const RUPERT_TILE = { x: 2969, y: 3468, z: 2 };
-  const PIANO_TILE = { x: 2904, y: 9869, z: 0 };
+  const PIANO_TILE = { x: 2907, y: 9870, z: 0 }; // cache parent 24881, 2x1 piano
   const MUSIC_STAND_TILE = { x: 2900, y: 9875, z: 0 };
   const PENDANT_TILE = { x: 2262, y: 5516, z: 3 };
   const MOUSE_HOLE_ENTRY_TILE = { x: 2275, y: 5530, z: 0 };
@@ -206,6 +206,17 @@ module.exports = function registerGrimTalesQuest(api) {
 
   // Piano: the wiki tune is E F E D C (right hand), then A E G A (left hand).
   const PIANO_TUNE = ["upper-e", "upper-f", "upper-e", "upper-d", "upper-c", "a", "e", "g", "a"];
+  const PIANO_INTERFACE_ID = 535;
+  const PIANO_BUTTON_NOTES = new Map([
+    [(PIANO_INTERFACE_ID << 16) | 77, "upper-e"],
+    [(PIANO_INTERFACE_ID << 16) | 78, "upper-f"],
+    [(PIANO_INTERFACE_ID << 16) | 76, "upper-d"],
+    [(PIANO_INTERFACE_ID << 16) | 75, "upper-c"],
+    [(PIANO_INTERFACE_ID << 16) | 73, "a"],
+    [(PIANO_INTERFACE_ID << 16) | 70, "e"],
+    [(PIANO_INTERFACE_ID << 16) | 72, "g"],
+  ]);
+  const PIANO_PROGRESS_ATTRIBUTE = "grim-tales:piano-progress";
   const PIANO_NOTE_MESSAGES = ["ZNc_gU", "J4H8Je", "p6_WrQ", "YyCouY", "-KzTuA", "oItvCU", "DOh0JW", "_Xs4C4", "4kmCmc"];
   const PIANO_OPEN_MESSAGE_ID = "j_cFAe";
 
@@ -231,7 +242,6 @@ module.exports = function registerGrimTalesQuest(api) {
   let worldInstalled = false;
   let messageIndex = null;
   const installedObjects = [];
-  const pianoProgress = new WeakMap();
   const glodByPlayer = new WeakMap();
 
   // ---------------------------------------------------------------------------
@@ -251,6 +261,10 @@ module.exports = function registerGrimTalesQuest(api) {
   function setBit(player, bit) {
     player.setAttribute(BITS_ATTRIBUTE, bits(player) | bit);
     syncQuestHelperState(player);
+  }
+
+  function pianoProgress(player) {
+    return Math.max(0, Math.min(PIANO_TUNE.length, Number(player.getAttribute(PIANO_PROGRESS_ATTRIBUTE)) || 0));
   }
 
   function questHelperStageValue(stage, player) {
@@ -284,8 +298,9 @@ module.exports = function registerGrimTalesQuest(api) {
       .sendVarbit(QH_VARBITS.stalkState, stalkState)
       .sendVarbit(QH_VARBITS.giantDead, Number(stage >= STAGE_GOBLIN_OBTAINED))
       .sendVarbit(QH_VARBITS.headFound, Number(hasBit(player, BIT_PIANO_SEARCHED)))
-      .sendVarbit(QH_VARBITS.pianoTrack, pianoProgress.get(player) ?? 0)
+      .sendVarbit(QH_VARBITS.pianoTrack, pianoProgress(player))
       .sendVarbit(QH_VARBITS.pianoUsed, Number(hasBit(player, BIT_PIANO_OPEN)))
+      .sendVarbit(QH_VARBITS.rupertTowerVisible, Number(hasBit(player, BIT_BEARD_DOWN)))
       .sendVarbit(QH_VARBITS.featherGiven, Number(stage >= STAGE_FEATHER_GIVEN))
       .sendVarbit(QH_VARBITS.pendantHeld,
         Number(stage === STAGE_PENDANT_FOUND && held(player, MIAZRQAS_PENDANT_ITEM_ID)));
@@ -416,12 +431,12 @@ module.exports = function registerGrimTalesQuest(api) {
     registerQuestObject(EARTH_MOUND_OBJECT_ID, EARTH_MOUND_TILE);
     registerQuestObject(BEARD_OBJECT_ID, BEARD_GROUND_TILE);
     registerQuestObject(BEARD_OBJECT_ID, BEARD_TOP_TILE);
-    registerQuestObject(PIANO_OBJECT_ID, PIANO_TILE, 10);
+    // The cache piano transforms per player from varbit 3698; do not register
+    // a shared replacement object when one player solves the tune.
     registerQuestObject(MUSIC_STAND_OBJECT_ID, MUSIC_STAND_TILE);
     registerQuestObject(PENDANT_OBJECT_ID, PENDANT_TILE);
     // Grimgnash is already a cache spawn (6274, transformed to 5119 by grim_griffin_asleep).
     // Spawning 5119 here produced a second griffin at a different tile.
-    api.spawnNpc({ id: RUPERT_NPC_ID, x: RUPERT_TILE.x, y: RUPERT_TILE.y, z: RUPERT_TILE.z, wanderRadius: 0 });
   }
 
   function ensureGlod(player) {
@@ -896,58 +911,41 @@ module.exports = function registerGrimTalesQuest(api) {
   }
 
   function showPianoMenu(player) {
-    const progress = pianoProgress.get(player) ?? 0;
-    if (progress >= 5) {
-      api.sendMultiChatboxPrompt(
-        player,
-        "Choose a left-hand key",
-        "A", () => pressPianoNote(player, "a"),
-        "E", () => pressPianoNote(player, "e"),
-        "G", () => pressPianoNote(player, "g")
-      );
-      return;
-    }
-    api.sendMultiChatboxPrompt(
-      player,
-      "Choose a right-hand key",
-      "Upper E", () => pressPianoNote(player, "upper-e"),
-      "Upper F", () => pressPianoNote(player, "upper-f"),
-      "Upper D", () => pressPianoNote(player, "upper-d"),
-      "Upper C", () => pressPianoNote(player, "upper-c")
-    );
+    player.getPacketSender().sendInterface(PIANO_INTERFACE_ID);
   }
 
   function pressPianoNote(player, note) {
-    const progress = pianoProgress.get(player) ?? 0;
+    const progress = pianoProgress(player);
     if (PIANO_TUNE[progress] !== note) {
-      pianoProgress.set(player, 0);
+      player.setAttribute(PIANO_PROGRESS_ATTRIBUTE, 0);
       syncQuestHelperState(player);
-      showPianoMenu(player);
       return;
     }
     const message = pageMessage(PIANO_NOTE_MESSAGES[progress]);
     if (message) player.sendMessage(message);
     const next = progress + 1;
     if (next >= PIANO_TUNE.length) {
-      pianoProgress.delete(player);
+      player.setAttribute(PIANO_PROGRESS_ATTRIBUTE, 0);
       setBit(player, BIT_PIANO_OPEN);
-      swapQuestObject(PIANO_OBJECT_ID, PIANO_OPEN_OBJECT_ID, PIANO_TILE);
       const opened = pageMessage(PIANO_OPEN_MESSAGE_ID);
       if (opened) player.sendMessage(opened);
       return;
     }
-    pianoProgress.set(player, next);
+    player.setAttribute(PIANO_PROGRESS_ATTRIBUTE, next);
     syncQuestHelperState(player);
-    showPianoMenu(player);
   }
 
   function playPiano(event) {
     const { player } = event;
     event.handled = true;
-    if (hasBit(player, BIT_PIANO_OPEN)) return;
-    pianoProgress.set(player, 0);
-    syncQuestHelperState(player);
+    if (hasBit(player, BIT_PIANO_OPEN) || quest.getStage(player) !== STAGE_PENDANT_TASK) return;
     showPianoMenu(player);
+  }
+
+  function handlePianoButton({ player, buttonId, handled = false }) {
+    const note = PIANO_BUTTON_NOTES.get(buttonId);
+    if (handled || !player || !note || quest.getStage(player) !== STAGE_PENDANT_TASK || hasBit(player, BIT_PIANO_OPEN)) return;
+    pressPianoNote(player, note);
   }
 
   function searchPiano(event) {
@@ -1172,7 +1170,7 @@ module.exports = function registerGrimTalesQuest(api) {
       readMoundSignpost(event);
       return;
     }
-    if (PIANO_OBJECT_IDS.has(objectId) && atTile(event.location, PIANO_TILE)) {
+    if (PIANO_OBJECT_IDS.has(event.definition?.id ?? objectId) && atTile(event.location, PIANO_TILE)) {
       if (event.clickType === 3) searchPiano(event);
       else playPiano(event);
       return;
@@ -1385,6 +1383,8 @@ module.exports = function registerGrimTalesQuest(api) {
 
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
+  api.onInterfaceActionButton([...PIANO_BUTTON_NOTES.keys()], handlePianoButton);
+  api.persistAttribute(PIANO_PROGRESS_ATTRIBUTE, 0);
   api.onNpcInteraction("Grimgnash", { "Talk-To": talkToGrimgnash });
   api.onNpcInteraction("Miazrqa", { "Talk-to": talkToMiazrqa });
   api.onNpcDialogueVariant(selectVariant);
