@@ -12,3 +12,4 @@
 /server/** merge=ours
 # Preserve the canonical reward artifact's bytes on Windows checkouts too.
 /server/data/definitions/clue-caskets.json text eol=lf
+/server/plugins/bosses/data/reward-tables.json text eol=lf
