@@ -12,6 +12,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const runtime = require('../plugins/quests/QuestRuntime');
@@ -92,6 +93,7 @@ function harness() {
   const transcripts = [];
   const logins = [];
   const spawned = [];
+  const deaths = [];
   const api = new Proxy({
     core,
     persistAttribute: noop,
@@ -103,7 +105,7 @@ function harness() {
     onItemOnObject: noop,
     onItemOnGroundItem: noop,
     onObjectInteraction: noop,
-    onNpcDeath: noop,
+    onNpcDeath: handler => deaths.push(handler),
     onPlayerLogin: handler => logins.push(handler),
     onCustomEvent: (name, handler) => {
       if (!custom.has(name)) custom.set(name, []);
@@ -143,7 +145,7 @@ function harness() {
     .filter(([method, packetId]) => method === 'sendVarbit' && packetId === id)
     .map(([, , value]) => value)
     .at(-1);
-  return { custom, conditions, transcripts, logins, spawned, quest, dispatch, lastVarbit };
+  return { custom, conditions, transcripts, logins, spawned, deaths, quest, dispatch, lastVarbit };
 }
 
 // Runs the real transcript runner through the production PluginManager hooks.
@@ -220,7 +222,12 @@ function runnerPlayer({ ranged = 99 } = {}) {
   };
   const packet = new Proxy({
     sendConfig(id, value) { configs.set(id, value); return packet; },
-    sendVarbit(id, value) { varbits.set(id, value); return packet; },
+    sendVarbit(id, value) {
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      const mask = (2 ** (endBit - startBit + 1) - 1) << startBit;
+      configs.set(baseVar, ((configs.get(baseVar) ?? 0) & ~mask) | ((value << startBit) & mask));
+      varbits.set(id, value); return packet;
+    },
     sendInterfaceRemoval() { p.manager?.reset?.(); p.prompt = null; return packet; },
   }, { get: (target, key) => target[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
   const p = {
@@ -487,4 +494,64 @@ test('real runner: Zavistic gives a lost potion through _QKSlE but the held-poti
   } finally {
     h.cleanup();
   }
+});
+
+
+test('real runner: innkeeper tankard evidence does not invent Zavistic evidence', () => {
+  const h=registerRealRunner();
+  try {
+    const p=runnerPlayer(); h.quest.setStage(p, STAGE_STARTED);
+    runtime.startTranscript(h.api,p,core.NpcIdentifiers.BARTENDER_2,'Zogre Flesh Eaters',
+      'investigating-b-vahn-using-the-dragon-inn-tankard-on-the-dragon-inn-bartender');
+    drain(p);
+    assert.equal(p.varbits.get(489),1);
+    assert.equal(p.varbits.get(493),0,'separate recipient, separate earned flag');
+    assert.equal(p.varbits.get(490),0,'portrait has not been shown');
+  } finally { h.cleanup(); }
+});
+
+test('q128 earned partial auxiliary events replay with actual cache sibling preservation', () => {
+  const h=harness(), p=runnerPlayer();
+  const names={ thzfe_brentle_skele:503, thzfe_prismsearch:488, thzfe_innkeepermugshown:489,
+    thzfe_innkeeperportraitshown:490,thzfe_shownnecrobook:491,thzfe_shownhambook:492,
+    thzfe_showntankard:493,thzfe_shownsignedportrait:494,thzfe_sithik_transformed:495,
+    thzfe_makecuredisease:498,thzfe_makebrutalarrow:499,thzfe_makecompozogrebow:500 };
+  for(const[name,id]of Object.entries(names)) assert.equal(CacheDefinitions.getVarbitId(name),id);
+  const message=stepId=>h.dispatch('npc-dialogue:action',{player:p,stepId,kind:'message'});
+  h.dispatch('npc-dialogue:condition',{player:p,stepId:'ddiH2D'});
+  assert.equal(p.varbits.get(488),3);
+  message('CEI1zE'); assert.equal(p.varbits.get(488),4);
+  h.dispatch('npc-dialogue:condition',{player:p,stepId:'lv5Jxg'});
+  assert.equal(p.varbits.get(488),5);
+  message('FoOT6Z'); assert.equal(p.varbits.get(490),1);
+  message('piuCKA'); assert.equal(p.varbits.get(493),1);
+  message('tFIOsZ'); assert.equal(p.varbits.get(491),1);
+  assert.equal(p.varbits.get(492),0);
+  message('aItbm4'); assert.equal(p.varbits.get(500),1);
+  const parent=CacheDefinitions.getVarbit(488).baseVar;
+  const mask=[487,...Object.values(names)].filter(id=>CacheDefinitions.getVarbit(id).baseVar===parent)
+    .reduce((m,id)=>{const d=CacheDefinitions.getVarbit(id);return m|((2**(d.endBit-d.startBit+1)-1)<<d.startBit)},0);
+  const siblings=0x5a5a5a5a & ~mask;
+  p.configs.set(parent,siblings);p.varbits.clear();
+  const stage=h.quest.getStage(p), items=[...p.items],xp=[...p.xp];
+  h.dispatch('player:bootstrap-complete',{player:p});
+  assert.equal(p.varbits.get(488),5);assert.equal(p.varbits.get(493),1);
+  assert.equal(p.varbits.get(500),1);assert.equal(p.varbits.get(492),0);
+  assert.equal(p.configs.get(parent)&~mask,siblings);
+  assert.equal(h.quest.getStage(p),stage);assert.deepEqual([...p.items],items);assert.deepEqual(p.xp,xp);
+});
+
+
+test('q128 only the tracked Brentle zombie death earns the skeleton defeat flag', () => {
+  const h=harness(), p=runnerPlayer();
+  h.dispatch('npc-dialogue:action',{player:p,stepId:'VHXgZ8',kind:'action'});
+  const npc=h.spawned.at(-1), npcId=core.NpcIdentifiers.ZOMBIE_44;
+  for(const foreign of [undefined,{getId:()=>npcId}]) {
+    for(const death of h.deaths) death({killer:p,npcId,npc:foreign});
+    assert.equal(p.varbits.get(503)??0,0);
+  }
+  for(const death of h.deaths) death({killer:p,npcId,npc});
+  assert.equal(p.varbits.get(503),2);
+  p.varbits.clear();h.dispatch('player:bootstrap-complete',{player:p});
+  assert.equal(p.varbits.get(503),2);
 });

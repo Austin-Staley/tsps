@@ -201,9 +201,29 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   const hasFlag = (player, bit) => (getFlags(player) & bit) !== 0;
   const hasItem = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
 
+  const VARBIT_BASEMENT_DOOR = 35; // HORRORDOOR
+  const AUXILIARY_FLAGS = [
+    [36, FLAG_BRIDGE_LEFT], [37, FLAG_BRIDGE_RIGHT], [38, FLAG_KEY_GIVEN],
+    [46, FLAG_TAR], [47, FLAG_GLASS], [48, FLAG_LIGHT],
+    [43, FLAG_WALL_AIR], [41, FLAG_WALL_WATER], [42, FLAG_WALL_EARTH],
+    [40, FLAG_WALL_FIRE], [44, FLAG_WALL_SWORD], [45, FLAG_WALL_ARROW],
+  ];
+
+  function syncAuxiliaryState(player) {
+    const sender = player.getPacketSender();
+    for (const [id, flag] of AUXILIARY_FLAGS) sender.sendVarbit(id, hasFlag(player, flag) ? 1 : 0);
+    // HORRORDOOR is the basement puzzle door, not the keyed exterior entrance.
+    sender.sendVarbit(VARBIT_BASEMENT_DOOR, wallComplete(player) ? 1 : 0);
+  }
+
+  function handleBootstrapComplete({ player }) {
+    syncAuxiliaryState(player);
+  }
+
   function setFlag(player, bit, value = true) {
     const flags = getFlags(player);
     player.setAttribute(ATTR_FLAGS, value ? (flags | bit) : (flags & ~bit));
+    syncAuxiliaryState(player);
   }
 
   function freeSlots(player) {
@@ -481,7 +501,7 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
     if (npcId === GUNNJORN_NPC_ID && (stepId === "Wh6Z8x" || stepId === "fpqzrz")) {
       if (!hasItem(player, LIGHTHOUSE_KEY)) {
         player.getInventory().adds(LIGHTHOUSE_KEY, 1);
-        setFlag(player, FLAG_KEY_GIVEN, true);
+        if (hasItem(player, LIGHTHOUSE_KEY)) setFlag(player, FLAG_KEY_GIVEN, true);
       }
       return;
     }
@@ -802,6 +822,7 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   }
 
   function handleLogin({ player }) {
+    syncAuxiliaryState(player);
     refreshQuestList(player);
   }
 
@@ -827,6 +848,7 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
     onReward: grantReward,
   });
 
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrapComplete);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onNpcInteraction("Gunnjorn", { "Talk-to": talkToGunnjorn });

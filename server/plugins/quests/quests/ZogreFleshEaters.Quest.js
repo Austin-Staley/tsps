@@ -162,11 +162,14 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   const ASKED_REMOVE_ATTRIBUTE = "quest.zogre_flesh_eaters.asked_remove";
   const MAKE_BRUTAL_ATTRIBUTE = "quest.zogre_flesh_eaters.make_brutal";
   const MAKE_CURE_ATTRIBUTE = "quest.zogre_flesh_eaters.make_cure";
-  const TANKARD_SHOWN_ATTRIBUTE = "quest.zogre_flesh_eaters.tankard_shown";
+  const TANKARD_SHOWN_ATTRIBUTE = "zogre-flesh-eaters:zavistic-tankard-shown";
   const NECRO_SHOWN_ATTRIBUTE = "quest.zogre_flesh_eaters.necro_shown";
   const HAM_SHOWN_ATTRIBUTE = "quest.zogre_flesh_eaters.ham_shown";
   const PORTRAIT_SHOWN_ATTRIBUTE = "quest.zogre_flesh_eaters.portrait_shown";
   const INNKEEPER_SIGNED_ATTRIBUTE = "quest.zogre_flesh_eaters.innkeeper_signed";
+  const INNKEEPER_MUG_ATTRIBUTE = "zogre-flesh-eaters:innkeeper-mug-shown";
+  const INNKEEPER_PORTRAIT_ATTRIBUTE = "zogre-flesh-eaters:innkeeper-portrait-shown";
+  const MAKE_BOW_ATTRIBUTE = "zogre-flesh-eaters:make-composite-bow";
   const SOLD_BALM_ATTRIBUTE = "quest.zogre_flesh_eaters.sold_balm";
   const SKELETON_ATTRIBUTE = "quest.zogre_flesh_eaters.skeleton";
   const TRANSFORMED_ATTRIBUTE = "quest.zogre_flesh_eaters.transformed";
@@ -180,7 +183,6 @@ module.exports = function registerZogreFleshEatersQuest(api) {
     ASKED_REMOVE_ATTRIBUTE,
     MAKE_BRUTAL_ATTRIBUTE,
     MAKE_CURE_ATTRIBUTE,
-    TANKARD_SHOWN_ATTRIBUTE,
     NECRO_SHOWN_ATTRIBUTE,
     HAM_SHOWN_ATTRIBUTE,
     PORTRAIT_SHOWN_ATTRIBUTE,
@@ -201,11 +203,36 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   const give = (player, itemId, amount = 1) => player.getInventory().adds(itemId, amount);
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
   const flag = (player, key) => player.getAttribute(key) === true;
-  const setFlag = (player, key, value = true) => player.setAttribute(key, value);
+  function setFlag(player, key, value = true) {
+    player.setAttribute(key, value);
+    syncAuxiliaryState(player);
+  }
   const progress = (player) => Number(player.getAttribute(SEARCH_ATTRIBUTE)) || 0;
 
   function setProgress(player, value) {
     if (value > progress(player)) player.setAttribute(SEARCH_ATTRIBUTE, value);
+    syncAuxiliaryState(player);
+  }
+
+  const VARBIT_SEARCH_STATUS = 488; // THZFE_PRISMSEARCH
+  const VARBIT_SKELETON = 503; // THZFE_BRENTLE_SKELE
+  const AUXILIARY_FLAGS = [
+    [489, INNKEEPER_MUG_ATTRIBUTE], [490, INNKEEPER_PORTRAIT_ATTRIBUTE],
+    [491, NECRO_SHOWN_ATTRIBUTE], [492, HAM_SHOWN_ATTRIBUTE],
+    [493, TANKARD_SHOWN_ATTRIBUTE], [494, PORTRAIT_SHOWN_ATTRIBUTE],
+    [495, TRANSFORMED_ATTRIBUTE], [498, MAKE_CURE_ATTRIBUTE],
+    [499, MAKE_BRUTAL_ATTRIBUTE], [500, MAKE_BOW_ATTRIBUTE],
+  ];
+
+  function syncAuxiliaryState(player) {
+    const sender = player.getPacketSender();
+    for (const [id, attribute] of AUXILIARY_FLAGS) sender.sendVarbit(id, flag(player, attribute) ? 1 : 0);
+    sender.sendVarbit(VARBIT_SEARCH_STATUS, flag(player, ASKED_LOOK_ATTRIBUTE) ? 5 : progress(player));
+    sender.sendVarbit(VARBIT_SKELETON, Number(player.getAttribute(SKELETON_ATTRIBUTE)) || 0);
+  }
+
+  function handleBootstrapComplete({ player }) {
+    syncAuxiliaryState(player);
   }
 
   function freeSlots(player) {
@@ -547,9 +574,19 @@ module.exports = function registerZogreFleshEatersQuest(api) {
         setFlag(player, HAM_SHOWN_ATTRIBUTE);
         return;
       case "m5Yh81":
+      case "piuCKA":
+      case "jrf_wW":
+        setFlag(player, TANKARD_SHOWN_ATTRIBUTE);
+        return;
       case "OG1g5U":
       case "ukw5TP":
-        setFlag(player, TANKARD_SHOWN_ATTRIBUTE);
+        setFlag(player, INNKEEPER_MUG_ATTRIBUTE);
+        return;
+      case "FoOT6Z":
+        setFlag(player, INNKEEPER_PORTRAIT_ATTRIBUTE);
+        return;
+      case "aItbm4":
+        setFlag(player, MAKE_BOW_ATTRIBUTE);
         return;
       case "5liwsa":
         setFlag(player, PORTRAIT_SHOWN_ATTRIBUTE);
@@ -1069,6 +1106,7 @@ module.exports = function registerZogreFleshEatersQuest(api) {
         return;
       }
       player.setAttribute(SKELETON_ATTRIBUTE, 1);
+      syncAuxiliaryState(player);
       startTranscript(api, player, GRISH_NPC_ID, PAGE, "entering-jiggig-search-skeleton");
       return;
     }
@@ -1200,9 +1238,11 @@ module.exports = function registerZogreFleshEatersQuest(api) {
       if (!has(player, OGRE_ARTEFACT)) give(player, OGRE_ARTEFACT);
       return;
     }
-    if (event.npcId === ZOMBIE_NPC_ID) {
+    if (event.npcId === ZOMBIE_NPC_ID && event.npc
+      && event.npc === zombieByPlayer.get(player)) {
       zombieByPlayer.delete(player);
       player.setAttribute(SKELETON_ATTRIBUTE, 2);
+      syncAuxiliaryState(player);
     }
   }
 
@@ -1303,6 +1343,7 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   }
 
   function handleLogin({ player }) {
+    syncAuxiliaryState(player);
     slashBashByPlayer.delete(player);
     zombieByPlayer.delete(player);
     if (quest.getStage(player) >= STAGE_BARRICADE) crushBarricade();
@@ -1335,6 +1376,11 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcInteraction("Zavistic Rarve", { "Talk-to": talkToZavistic });
   api.onNpcDialogueCondition(answerCondition);
+  api.persistAttribute(TANKARD_SHOWN_ATTRIBUTE, false);
+  api.persistAttribute(INNKEEPER_MUG_ATTRIBUTE, false);
+  api.persistAttribute(INNKEEPER_PORTRAIT_ATTRIBUTE, false);
+  api.persistAttribute(MAKE_BOW_ATTRIBUTE, false);
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrapComplete);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);

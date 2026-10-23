@@ -3,6 +3,7 @@ const { test, before } = require('node:test');
 const path = require('node:path');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
@@ -33,6 +34,7 @@ function setup() {
   const inventory = new Map();
   const varbits = new Map();
   const configs = new Map();
+  const varps = new Map();
   const messages = [];
   const tasks = [];
   const taskManager = {
@@ -50,6 +52,7 @@ function setup() {
       inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count));
     },
     adds(id, count) {
+      if (free === 0 && !(inventory.get(id) > 0)) return inventoryApi;
       inventory.set(id, (inventory.get(id) ?? 0) + count);
       return true;
     },
@@ -61,10 +64,15 @@ function setup() {
   };
 
   const sender = new Proxy({
-    sendVarbit(id, value) { varbits.set(id, value); return sender; },
+    sendVarbit(id, value) {
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      const mask = (2 ** (endBit - startBit + 1) - 1) << startBit;
+      varps.set(baseVar, ((varps.get(baseVar) ?? 0) & ~mask) | ((value << startBit) & mask));
+      varbits.set(id, value); return sender;
+    },
     sendConfig(id, value) { configs.set(id, value); return sender; },
     getVarbit: (id) => varbits.get(id) ?? 0,
-    getVarp: (id) => configs.get(id) ?? 0,
+    getVarp: (id) => varps.get(id) ?? 0,
   }, { get(target, key) { return target[key] ?? (() => sender); } });
 
   const player = {
@@ -144,7 +152,7 @@ function setup() {
     return payload;
   };
   return {
-    core, quest, player, sender, attrs, inventory, skills, varbits, configs, messages, hooks, spawned, emit,
+    core, quest, player, sender, attrs, inventory, skills, varbits, configs, varps, messages, hooks, spawned, emit,
     setFree(value) { free = value; },
     setLocation(x, y, z = 0) { location = { x, y, z }; },
     variant(npcId) { return hooks.variants[0]({ player, npcId }); },
@@ -196,6 +204,7 @@ test('q059 cache contract: varbit 34 is the wire, not whole varp 351', () => {
   // The canonical completion is at or above the cache threshold (10).
   h.quest.complete(h.player);
   assert.equal(h.quest.getStage(h.player), 10);
+  assert.equal(h.varbits.get(35), 0, 'completion alone does not fabricate wall offerings');
   assert.ok(h.varbits.get(34) >= 10);
   assert.equal(h.inventory.get(I.RUSTY_CASKET), 1, 'completion hands over the casket');
 });
@@ -298,6 +307,7 @@ test('q059 mandatory handler route: start gate, bridge, key, door, light, wall, 
   assert.equal(h.quest.getStage(h.player), 5, 'an untracked base-ID mother cannot complete the quest');
   h.death(988);
   assert.equal(h.quest.getStage(h.player), 10);
+  for (const id of [35,36,37,38,40,41,42,43,44,45,46,47,48]) assert.equal(h.varbits.get(id), 1, `earned helper flag ${id}`);
   assert.ok(h.varbits.get(34) >= 10);
 });
 
@@ -413,4 +423,38 @@ test('q059 completes from each transformed mother content ID and rejects a non-o
     h.deathContent(mother, phases[index]);
     assert.equal(h.quest.getStage(h.player), 10, `transformed content ${phases[index]} completes the quest`);
   }
+});
+
+
+test('q059 auxiliary flags are earned individually and replay after bootstrap with sibling preservation', () => {
+  const h = setup(), I = h.core.ItemIdentifiers, N = h.core.NpcIdentifiers;
+  const names = { horrorbridgeleft:36, horrorbridgeright:37, horroragilitykey:38, horrordoor:35,
+    horrortar:46, horrorglass:47, horrorlight:48, horrorair:43, horrorwater:41,
+    horrorearth:42, horrorfire:40, horrorsword:44, horrorarrow:45 };
+  for (const [name,id] of Object.entries(names)) assert.equal(CacheDefinitions.getVarbitId(name), id);
+  h.quest.setStage(h.player, 1);
+  h.setFree(0); h.action(N.GUNNJORN, 'Wh6Z8x');
+  assert.equal(h.varbits.get(38) ?? 0, 0, 'failed handout cannot earn the key flag');
+  h.setFree(1); h.action(N.GUNNJORN, 'Wh6Z8x');
+  assert.equal(h.varbits.get(38), 1);
+  h.inventory.set(I.PLANK,1); h.inventory.set(I.STEEL_NAILS,30); h.inventory.set(I.HAMMER,1);
+  h.itemOnObject(4615,I.PLANK);
+  // Persisted partial state is authoritative, regardless of later item loss/completion.
+  const flags = h.attrs.get('quest.horror_from_the_deep.flags');
+  assert.ok(flags > 0);
+  assert.equal(h.varbits.get(36),1);
+  assert.equal(h.varbits.get(37),0);
+  const parent = CacheDefinitions.getVarbit(38).baseVar;
+  const owned = [34,...Object.values(names)].filter(id=>CacheDefinitions.getVarbit(id).baseVar===parent)
+    .reduce((mask,id)=>{ const d=CacheDefinitions.getVarbit(id); return mask | ((2**(d.endBit-d.startBit+1)-1)<<d.startBit); },0);
+  const siblings=0x5a5a5a5a & ~owned;
+  h.varps.set(parent,siblings); h.varbits.clear();
+  const stage=h.quest.getStage(h.player), beforeItems=[...h.inventory];
+  h.emit('player:bootstrap-complete',{});
+  assert.equal(h.varbits.get(38),1);
+  assert.equal(h.varbits.get(35),0, 'exterior key is not basement puzzle completion');
+  assert.equal(h.varbits.get(40),0, 'unoffered fire rune stays unearned');
+  assert.equal(h.varps.get(parent)&~owned,siblings);
+  assert.equal(h.quest.getStage(h.player),stage);
+  assert.deepEqual([...h.inventory],beforeItems);
 });
