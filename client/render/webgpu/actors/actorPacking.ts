@@ -248,7 +248,7 @@ export function getNpcGeometryRequest(
     const overlayFrameId = overlaySeqId >= 0 ? ecs.getMovementFrameIndex?.(ecsId) | 0 : -1;
 
     return [npcTypeId, renderSeqId, frameId, overlaySeqId, overlayFrameId,
-        npcInterpolation(client, ecsId, renderSeqId, frameId, overlaySeqId, overlayFrameId)];
+        renderSeqId >= 0 ? npcInterpolation(client, ecsId, renderSeqId, frameId, overlaySeqId, overlayFrameId) : undefined];
 }
 
 /** Port of render/render/anim/npc2.ts resolveUnbatchedNpcGeometry (including animation smoothing). */

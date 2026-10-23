@@ -72,7 +72,7 @@ function fixture(alpha = true, capacity = 8) {
         return state as any;
     };
     const evictCpu = () => { (loader as any).geomCache.clear(); (loader as any).geomCacheBytes = 0; };
-    return { loader, cache, pack, evictCpu, ready, model,
+    return { client, loader, cache, pack, evictCpu, ready, model,
         setType: (id: number) => { typeId = id; }, setVariant: (id: number) => { variant = id; },
         setSequence: (id: number) => { sequence = id; }, setFrame: (id: number) => { frame = id; },
         builds: () => builds, uploads: () => uploads };
@@ -132,8 +132,11 @@ test("missing next frames use the exact CPU fallback key and recover when ready"
 
 test("unanimated and missing-current NPC frames retain base-geometry fallback", () => {
     const f = fixture();
+    let samples = 0;
+    f.client.clientPlugins.smoothsNpcs = () => { samples++; return false; };
     f.setSequence(-1);
     assert.equal(f.pack().opaque.length, 1);
+    assert.equal(samples, 0, "unanimated NPCs do not sample interpolation");
     f.setSequence(1); f.ready.clear(); f.evictCpu();
     assert.equal(f.pack().opaque.length, 1);
 });
