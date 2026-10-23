@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ActorDataTexture, MapActorUniforms, POSE_WIDTH } from "../render/webgpu/actors/actorGpu";
+import { GPU_BUFFER_USAGE } from "../render/webgpu/bindings";
 
 test("growing actor uniforms preserves every earlier draw's position and transform", () => {
     let uploaded = new ArrayBuffer(0);
@@ -16,7 +17,7 @@ test("growing actor uniforms preserves every earlier draw's position and transfo
             },
         },
     } as unknown as GPUDevice;
-    const uniforms = new MapActorUniforms(device, {} as GPUBindGroupLayout, 256, {
+    const uniforms = new MapActorUniforms(device, {} as GPUBindGroupLayout, {
         mapX: 50, mapY: 50, borderSize: 0, heightMapSize: 2,
         heightMapTextureData: new Int16Array(16),
     } as any);
@@ -29,7 +30,7 @@ test("growing actor uniforms preserves every earlier draw's position and transfo
         const floats = new Float32Array(uploaded);
         const words = new Uint32Array(uploaded);
         for (let i = 0; i < count; i++) {
-            const row = i * 64;
+            const row = i * 32;
             assert.equal(floats[row], 50 + i, `position survives growth at ${count} draws`);
             assert.equal(words[row + 4], i, "actor data index is preserved");
             assert.equal(new Int32Array(uploaded)[row + 10], -1, "CPU poses remain CPU poses");
@@ -122,7 +123,7 @@ test("actor uniforms skip unchanged frames and refresh data after a buffer grows
         queue: { writeTexture() {}, writeBuffer: (_buffer: unknown, _offset: number,
             data: ArrayBuffer, start: number, size: number) => writes.push(data.slice(start, start + size)) },
     } as unknown as GPUDevice;
-    const uniforms = new MapActorUniforms(device, {} as GPUBindGroupLayout, 256,
+    const uniforms = new MapActorUniforms(device, {} as GPUBindGroupLayout,
         { mapX: 50, mapY: 50, borderSize: 0 } as any);
     const frame = (count: number, offset = 0) => {
         uniforms.reset();
@@ -137,9 +138,39 @@ test("actor uniforms skip unchanged frames and refresh data after a buffer grows
     assert.equal(new Float32Array(writes[1])[0], 51);
     frame(9, 1);
     assert.equal(writes.length, 3, "a grown buffer receives its complete contents");
-    assert.equal(writes[2].byteLength, 9 * 256);
+    assert.equal(writes[2].byteLength, 9 * 128);
     frame(0);
     frame(1);
     assert.equal(writes.length, 4, "reappearing draws receive their current uniforms");
+    uniforms.destroy();
+});
+
+test("packed actor records keep independent poses, offsets and deck transforms", () => {
+    let descriptor: any, binding: any, uploaded = new ArrayBuffer(0);
+    const device = {
+        createTexture: () => ({ createView: () => ({}), destroy() {} }),
+        createBuffer: (desc: any) => { descriptor = desc; return { destroy() {} }; },
+        createBindGroup: (desc: any) => { binding = desc.entries[0].resource; return {}; },
+        queue: { writeTexture() {}, writeBuffer: (_b: unknown, _o: number, data: ArrayBuffer, start: number, size: number) => {
+            uploaded = data.slice(start, start + size);
+        } },
+    } as unknown as GPUDevice;
+    const uniforms = new MapActorUniforms(device, {} as GPUBindGroupLayout, { mapX: 50, mapY: 51, borderSize: 6 } as any);
+    const deck = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4, 5, 6, 1]);
+    uniforms.setWorldEntityTransform(deck);
+    uniforms.addEntry(50, 51, -1, 10, 7, 0, 0.25, 0.75, 13);
+    uniforms.setWorldEntityTransform(undefined);
+    uniforms.addEntry(52, 53, -1, -10, 8, 1, 0.5, 0.125, 14);
+    uniforms.flush();
+    assert.equal(uploaded.byteLength, 256, "two complete actor records need 256 bytes, without dynamic-offset padding");
+    assert.ok(descriptor.usage & GPU_BUFFER_USAGE.STORAGE);
+    assert.equal(binding.size, descriptor.size, "every instance can read its own record from the bound array");
+    const words = new Int32Array(uploaded), floats = new Float32Array(uploaded);
+    assert.deepEqual([words[4], words[10], words[11]], [7, 13, 1]);
+    assert.deepEqual(Array.from(floats.subarray(16, 32)), Array.from(deck));
+    assert.deepEqual([words[32 + 4], words[32 + 10], words[32 + 11]], [8, 14, 0]);
+    assert.deepEqual(Array.from(floats.subarray(32, 36)), [52, 53, -1, -10]);
+    assert.equal(words[32 + 5], 1);
+    assert.deepEqual(Array.from(floats.subarray(32 + 6, 32 + 8)), [0.5, 0.125]);
     uniforms.destroy();
 });

@@ -16,11 +16,6 @@ const IDENTITY_MAT4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0
 
 export type ActorPose = { row: number; matrices: Float32Array };
 
-/** Dynamic-offset stride; 256 matches bindings.ts, grown if the device needs more. */
-export function actorUniformStride(device: GPUDevice): number {
-    return Math.max(256, device.limits.minUniformBufferOffsetAlignment || 1);
-}
-
 /** group(3): the per-frame actor data texture and the GPU player pose texture. */
 export class ActorDataTexture {
     readonly texture: GPUTexture;
@@ -141,7 +136,7 @@ function createHeightMapTexture(device: GPUDevice, mapData: SdMapData): GPUTextu
 }
 
 /**
- * Per-map group(2): a dynamic-offset uniform buffer plus the map's own height map texture.
+ * Per-map group(2): packed actor records plus the map's own height map texture.
  * One uniform entry per draw item; entries are reused by the opaque and alpha passes.
  */
 export class MapActorUniforms {
@@ -152,7 +147,7 @@ export class MapActorUniforms {
 
     private readonly device: GPUDevice;
     private readonly layout: GPUBindGroupLayout;
-    private readonly stride: number;
+    private readonly stride = ACTOR_UNIFORM_BYTES;
     private capacity = 0;
     private buffer: GPUBuffer | undefined;
     private bindGroup: GPUBindGroup | undefined;
@@ -168,17 +163,15 @@ export class MapActorUniforms {
     constructor(
         device: GPUDevice,
         layout: GPUBindGroupLayout,
-        stride: number,
         mapData: SdMapData,
     ) {
         this.device = device;
         this.layout = layout;
-        this.stride = stride;
         this.borderSize = mapData.borderSize | 0;
         this.renderPosX = mapData.renderPosX ?? mapData.mapX;
         this.renderPosY = mapData.renderPosY ?? mapData.mapY;
         this.heightTexture = createHeightMapTexture(device, mapData);
-        this.scratch = new Float32Array(stride / 4);
+        this.scratch = new Float32Array(this.stride / 4);
         this.view = new DataView(this.scratch.buffer);
     }
 
@@ -254,12 +247,8 @@ export class MapActorUniforms {
         }
     }
 
-    bindGroupFor(entry: number): GPUBindGroup | undefined {
+    bindGroupFor(): GPUBindGroup | undefined {
         return this.bindGroup;
-    }
-
-    offsetFor(entry: number): number {
-        return entry * this.stride;
     }
 
     destroy(): void {
@@ -282,7 +271,7 @@ export class MapActorUniforms {
         this.buffer = this.device.createBuffer({
             label: "webgpu actor uniforms",
             size: capacity * this.stride,
-            usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+            usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
         });
         this.bindGroup = this.device.createBindGroup({
             label: "webgpu actor uniforms",
@@ -290,7 +279,7 @@ export class MapActorUniforms {
             entries: [
                 {
                     binding: 0,
-                    resource: { buffer: this.buffer, offset: 0, size: this.stride },
+                    resource: { buffer: this.buffer, offset: 0, size: capacity * this.stride },
                 },
                 { binding: 1, resource: this.heightTexture.createView({ dimension: "2d-array" }) },
             ],

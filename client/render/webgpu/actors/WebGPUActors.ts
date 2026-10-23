@@ -29,7 +29,6 @@ import {
     MapActorUniforms,
     POSE_ROWS,
     POSE_WIDTH,
-    actorUniformStride,
     type GpuGeometry,
     type ActorPose,
 } from "./actorGpu";
@@ -148,8 +147,8 @@ export class WebGPUActors {
             entries: [
                 {
                     binding: 0,
-                    visibility: GPU_SHADER_STAGE.VERTEX | GPU_SHADER_STAGE.FRAGMENT,
-                    buffer: { type: "uniform", hasDynamicOffset: true, minBindingSize: 128 },
+                    visibility: GPU_SHADER_STAGE.VERTEX,
+                    buffer: { type: "read-only-storage", minBindingSize: 128 },
                 },
                 {
                     binding: 1,
@@ -485,36 +484,53 @@ export class WebGPUActors {
             pass.setBindGroup(1, extended ? world.extensionTextureBindGroup! : world.worldTextureBindGroup);
         }
         pass.setBindGroup(3, this.actorData.bindGroup);
+        let boundPipeline: GPURenderPipeline | undefined;
+        let boundGeometry: GpuGeometry | undefined;
+        let boundLabels: GPUBuffer | undefined;
         const maps = this.frameMaps;
         for (let m = 0; m < maps.length; m++) {
             const state = alpha ? maps[maps.length - 1 - m] : maps[m];
-            for (const item of alpha ? state.alpha : state.opaque) {
+            const items = alpha ? state.alpha : state.opaque;
+            if (items.length === 0) continue;
+            const bindGroup = state.uniforms.bindGroupFor();
+            if (!bindGroup) continue;
+            pass.setBindGroup(2, bindGroup);
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
                 const variants = extended ? this.variants.get(item.pipeline) : undefined;
                 const pipeline = depth ? variants?.depth : variants?.extended ?? item.pipeline;
-                if (pipeline) this.dispatch(pass, state, item, pipeline, depth ? 1 : world.sampleCount);
+                if (!pipeline) continue;
+                let instances = 1;
+                // Keep draw order: only adjacent opaque actors with consecutive records merge.
+                if (!alpha) {
+                    while (i + 1 < items.length) {
+                        const next = items[i + 1];
+                        if (next.pipeline !== item.pipeline || next.geometry !== item.geometry ||
+                            next.entry !== item.entry + instances) break;
+                        instances++;
+                        i++;
+                    }
+                }
+                const selected = withSampleCount(pipeline, depth ? 1 : world.sampleCount);
+                if (selected !== boundPipeline) {
+                    pass.setPipeline(selected);
+                    boundPipeline = selected;
+                }
+                if (item.geometry !== boundGeometry) {
+                    pass.setVertexBuffer(0, item.geometry.vertices);
+                    pass.setIndexBuffer(item.geometry.indices, "uint32");
+                    boundGeometry = item.geometry;
+                }
+                if (this.playerPipelines.has(pipeline)) {
+                    const labels = item.geometry.labels ?? item.geometry.vertices;
+                    if (labels !== boundLabels) {
+                        pass.setVertexBuffer(1, labels);
+                        boundLabels = labels;
+                    }
+                }
+                pass.drawIndexed(item.geometry.indexCount, instances, 0, 0, item.entry);
             }
         }
-    }
-
-    private dispatch(
-        pass: GPURenderPassEncoder,
-        state: MapActorState,
-        item: ActorDrawItem,
-        pipeline: GPURenderPipeline,
-        sampleCount: number,
-    ): void {
-        const bindGroup = state.uniforms.bindGroupFor(item.entry);
-        if (!bindGroup) return;
-        pass.setPipeline(withSampleCount(pipeline, sampleCount));
-        pass.setBindGroup(2, bindGroup, [state.uniforms.offsetFor(item.entry)]);
-        pass.setVertexBuffer(0, item.geometry.vertices);
-        if (this.playerPipelines.has(pipeline)) {
-            // CPU-posed meshes (pose row -1) never read their label, so their own vertex
-            // buffer stands in for the label buffer: it is always long enough.
-            pass.setVertexBuffer(1, item.geometry.labels ?? item.geometry.vertices);
-        }
-        pass.setIndexBuffer(item.geometry.indices, "uint32");
-        pass.drawIndexed(item.geometry.indexCount);
     }
 
     onMapAdded(map: WebGPUMapSquare, mapData: SdMapData): void {
@@ -527,7 +543,6 @@ export class WebGPUActors {
             uniforms: new MapActorUniforms(
                 device,
                 this.actorUniformLayout,
-                actorUniformStride(device),
                 mapData,
             ),
             opaque: [],
@@ -710,6 +725,7 @@ export class WebGPUActors {
         const geometry = resolveUnbatchedNpcGeometry(client, loader, ecsId);
         if (!geometry) return;
         const timeLoaded = map.timeLoaded;
+        let entry: number | undefined;
         const opaque = this.geometry?.getOrCreate(
             `${geometry.key}|o`,
             geometry.opaqueVertices,
@@ -719,7 +735,7 @@ export class WebGPUActors {
             state.opaque.push({
                 pipeline: this.pipelines.get("npc")![0],
                 geometry: opaque,
-                entry: this.actorEntry(
+                entry: entry ??= this.actorEntry(
                     state,
                     map,
                     timeLoaded,
@@ -740,7 +756,7 @@ export class WebGPUActors {
             state.alpha.push({
                 pipeline: this.pipelines.get("npc")![1],
                 geometry: alpha,
-                entry: this.actorEntry(
+                entry: entry ??= this.actorEntry(
                     state,
                     map,
                     timeLoaded,
@@ -795,12 +811,13 @@ export class WebGPUActors {
                     this.pipelines.get("player")![1],
                 ],
             ];
+            let entry: number | undefined;
             for (const [geometry, items, pipeline] of passes) {
                 if (!geometry) continue;
                 items.push({
                     pipeline,
                     geometry,
-                    entry: this.actorEntry(state, map, timeLoaded, modelYOffset, dataIndex, 0, 0, 0, poseRow),
+                    entry: entry ??= this.actorEntry(state, map, timeLoaded, modelYOffset, dataIndex, 0, 0, 0, poseRow),
                 });
             }
         }
@@ -996,6 +1013,7 @@ export class WebGPUActors {
     ): void {
         const cache = this.gfx?.cache;
         if (!cache) return;
+        let entry: number | undefined;
         const opaqueGeometry = cache.ensureFrameGeometry(spotId, frameIdx, false, frameCycle);
         if (opaqueGeometry && this.pipelines.get(kind)?.[0]) {
             const gpu = this.geometry?.getOrCreate(
@@ -1007,7 +1025,7 @@ export class WebGPUActors {
                 state.opaque.push({
                     pipeline: this.pipelines.get(kind)![0],
                     geometry: gpu,
-                    entry: this.actorEntry(
+                    entry: entry ??= this.actorEntry(
                         state,
                         map,
                         timeLoaded,
@@ -1031,7 +1049,7 @@ export class WebGPUActors {
                 state.alpha.push({
                     pipeline: this.pipelines.get(kind)![1],
                     geometry: gpu,
-                    entry: this.actorEntry(
+                    entry: entry ??= this.actorEntry(
                         state,
                         map,
                         timeLoaded,

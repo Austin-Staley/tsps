@@ -71,7 +71,8 @@ struct ActorUniforms {
     u_worldEntityTransform: mat4x4<f32>, // 64..128
 };
 
-@group(2) @binding(0) var<uniform> actorU: ActorUniforms;
+@group(2) @binding(0) var<storage, read> actorRows: array<ActorUniforms>;
+var<private> actorU: ActorUniforms;
 @group(2) @binding(1) var u_mapHeight: texture_2d_array<i32>;
 
 @group(3) @binding(0) var u_actorData: texture_2d<u32>;
@@ -496,6 +497,7 @@ function placement(kind: ActorKind): string {
     let clip = scene.u_projectionMatrix * viewPos;
     let clipPosition = vec4<f32>(clip.x, clip.y, (clip.z + clip.w) * 0.5, clip.w);`;
     return `
+    actorU = actorRows[a_instance];
 ${info}${pose}
 
     var localPos = glslRowMul(
@@ -515,7 +517,7 @@ ${info}${pose}
 
 function vertexParams(kind: ActorKind): string {
     const wide = WIDE_KINDS.has(kind);
-    return `@location(0) a_vertex: vec${wide ? 4 : 3}<u32>${wide ? ", @location(3) a_positionFraction: u32" : ""}${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
+    return `@builtin(instance_index) a_instance: u32, @location(0) a_vertex: vec${wide ? 4 : 3}<u32>${wide ? ", @location(3) a_positionFraction: u32" : ""}${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
 }
 
 function sceneVertexEntry(kind: ActorKind, ext?: WebGPUSceneShaders): string {
