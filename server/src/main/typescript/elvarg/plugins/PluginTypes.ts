@@ -872,6 +872,8 @@ export interface PluginApi {
     objectName: string,
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
+  /** Conditional interaction ownership before normal object handlers. Leave unclaimed events untouched. */
+  onBeforeObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
   /** Conditional interaction ownership before normal NPC handlers. Leave unclaimed events untouched. */
   onBeforeNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
