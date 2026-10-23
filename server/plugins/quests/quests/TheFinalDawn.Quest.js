@@ -643,8 +643,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return body === ItemIdentifiers.EMISSARY_ROBE_TOP && legs === ItemIdentifiers.EMISSARY_ROBE_BOTTOM;
   }
 
-  function play(player, npcId, variant, select) {
-    return startTranscript(api, player, npcId, PAGE, variant, select);
+  function play(player, npcId, variant, select, npc = null) {
+    return startTranscript(api, player, npcId, PAGE, variant, select, npc);
   }
 
   function correctPassphrase(player) {
@@ -1387,7 +1387,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     }
     if (stage >= STAGE_TRAP && stage < STAGE_JANUS) {
       openSafehouseScene(player);
-      play(player, npcId, "home-invasion-talking-to-captain-vibia-2", selectTrapSteps(player, npcId));
+      play(player, npcId, "home-invasion-talking-to-captain-vibia-2", selectTrapSteps(player, npcId),
+        tracked(player, "vibia-house"));
       return true;
     }
     if (stage >= STAGE_JANUS && stage < STAGE_CAM_TORUM) {
@@ -2467,6 +2468,11 @@ module.exports = function registerTheFinalDawnQuest(api) {
   /** Captured stage changes that ride on the final archive dialogue lines. */
   function handleDialogueLine(event) {
     const { player, npcId, text } = event;
+    if (player && quest.getStage(player) === STAGE_TRAP && VIBIA_IDS.has(npcId) && event.step?.speaker === "Guard Dog"
+      && event.pages?.some(page => page.page === PAGE && page.variants?.includes("home-invasion-talking-to-captain-vibia-2"))
+      && Scenes.get(player)?.name === "safehouse-trap") {
+      event.actor = tracked(player, "guard-dog") ?? undefined;
+    }
     if (!player || !ITZLA_IDS.has(npcId)) return;
     const line = String(text ?? "");
     if (/Let's get after her/i.test(line) && quest.getStage(player) === STAGE_METZLI_DEAD) {

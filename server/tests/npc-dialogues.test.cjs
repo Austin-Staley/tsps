@@ -943,6 +943,60 @@ test('an overhead NPC action owns its two-tick continuation; treating it as a di
   }
 });
 
+test('an explicitly bound overhead scene actor is still local, visible, registered and owner scoped', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const transcript = [{ type: 'line', speaker: 'Guard Dog', text: 'Woof!', presentation: 'overhead' }];
+  const run = ({ registered = true, visible = true, owner = null, area = null, z = 0, local = true } = {}) => {
+    const chats = [], scene = {}, playerLocation = { getZ: () => 0, getDistance: () => 1 };
+    const npcLocation = { getZ: () => z };
+    const sender = new Proxy({}, { get: (_target, _key) => (..._args) => sender });
+    const player = {
+      isRegistered: () => true,
+      getLocation: () => playerLocation,
+      getPrivateArea: () => scene,
+      getLocalNpcs: () => local ? [actor] : [],
+      getPacketSender: () => sender,
+      sendMessage: () => {},
+      getDialogueManager() { return this.manager; },
+    };
+    const actor = {
+      isRegistered: () => registered,
+      isVisible: () => visible,
+      isOwnerOnly: () => true,
+      getOwner: () => owner ?? player,
+      getPrivateArea: () => area ?? scene,
+      getLocation: () => npcLocation,
+      getCurrentDefinition: () => ({ getName: () => 'Dog' }),
+      forceChat: text => chats.push(text),
+    };
+    player.manager = new DialogueManager(player);
+    const api = {
+      core: PluginManager.getCoreApi(),
+      emitCustomEvent(name, request) { if (name === 'npc-dialogue:line') request.actor = actor; },
+    };
+    const event = { player, npc: null, npcId: 14303, definition: { getId: () => 14303, getName: () => 'Captain Vibia' } };
+    startDialogue(api, event, transcript, {}, { ...event, pages: [], speakerIdByName: new Map() });
+    return { chats, player };
+  };
+
+  try {
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+    assert.deepEqual(run().chats, ['Woof!'], 'an explicit alias binds the real local Dog actor');
+    assert.deepEqual(run({ owner: {} }).chats, [], 'a different owner cannot speak in this scene');
+    assert.deepEqual(run({ area: {} }).chats, [], 'an actor in another private area is rejected');
+    assert.deepEqual(run({ visible: false }).chats, [], 'an invisible actor is rejected');
+    assert.deepEqual(run({ registered: false }).chats, [], 'a removed actor is rejected');
+    assert.deepEqual(run({ local: false }).chats, [], 'an actor absent from the local NPC list is rejected');
+    assert.deepEqual(run({ z: 1 }).chats, [], 'an actor on another plane is rejected');
+  } finally {
+    TaskManager.pendingTasks.clear();
+    TaskManager.activeTasks.length = 0;
+  }
+});
+
 test('ordinary typed player-placeholder lines still use the player chathead', () => {
   const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
   const { PluginManager } = require('../dist/plugins/PluginManager');

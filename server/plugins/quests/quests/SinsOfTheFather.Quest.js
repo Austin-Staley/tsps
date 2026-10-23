@@ -674,6 +674,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const vanstromFights = new WeakMap();
   const vanstromNpcMeta = new WeakMap();
   const carlFollowSessions = new WeakMap();
+  const carlFailureActors = new WeakMap();
   const personalObjects = new WeakMap();
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
@@ -789,8 +790,8 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     return start > 0 ? steps.slice(start) : steps;
   }
 
-  function play(player, npcId, variant) {
-    return startTranscript(api, player, npcId, PAGE, variant, withoutLeadingJumps);
+  function play(player, npcId, variant, npc = null) {
+    return startTranscript(api, player, npcId, PAGE, variant, withoutLeadingJumps, npc);
   }
 
   function say(player, npcId, text) {
@@ -1090,14 +1091,22 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   function failCarlFollow(player, caught) {
     const session = carlFollowSessions.get(player);
     if (!session) return;
-    removeCarlFollow(player);
+    carlFollowSessions.delete(player);
+    const failureActors = carlFailureActors.get(player) ?? new Set();
+    failureActors.add(session.npc);
+    carlFailureActors.set(player, failureActors);
     player.setAttribute(CARL_PROGRESS_ATTRIBUTE, 0);
     quest.setStage(player, STAGE_HAMELN);
     applyStageSpawns(player);
     syncQuestObjects(player);
     play(player, PROP_ID, caught
       ? "plague-s-end-if-caught-by-carl"
-      : "plague-s-end-if-the-player-falls-too-far-behind-carl");
+      : "plague-s-end-if-the-player-falls-too-far-behind-carl", session.npc);
+    later(player, 3, () => {
+      if (!failureActors.delete(session.npc)) return;
+      if (!failureActors.size) carlFailureActors.delete(player);
+      api.removeNpc(session.npc);
+    });
   }
   /**
    * RSMOD/RegionManager ray: each Bresenham step must be traversable, so wall
@@ -3700,6 +3709,8 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     cleanupVanstromFight(player);
     clearPersonalObjects(player);
     removeCarlFollow(player);
+    for (const npc of carlFailureActors.get(player) ?? []) api.removeNpc(npc);
+    carlFailureActors.delete(player);
     despawnAll(player);
   }
 

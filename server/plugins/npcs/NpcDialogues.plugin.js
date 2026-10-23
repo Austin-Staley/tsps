@@ -9,7 +9,8 @@
  * game logic (set stage, hand in items) without re-authoring the words, and each
  * speech line emits "npc-dialogue:line" with a mutable `skip` so a quest can drop
  * lines that no longer apply (e.g. handing over an item the player does not have), a
- * mutable `text` to fill in blanks and an `after` callback run once the player continues
+ * mutable `text` to fill in blanks, an optional bound scene `actor` for overhead lines, and
+ * an `after` callback run once the player continues
  * past it. A message step's "npc-dialogue:action" (`kind: "message"`) can set
  * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
  * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand.
@@ -63,6 +64,11 @@ function actorAvailable(player, actor) {
   return actor === player || sameActorContext(player, actor);
 }
 
+function explicitlyBoundActorAvailable(player, actor) {
+  return actorAvailable(player, actor) && actor?.isVisible?.() === true
+    && (actor === player || localNpcs(player).includes(actor));
+}
+
 function localNpcs(player) {
   const list = player?.getLocalNpcs?.();
   return Array.isArray(list) ? list : list ? [...list.values()] : [];
@@ -88,7 +94,8 @@ function nearestNamedNpc(player, name) {
   return matches[0]?.npc;
 }
 
-function overheadActor(step, event, typedLine, player) {
+function overheadActor(step, event, typedLine, player, boundActor) {
+  if (boundActor) return explicitlyBoundActorAvailable(player, boundActor) ? boundActor : undefined;
   if (typeof step.player === "string") return player;
   if (typedLine && PLAYER_SPEAKER.test(step.speaker ?? "")) return player;
   if (typeof step.npc === "string") {
@@ -777,7 +784,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             if (manager.getCurrent?.() !== overheadAction) return;
             // Resolve here, after before and its identity check: ordinary speech
             // earlier in the chain must already be showing before a miss stops it.
-            const actor = overheadActor(step, event, typedLine, player);
+            const actor = overheadActor(step, event, typedLine, player, request.actor);
             if (!actorAvailable(player, actor)) {
               unavailable();
               manager.reset?.();
