@@ -6,7 +6,7 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Original 128: accepted natural main-route proofs
 
-Thirteen quests have accepted natural main-route completion evidence: **13 / 128 (10.16%)** (q003, q006, q008, q011, q026, q040, q041, q048, q063, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Fourteen quests have accepted natural main-route completion evidence: **14 / 128 (10.94%)** (q003, q006, q008, q011, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 ### q003 — The Ascent of Arceuus
 
@@ -80,6 +80,12 @@ Thirteen quests have accepted natural main-route completion evidence: **13 / 128
 - **Revision:** plugin/source = loaded `a6628d9b8b924077df0c33d9009deeb8bec6d7cec35d319eef3b76272cc5ede5`; reviewed focused test `656fa628598b42f08baa11190953ec3ee843875880a5608113947b31dea325aa`.
 - **Scoped result:** fresh stage-0 route completed main varbit 13902=30 (durable stage13), with tutorial varbit 13903=65; QP 0→1. Smithing XP was +266 from observed tutorial practice before the quest reward, then +6,000 completion XP (+6,266 total). Credentialed relog preserved completion and reward, and final logout was confirmed offline.
 - **Limits:** this does not certify all branches, recovery, visual overlay, full-bag behavior or combat balance. Evidence: `/tmp/tsps-728/native/jobs/q105-epoch19-acceptance.md` and root acceptance.
+
+### q072 — Meat and Greet
+
+- **Revision:** plugin/source = loaded = root-reviewed `14433cf4767ef48d9249181dd5b8551c4d7f75d1f4dacb41cef9bcebfa95522e`; focused test `32f42ca3a82b63d12a81e025ea44e0953c5e21699df6e3714958bb8fb4128910`; root accepted this scoped fresh natural route.
+- **Scoped result:** fresh stage-0 route completed at varbit/durable stage 26, QP 1→2, Cooking +8,000 (13,034,431→13,042,431). Route combat added Strength +2,120 and Hitpoints +676. Repeat Emelio dialogue did not duplicate rewards; credentialed relog preserved completion/rewards and final logout was offline-confirmed. Root independently accepted the bounded main-route proof.
+- **Limits:** Alpha and Minotaur combat used declared NPC HP-lowering aids after actual player hits, so this is not unassisted combat or damage-balance evidence. No visual overlay, full-bag, recovery, or all-branches certification. Evidence: `/tmp/tsps-728/native/jobs/q072-epoch19-acceptance.md`, `/tmp/tsps-728/native/jobs/q072-epoch19-baseline-emelio.json`, raw captures `q072-epoch19-natural-route.raw.jsonl`, `q072-epoch19-reconnect.raw.jsonl`, `q072-epoch19-postrelog.raw.jsonl`.
 
 ## Original 128: completion observations not yet accepted
 

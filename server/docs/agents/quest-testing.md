@@ -26,6 +26,16 @@ Agree these before touching an account. They stop most time loss.
 - **Stop rule.** Two equivalent attempts that fail the same way means stop, inspect the exact
   cause (message, tile, object/menu, collision, source predicate), then report or fix. Do not
   retry the same click, do not "recover" with a relog and call it a pass.
+- **Keep actors moving.** An old review hash is not a runtime mismatch. When the actual loaded
+  source matches the published candidate, review the changes since the historical report,
+  run its focused checks and record the current hashes. A frozen source claim does not reserve
+  its native actor: record the source/native split and archive stale bookkeeping yourself.
+  Apply the ready-row cap by archiving completed, offline rows verbatim.
+- **Close out together.** Batch exact reward deltas, nearby repeat dialogue, normal logout/login,
+  persistence and final logout/offline checks, then write a small evidence packet. Keep raw
+  captures on disk; read selected fields. During slow walking or timers, advance another
+  independent account. A hung call needs a bounded timeout and same-account reconnect,
+  followed by inspecting whether the action already happened; it never authorizes a reset.
 
 ## Sources: what each can and cannot prove
 
