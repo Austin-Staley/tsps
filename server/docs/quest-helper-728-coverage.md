@@ -36,9 +36,9 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **16/106 active scoped main routes (15.09%)**. The count
-is 16/128 against the original inventory; the increase in percentage comes only
-from the approved scope reduction plus the newly accepted Depths of Despair and Death Plateau routes. Supplemental issue-809 evidence
+of accepted route counts: **17/106 active scoped main routes (16.04%)**. The count
+is 17/128 against the original inventory; the increase in percentage comes only
+from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau and Client of Kourend routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The draft PR is updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
@@ -232,7 +232,7 @@ deferred quest. No deferred quest is counted as complete.
 | Biohazard | `Biohazard` | Recovery and canonical receipts corrected; premature Guidor advancement returned to owner | Scoped source evidence; correction pending | Incomplete at stage 1; logged out |
 | Bone Voyage | `BoneVoyage` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Cabin Fever | `CabinFever` | Pending | Pending | Pending |
-| Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Pending |
+| Client of Kourend | `ClientOfKourend` | Veos ownership/travel, orb handover and wire mapping, memoir recovery fixes pushed; independent review ongoing; lamp recovery remains under investigation | 9 focused handler tests pass | Accepted linked natural main route, actual Munty door, five houses/altar, rewards/repeat/relog/offline ([ledger](quest-helper-728-verification.md)); destroyed unused-lamp recovery/overlay unchecked |
 | Clock Tower | `ClockTower` | Cog handling, shared lever, trough scope, surface exit and completion wire reviewed | 13 focused tests pass | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Cold War | `ColdWar` | Pending | Pending | Pending |
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |

@@ -6,11 +6,11 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Sixteen quests have accepted natural main-route completion evidence: **16 / 106 active quests (15.09%)** (q003, q006, q008, q011, q017, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Seventeen quests have accepted natural main-route completion evidence: **17 / 106 active quests (16.04%)** (q003, q006, q008, q010, q011, q017, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
-long or complex quests; all 16 accepted routes are within the retained 106. Against
-the original inventory the count is still 16/128 (12.50%). Deferral changes scope,
+long or complex quests; all 17 accepted routes are within the retained 106. Against
+the original inventory the count is still 17/128 (13.28%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
 
@@ -26,6 +26,13 @@ lists the exact active and deferred sets and preserves their prior evidence.
 - **Revision:** plugin/source = loaded = peer-reviewed `4a0656ff904a18720472ea8f121b8ffef7b9fbdca555d9da48592f852cba5cdd`; focused test `395aa164379a038ad557c11ecac4047520b172787f0ee6b182033df94f2bd09d`.
 - **Natural route and result:** epoch 5 exercised the dialogue/scene handoffs, canal barge and copied sailing instance, voyage, arrival, Junior Navigator completion, and completion UI. Cache quest row 11 uses varbit 5795 with completion wire value 50; durable stage 11 was verified. QP +1; no skill XP reward; Fossil island notebook +1 and declared consumables were reconciled. Museum Kudos were earned in the run through ten Historian Minas reports and five real finds; they were not a setup fixture. Ordinary non-target prerequisites were declared as setup. The completed Junior Navigator despawned; a same-target repeat attempt could not reopen completion and caused no duplicate QP, XP or notebook. Relog preserved stage/rewards; completion save #220 and logout save #221 were recorded. Post-quest Curator dialogue and barge travel to Fossil Island worked after relog.
 - **Limits/recheck:** lost-item reclaims, full-bag, interrupted voyage/conversation and overlay remain unchecked (the scoped source tests cover several recovery branches, which is not native proof). Evidence: `/tmp/tsps-728/native/jobs/q008-epoch5.report.json`, `/tmp/tsps-728/native/prior/q008-epoch5/release.json`.
+
+### q010 — Client of Kourend
+
+- **Revision:** epoch21/22 loaded and current source `893ae4aa673230f3eeb71e72b93a42945f0d341955cf5b6b1b3ce9d6e5d760ec`; focused test `600f42dcb846a6a4314da21b5a584dfd542e9f6bf2b681182d438dd8d8571426`. Root matched both actual runtime captures.
+- **Natural route and result:** the linked fresh-stage0 route earned the quill/interviews for all five houses, passed the actual Munty door after its cache-pair fix, returned to Veos for the orb, walked the ordinary Dark Altar approach and activated it. It returned normally to Veos and completed the conversation: durable stage5, client varbit5619=9/varp1566=4041, QP1→2, one memoirs21760 and two unspent lamps21262. The orb was consumed and broken glass690 remained. The prerequisite X Marks lamp23072 was present before this quest and was preserved, not counted as its reward. No immediate quest skill XP is configured.
+- **Repeat/persistence:** epoch22 normal relog retained state/rewards. Veos's lost-reward option gave no extra items while the rewards were held. Normal logout/offline were confirmed. Root independently checked snapshots1326 (before hand-in),1327 (completion),1328–1331 (logout/relog/repeat); houses remain31, stage5, QP2 and reward quantities unchanged. Exact raw prefix/continuation hashes and selected saves: `/tmp/tsps-728/native/evidence/q010-root-accepted-20261023.json`.
+- **Limits/aids:** prerequisite/master/gear/initial start tile were declared before baseline; ordinary feather, food/travel supplies and travel invulnerability were used. A hung owned driver was replaced while reusing the existing actor, with no state reset. No target stage/item injection or administrative teleport after baseline. Destroyed unused-lamp recovery, other recovery branches and the visual overlay remain unchecked.
 
 ### q011 — Clock Tower
 

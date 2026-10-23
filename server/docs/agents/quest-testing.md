@@ -63,6 +63,12 @@ actual earning action and login replay, including bits owned by shared systems. 
 missing numeric reference is a review lead, not proof of a defect; old helper comments
 can contain obsolete ids. Do this before spending time walking a route with stale flags.
 
+Follow target NPCs through their cache parent/child transforms too. Listing an attackable
+id in a death handler does not prove combat can start: continue the actual threat, verify
+the real actor's Attack menu and health, then exercise its damage-attributed death path.
+Test shared-NPC cleanup with another quest's actor for the same player; account ownership
+alone does not identify which plugin may remove it.
+
 ## Find missing capture evidence quickly
 
 Search the [RSProx archive](https://rsprox.net/database) for a distinctive scene NPC or
