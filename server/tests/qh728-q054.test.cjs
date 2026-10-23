@@ -15,6 +15,8 @@ Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { PacketSender } = require('../dist/net/packet/PacketSender');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
@@ -38,6 +40,7 @@ const COMPLETE = 160;
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   new NpcDefinitionLoader().load();
+  core.ObjectDefinition.init();
 });
 
 function harness(options = {}) {
@@ -192,7 +195,7 @@ function harness(options = {}) {
   };
 }
 
-function player() {
+function player({ realWire = false } = {}) {
   const attrs = new Map(), items = new Map(), varbits = new Map(), log = [], xp = [], moves = [];
   const inv = {
     getAmount: id => items.get(id) ?? 0,
@@ -205,8 +208,10 @@ function player() {
     full() {},
   };
   const packet = new Proxy({
-    sendVarbit(id, value) { varbits.set(id, value); log.push(['sendVarbit', id, value]); return packet; },
-    sendConfig(id, value) { log.push(['sendConfig', id, value]); return packet; },
+    getVarbit: id => p.wire ? p.wire.getVarbit(id) : varbits.get(id) ?? 0,
+    getVarp: id => p.wire?.getVarp(id) ?? 0,
+    sendVarbit(id, value) { p.wire?.sendVarbit(id, value); varbits.set(id, value); log.push(['sendVarbit', id, value]); return packet; },
+    sendConfig(id, value) { p.wire?.sendConfig(id, value); log.push(['sendConfig', id, value]); return packet; },
     sendString(text, uid) { p.text = text; return packet; },
     sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
   }, { get: (target, key) => target[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
@@ -227,17 +232,19 @@ function player() {
     getPrivateArea: () => null,
     moveTo: location => moves.push([location.getX(), location.getY(), location.getZ()]),
     getUsername: () => 'Q054',
+    getSession: () => ({ sendClientPacket: noop }),
     sendMessage: text => p.messages.push(text),
     isRegistered: () => true,
     isPlayerBot: () => false,
   };
+  if (realWire) p.wire = new PacketSender(p);
   p.manager = new DialogueManager(p);
   return p;
 }
 
 function supplied() {
   const h = harness();
-  const p = player();
+  const p = player({ realWire: true });
   for (const [id, amount] of [
     [I.BEER, 1], [I.VIAL, 2], [I.REDBERRIES, 1], [I.WHITE_BERRIES, 1],
     [I.LANTERN_LENS, 1], [I.EARTH_RUNE, 5], [I.BUCKET_OF_SAND, 1],
@@ -341,6 +348,7 @@ test('The Hand in the Sand runs stage 0 to 160 through the registered transcript
   h.finish(p);
   assert.equal(p.items.get(I.VIAL), 1, 'one of the two vials is handed over for the teleport');
   assert.deepEqual(p.moves.at(-1), [3014, 3259, 0]);
+  assert.equal(p.getPacketSender().getVarbit(1531), 1, 'actual teleport earns HANDSAND_TELE');
 
   // Betty takes the second vial and gives bottled water.
   h.talk(p, N.BETTY);
@@ -349,25 +357,33 @@ test('The Hand in the Sand runs stage 0 to 160 through the registered transcript
   h.finish(p);
   assert.equal(p.items.get(I.VIAL) ?? 0, 0);
   assert.equal(p.items.get(I.BOTTLED_WATER), 1);
+  assert.equal(p.getPacketSender().getVarbit(1532), 1, 'Betty earns receivedBottledWater');
 
   // Redberry juice, pink dye, rose-tinted lens.
   h.itemOnItem(p, I.BOTTLED_WATER, I.REDBERRIES);
   assert.equal(p.items.get(I.REDBERRY_JUICE), 1);
+  assert.equal(p.getPacketSender().getVarbit(1532), 2);
   h.itemOnItem(p, I.REDBERRY_JUICE, I.WHITE_BERRIES);
   assert.equal(p.items.get(I.PINK_DYE), 1);
+  assert.equal(p.getPacketSender().getVarbit(1532), 3);
   h.itemOnItem(p, I.PINK_DYE, I.LANTERN_LENS);
   assert.equal(p.items.get(I.ROSE_TINTED_LENS), 1);
+  assert.equal(p.getPacketSender().getVarbit(1532), 4);
 
   // Betty places the counter vial, then the lens makes the truth serum.
   h.talk(p, N.BETTY);
   h.nextPrompt(p);
   h.choose(p, 'Talk to Betty about the Hand in the Sand.');
   h.finish(p);
+  assert.equal(p.getPacketSender().getVarbit(1537), 1, 'Betty actually places the vial');
+  assert.equal(core.ObjectDefinition.forPlayer(10812, p).id, O.COUNTER_15);
   const counter = h.itemOnObject(p, O.COUNTER_15, I.ROSE_TINTED_LENS);
   assert.equal(counter.handled, true);
   h.finish(p);
   assert.equal(p.items.get(I.ROSE_TINTED_LENS) ?? 0, 0);
   assert.equal(p.items.get(I.TRUTH_SERUM), 1);
+  assert.equal(p.getPacketSender().getVarbit(1532), 5, 'madeTruthSerum helper condition');
+  assert.equal(p.getPacketSender().getVarbit(1537), 0);
 
   // Betty adds Sandy's sand (70 -> 80).
   h.talk(p, N.BETTY);
@@ -375,6 +391,7 @@ test('The Hand in the Sand runs stage 0 to 160 through the registered transcript
   h.choose(p, 'Talk to Betty about the Hand in the Sand.');
   h.finish(p);
   assert.equal(stage(), 80);
+  assert.equal(p.getPacketSender().getVarbit(1532), 6);
   assert.equal(p.items.get(I.SAND) ?? 0, 0);
 
   // Distract Sandy (80 -> 90).
@@ -443,6 +460,15 @@ test('The Hand in the Sand runs stage 0 to 160 through the registered transcript
   assert.equal(stage(), COMPLETE);
   assert.equal(p.items.get(I.WIZARDS_HEAD) ?? 0, 0);
   assert.equal(p.varbits.get(VARBIT), COMPLETE, 'the completion value reaches cache varbit 1527');
+  // New connection, same durable attributes: replay the earned helper facts.
+  p.wire = new PacketSender(p);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+  runtime.sendQuestVarps({ player: p });
+  h.api.emitCustomEvent('player:bootstrap-complete', { player: p });
+  assert.equal(p.getPacketSender().getVarbit(VARBIT), COMPLETE);
+  assert.equal(p.getPacketSender().getVarbit(1531), 1);
+  assert.equal(p.getPacketSender().getVarbit(1532), 6);
+  assert.equal(p.getPacketSender().getVarbit(1537), 0);
   assert.deepEqual(p.xp, [[core.Skill.CRAFTING.getIndex(), 9000], [core.Skill.THIEVING.getIndex(), 1000]]);
   assert.equal(p.attrs.get('quest.points'), 1);
   assert.ok(p.messages.some(text => text.includes('completed a quest')));
@@ -691,4 +717,42 @@ test('lost hand, rota and head recovery stay on the quest page and preserve the 
   h.finish(p);
   assert.equal(p.items.get(I.WIZARDS_HEAD), 1, 'Mazion replaces a lost head');
   assert.equal(h.quest.getStage(p), 150);
+});
+
+
+test('auxiliary wire replays only earned state and preserves parent siblings and WGS counter ownership', () => {
+  for (const [id, baseVar, startBit, endBit] of [[1531,635,12,12],[1532,635,13,15],[1537,636,9,10]]) {
+    const actual = CacheDefinitions.getVarbit(id);
+    assert.deepEqual([actual.baseVar,actual.startBit,actual.endBit], [baseVar,startBit,endBit]);
+  }
+  const h = harness(), p = player({ realWire: true });
+  const sender = p.getPacketSender();
+  sender.sendConfig(635, (1 << 9) | (1 << 10) | (1 << 11));
+  sender.sendConfig(636, 0x40001);
+  h.quest.setStage(p, 70);
+  h.api.emitCustomEvent('npc-dialogue:line', { player: p, npcId: N.BETTY, text: 'I have one here!' });
+  assert.equal(sender.getVarbit(1532), 1);
+  sender.sendVarbit(1537, 2);
+  h.api.emitCustomEvent('npc-dialogue:action', { player: p, stepId: 'sB80ti', kind: 'message' });
+  assert.equal(sender.getVarbit(1537), 1, 'actual Hand vial placement owns its form');
+  assert.equal(sender.getVarp(635) & 0xe00, 0xe00);
+  assert.equal(sender.getVarp(636) & ~0x600, 0x40001);
+  sender.sendVarbit(1532, 0); sender.sendVarbit(1537, 0);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+  h.api.emitCustomEvent('player:bootstrap-complete', { player: p });
+  assert.equal(sender.getVarbit(1532), 1);
+  assert.equal(sender.getVarbit(1537), 1);
+  assert.equal(sender.getVarbit(1531), 0, 'no inferred teleport from stage or serum progress');
+  for (const value of [2, 3]) {
+    p.attrs.set('quest.while_guthix_sleeps.stage', 250);
+    sender.sendVarbit(1537, value);
+    for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+    h.api.emitCustomEvent('player:bootstrap-complete', { player: p });
+    assert.equal(sender.getVarbit(1537), value, 'active WGS seed counter keeps its owner');
+  }
+  const fresh = player({ realWire: true });
+  h.quest.setStage(fresh, COMPLETE);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: fresh });
+  h.api.emitCustomEvent('player:bootstrap-complete', { player: fresh });
+  for (const id of [1531, 1532, 1537]) assert.equal(fresh.getPacketSender().getVarbit(id), 0, 'completion invents no auxiliary actions');
 });

@@ -50,6 +50,11 @@ module.exports = function registerHandInTheSandQuest(api) {
   ]);
 
   const VARBIT_HAND_IN_THE_SAND = 1527; // handsand_quest: varp 635 bits 0-8
+  const VARBIT_TELEPORTED = 1531; // handsand_tele: varp 635 bit 12
+  const VARBIT_SERUM = 1532; // handsand_serum: varp 635 bits 13-15
+  const VARBIT_COUNTER = 1537; // handsand_counter_multi: varp 636 bits 9-10
+  const WGS_SEED_COUNTER_FROM = 250; // Fellowship.WhileGuthixSleeps owns 1537 here.
+  const WGS_SEED_COUNTER_UNTIL = 280;
   const STAGE_INVESTIGATE_HAND = 10;
   const STAGE_ASK_WIZARDS = 20;
   const STAGE_BERT_HOURS = 30;
@@ -160,6 +165,7 @@ module.exports = function registerHandInTheSandQuest(api) {
 
   const SERUM_ATTRIBUTE = "quest.hand_in_the_sand.serum";
   const COUNTER_ATTRIBUTE = "quest.hand_in_the_sand.counter";
+  const TELEPORTED_ATTRIBUTE = "hand-in-the-sand:teleported-to-betty";
   const QUESTION_ATTRIBUTES = [
     "quest.hand_in_the_sand.question1",
     "quest.hand_in_the_sand.question2",
@@ -190,6 +196,28 @@ module.exports = function registerHandInTheSandQuest(api) {
 
   function setSerum(player, value) {
     player.setAttribute(SERUM_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(VARBIT_SERUM, value);
+  }
+
+  function syncCounter(player) {
+    // WGS's fellowship owns this same counter while enriching its seed.
+    const request = { player, key: "while_guthix_sleeps", stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    const stage = request.stage ?? Number(player.getAttribute("quest.while_guthix_sleeps.stage") ?? 0);
+    if (stage >= WGS_SEED_COUNTER_FROM && stage < WGS_SEED_COUNTER_UNTIL) return;
+    player.getPacketSender().sendVarbit(VARBIT_COUNTER, player.getAttribute(COUNTER_ATTRIBUTE) === true ? 1 : 0);
+  }
+
+  function setCounter(player, placed) {
+    player.setAttribute(COUNTER_ATTRIBUTE, placed);
+    syncCounter(player);
+  }
+
+  function syncAuxiliaries({ player }) {
+    const sender = player.getPacketSender();
+    sender.sendVarbit(VARBIT_SERUM, serumLevel(player));
+    sender.sendVarbit(VARBIT_TELEPORTED, Number(player.getAttribute(TELEPORTED_ATTRIBUTE)) === 1 ? 1 : 0);
+    syncCounter(player);
   }
 
   function allQuestionsAsked(player) {
@@ -635,7 +663,7 @@ module.exports = function registerHandInTheSandQuest(api) {
         return;
       }
       if (stepId === BETTY_VIAL_MESSAGE) {
-        player.setAttribute(COUNTER_ATTRIBUTE, true);
+        setCounter(player, true);
         return;
       }
       if (stepId === LENS_COUNTER_MESSAGE) {
@@ -643,7 +671,7 @@ module.exports = function registerHandInTheSandQuest(api) {
           player.getInventory().deleteNumber(ROSE_TINTED_LENS, 1);
           if (!held(player, TRUTH_SERUM)) player.getInventory().adds(TRUTH_SERUM, 1);
           setSerum(player, SERUM_MADE);
-          player.setAttribute(COUNTER_ATTRIBUTE, false);
+          setCounter(player, false);
         }
         return;
       }
@@ -745,6 +773,8 @@ module.exports = function registerHandInTheSandQuest(api) {
     if (event.action === "teleport" && stepId === BETTY_TELEPORT_ACTION) {
       if (held(player, VIAL)) player.getInventory().deleteNumber(VIAL, 1);
       player.moveTo(new api.core.Location(3014, 3259, 0));
+      player.setAttribute(TELEPORTED_ATTRIBUTE, 1);
+      player.getPacketSender().sendVarbit(VARBIT_TELEPORTED, 1);
       event.handled = true;
       return;
     }
@@ -1012,11 +1042,13 @@ module.exports = function registerHandInTheSandQuest(api) {
   }
 
   function handleLogin({ player }) {
+    syncAuxiliaries({ player });
     refreshQuestList(player);
   }
 
   api.persistAttribute(SERUM_ATTRIBUTE);
   api.persistAttribute(COUNTER_ATTRIBUTE);
+  api.persistAttribute(TELEPORTED_ATTRIBUTE, 0);
   for (const attribute of QUESTION_ATTRIBUTES) api.persistAttribute(attribute);
 
   quest = registerQuest(api, {
@@ -1053,4 +1085,5 @@ module.exports = function registerHandInTheSandQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemAction(handleItemAction);
   api.onPlayerLogin(handleLogin);
+  api.onCustomEvent("player:bootstrap-complete", syncAuxiliaries);
 };

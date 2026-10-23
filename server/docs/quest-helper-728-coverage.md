@@ -62,8 +62,9 @@ normal floor loot (`7685ba52c`; 20 combined EW1/EW2 checks).
 
 The Hand in the Sand also corrects its canonical varbit, shares the bell/Zavistic with
 Zogre and consumes sandpit supplies once (`f1b93eef0`; 27 combined checks, including
-both registered quests). Its serum/counter helper auxiliaries are under separate review;
-scene visuals and natural completion remain unverified. These are source publications,
+both registered quests). Its earned serum/counter/teleport auxiliaries now mirror the actual cache fields and
+replay after bootstrap, while preserving WGS's proven counter ownership (28 combined
+checks). Scene visuals and natural completion remain unverified. These are source publications,
 with no additional accepted natural-route count.
 
 Latest normal saved checkpoints are Hazeel Cult stage6 (mark and chest key), Tree Gnome
