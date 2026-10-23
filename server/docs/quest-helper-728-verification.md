@@ -6,7 +6,7 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Original 128: accepted natural main-route proofs
 
-Ten quests have accepted natural main-route completion evidence: **10 / 128 (7.81%)** (q003, q006, q008, q011, q026, q041, q048, q063, q074, q088). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Root acceptance artifacts are retained for q006, q011, q026, q048 and q088; their scoped limits remain in force.
+Thirteen quests have accepted natural main-route completion evidence: **13 / 128 (10.16%)** (q003, q006, q008, q011, q026, q040, q041, q048, q063, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 ### q003 — The Ascent of Arceuus
 
@@ -62,6 +62,24 @@ Ten quests have accepted natural main-route completion evidence: **10 / 128 (7.8
 - **Revision:** plugin/source = loaded = peer-reviewed `7c079b6a369bdb2fc6ebfa984570dc074f0b488daf636c5edb091534ac2c0694`; focused test `7633d98ea5dec96c05bbe7e9fb5b7a33651c15fb656dbc9f77fb3c4e6148fc4d`; root acceptance artifact `/tmp/tsps-728/native/evidence/q088-root-accepted-20261023.json`.
 - **Natural route and result:** the fresh-stage-0 route on `q728p404r1` continued from its saved epoch16 prefix in epoch17 and reached completion wire40. It gained 1 Quest Point, 1,000 Slayer XP, 5,000 coins and 30 Slayer points. The post-quest task dialogue did not add points twice. Completion and logout SQLite snapshots independently show QP 0→1 and Slayer points 0→30→30; normal relog preserved completion and rewards, and the account ended offline.
 - **Limits:** the optional Ned-shop rope was supplied as an ordinary declared item after that optional shop path failed. The optional helm-upgrade, full-bag and cancellation branches are not natively certified; there is no visual overlay proof. Foot wire30 and Sarah wire35 were corrected to match source without injecting progress. Evidence: `/tmp/tsps-728/native/jobs/q088-epoch17-completion.md` (SHA-256 `f2edb7bef4a6cd43ac6ece89e6ead49e341567a01f51c4c02f42ab0cd09313da`), `/tmp/tsps-728/native/jobs/q088-epoch17-completion.raw.jsonl` (SHA-256 `f3865c4ec8b0c06c14e6fb035ac13a82d6548ed59f1b340d11490cd5143841cc`), and `/tmp/tsps-728/native/evidence/q088-root-accepted-20261023.json`.
+
+### q040 — Fight Arena
+
+- **Revision:** source/loaded `c60a6d3d2834dd75c798b8ed941f742d818e398da1de15f42a75870ceecf10bb`; root acceptance artifact `/tmp/tsps-728/native/evidence/q040-root-accepted-20261023.json`.
+- **Scoped result:** checkpoint-linked natural route completed at stage14, QP 0→2, coins 995→1,995, Attack XP +12,175 and Thieving XP +2,175. Normal repeat/relog and durable saves were independently checked; the actor ended offline. The actual Khazard encounter and jail action completed; a declared combat aid was used after the encounter began.
+- **Limits:** no full-branch or visual-overlay claim. Evidence and source/test provenance: `/tmp/tsps-728/resume-q040-acceptance.md` and the acceptance artifact above.
+
+### q085 — Olaf's Quest
+
+- **Revision:** plugin/source = loaded = reviewed `1519dff410c02a2507e01952e89c991e5cdeb05a5f6339b5a721979389e959d9`; focused test `7ab7f0079e21be638d68394b6a2b9a28137439083f7d5f59592bb2612bec979c`.
+- **Scoped result:** fresh stage-0 route completed at varp/varbit 80; QP 3→4, coins 4→20,004, four rubies and parchment. Defence +12,000, Strength +980 and Hitpoints +318 included route combat XP. A declared `infhp` aid was used only after the real Ulfric encounter began. Relog and repeat dialogue preserved rewards without duplication; final logout was confirmed offline.
+- **Limits:** full-bag, optional destroyed-barrel recovery, fall chance and visual overlay remain unchecked. Evidence: `/tmp/tsps-728/native/jobs/q085-epoch19-acceptance.md` and `/tmp/tsps-728/native/evidence/q085-root-accepted-20261023.json`.
+
+### q105 — Sleeping Giants
+
+- **Revision:** plugin/source = loaded `a6628d9b8b924077df0c33d9009deeb8bec6d7cec35d319eef3b76272cc5ede5`; reviewed focused test `656fa628598b42f08baa11190953ec3ee843875880a5608113947b31dea325aa`.
+- **Scoped result:** fresh stage-0 route completed main varbit 13902=30 (durable stage13), with tutorial varbit 13903=65; QP 0→1. Smithing XP was +266 from observed tutorial practice before the quest reward, then +6,000 completion XP (+6,266 total). Credentialed relog preserved completion and reward, and final logout was confirmed offline.
+- **Limits:** this does not certify all branches, recovery, visual overlay, full-bag behavior or combat balance. Evidence: `/tmp/tsps-728/native/jobs/q105-epoch19-acceptance.md` and root acceptance.
 
 ## Original 128: completion observations not yet accepted
 
