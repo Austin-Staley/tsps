@@ -191,7 +191,7 @@ assert.equal(clicks, 1); assert.equal(native, 2, "unregistered hooks preserve na
             if (failUpload) throw new Error("upload failed");
         },
     };
-    const renderer = Object.assign(Object.create(GLRenderer.prototype), { gl, textures: new Map() });
+    const renderer = Object.assign(Object.create(GLRenderer.prototype), { gl, textures: new Map(), textureBatchTextures: [] });
     const source = { width: 800, height: 600 } as HTMLCanvasElement;
     const first = renderer.updateTextureFromCanvas("damage", source, { x: 10, y: 20, w: 30, h: 40 });
     assert.equal(uploads.at(-1)!.kind, "allocate", "first upload initializes the entire transparent canvas");
