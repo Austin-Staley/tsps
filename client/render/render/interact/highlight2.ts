@@ -189,9 +189,23 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS, LocHighlightTarget, NpcHighlightTarget } from "../constants";
 
-export function buildLocModelHighlightTriangles(host: WebGLOsrsRendererHost, 
+/** The loc's model triangles, all of its models together (a wall corner has two). */
+export function buildLocModelHighlightTriangles(host: WebGLOsrsRendererHost,
         target: LocHighlightTarget,
     ): ReadonlyArray<readonly [number, number, number]> | undefined {
+        const parts = buildLocModelHighlightParts(host, target);
+        if (!parts || parts.length === 0) return undefined;
+        return parts.length === 1 ? parts[0] : parts.flat();
+}
+
+/**
+ * Each of the loc's models as the scene draws it: one for most locs, two for a wall corner and a
+ * double diagonal wall decoration, wall decorations moved out by their wall's displacement
+ * (SceneBuilder.addLoc).
+ */
+export function buildLocModelHighlightParts(host: WebGLOsrsRendererHost,
+        target: LocHighlightTarget,
+    ): ReadonlyArray<ReadonlyArray<readonly [number, number, number]>> | undefined {
 
         const locModelLoader = host.getInteractLocModelLoader();
         if (!locModelLoader) return undefined;
@@ -218,12 +232,8 @@ export function buildLocModelHighlightTriangles(host: WebGLOsrsRendererHost,
             return undefined;
         }
 
-        let modelType = rawType;
-        let modelRotation = rawRotation;
-        if (modelType === LocModelType.NORMAL_DIAGIONAL) {
-            modelType = LocModelType.NORMAL;
-            modelRotation = (rawRotation + 4) & 0x7;
-        }
+        const parts = locModelParts(rawType, rawRotation, () => wallDecorDisplacement(host, target));
+        const multiple = parts.length > 1;
 
         // Find the current animation frame from the map's animated loc list.
         // LocAnimated x/y are in RS sub-tile units (localTile * 128 + 64).
@@ -249,40 +259,14 @@ export function buildLocModelHighlightTriangles(host: WebGLOsrsRendererHost,
                 }
             }
         }
-        let model = locModelLoader.getModelAnimated(
-            locType,
-            modelType as LocModelType,
-            modelRotation,
-            seqId,
-            seqFrame,
-        );
-
-        // Invisible interaction volumes (all faces fully transparent) use a
-        // visual proxy loc at the same tile for the highlight outline.
-        if (model && host.hasNoVisibleFaces(model)) {
-            const proxy = host.findVisualProxyModel(
-                locModelLoader,
-                target,
-                modelType,
-                modelRotation,
-            );
-            if (proxy) {
-                model = proxy;
-                target.overworldProxy = true;
-            }
-        }
-
-        if (!model || !model.verticesX || !model.verticesY || !model.verticesZ) {
-            return undefined;
-        }
 
         if (rawRotation === 1 || rawRotation === 3) {
             const tmp = sizeX;
             sizeX = sizeY;
             sizeY = tmp;
         }
-        const entityX = (target.tileX << 7) + (sizeX << 6);
-        const entityZ = (target.tileY << 7) + (sizeY << 6);
+        const baseEntityX = (target.tileX << 7) + (sizeX << 6);
+        const baseEntityZ = (target.tileY << 7) + (sizeY << 6);
         // For world entity overlay locs, sample overworld height (plane 0) — the GPU
         // renders at the overlay's source plane height which sits at sea level, not a
         // full UNITS_LEVEL_HEIGHT below.
@@ -291,19 +275,52 @@ export function buildLocModelHighlightTriangles(host: WebGLOsrsRendererHost,
         const heightPlane = isOverlay ? 0 : target.plane | 0;
         let baseY = sampleBridgeHeightForWorldTile(
             host.mapManager,
-            entityX / 128.0,
-            entityZ / 128.0,
+            baseEntityX / 128.0,
+            baseEntityZ / 128.0,
             heightPlane,
             BridgePlaneStrategy.RENDER,
         ).height;
         if (isOverlay) {
             baseY += host.getWorldEntityDeckHeight(0, 0) / 128.0;
         }
-        return host.buildModelTrianglePoints(model, (i) => ({
-            x: (entityX + model.verticesX[i]) / 128.0,
-            y: baseY + model.verticesY[i] / 128.0,
-            z: (entityZ + model.verticesZ[i]) / 128.0,
-        }));
+
+        const out: ReadonlyArray<readonly [number, number, number]>[] = [];
+        for (const part of parts) {
+            let model = locModelLoader.getModelAnimated(
+                locType,
+                part.modelType as LocModelType,
+                part.modelRotation,
+                seqId,
+                seqFrame,
+            );
+
+            // Invisible interaction volumes (all faces fully transparent) use a
+            // visual proxy loc at the same tile for the highlight outline.
+            if (!multiple && model && host.hasNoVisibleFaces(model)) {
+                const proxy = host.findVisualProxyModel(
+                    locModelLoader,
+                    target,
+                    part.modelType,
+                    part.modelRotation,
+                );
+                if (proxy) {
+                    model = proxy;
+                    target.overworldProxy = true;
+                }
+            }
+
+            if (!model || !model.verticesX || !model.verticesY || !model.verticesZ) continue;
+            const m = model;
+            const entityX = baseEntityX + part.dx;
+            const entityZ = baseEntityZ + part.dz;
+            const points = host.buildModelTrianglePoints(m, (i) => ({
+                x: (entityX + m.verticesX[i]) / 128.0,
+                y: baseY + m.verticesY[i] / 128.0,
+                z: (entityZ + m.verticesZ[i]) / 128.0,
+            }));
+            if (points && points.length >= 3) out.push(points);
+        }
+        return out.length > 0 ? out : undefined;
     
 }
 
@@ -399,4 +416,64 @@ export function buildNpcModelHighlightTriangles(host: WebGLOsrsRendererHost,
             };
         });
     
+}
+
+/** One model of a loc as the scene places it: model type and rotation, fine-unit offset. */
+export type LocModelPart = { modelType: number; modelRotation: number; dx: number; dz: number };
+
+const DECOR_DISPLACEMENT_X = [1, 0, -1, 0];
+const DECOR_DISPLACEMENT_Z = [0, -1, 0, 1];
+const DIAGONAL_DISPLACEMENT_X = [1, -1, -1, 1];
+const DIAGONAL_DISPLACEMENT_Z = [-1, -1, 1, 1];
+/** LocType.DEFAULT_DECOR_DISPLACEMENT. */
+const DEFAULT_DECOR_DISPLACEMENT = 16;
+
+/**
+ * SceneBuilder.addLoc's models per shape: a wall corner is two walls; wall decorations use the
+ * inside-decoration model, moved out by the tile's wall displacement (half, diagonally, for the
+ * diagonal shapes); a double diagonal decoration is two models, only the first displaced.
+ */
+export function locModelParts(
+    shape: number,
+    rotation: number,
+    wallDisplacement: () => number | undefined,
+): LocModelPart[] {
+    const r = rotation & 3;
+    const at = (modelType: number, modelRotation: number, dx = 0, dz = 0): LocModelPart =>
+        ({ modelType, modelRotation, dx, dz });
+    switch (shape) {
+        case LocModelType.NORMAL_DIAGIONAL:
+            return [at(LocModelType.NORMAL, (r + 4) & 0x7)];
+        case LocModelType.WALL_CORNER:
+            return [at(shape, r + 4), at(shape, (r + 1) & 3)];
+        case LocModelType.WALL_DECORATION_OUTSIDE: {
+            const d = wallDisplacement() ?? DEFAULT_DECOR_DISPLACEMENT;
+            return [at(LocModelType.WALL_DECORATION_INSIDE, r, d * DECOR_DISPLACEMENT_X[r], d * DECOR_DISPLACEMENT_Z[r])];
+        }
+        case LocModelType.WALL_DECORATION_DIAGONAL_OUTSIDE: {
+            const d = Math.trunc((wallDisplacement() ?? DEFAULT_DECOR_DISPLACEMENT) / 2);
+            return [at(LocModelType.WALL_DECORATION_INSIDE, r + 4, d * DIAGONAL_DISPLACEMENT_X[r], d * DIAGONAL_DISPLACEMENT_Z[r])];
+        }
+        case LocModelType.WALL_DECORATION_DIAGONAL_INSIDE:
+            return [at(LocModelType.WALL_DECORATION_INSIDE, ((r + 2) & 3) + 4)];
+        case LocModelType.WALL_DECORATION_DIAGONAL_DOUBLE: {
+            const d = Math.trunc((wallDisplacement() ?? DEFAULT_DECOR_DISPLACEMENT) / 2);
+            return [
+                at(LocModelType.WALL_DECORATION_INSIDE, r + 4, d * DIAGONAL_DISPLACEMENT_X[r], d * DIAGONAL_DISPLACEMENT_Z[r]),
+                at(LocModelType.WALL_DECORATION_INSIDE, ((r + 2) & 3) + 4),
+            ];
+        }
+        default:
+            return [at(shape, r)];
+    }
+}
+
+/** The decor displacement of the wall on the loc's tile, if there is one. */
+function wallDecorDisplacement(host: WebGLOsrsRendererHost, target: LocHighlightTarget): number | undefined {
+    const locs = (host as any).getLocIdsAtTileAllLevels?.(target.tileX, target.tileY) as
+        | { id: number; level: number; typeRot?: number }[]
+        | undefined;
+    const wall = locs?.find((l) => l.level === (target.plane | 0) && ((l.typeRot ?? 0xff) & 0x3f) <= LocModelType.WALL_RECT_CORNER);
+    if (!wall) return undefined;
+    return host.osrsClient.locTypeLoader.load(wall.id)?.decorDisplacement;
 }
