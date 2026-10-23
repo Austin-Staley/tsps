@@ -469,6 +469,20 @@ export abstract class ItemContainer {
     return this.addItem(new Item(id, amount));
   }
 
+  /** How much of an item add() can accept, without changing either item or container. */
+  public getAddableAmount(item: Item): number {
+    const requested = Math.max(0, Math.floor(item.getAmount()));
+    if (item.getId() <= 0 || !Number.isFinite(requested) || requested <= 0) return 0;
+    if (getItemDefinition().forId(item.getId()).isStackable() || this.stackType() == StackType.STACKS) {
+      const meta = JSON.stringify(item.getMeta() ?? null);
+      const existing = this.items.find((held) => held.getId() === item.getId() &&
+        JSON.stringify(held.getMeta() ?? null) === meta);
+      if (existing) return Math.min(requested, Math.max(0, MAX_STACK_AMOUNT - existing.getAmount()));
+      return this.getFreeSlots() > 0 ? Math.min(requested, MAX_STACK_AMOUNT) : 0;
+    }
+    return Math.min(requested, this.getFreeSlots());
+  }
+
   public add(item: Item, refresh: boolean): ItemContainer {
     ensureContainersLoaded();
     if (
