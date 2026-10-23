@@ -7,12 +7,9 @@
 // module-level recorder. Fixture-started stages/attributes are labelled; live
 // playthrough and the visual Quest Helper overlay are not claimed.
 //
-// Cross-owner boundary (finding 4): guard 4218 is also claimed by
-// KingsRansom.Quest.js, which is NOT registered in this suite. Murder Mystery
-// deliberately adds its explicit first-click hook only for spawned ids
-// 6194-6200; 4218 remains on the normal dialogue variant/hook path so it runs
-// once King's Ransom yields. Its prerequisite ownership boundary is checked
-// separately in qh728-q064.test.cjs.
+// The shared guard regression registers King's Ransom first and proves it
+// yields guard4218 until Murder Mystery completes. Spawned mansion ids6194–6200
+// use Murder Mystery's explicit first-click transcript handler.
 const assert = require('node:assert/strict');
 const { test, after } = require('node:test');
 const { Server } = require('../dist/Server');
