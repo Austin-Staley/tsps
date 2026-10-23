@@ -11,8 +11,9 @@
  *   entering it is immune to rogues for 6 seconds, until they attack someone (1 June 2023).
  *   Bounty Hunter weapons work here.
  *
- * The level range for rogues (15 either way, as on PvP worlds) has no Wiki source; targets are
- * always inside it. Phoenix necklaces (29 January 2025) need nothing: the server has no
+ * Rogues can attack within five combat levels; assigned targets use the matchmaking range.
+ * https://secure.runescape.com/m=news/bounty-hunter-is-back?oldschool=1
+ * Phoenix necklaces (29 January 2025) need nothing: the server has no
  * phoenix necklace effect. Messages are our wording.
  */
 
@@ -22,7 +23,7 @@ const Targets = require("./Targets.BountyHunter");
 const LOBBY_ALLOWANCE_TICKS = 200; // 2:00
 const LOBBY_REFUND_TICKS = 25; // 15 seconds
 const ROGUE_IMMUNITY_TICKS = 10; // 6 seconds
-const ROGUE_LEVEL_RANGE = 15;
+const ROGUE_LEVEL_RANGE = 5;
 const ATTACK_OPTION_SLOT = 1; // the client's first player option, as Castle Wars and Ferox use it
 // Prayer head icons of Protect from Melee, Missiles and Magic.
 const PROTECTION_HEAD_ICONS = [0, 1, 2];
@@ -147,8 +148,9 @@ function refuse(attacker, message) {
 function canAttackInArena(attacker, target) {
   if (!isPlayer(attacker) || !isPlayer(target)) return null;
   if (!bh.inArena(attacker) || !bh.inArena(target)) return false;
+  const assignedTarget = bh.targetOf(attacker) === target;
   const levels = Math.abs(attacker.getSkillManager().getCombatLevel() - target.getSkillManager().getCombatLevel());
-  if (levels > ROGUE_LEVEL_RANGE) return refuse(attacker, "Your level difference is too great.");
+  if (!assignedTarget && levels > ROGUE_LEVEL_RANGE) return refuse(attacker, "Your level difference is too great.");
   if (bh.targetOf(target) !== attacker && cycle() < (bh.immuneUntil.get(target) ?? 0)) {
     return refuse(attacker, "That player has only just entered the arena.");
   }

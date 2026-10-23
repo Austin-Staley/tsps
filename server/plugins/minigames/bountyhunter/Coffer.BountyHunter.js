@@ -41,6 +41,12 @@ function playerMinimumDeposit(player) {
   return minimumDeposit(player.getSkillManager().getCombatLevel());
 }
 
+/** Bot supplies cover the entry fee again after a death. */
+function fundToMinimum(player) {
+  const minimum = playerMinimumDeposit(player);
+  if (balance(player) < minimum) player.setAttribute(COFFER_ATTRIBUTE, minimum);
+}
+
 function coins(player) {
   return player.getInventory().getAmount(core.ItemIdentifiers.COINS);
 }
@@ -116,4 +122,4 @@ module.exports = function attachBountyHunterCoffer(api) {
   api.onCustomEvent("bounty-hunter:coffer-balance", answerBalance);
   api.onCustomEvent("bounty-hunter:minimum-deposit", answerMinimumDeposit);
 };
-Object.assign(module.exports, { balance, minimumDeposit, playerMinimumDeposit, deathCost, deposit, withdraw, died });
+Object.assign(module.exports, { balance, minimumDeposit, playerMinimumDeposit, fundToMinimum, deathCost, deposit, withdraw, died });

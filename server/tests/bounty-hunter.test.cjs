@@ -13,6 +13,37 @@ const rules = (avoided = []) => ({
 });
 const names = (pairs) => pairs.map((pair) => pair.map((p) => p.name).join("+"));
 
+test("rogues need to be within five levels; assigned targets use their matchmaking range", () => {
+  const Area = require("../plugins/minigames/bountyhunter/Area.BountyHunter");
+  const bh = require("../plugins/minigames/bountyhunter/State.BountyHunter");
+  const areas = [];
+  const state = { ...bh, arena: new Set(), targets: new Map(), immuneUntil: new WeakMap() };
+  Area(new Proxy({
+    core: { Area: class {}, Boundary: class {}, World: { getProcessCycle: () => 100 } },
+    registerArea: (area) => areas.push(area),
+  }, { get: (object, key) => object[key] ?? (() => {}) }), state);
+  const actor = (level) => ({ isPlayer: () => true,
+    getSkillManager: () => ({ getCombatLevel: () => level }), sendMessage() {},
+    getPacketSender: () => ({ sendVarbit() {} }) });
+  const attacker = actor(100);
+  state.arena.add(attacker);
+  for (const [level, allowed] of [[94, false], [95, true], [105, true], [106, false], [115, false]]) {
+    const target = actor(level);
+    state.arena.add(target);
+    assert.equal(areas[1].canAttack(attacker, target), allowed, `rogue level ${level}`);
+    state.targets.set(attacker, target);
+    state.targets.set(target, attacker);
+    state.immuneUntil.set(target, 110);
+    assert.equal(areas[1].canAttack(attacker, target), true, `assigned level ${level}`);
+    assert.equal(areas[1].canAttack(target, attacker), true, 'assigned targets can retaliate');
+    state.targets.clear();
+    state.immuneUntil.set(target, 110);
+    assert.equal(areas[1].canAttack(attacker, target), false, 'rogue entry immunity still applies');
+    state.arena.delete(target);
+    assert.equal(areas[1].canAttack(attacker, target), false, 'cannot attack into the lobby');
+  }
+});
+
 test("targets are from 15 levels below up to the chosen band above", () => {
   assert.equal(inRange(100, 85, 5), true);
   assert.equal(inRange(100, 84, 5), false);

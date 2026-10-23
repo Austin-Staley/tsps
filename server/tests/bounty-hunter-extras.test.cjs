@@ -8,6 +8,7 @@ const Fort = require(`${BH}/Fort.BountyHunter`);
 const SupplyCrates = require(`${BH}/SupplyCrates.BountyHunter`);
 const TargetTeleport = require(`${BH}/TargetTeleport.BountyHunter`);
 const RiskSkulls = require(`${BH}/RiskSkulls.BountyHunter`);
+const Hud = require(`${BH}/Hud.BountyHunter`);
 
 const Items = {
   COINS: 995, LAW_RUNE: 563, DEATH_RUNE: 560, CHAOS_RUNE: 562, TARGET_TELEPORT_SCROLL: 12846,
@@ -18,6 +19,44 @@ const Items = {
 const location = (x, y, z = 0) => ({ getX: () => x, getY: () => y, getZ: () => z });
 const IN_CRATER = location(3420, 4080);
 const OUTSIDE = location(3200, 3200);
+
+test("target hints track distant tiles, switch to nearby players, and clear when the target is gone", () => {
+  const hints = [];
+  const varps = new Map();
+  const varbits = new Map();
+  const sender = new Proxy({
+    getVarp: (id) => varps.get(id) ?? 0,
+    sendConfig: (id, value) => varps.set(id, value),
+    getVarbit: (id) => varbits.get(id) ?? 0,
+    sendVarbit: (id, value) => varbits.set(id, value),
+    sendPositionalHint: (at) => hints.push([at.getX(), at.getY()]),
+    sendPlayerHint: (target) => hints.push(target),
+    clearHintArrow: () => hints.push(null),
+  }, { get: (object, key) => object[key] ?? (() => {}) });
+  let at = location(3510, 4140);
+  const target = { getLocation: () => at, getUsername: () => 'BhBot1', getIndex: () => 1 };
+  let assigned = target;
+  const locals = [];
+  const viewer = { getLocation: () => location(3330, 3970), getLocalPlayers: () => locals, getPacketSender: () => sender };
+  Hud({}, { inCrater: () => true, inLobby: () => false, inArena: () => true, targetOf: () => assigned });
+  Hud.sync(viewer);
+  Hud.sync(viewer);
+  assert.deepEqual(hints, [[3510, 4140]], 'a target over 200 tiles away uses one positional hint');
+  at = location(3509, 4140);
+  Hud.sync(viewer);
+  assert.deepEqual(hints.at(-1), [3509, 4140], 'the distant arrow follows movement');
+  locals.push(target);
+  Hud.sync(viewer);
+  assert.equal(hints.at(-1), target, 'a visible player gets the smooth actor hint');
+  locals.length = 0;
+  Hud.sync(viewer);
+  assert.deepEqual(hints.at(-1), [3509, 4140], 'losing visibility restores the positional hint');
+  assigned = null;
+  Hud.sync(viewer);
+  Hud.sync(viewer);
+  assert.equal(hints.at(-1), null);
+  assert.equal(hints.filter((hint) => hint === null).length, 1);
+});
 
 class ItemStatementDialogue { constructor(index, itemId, text) { Object.assign(this, { itemId, text }); } }
 class DialogueChainBuilder { constructor() { this.list = []; } add(d) { this.list.push(d); return this; } }

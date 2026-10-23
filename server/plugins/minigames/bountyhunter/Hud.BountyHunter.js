@@ -35,7 +35,7 @@ const METRES_PER_STEP = 10;
 const PJ_COUNTDOWN_OFFSET = 2;
 
 let bh;
-/** player -> the target their hint arrow points at, so only our own arrow is ever cleared. */
+/** player -> last hint key, so moving distant targets update without repeating stationary hints. */
 const hinted = new WeakMap();
 
 function setVarbit(sender, id, value) {
@@ -70,11 +70,14 @@ function sync(player) {
   setVarbit(sender, VARBIT_TARGET_EXISTS, target ? 1 : 0);
   if (relayout) sender.sendClientScript(PVP_LAYOUT_SCRIPT);
 
-  if (hinted.get(player) !== target) {
-    if (target) sender.sendPlayerHint(target);
-    else sender.clearHintArrow();
-    if (target) hinted.set(player, target);
-    else hinted.delete(player);
+  const at = target?.getLocation();
+  const local = target && player.getLocalPlayers().includes(target);
+  const hint = !target ? null : local ? `p:${target.getIndex()}` : `t:${at.getX()},${at.getY()},${at.getZ()}`;
+  if (hinted.get(player) !== hint) {
+    if (local) sender.sendPlayerHint(target);
+    else if (target) sender.sendPositionalHint(at, 2, 0, at.getZ());
+    else if (hinted.has(player)) sender.clearHintArrow();
+    hinted.set(player, hint);
   }
 }
 
