@@ -148,7 +148,7 @@ items.
 the Spot it becomes a scroll box (`treasure-trails:clue-item`).
 
 **The table:** `clue-caskets.json` is imported unedited from the `osrsreboxed-db` exporter
-(`scripts/drops/clue_caskets.py`, branch `feat/clue-casket-tiers` at `6b62f806`, SHA-256
+(`scripts/drops/clue_caskets.py`, RSPSApp/osrsreboxed-db#13 at `efbf4bbe`, SHA-256
 `87d26369d2408d11b19cb4bace5c741d628ac3283d29bcc2f6cc80b4df560c29`; two generations byte-identical).
 - It adds the easy, medium and hard pools and structured `milestones` for every tier.
 - The elite and master pools are unchanged apart from their new `milestones`.
