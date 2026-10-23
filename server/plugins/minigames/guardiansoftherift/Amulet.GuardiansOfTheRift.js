@@ -59,7 +59,7 @@ function action(event) {
   event.box = { items: exchange ? [locket, amulet] : [amulet] };
 }
 function locketOnGuide(event) {
-  if (event.itemId !== Shared.obj(LOCKET) || event.target?.getDefinition?.()?.getName?.() !== PAGE) return;
+  if (event.itemId !== Shared.obj(LOCKET) || (event.definition ?? event.target?.getDefinition?.())?.getName?.() !== PAGE) return;
   if (!questDone(event.player) || Records.setting(event.player, OPENED) !== 1 || owns(event.player)) return;
   Shared.api().emitCustomEvent("npc-dialogue:start", {
     player: event.player, npc: event.target, npcId: event.target.getId(),

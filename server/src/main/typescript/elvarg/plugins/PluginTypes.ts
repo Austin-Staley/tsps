@@ -598,6 +598,12 @@ export interface PluginItemOnPlayerEvent {
 export interface PluginItemOnNpcEvent {
   player: any;
   target: any;
+  /**
+   * The definition this player sees (the transform-resolved form, as NPC options get).
+   * Match names on this: `target.getDefinition()` is the spawned parent, nameless for many
+   * revision 241 NPCs such as the second Lumbridge banker.
+   */
+  definition?: any;
   /** The target NPC's content id (its varbit-resolved cache variant), for quest id sets. */
   npcId: number;
   targetIndex: number;
