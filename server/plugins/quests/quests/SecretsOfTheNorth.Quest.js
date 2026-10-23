@@ -518,6 +518,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
 
   const HAZEEL_KEYS = ["hazeel:cult", "hazeel:dungeon", "hazeel:lair"];
   const KHAZARD_KEYS = ["khazard:cult", "khazard:dungeon", "khazard:lair"];
+  const OWNED_NPC_FLAG = "secrets-of-the-north:spawned";
 
   function trackedFor(player) {
     let tracked = trackedNpcs.get(player);
@@ -529,13 +530,13 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   }
 
   /**
-   * Drops this player's own copies of an id (owner ref, or the same account name
-   * after a relog), optionally restricted to one tile.
+   * Drops this quest's copies for the player, including stale copies after relog.
    */
   function cullOwnedNpcs(player, npcId, x, y, z) {
     const name = player.getUsername?.();
     for (const other of api.getWorld?.()?.getNpcs?.() ?? []) {
       if (other?.getId?.() !== npcId) continue;
+      if (other.hasFlag?.(OWNED_NPC_FLAG) !== true) continue;
       const owner = other.getOwner?.();
       if (owner !== player && (!name || owner?.getUsername?.() !== name)) continue;
       if (x !== undefined) {
@@ -552,7 +553,10 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     if (existing?.isRegistered?.()) return existing;
     cullOwnedNpcs(player, npcId);
     const npc = api.spawnNpc({ id: npcId, x, y, z, wanderRadius, owner: player, ownerOnly: true });
-    if (npc) tracked.set(key, npc);
+    if (npc) {
+      npc.setFlag(OWNED_NPC_FLAG);
+      tracked.set(key, npc);
+    }
     return npc;
   }
 

@@ -61,13 +61,19 @@ function harness({ completed = [] } = {}) {
       if (name === 'quest:is-started' && event) event.started = completedQuests.has(event.key);
     },
     spawnNpc: definition => {
-      let removed = false, at = new core.Location(definition.x, definition.y, definition.z);
+      let at = new core.Location(definition.x, definition.y, definition.z);
+      const flags = new Set();
       const npc = {
         ...definition,
         getId: () => definition.id,
         getOwner: () => definition.owner,
         getLocation: () => at,
-        isRegistered: () => !removed,
+        isRegistered: () => npc.removed !== true,
+        hasFlag: flag => flags.has(flag),
+        setFlag: (flag, enabled = true) => {
+          if (enabled) flags.add(flag); else flags.delete(flag);
+          return npc;
+        },
         getCombat: () => ({ attack: target => { npc.attacked = target; }, reset: noop }),
         setCombatXpMultiplier: noop, setPositionToFace: value => { npc.faced = value; },
         setNpcTransformationId: id => { npc.transformed = id; }, performAnimation: noop,
@@ -413,6 +419,23 @@ test('Evelot fight and death advance to the cult meeting, with interruption-safe
   assert.equal(variant(h), 'on-the-trail-talking-to-evelot-after-defeating-her');
   h.talk('Guard', p, N.GUARD_180);
   assert.equal(variant(h), 'on-the-trail-talking-to-the-carnillean-guard-after-the-conversation-with-evelot');
+});
+
+test('North spawn cleanup preserves another quest\'s Alomone for the same player', () => {
+  const h = harness(), p = player();
+  const foreign = h.api.spawnNpc({
+    id: N.ALOMONE, x: 2609, y: 9670, z: 0, owner: p, ownerOnly: true,
+  });
+  h.login(p);
+  assert.equal(foreign.isRegistered(), true, 'inactive North cannot remove Hazeel Cult\'s NPC');
+
+  h.setStage(p, 7);
+  const owned = h.npcs.find(n => n !== foreign && n.id === N.ALOMONE && n.isRegistered());
+  assert.ok(owned, 'North creates its own cult-meeting actor');
+  assert.equal(foreign.isRegistered(), true, 'creating the North actor preserves the foreign actor');
+  h.setStage(p, 13);
+  assert.equal(owned.isRegistered(), false, 'leaving the meeting removes North\'s actor');
+  assert.equal(foreign.isRegistered(), true, 'cleanup still preserves the foreign actor');
 });
 
 test('cult meeting spawns Hazeel only on the opposed side and advances through the guard', () => {
