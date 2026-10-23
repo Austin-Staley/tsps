@@ -298,6 +298,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     override cleanUp(): void {
+        this.clearMinimapSources();
         this.osrsClient.inputManager.cleanUp();
     }
 

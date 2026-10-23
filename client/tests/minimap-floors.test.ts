@@ -115,6 +115,7 @@ test("missing floor requests deduplicate, retry after failure and reject replace
     const renderer: any = Object.create(GameRenderer.prototype);
     renderer.minimapSources = new Map(); renderer.minimapRequests = new Map();
     renderer.osrsClient = {
+        inputManager: { cleanUp() {} },
         setMinimapImageUrl: (...args: any[]) => installed.push(args as any),
         workerPool: { queueMinimap: () => new Promise((resolve, reject) => { resolves.push(resolve); rejects.push(reject); }) },
     };
@@ -150,4 +151,12 @@ test("missing floor requests deduplicate, retry after failure and reject replace
     await retried;
     assert.equal(installed.length, 1, "instance/logout cleanup invalidates in-flight replies");
     assert.equal(renderer.minimapRequests.size, 0);
+
+    renderer.registerMinimapSource({ mapX: 50, mapY: 50, minimapInput: input });
+    installed.length = 0;
+    const stopped = renderer.requestMinimapImage(50, 50, 3);
+    GameRenderer.prototype.cleanUp.call(renderer);
+    resolves[4]({ minimapBlobs: [undefined, undefined, undefined, new Blob(["stopped"])] });
+    await stopped;
+    assert.equal(installed.length, 0, "a stopped renderer must not publish floors after a backend switch");
 });

@@ -137,7 +137,7 @@ async function main(): Promise<void> {
         playerRenderer: { cleanupAppearanceCache() {} },
         clearPlayerGeometryRuntimeState() {}, clearInteractHighlightActiveTarget() {},
         clearInteractHighlightHoverTarget() {}, interactHighlightDrawTargets: [],
-        actorDataTextures: [], actorDataTextureBuffer: [], clearMaps() {}, disposeDynamicNpcAnimState() {},
+        actorDataTextures: [], actorDataTextureBuffer: [], clearMaps() {}, clearMinimapSources() {}, disposeDynamicNpcAnimState() {},
     });
     await cleanUp(host);
     for (const resource of disposed) assert.equal(resource.deletes, 1, "cleanup releases each live target once");
