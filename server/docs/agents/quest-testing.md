@@ -57,6 +57,12 @@ Agree these before touching an account. They stop most time loss.
 4. **The cache** is the final id authority: names, placements, transforms, DB rows, action/menu
    data and bit layouts.
 
+Before a playthrough, collect the helper's `VarbitID` references and map their semantic
+names through the active cache. Check each required progress/puzzle bit against its
+actual earning action and login replay, including bits owned by shared systems. A
+missing numeric reference is a review lead, not proof of a defect; old helper comments
+can contain obsolete ids. Do this before spending time walking a route with stale flags.
+
 ## Find missing capture evidence quickly
 
 Search the [RSProx archive](https://rsprox.net/database) for a distinctive scene NPC or
@@ -575,6 +581,13 @@ Never report "PASS" if a mandatory leg, reward, relog or post-quest check is mis
   damage assistance still requires the real encounter and hit described above.
 
 ## Tests
+
+Model the production packet contract. `ObjectActionPacketListener` supplies lowercase
+`event.option` values to generic object hooks; cache menu labels and named action maps
+retain their original case. Exercise the registered dispatch with actual definitions
+where possible. A fixture that injects `"Fire"` can pass while a real `"fire"` click does
+nothing. Likewise, inventory `adds` returns a container: verify the resulting quantity
+rather than treating its return value as a successful receipt.
 
 - Run focused tests once, from `server/`: build if the test loads `dist/`, then
   `node --test tests/<focused>.test.cjs`.

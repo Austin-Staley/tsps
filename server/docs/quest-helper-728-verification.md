@@ -6,11 +6,11 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Fifteen quests have accepted natural main-route completion evidence: **15 / 106 active quests (14.15%)** (q003, q006, q008, q011, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
+Sixteen quests have accepted natural main-route completion evidence: **16 / 106 active quests (15.09%)** (q003, q006, q008, q011, q017, q019, q026, q040, q041, q048, q063, q072, q074, q085, q088, q105). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
-long or complex quests; all 15 accepted routes are within the retained 106. Against
-the original inventory the count is still 15/128 (11.72%). Deferral changes scope,
+long or complex quests; all 16 accepted routes are within the retained 106. Against
+the original inventory the count is still 16/128 (12.50%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
 
@@ -38,6 +38,13 @@ lists the exact active and deferred sets and preserves their prior evidence.
 - **Revision:** plugin/source = loaded = peer-reviewed `1d22033d066ba1af26f833f3146da6e6a5f0bf50063bbac952822ff6ea6487a7`; focused test `f4bad7f8406e5731a82a9c5f12a561eb3b09c648df45aed7c5a16f02b8208205`; exact-hash review `/tmp/tsps-728/reviews/q006.json` passed.
 - **Natural route and result:** one linked fresh-stage-0 route on `q728a006r1`: the epoch-3 report naturally reached stage 20, and epoch 14 resumed from that saved stage-20 checkpoint (not a stage-40 baseline), naturally reaching stage 40 before continuing to stage 65. The account inflated two observed swamp toads through the `Inflate` NPC option, killed its private Chompy in real combat and used `Pluck`, completed Rantz's hunt/cooking route, exited the cave, and handed in the seasoned chompy. Quest Points increased 0→2 on the same target-only account; Cooking +1,470, Ranged +735, Fletching +262. A normal Rantz repeat did not duplicate rewards; relog preserved stage 65, QP 2, XP and inventory; official completion/logout snapshots were recorded and the account ended offline. Root accepted this scoped checkpoint-linked main route.
 - **Limits:** no visual overlay proof, no all-branches or recovery claim, and no separate QP varp-101 reading at stage 60; the fresh stage-0 and final relog values reconcile to QP 2. Evidence: `/tmp/tsps-728/native/jobs/q006-r1-epoch3.report.json`, `/tmp/tsps-728/native/jobs/q006-epoch9.raw.jsonl`, `/tmp/tsps-728/native/jobs/q006-epoch10.raw.jsonl`, `/tmp/tsps-728/native/jobs/q006-epoch14-acceptance.md`, `/tmp/tsps-728/native/evidence/q006-root-accepted-20261023.json`.
+
+### q017 — Death Plateau
+
+- **Revision:** source and epoch21 loaded plugin `d1d50c283ccc4d35cf16ee26dabd0b7a5b9f975466486a5d59fe02ddb2ac2c48`; focused test `79b0042bfc4298ae12c0ddacf205f5fa83e2ffa7d8e53be82d5c2fff5dbc0546` (12 checks). The same source was used across the linked epochs19/20/21 route.
+- **Natural route and result:** the fresh-stage0 account played Denulth/Harold's IOU, read its combination, placed all five stone balls, entered the equipment room, used Saba's actual cave, obtained Tenzing's boots and Dunstan's training certificate through the normal NPC chain, supplied Tenzing and received the secret map. It exited through Tenzing's north door and stile, walked the actual secret trail to scout, and reported to Denulth. Client varp314 reached80; QP0→1, Attack XP+3,000 and one steel claws3097 were observed. The map and combination were consumed. Post-quest Denulth dialogue did not repeat rewards; normal relog/logout preserved them and final offline status was confirmed.
+- **Independent persistence:** root checked snapshots1311 (before hand-in),1314 (completion),1317 and1318 (logout/relog/repeat). Completed saves have stage80/QP1/Attack13,037,431/one claws, with no remaining map or combination. Exact raw prefix/continuation hashes and selected save fields: `/tmp/tsps-728/native/evidence/q017-root-accepted-20261023.json`.
+- **Limits/aids:** ordinary skills, gear, food, ale, iron bar, ten bread, ten cooked trout and a Games necklace were declared aids. Invulnerability was enabled then disabled during optional troll encounters. Quest-specific IOU/combination/certificate/boots/map were earned; no target stage/item injection or administrative movement after baseline. Full-bag certificate recovery was exercised. Other recovery, alternate dialogue and the visual overlay remain unchecked.
 
 ### q019 — The Depths of Despair
 

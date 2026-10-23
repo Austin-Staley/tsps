@@ -36,9 +36,9 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **15/106 active scoped main routes (14.15%)**. The count
-is 15/128 against the original inventory; the increase in percentage comes only
-from the approved scope reduction plus the newly accepted Depths of Despair route. Supplemental issue-809 evidence
+of accepted route counts: **16/106 active scoped main routes (15.09%)**. The count
+is 16/128 against the original inventory; the increase in percentage comes only
+from the approved scope reduction plus the newly accepted Depths of Despair and Death Plateau routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The draft PR is updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
@@ -238,7 +238,7 @@ deferred quest. No deferred quest is counted as complete.
 | Creature of Fenkenstrain | `CreatureOfFenkenstrain` | Pending | Pending | Pending |
 | The Curse of Arrav | `CurseOfArrav` | Pending | Pending | Pending |
 | Death on the Isle | `DeathOnTheIsle` | Captured item IDs, accusation bit and evidence recovery checkpoint reviewed; full parity review pending | 8 focused dispatch tests pass | Pending |
-| Death Plateau | `DeathPlateau` | Harold’s IOU recovery, ordered condition checks and missing-item handouts use the imported transcript; shared runner now continues explicitly true linear sibling conditions | 47 shared/runtime and quest regressions pass | Natural completion and native recovery remain pending |
+| Death Plateau | `DeathPlateau` | Harold’s IOU recovery, ordered condition checks and missing-item handouts use the imported transcript; shared runner now continues explicitly true linear sibling conditions | 47 shared/runtime and quest regressions pass | Accepted linked natural main route, rewards/repeat/relog/offline; certificate full-bag retry exercised ([ledger](quest-helper-728-verification.md)); other recovery/overlay unchecked |
 | Death to the Dorgeshuun | `DeathToTheDorgeshuun` | Pending | Pending | Pending |
 | The Depths of Despair | `DepthsOfDespair` | Recovery/dialogue review and cache-backed stepping-stone approach fixed | 14 focused checks pass, including normal movement to the bank | Accepted checkpoint-linked main route, rewards/repeat/relog/offline independently checked; recovery and overlay remain unchecked ([ledger](quest-helper-728-verification.md)) |
 | Devious Minds | `DeviousMinds` | Pending | Pending | Pending |
