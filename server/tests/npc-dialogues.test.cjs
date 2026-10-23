@@ -958,6 +958,63 @@ test('quest menu warning pauses once, then presents the same selectable options'
   assert.deepEqual(menus[0].options.filter(value => typeof value === 'string'), ['Yes', 'No']);
 });
 
+test('conditional menu options resolve by their source condition id', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const previous = PluginManager.emitNpcDialogueCondition;
+  const seen = [];
+  const menus = [];
+  PluginManager.emitNpcDialogueCondition = (request) => {
+    seen.push(request.stepId);
+    return request.stepId === 'condition-source-id' ? false : null;
+  };
+  try {
+    const player = {
+      getDialogueManager: () => ({ reset() {}, startDialogues(chain) {
+        for (const entry of chain.getDialogues().values()) entry.send(player);
+      } }),
+      getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+      sendMessage() {},
+    };
+    const event = { player, npcId: 1, npc: null, definition: { getName: () => 'Guard' } };
+    startDialogue({ emitCustomEvent() {}, sendMultiChatboxPrompt(_player, _title, ...pairs) {
+      menus.push(pairs.filter((_, index) => index % 2 === 0));
+    } }, event, [{ type: 'choice', options: [
+      { text: 'Hidden', id: 'option-id', condition: 'If ready:', condition_id: 'condition-source-id' },
+      { text: 'Visible', id: 'other-option' },
+    ] }], {}, { ...event, pages: [] });
+    assert.deepEqual(seen, ['condition-source-id']);
+    assert.equal(menus.length, 1);
+    assert.equal(menus[0][0], 'Visible');
+    assert.ok(!menus[0].includes('Hidden'));
+
+    const randomActions = [];
+    const randomPlayer = {
+      getDialogueManager: () => ({ reset() {}, startDialogues(chain) {
+        for (const entry of chain.getDialogues().values()) entry.send(randomPlayer);
+      } }),
+      getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+      sendMessage() {},
+    };
+    const originalRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      startDialogue({ emitCustomEvent(name, request) {
+        if (name === 'npc-dialogue:action') randomActions.push(request.stepId);
+      } }, { ...event, player: randomPlayer }, [{ type: 'random', options: [
+        { text: 'Hidden', id: 'random-option-id', condition: 'If ready:', condition_id: 'condition-source-id', steps: [{ type: 'action', id: 'hidden-action' }] },
+        { text: 'Visible', id: 'random-visible', steps: [{ type: 'action', id: 'visible-action' }] },
+      ] }], {}, { player: randomPlayer, npcId: 1, pages: [] });
+    } finally {
+      Math.random = originalRandom;
+    }
+    assert.ok(randomActions.includes('visible-action'));
+    assert.ok(!randomActions.includes('hidden-action'));
+    assert.deepEqual(seen, ['condition-source-id', 'condition-source-id']);
+  } finally {
+    PluginManager.emitNpcDialogueCondition = previous;
+  }
+});
+
 test('typed speakers retain their name with a nameless transform-parent head and captured expressions', () => {
   let chain;
   const sent = [], sender = new Proxy({}, { get: (_target, key) => (...args) => { sent.push([key, ...args]); return sender; } });

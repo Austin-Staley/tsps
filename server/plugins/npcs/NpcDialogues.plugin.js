@@ -627,7 +627,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     // An option the wiki guards ("If the player is wearing the Ring of Charos(a):") is hidden
     // only once a plugin answers its condition false; unanswered ones still show.
     const options = (step.options || []).filter((option) =>
-      !option.condition || resolveCondition({ text: option.condition, id: option.id }) !== false);
+      !option.condition || resolveCondition({ text: option.condition, id: option.condition_id ?? option.id }) !== false);
     const more = options.length - offset > 5;
     const visible = options.slice(offset, offset + (more ? 4 : 5));
     // Record every option when the prompt is shown (not on selection) so that a
@@ -897,7 +897,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           // ("If Animal Magnetism is completed:") are left out once a plugin answers
           // their condition false, as menu options are.
           const options = (step.options ?? []).filter((option) =>
-            !option.condition || resolveCondition({ text: option.condition, id: option.id }) !== false);
+            !option.condition || resolveCondition({ text: option.condition, id: option.condition_id ?? option.id }) !== false);
           if (!options.length) return run(rest, currentRecord);
           const index = Math.floor(Math.random() * options.length);
           const option = options[index];
