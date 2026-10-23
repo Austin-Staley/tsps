@@ -329,6 +329,9 @@ export class PlayerRenderer {
         this.lastRenderableAppearance.clear();
         this.geomCache.clear();
         this.clearPlayerGpuGeometryCache();
+        this.uploadedPoseTexture = undefined;
+        this.uploadedPoseKeys.length = 0;
+        this.uploadedPoseMatrices.length = 0;
     }
 
     // Bounded geometry cache: (appearance|seqId|frameIdx) -> buffers
@@ -572,6 +575,9 @@ export class PlayerRenderer {
     private poseUpload = new Float32Array(0);
     private readonly poseRows = new Map<string, { geometry: PlayerGpuGeometry; row: number }>();
     private readonly poseRowMatrices: Float32Array[] = [];
+    private uploadedPoseTexture?: Texture;
+    private readonly uploadedPoseKeys: string[] = [];
+    private readonly uploadedPoseMatrices: Float32Array[] = [];
     private readonly poseCache = new Map<string, Float32Array | null>();
     private readonly rigs = new WeakMap<object, LabelRig | null>();
     private readonly restMeshIds = new WeakMap<object, number>();
@@ -727,26 +733,45 @@ export class PlayerRenderer {
             out.clear();
             return out;
         }
+        const texture: Texture = r.playerPoseTexture;
+        if (texture !== this.uploadedPoseTexture) {
+            this.uploadedPoseTexture = texture;
+            this.uploadedPoseKeys.length = 0;
+            this.uploadedPoseMatrices.length = 0;
+        }
+        let first = rows.length, last = -1;
+        for (const [key, { row }] of out) {
+            // A streamed frame can replace the rest pose under the same animation key.
+            if (this.uploadedPoseKeys[row] !== key || this.uploadedPoseMatrices[row] !== rows[row]) {
+                first = Math.min(first, row);
+                last = row;
+            }
+        }
+        if (last < 0) return out;
         const width = maxLabels * 3;
         const rowFloats = width * 4;
-        if (this.poseUpload.length < rowFloats * rows.length) {
+        const height = last - first + 1;
+        if (this.poseUpload.length < rowFloats * height) {
             this.poseUpload = new Float32Array(rowFloats * PlayerRenderer.POSE_ROWS);
         }
-        for (let i = 0; i < rows.length; i++) this.poseUpload.set(rows[i], i * rowFloats);
+        for (let i = first; i <= last; i++) this.poseUpload.set(rows[i], (i - first) * rowFloats);
         const gl: WebGL2RenderingContext = r.app.gl;
-        const texture: any = r.playerPoseTexture;
         texture.bind(Math.max(0, texture.currentUnit | 0));
         gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
             0,
-            0,
+            first,
             width,
-            rows.length,
+            height,
             gl.RGBA,
             gl.FLOAT,
-            this.poseUpload.subarray(0, rowFloats * rows.length),
+            this.poseUpload.subarray(0, rowFloats * height),
         );
+        for (const [key, { row }] of out) {
+            this.uploadedPoseKeys[row] = key;
+            this.uploadedPoseMatrices[row] = rows[row];
+        }
         return out;
     }
 
