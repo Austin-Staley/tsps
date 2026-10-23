@@ -41,6 +41,10 @@ const OFFER_MIN_DELAY_MS = 5_000;
 const OFFER_MAX_DELAY_MS = 10 * 60_000;
 const OFFER_ILLIQUID_MIN_MS = 60_000;
 const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
+// At the guide price an offer has a tenth of the volume wait; crossing it by a
+// few percent cuts that further, while resting further away waits progressively longer.
+const OFFER_GUIDE_DELAY = 0.1;
+const OFFER_PRICE_SENSITIVITY = 50;
 const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
 const MARKET_DATA_FILE = path.join(__dirname, "data", "grand-exchange.json");
@@ -122,7 +126,15 @@ function fillDelayMs(offer, random = Math.random) {
   }
   const quantity = Math.max(1, Number(offer.quantity) || 1);
   const expectedMinutes = quantity / (volume / 1440);
-  const delay = expectedMinutes * 60_000 * (0.75 + 0.75 * random());
+  // No order book: approximate resting liquidity from the distance to the guide.
+  // Overpaying a buy (or undercutting a sell) crosses faster; the reverse waits.
+  // ponytail: price-distance heuristic, replace with a resting order book if fill
+  // order needs to depend on the actual queue at each price.
+  const guide = guidePrice(offer);
+  const distance = guide > 0 ? (offerPrice(offer) - guide) / guide : 0;
+  const aggressiveness = offer.sell ? -distance : distance;
+  const priceFactor = OFFER_GUIDE_DELAY * Math.exp(-OFFER_PRICE_SENSITIVITY * aggressiveness);
+  const delay = expectedMinutes * 60_000 * (0.75 + 0.75 * random()) * priceFactor;
   return Math.max(OFFER_MIN_DELAY_MS, Math.min(OFFER_MAX_DELAY_MS, delay));
 }
 

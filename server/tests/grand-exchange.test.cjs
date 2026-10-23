@@ -76,6 +76,9 @@ market[HIGH_VOLUME] = { volume: 20_000_000 };
 const SLOW = 2002;
 define(SLOW);
 market[SLOW] = { volume: 900 };
+const PRICED = 2006;
+define(PRICED, { getGrandExchangeValue: () => 100, getGrandExchangeSellValue: () => 90 });
+market[PRICED] = { volume: 1440 };
 const ILLIQUID = 2003;
 const BROKEN_VOLUME = 2004;
 define(BROKEN_VOLUME);
@@ -97,6 +100,20 @@ test('fill delay follows volume and quantity', () => {
     assert.ok(delay >= previous, `quantity ${quantity}: ${delay} < ${previous}`);
     previous = delay;
   }
+});
+
+test('crossing the guide fills fast, resting away from it waits', () => {
+  const atGuide = fillDelayMs({ itemId: PRICED, quantity: 1, price: 100 }, half);
+  const over = fillDelayMs({ itemId: PRICED, quantity: 1, price: 110 }, half);
+  const under = fillDelayMs({ itemId: PRICED, quantity: 1, price: 90 }, half);
+  assert.ok(over <= 5_000, `overpaying took ${over}ms`);
+  assert.ok(under === 10 * 60_000, `resting buy took ${under}ms`);
+  assert.ok(atGuide > 5_000 && atGuide < 60_000, `guide took ${atGuide}ms`);
+
+  const sellUnder = fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 81 }, half);
+  const sellAbove = fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 99 }, half);
+  assert.ok(sellUnder <= 5_000, `undercutting sell took ${sellUnder}ms`);
+  assert.ok(sellAbove === 10 * 60_000, `resting sell took ${sellAbove}ms`);
 });
 
 test('unknown, zero, broken and negative volume is illiquid', () => {
