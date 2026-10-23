@@ -511,7 +511,7 @@ export class WorldMapArchiveRenderer {
     private readonly geographyIndex: CacheIndex;
     private readonly groundIndex: CacheIndex;
     private readonly areaCache = new Map<number, WorldMapAreaDataRecord | undefined>();
-    private readonly groundSpriteCache = new Map<string, Promise<Int32Array>>();
+    private readonly groundSpriteCache = new Map<string, Promise<Int32Array | undefined>>();
     private readonly scaleHandlers = new Map<number, WorldMapScaleHandler>();
     private readonly renderedRegionCache = new Map<string, WorldMapRenderedTile>();
     private renderedRegionCacheBytes = 0;
@@ -542,7 +542,7 @@ export class WorldMapArchiveRenderer {
             return undefined;
         }
         const clampedPixelsPerTile = Math.max(1, Math.min(8, Math.ceil(pixelsPerTile || 1)));
-        const areaData = this.getAreaData(area);
+        const areaData = await retryOnMissingGroup(() => this.getAreaData(area));
         if (!areaData) {
             return undefined;
         }
@@ -562,15 +562,18 @@ export class WorldMapArchiveRenderer {
             return cached;
         }
 
-        if (!this.loadGeography(region)) {
+        const source = region.data0 ?? region.data1[0];
+        // Request both archives together, as native WorldMapRegion.drawTile does.
+        const [geographyLoaded, groundColors] = await Promise.all([
+            retryOnMissingGroup(() => this.loadGeography(region)),
+            this.getGroundColors(source.groupId, source.headerless ? source.fileId : 0),
+        ]);
+        if (!geographyLoaded || !groundColors) {
             return undefined;
         }
         const width = clampedPixelsPerTile * TILE_COUNT;
         const height = width;
         const rgbPixels = new Int32Array(width * height);
-        const source = region.data0 ?? region.data1[0];
-        // Rev 241 keeps one ground image per map area in the region's group; before, file 0.
-        const groundColors = await this.getGroundColors(source?.groupId ?? -1, source?.headerless ? source.fileId : 0);
         const scaleHandler = this.getScaleHandler(clampedPixelsPerTile);
 
         if (region.data0) {
@@ -592,15 +595,20 @@ export class WorldMapArchiveRenderer {
 
     getIcons(area: WorldMapArea | undefined, mapX: number, mapY: number): WorldMapRenderIcon[] | undefined {
         if (!area) return undefined;
-        const areaData = this.getAreaData(area);
-        if (!areaData) return undefined;
-        const region = this.getRegion(areaData, mapX | 0, mapY | 0);
-        if (!region) return undefined;
-        if ((region.data0 || region.data1.length > 0) && !region.geographyLoaded) {
-            this.loadGeography(region);
+        try {
+            const areaData = this.getAreaData(area);
+            if (!areaData) return undefined;
+            const region = this.getRegion(areaData, mapX | 0, mapY | 0);
+            if (!region) return undefined;
+            if ((region.data0 || region.data1.length > 0) && !region.geographyLoaded) {
+                this.loadGeography(region);
+            }
+            const icons = region.staticIcons.concat(region.dynamicIcons);
+            return icons.length > 0 ? icons : undefined;
+        } catch (error) {
+            if (!isGroupMissingError(error)) throw error;
+            return undefined;
         }
-        const icons = region.staticIcons.concat(region.dynamicIcons);
-        return icons.length > 0 ? icons : undefined;
     }
 
     private getAreaData(area: WorldMapArea): WorldMapAreaDataRecord | undefined {
@@ -627,6 +635,7 @@ export class WorldMapArchiveRenderer {
                 regions: new Map(),
             };
         } catch (error) {
+            if (isGroupMissingError(error)) throw error;
             console.log("[WorldMapArchiveRenderer] Failed to load area data", {
                 areaId: area.id,
                 internalName: area.internalName,
@@ -708,9 +717,18 @@ export class WorldMapArchiveRenderer {
         if (region.data1[0]?.headerless) {
             if (!this.loadChunkRegionGeography(region.data1)) return false;
         } else {
+            let missing: unknown;
+            let loaded = true;
             for (const data of region.data1) {
-                if (!this.loadWorldMapDataGeography(data)) return false;
+                try {
+                    loaded = this.loadWorldMapDataGeography(data) && loaded;
+                } catch (error) {
+                    if (!isGroupMissingError(error)) throw error;
+                    missing = error;
+                }
             }
+            if (missing) throw missing;
+            if (!loaded) return false;
         }
         for (const data of region.data1) {
             this.buildIcons(region, data, data.chunkX * 8, data.chunkY * 8, 8, 8);
@@ -728,6 +746,7 @@ export class WorldMapArchiveRenderer {
             decodeHeaderlessChunkRegion(entries, file.data);
             return true;
         } catch (error) {
+            if (isGroupMissingError(error)) throw error;
             console.warn("[WorldMap] chunk region geography", entries[0].regionX, entries[0].regionY, error);
             return false;
         }
@@ -745,15 +764,12 @@ export class WorldMapArchiveRenderer {
             }
             return true;
         } catch (error) {
-            // Missing groups are queued for on-demand fetch and this is
-            // retried on the next render, so only log real failures.
-            if (!isGroupMissingError(error)) {
-                console.log("[WorldMapArchiveRenderer] Failed to load geography", {
-                    groupId: data.groupId,
-                    fileId: data.fileId,
-                    error,
-                });
-            }
+            if (isGroupMissingError(error)) throw error;
+            console.log("[WorldMapArchiveRenderer] Failed to load geography", {
+                groupId: data.groupId,
+                fileId: data.fileId,
+                error,
+            });
             return false;
         }
     }
@@ -1256,7 +1272,7 @@ export class WorldMapArchiveRenderer {
         return HSL_RGB_MAP[adjustOverlayLight(hsl, 96)] ?? defaultColor;
     }
 
-    private getGroundColors(groupId: number, fileId = 0): Promise<Int32Array> {
+    private getGroundColors(groupId: number, fileId = 0): Promise<Int32Array | undefined> {
         const key = `${groupId}/${fileId}`;
         const cached = this.groundSpriteCache.get(key);
         if (cached) return cached;
@@ -1265,7 +1281,7 @@ export class WorldMapArchiveRenderer {
         return colors;
     }
 
-    private async loadGroundColors(groupId: number, fileId: number): Promise<Int32Array> {
+    private async loadGroundColors(groupId: number, fileId: number): Promise<Int32Array | undefined> {
         try {
             // Waits for the group to stream in when the cache is sparse.
             const archive = await retryOnMissingGroup(() => this.groundIndex.getArchive(groupId));
@@ -1279,9 +1295,9 @@ export class WorldMapArchiveRenderer {
                 error,
             });
         }
-        // Don't keep the blank result cached; a later view retries the load.
+        // A transient miss must not become a permanently cached tile with blank ground.
         this.groundSpriteCache.delete(`${groupId}/${fileId}`);
-        return new Int32Array(TILE_AREA);
+        return undefined;
     }
 
     private async decodeWorldMapSprite(data: Int8Array): Promise<Int32Array> {
