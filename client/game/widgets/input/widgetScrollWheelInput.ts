@@ -3,6 +3,7 @@ import { getVisibleWidgetSurfaceReason } from "../../../widgets/menu/utils";
 import type { WidgetInputControllerDeps, WidgetInputFrame } from "./widgetInputTypes";
 import type { WidgetInteractionController } from "../WidgetInteractionController";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
+import { SCROLL_WHEEL_ZOOM_INCREMENT_EVENT, SCROLL_WHEEL_ZOOM_SCRIPT } from "../../../rs/cs2/zoomCallbacks";
 
 export function processWidgetScrollWheelInput(
     deps: WidgetInputControllerDeps,
@@ -12,7 +13,8 @@ export function processWidgetScrollWheelInput(
 ): void {
     const { input, mx, hits } = frame;
     const wheelDelta = input.wheelDeltaY;
-    if (wheelDelta !== 0 && hits.length > 0 && !widgetInteraction.isDraggingWidget) {
+    const pinchDelta = input.pinchZoomDelta ?? 0;
+    if ((wheelDelta !== 0 || pinchDelta !== 0) && hits.length > 0 && !widgetInteraction.isDraggingWidget) {
         let consumedWheel = false;
         let blockedByVisibleWidget = false;
 
@@ -25,6 +27,7 @@ export function processWidgetScrollWheelInput(
 
             // noScrollThrough blocks scroll from reaching widgets behind
             if (w.noScrollThrough && w.isIf3 !== false) {
+                if (pinchDelta !== 0) input.clearWheel();
                 break;
             }
 
@@ -39,16 +42,34 @@ export function processWidgetScrollWheelInput(
                 (Array.isArray(w.onScroll) && w.onScroll.length > 0);
             if (!hasScrollHandler) continue;
 
-            const wheelStep = wheelDelta > 0 ? 1 : -1;
+            const scriptId = w.eventHandlers?.onScroll?.scriptId ?? w.onScroll?.[0];
+            const pinchZoom = scriptId === SCROLL_WHEEL_ZOOM_SCRIPT &&
+                (pinchDelta !== 0 || input.getCameraZoomDelta() !== wheelDelta);
+            if (!pinchZoom && wheelDelta === 0) continue;
+            if (pinchZoom && blockedByVisibleWidget) break;
+            const wheelStep = (pinchZoom ? input.getCameraZoomDelta() : wheelDelta) > 0 ? 1 : -1;
             const scrollCtx: Partial<ScriptEvent> = {
                 mouseX: mx - (w._absX ?? w.x ?? 0),
                 mouseY: wheelStep,
             };
 
-            if (w.eventHandlers?.onScroll) {
-                deps.getCs2Vm().invokeEventHandler(w, "onScroll", scrollCtx);
-            } else if (Array.isArray(w.onScroll) && w.onScroll.length > 0) {
-                deps.executeScriptListener(w, w.onScroll, scrollCtx);
+            const vm = deps.getCs2Vm();
+            // Scale after plugin callbacks so their zoom step and Control-to-zoom still apply.
+            const scalePinch = (_script: unknown, name: string) => {
+                if (name === SCROLL_WHEEL_ZOOM_INCREMENT_EVENT) {
+                    const top = vm.intStackSize - 1;
+                    vm.intStack[top] = input.consumePinchZoomIncrement(vm.intStack[top]);
+                }
+            };
+            if (pinchZoom) vm.scriptCallbackListeners.add(scalePinch);
+            try {
+                if (w.eventHandlers?.onScroll) {
+                    vm.invokeEventHandler(w, "onScroll", scrollCtx);
+                } else if (Array.isArray(w.onScroll) && w.onScroll.length > 0) {
+                    deps.executeScriptListener(w, w.onScroll, scrollCtx);
+                }
+            } finally {
+                if (pinchZoom) vm.scriptCallbackListeners.delete(scalePinch);
             }
 
             consumedWheel = true;
@@ -57,7 +78,7 @@ export function processWidgetScrollWheelInput(
 
         // Block camera zoom if scroll was consumed or the pointer is over a zoom-blocking widget.
         if (consumedWheel || blockedByVisibleWidget) {
-            input.wheelDeltaY = 0;
+            input.clearWheel();
         }
     }
 }

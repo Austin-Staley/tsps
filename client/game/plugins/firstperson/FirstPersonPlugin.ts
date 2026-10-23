@@ -403,8 +403,9 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
     }
 
     handleCameraScroll({ camera, input }: CameraInputContext): boolean {
-        if (!this.enabled || input.wheelDeltaY === 0) return false;
-        this.zoomScale = Math.max(0.5, Math.min(2, this.zoomScale - input.wheelDeltaY * 0.001));
+        const delta = input.getCameraZoomDelta();
+        if (!this.enabled || delta === 0) return false;
+        this.zoomScale = Math.max(0.5, Math.min(2, this.zoomScale - delta * 0.001));
         camera.setViewZoomScale(this.zoomScale * (1 - RUN_FOV_KICK * this.runBlend));
         return true;
     }

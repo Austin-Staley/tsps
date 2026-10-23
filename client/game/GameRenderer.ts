@@ -547,8 +547,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
         // Scroll wheel zoom.
         // Follow-camera zoom is driven by widget onScroll handlers on the main viewport root.
-        // Pinch is merged into wheelDeltaY in InputManager (same path as mouse wheel).
-        const zoomDelta = inputManager.wheelDeltaY;
+        const zoomDelta = inputManager.getCameraZoomDelta();
         const pluginHandlesCameraScroll = this.osrsClient.clientPlugins.handleCameraScroll({
             camera,
             input: inputManager,

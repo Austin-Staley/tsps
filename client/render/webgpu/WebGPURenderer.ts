@@ -675,12 +675,12 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             if (
                 this.osrsClient.clientPlugins.hdEnabled() === true &&
                 this.osrsClient.followPlayerCamera &&
-                inputManager.wheelDeltaY !== 0 &&
+                inputManager.getCameraZoomDelta() !== 0 &&
                 inputManager.mouseX >= 0 &&
                 inputManager.mouseY >= 0 &&
                 this.osrsClient.camera.containsScreenPoint(inputManager.mouseX, inputManager.mouseY)
             ) {
-                this.followCamWheel += inputManager.wheelDeltaY;
+                this.followCamWheel += inputManager.getCameraZoomDelta();
             }
             this.handleInput(deltaTime);
             // Deck interpolation runs before the camera: it projects the deck coordinates the

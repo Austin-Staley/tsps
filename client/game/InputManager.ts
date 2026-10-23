@@ -30,7 +30,7 @@ function toOsrsKeyCode(domKeyCode: number): number {
     return -1;
 }
 
-/** Finger travel per camera zoom notch while pinching (CSS px). */
+/** Finger travel equivalent to one mouse-wheel notch (CSS px). */
 const PINCH_PX_PER_WHEEL_NOTCH = 20;
 /** A mouse wheel notch's deltaY (pixel mode). */
 const WHEEL_NOTCH_DELTA = 100;
@@ -238,8 +238,10 @@ export class InputManager {
     /** Center point of pinch gesture */
     private pinchCenterX: number = 0;
     private pinchCenterY: number = 0;
-    /** Accumulated pinch zoom delta (positive = zoom in, negative = zoom out) */
+    /** Continuous pinch wheel units this frame; positive zooms out. */
     pinchZoomDelta: number = 0;
+    private pinchWheelDeltaY: number = 0;
+    private pinchZoomRemainder: number = 0;
     /** Finger travel (CSS px, + = pinch in) not yet turned into wheel notches. */
     private pinchNotchRemainder: number = 0;
 
@@ -949,6 +951,7 @@ export class InputManager {
             this.pinchStartDistance = distance;
             this.lastPinchDistance = distance;
             this.pinchNotchRemainder = 0;
+            this.pinchZoomRemainder = 0;
             const [cx, cy] = this.getTouchCenter(event.touches[0], event.touches[1]);
             this.pinchCenterX = cx;
             this.pinchCenterY = cy;
@@ -979,19 +982,17 @@ export class InputManager {
         this.lastInputTimeMs = this.nowMs();
         this.lastTouchInputTimeMs = this.lastInputTimeMs;
 
-        // Handle pinch gesture — same sink as mouse wheel so minimap / UI onScroll
-        // and camera zoom all see identical wheelDeltaY.
+        // Keep coarse widget scrolling and continuous camera zoom from the same gesture.
         if (this.isPinching && event.touches.length === 2) {
             const distance = this.getTouchDistance(event.touches[0], event.touches[1]);
             const delta = distance - this.lastPinchDistance;
-            // Pinch-in (delta < 0) → positive wheelDeltaY (zoom out), matching wheel-down.
-            // The zoom scripts take one fixed notch per frame whatever the delta, so a raw
-            // per-move delta zoomed a notch every frame of any pinch. Send whole notches by
-            // finger travel instead, keeping the remainder.
+            this.pinchZoomDelta += -delta * WHEEL_NOTCH_DELTA / PINCH_PX_PER_WHEEL_NOTCH;
+            // Widgets keep discrete notches; the camera also receives the continuous travel.
             this.pinchNotchRemainder += -delta;
             while (Math.abs(this.pinchNotchRemainder) >= PINCH_PX_PER_WHEEL_NOTCH) {
                 const sign = Math.sign(this.pinchNotchRemainder);
                 this.wheelDeltaY += sign * WHEEL_NOTCH_DELTA;
+                this.pinchWheelDeltaY += sign * WHEEL_NOTCH_DELTA;
                 this.pinchNotchRemainder -= sign * PINCH_PX_PER_WHEEL_NOTCH;
             }
             this.lastPinchDistance = distance;
@@ -1201,6 +1202,23 @@ export class InputManager {
         this.clickMode1 = ClickMode.NONE;
     }
 
+    getCameraZoomDelta(): number {
+        return this.wheelDeltaY - this.pinchWheelDeltaY + this.pinchZoomDelta;
+    }
+
+    consumePinchZoomIncrement(increment: number): number {
+        const delta = this.getCameraZoomDelta() * increment / WHEEL_NOTCH_DELTA + this.pinchZoomRemainder;
+        const whole = Math.trunc(delta);
+        this.pinchZoomRemainder = delta - whole;
+        return whole * Math.sign(this.getCameraZoomDelta());
+    }
+
+    clearWheel(): void {
+        this.wheelDeltaY = 0;
+        this.pinchZoomDelta = 0;
+        this.pinchWheelDeltaY = 0;
+    }
+
     /**
      * Called at end of each frame
      */
@@ -1223,14 +1241,13 @@ export class InputManager {
         // Clear per-frame deltas
         this.deltaMouseX = 0;
         this.deltaMouseY = 0;
-        this.wheelDeltaY = 0;
+        this.clearWheel();
         this.wheelCamDeltaX = 0;
         this.wheelCamDeltaY = 0;
         this._cameraDragDeltaX = 0;
         this._cameraDragDeltaY = 0;
         this.middleClickX = -1;
         this.middleClickY = -1;
-        this.pinchZoomDelta = 0;
         this.lastMouseX = this.mouseX;
         this.lastMouseY = this.mouseY;
 
