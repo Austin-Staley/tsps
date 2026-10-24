@@ -11,12 +11,16 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { AccuracyFormulasDpsCalc } = require('../dist/game/content/combat/formula/AccuracyFormulasDpsCalc');
 const core = PluginManager.getCoreApi();
 
 let Common, Fight, Roof, Combat, Kills, tasks, onTaskAnswer, prayers, killTotal;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  new NpcDefinitionLoader().load();
   Common = require('../plugins/bosses/grotesqueguardians/Common.GrotesqueGuardians');
   ({ Fight } = require('../plugins/bosses/grotesqueguardians/Fight.GrotesqueGuardians'));
   Roof = require('../plugins/bosses/grotesqueguardians/Roof.GrotesqueGuardians');
@@ -29,6 +33,7 @@ before(async () => {
   const api = new Proxy({
     core: { ...core, TaskManager: { submit: (task) => tasks.push(task) } },
     persistAttribute: () => {},
+    onCombatHitRoll: PluginManager.createApi('GuardiansTests').onCombatHitRoll,
     getPrayerHandler: () => ({
       PROTECT_FROM_MELEE: 'melee', PROTECT_FROM_MISSILES: 'missiles',
       isActivated: (_player, prayer) => prayers.has(prayer),
@@ -40,6 +45,7 @@ before(async () => {
   }, { get: (target, key) => target[key] ?? (() => {}) });
   Common.init(api);
   Roof.attach(api);
+  Combat.attach(api);
 });
 
 /** Runs every queued one-shot task. */
@@ -290,6 +296,117 @@ test('enraged Dusk opens on the style the player is not praying against, then mo
   prayers = new Set(['missiles']);
   assert.equal(Combat.nextEnragedStyle(npc, target, () => 0.3), 'melee', 'praying against it: 1 in 3');
   prayers = new Set();
+});
+
+/** Real combat entities, cache-backed definitions, PendingHit and the registered prayer hook. */
+function realCombat() {
+  const player = new Player(null), graphics = [];
+  const sender = new Proxy({}, { get: (_, key) => key === 'sendGraphic'
+    ? (_graphic, tile) => graphics.push(tile) : () => sender });
+  player.getPacketSender = () => sender;
+  player.setRegistered(true);
+  player.setHitpoints(99);
+  player.moveTo(loc(1695, 4575));
+  const dusk = core.NPC.create(Common.ids.npcs.duskPhase1, loc(1689, 4573));
+  const dawn = core.NPC.create(Common.ids.npcs.dawnPhase1, loc(1701, 4573));
+  const fight = new Fight({ players: () => [player] }, dusk, dawn, () => 0);
+  return { player, dusk, dawn, fight, graphics };
+}
+
+test('real PendingHits preserve Dawn full protection and Dusk partial melee protection', t => {
+  t.mock.method(AccuracyFormulasDpsCalc, 'rollAccuracy', () => true);
+  t.mock.method(Math, 'random', () => 0.999);
+  const { player, dusk, dawn, fight } = realCombat();
+  const { DuskCombat, DawnCombat } = Combat.methods();
+  for (const [npc, method, phase, tile, prayer, unprotected, protectedDamage] of [
+    [dusk, new DuskCombat(), 1, loc(1693,4574), core.PrayerHandler.PROTECT_FROM_MELEE, [15], [3]],
+    [dusk, new DuskCombat(), 4, loc(1693,4574), core.PrayerHandler.PROTECT_FROM_MELEE, [26], [5]],
+    [dawn, new DawnCombat(), 1, loc(1695,4575), core.PrayerHandler.PROTECT_FROM_MISSILES, [9,9], [0,0]],
+    [dawn, new DawnCombat(), 1, loc(1700,4574), core.PrayerHandler.PROTECT_FROM_MELEE, [15], [0]],
+  ]) {
+    fight.phase = phase;
+    if (phase === 4) {
+      dusk.setNpcTransformationId(Common.ids.npcs.duskPhase4);
+      dusk.__ggLastStyle = 'melee';
+    }
+    player.moveTo(tile);
+    for (const active of [false, true]) {
+      player.setPrayerActive(prayer, active);
+      method.start(npc, player);
+      const hits = method.hits(npc, player);
+      assert.ok(hits.every(hit => hit instanceof core.PendingHit && hit.isAccurate()));
+      assert.deepEqual(hits.map(hit => hit.getTotalDamage()), active ? protectedDamage : unprotected);
+    }
+    player.setPrayerActive(prayer, false);
+  }
+});
+
+test('enraged ranged orbs use the 60% cap, a fixed first hit and two rolls for the second', t => {
+  let accuracyChecks = 0;
+  t.mock.method(AccuracyFormulasDpsCalc, 'rollAccuracy', () => { accuracyChecks++; return true; });
+  t.mock.method(Math, 'random', () => 0.999);
+  const { player, dusk, fight } = realCombat();
+  fight.phase = 4;
+  dusk.setNpcTransformationId(Common.ids.npcs.duskPhase4);
+  const method = new (Combat.methods().DuskCombat)();
+  const rolls = [];
+  t.mock.method(Common, 'randomInt', (min, max) => {
+    rolls.push([min, max]);
+    return Math.min(rolls.length === 1 ? 10 : 3, max);
+  });
+  for (const active of [false, true]) {
+    player.setPrayerActive(core.PrayerHandler.PROTECT_FROM_MISSILES, active);
+    rolls.length = 0;
+    method.start(dusk, player);
+    const hits = method.hits(dusk, player);
+    assert.deepEqual(hits.map(hit => hit.getTotalDamage()), active ? [7,3] : [15,3]);
+    assert.deepEqual(rolls, active ? [[0,7],[0,7]] : [[0,15],[0,10]]);
+  }
+  assert.equal(accuracyChecks, 4, 'each orb has its own accuracy check');
+  let incoming = 0;
+  PluginManager.createApi('GuardiansIncomingDamageTest').registerIncomingDamageModifier((target, damage) => {
+    if (target !== player) return;
+    incoming++;
+    damage.multiplyDamage(0.5);
+  });
+  rolls.length = 0;
+  assert.deepEqual(method.hits(dusk, player).map(hit => hit.getTotalDamage()), [3,1]);
+  assert.equal(incoming, 2, 'incoming damage modifiers apply once per orb, after partial prayer protection');
+});
+
+test('the fixed ranged orb still misses and respects the real PendingHit HP cap', t => {
+  const accuracy = t.mock.method(AccuracyFormulasDpsCalc, 'rollAccuracy', () => false);
+  t.mock.method(Math, 'random', () => 0.999);
+  const { player, dusk, fight } = realCombat();
+  fight.phase = 4;
+  dusk.setNpcTransformationId(Common.ids.npcs.duskPhase4);
+  const method = new (Combat.methods().DuskCombat)();
+  method.start(dusk, player);
+  assert.deepEqual(method.hits(dusk, player).map(hit => hit.getTotalDamage()), [0,0]);
+  accuracy.mock.mockImplementation(() => true);
+  player.setHitpoints(2);
+  assert.equal(method.hits(dusk, player)[0].getTotalDamage(), 2);
+});
+
+test('the 5x5 prison keeps its closed wall inside and its gap safe in the real hit queue', t => {
+  t.mock.method(Math, 'random', () => 0.999);
+  for (const [offset, damaged] of [[[2,0],true], [[1,0],true], [null,false], [[3,0],false]]) {
+    const { player, dusk, fight, graphics } = realCombat();
+    fight.phase = 4;
+    dusk.setHitpointsLocked(false);
+    dusk.setHitpoints(200);
+    fight.imprison(player);
+    const { centre, gap } = fight.prison;
+    assert.equal(graphics.length, 15);
+    assert.ok(graphics.every(tile => Common.chebyshev(tile, centre) === 2));
+    assert.ok(graphics.every(tile => Common.chebyshev(tile, gap) > 0));
+    assert.equal(Common.chebyshev(gap, centre), 2);
+    player.moveTo(offset ? centre.transform(...offset) : gap);
+    fight.tickCount = Common.data.prison.escapeTicks;
+    fight.tickPrison();
+    assert.equal(player.getCombat().getHitQueue().getQueuedDamage(), damaged ? 65 : 0);
+    assert.equal(dusk.getHitpoints(), damaged ? 265 : 200);
+  }
 });
 
 test('the brittle key used on the Roof Entrance is absorbed and opens it for good; a click does not use it', () => {

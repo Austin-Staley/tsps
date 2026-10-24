@@ -6,7 +6,8 @@
  *   explosion (up to 30 to anyone next to him two ticks on); enraged, slashes of up to 26 or two
  *   ranged orbs of up to 15, switching style 1 time in 6 (1 in 3 when the player prays against
  *   his last), and a prison every eighth attack.
- * All every 6 ticks. Protection prayers block them as for any NPC.
+ * All every 6 ticks. Dawn's normal attacks are fully protected; Dusk's melee loses 80% damage,
+ * and his ranged cap is halved. His first orb is fixed at 60% of his usual max, the second rolled twice.
  */
 const Common = require("./Common.GrotesqueGuardians");
 const { bind } = require("./Fight.GrotesqueGuardians");
@@ -46,17 +47,26 @@ function nextEnragedStyle(npc, target, random = Math.random) {
   return next;
 }
 
+/** Dusk's protection reduction is already included in the damage passed to PendingHit. */
+function partialProtection(roll) {
+  if (roll.attacker?.__ggFight && Common.isDusk(roll.attacker)) roll.bypassProtectionPrayer = true;
+}
+
 function methods() {
-  const { CombatMethod, CombatType, PendingHit, Animation, Projectile } = Common.core;
+  const { CombatMethod, CombatType, PendingHit, PrayerHandler, Animation, Projectile } = Common.core;
   const { dawn, dusk } = Common.data;
 
   function hitsFor(method, character, target) {
     if (!method.plan) return [];
-    return method.plan.map(({ style, delay, max }) => {
+    return method.plan.map(({ style, delay, max, fixed, nested }) => {
       method.style = style;
-      const hit = new PendingHit(character, target, method, delay);
-      hit.setTotalDamage(Math.min(max, hit.getTotalDamage()));
-      return hit;
+      const protectedHit = Common.isDusk(character) && PrayerHandler.isActivated(target, PrayerHandler.getProtectingPrayer(method.type()));
+      if (protectedHit && style === "ranged") max = Math.floor(max / 2);
+      let damage = fixed ? max : Common.randomInt(0, max);
+      if (nested) damage = Common.randomInt(0, damage);
+      if (protectedHit && style === "melee") damage = Math.floor(damage / 5);
+      // Accuracy, incoming damage effects and the target's HP cap are still applied once by core.
+      return new PendingHit(character, target, method, { delay, damage });
     });
   }
 
@@ -149,7 +159,8 @@ function methods() {
           npc.performAnimation(new Animation(ids.seqs.enragedRanged));
           const delay = hitDelay("ranged", distance);
           shoot(npc, target, ids.spotanims.explosion, delay);
-          this.plan = [{ style: "ranged", delay, max: dusk.enragedRangedMax }, { style: "ranged", delay, max: dusk.enragedRangedMax }];
+          const max = Math.floor(dusk.enragedMeleeMax * 0.6);
+          this.plan = [{ style: "ranged", delay, max, fixed: true }, { style: "ranged", delay, max, nested: true }];
         }
         return;
       }
@@ -188,6 +199,7 @@ function attach(api) {
   const { DawnCombat, DuskCombat } = methods();
   api.registerNpcCombatMethodProvider(Common.dawnForms(), DawnCombat, { singleton: false });
   api.registerNpcCombatMethodProvider(Common.duskForms(), DuskCombat, { singleton: false });
+  api.onCombatHitRoll(partialProtection);
 }
 
 module.exports = { attach, methods, hitDelay, distanceTo, nextEnragedStyle };

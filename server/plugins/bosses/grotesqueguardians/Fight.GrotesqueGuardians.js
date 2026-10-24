@@ -238,12 +238,12 @@ class Fight {
 
   // --- Phase 4: the prison
 
-  /** A 3x3 cell of fire round the player with one tile open. */
+  /** A 5x5 wall of fire round the 3x3 cell, with one tile open. */
   imprison(target) {
     const { prison } = Common.data;
     const centre = target.getLocation();
     const ring = [];
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) ring.push([dx, dy]);
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) ring.push([dx, dy]);
     const gap = ring[Math.floor(this.random() * ring.length)];
     this.prisons += 1;
     this.prison = { centre, gap: centre.transform(gap[0], gap[1]), closes: this.tickCount + prison.escapeTicks, target };
@@ -251,13 +251,13 @@ class Fight {
     for (const [dx, dy] of ring) if (dx !== gap[0] || dy !== gap[1]) Common.tileGraphic(this.roof.players(), centre.transform(dx, dy), Common.ids.spotanims.enragedLightning);
   }
 
-  /** Still in the cell when it closes (the open tile doesn't count as out): the hit heals Dusk. */
+  /** Still inside when it closes: the hit heals Dusk. The opening itself is safe, even by a wall. */
   tickPrison() {
     const prison = this.prison;
     if (!prison || this.tickCount < prison.closes) return;
     this.prison = null;
     const at = prison.target.getLocation();
-    if (Common.chebyshev(at, prison.centre) > 1 || (at.getX() === prison.gap.getX() && at.getY() === prison.gap.getY())) return;
+    if (Common.chebyshev(at, prison.centre) > 2 || (at.getX() === prison.gap.getX() && at.getY() === prison.gap.getY())) return;
     const damage = Common.hurtPlayer(prison.target, Common.randomInt(0, Common.data.prison.max));
     // Down to the hammer, he takes nothing back.
     if (this.dusk.getHitpoints() <= 0) return;

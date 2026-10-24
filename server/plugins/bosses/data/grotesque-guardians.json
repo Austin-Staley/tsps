@@ -96,7 +96,6 @@
   "dusk": {
     "meleeMax": 15,
     "enragedMeleeMax": 26,
-    "enragedRangedMax": 15,
     "attackSpeed": 6,
     "explosion": {
       "max": 30,
