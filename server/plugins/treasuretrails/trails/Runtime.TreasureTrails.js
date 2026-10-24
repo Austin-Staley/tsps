@@ -204,6 +204,8 @@ function dig(event) {
 }
 
 function wearing(player, requirement) {
+  if (requirement.emptySlot != null)
+    return !player.getEquipment().getItems().some(item => item && item.getId() > 0 && core.ItemDefinition.forId(item.getId()).getEquipmentType().getSlot() === requirement.emptySlot);
   return player.getEquipment().getItems().some(item => item && (requirement.anyOf ? requirement.anyOf.includes(item.getId()) :
     core.CacheDefinitions.getItem(item.getId())?.params?.get?.(requirement.param) != null));
 }

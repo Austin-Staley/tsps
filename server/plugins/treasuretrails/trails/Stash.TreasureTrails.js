@@ -74,6 +74,7 @@ function deposit(player, unit) {
   const inventory = player.getInventory();
   const taken = [];
   for (const requirement of unit.step.equipment) {
+    if (requirement.emptySlot != null) continue;
     const slot = inventory.getItems().findIndex((item, index) => item && requirement.anyOf.includes(item.getId()) && !taken.some(entry => entry.slot === index));
     if (slot < 0) {
       player.sendMessage("You need all the items for this STASH unit's emote clue to store them.");

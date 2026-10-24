@@ -84,7 +84,7 @@ test("every easy step is a distinct cache clue item with a solvable target", () 
     assert.equal(core.ItemDefinition.forId(step.itemId).getName(), "Clue scroll (easy)", step.key);
     if (step.target === "npc") assert.ok(step.npcIds.length, step.key);
     if (step.target === "loc") assert.ok(step.locIds.length, step.key);
-    if (step.family === "emote") assert.ok(step.emotes.length === 1 && step.equipment.length && step.equipment.every(r => r.anyOf?.length), step.key);
+    if (step.family === "emote") assert.ok(step.emotes.length === 1 && step.equipment.length && step.equipment.every(r => r.anyOf?.length || r.emptySlot != null), step.key);
     if (step.family === "music") assert.ok(Number.isInteger(step.midi) && step.track, step.key);
     if (step.family === "map") assert.ok(step.interfaceId != null, `${step.key} has no map interface`);
   }
@@ -170,14 +170,17 @@ test("dig and map steps dig only on the exact tile and plane with a spade", () =
   }
 });
 
-test("every emote step needs the location and the outfit, then personal Uri", () => {
+test("every emote step needs the location and the outfit (or nothing worn), then personal Uri", () => {
   const f = fixture();
   for (const step of ofFamily("emote")) {
     f.items.fill(null); f.worn.length = 0; f.spawned.length = 0;
     f.place(step, 2);
+    // Boots alone are the wrong outfit for every step, including "nothing equipped at all".
+    f.worn.push(new core.Item(I.LEATHER_BOOTS, 1));
     Runtime.emote({ player: f.player, slot: step.emotes[0] });
     assert.equal(f.spawned.length, 0, `${step.key} spawned Uri without the outfit`);
-    f.worn.push(...step.equipment.map(requirement => new core.Item(requirement.anyOf[0], 1)));
+    f.worn.length = 0;
+    f.worn.push(...step.equipment.filter(requirement => requirement.anyOf).map(requirement => new core.Item(requirement.anyOf[0], 1)));
     Runtime.emote({ player: f.player, slot: step.emotes[0] + 1000 });
     assert.equal(f.spawned.length, 0, `${step.key} accepted the wrong emote`);
     Runtime.emote({ player: f.player, slot: step.emotes[0] });
@@ -308,7 +311,7 @@ test("an easy STASH unit is built with Construction 27, then stores and returns 
   assert.ok(f.items.every(item => !item || ![I.PLANK, I.BRONZE_NAILS].includes(item.getId())));
   assert.ok(f.sent.some(([name, varbit, value]) => name === "sendVarbit" && varbit === unit.varbit && value === 1));
   f.items.fill(null);
-  const outfit = unit.step.equipment.map(requirement => requirement.anyOf[0]);
+  const outfit = unit.step.equipment.filter(requirement => requirement.anyOf).map(requirement => requirement.anyOf[0]);
   outfit.slice(1).forEach((id, slot) => { f.items[slot] = new core.Item(id, 1); });
   use();
   assert.equal(f.attributes.get(Stash.STORED_ATTRIBUTE), undefined, "a partial outfit is not stored");
@@ -323,4 +326,17 @@ test("an easy STASH unit is built with Construction 27, then stores and returns 
   use();
   assert.equal(f.attributes.get(Stash.STORED_ATTRIBUTE)[locId], undefined);
   assert.deepEqual(f.items.filter(Boolean).map(item => item.getId()).sort(), [...outfit].sort());
+});
+
+test("\"Have nothing equipped at all\" steps accept only an empty outfit", () => {
+  const f = fixture();
+  const bare = steps().filter(step => step.family === "emote" && step.equipment.every(requirement => requirement.emptySlot != null));
+  assert.deepEqual(bare.map(step => step.key).sort(), ["cluehelper_emote_easy_20", "cluehelper_emote_easy_5"]);
+  for (const step of bare) {
+    f.place(step, 2);
+    f.worn.length = 0;
+    assert.equal(Runtime.emoteReady(f.player, step), true, step.key);
+    f.worn.push(new core.Item(I.GOLD_RING, 1));
+    assert.equal(Runtime.emoteReady(f.player, step), false, step.key);
+  }
 });

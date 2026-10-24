@@ -4,6 +4,8 @@
 // From easy upwards every step is its own "Clue scroll (<tier>)" item whose param links it
 // to its clue-helper row, so the item in the player's hand is the step being solved.
 const CLUE_ROW_PARAM = 623;
+const WORN_SLOTS = { hat: "HEAD_SLOT", back: "CAPE_SLOT", front: "AMULET_SLOT", rhand: "WEAPON_SLOT", torso: "BODY_SLOT", lhand: "SHIELD_SLOT",
+  legs: "LEG_SLOT", hands: "HANDS_SLOT", feet: "FEET_SLOT", ring: "RING_SLOT", quiver: "AMMUNITION_SLOT" };
 const STEP_TABLES = ["anagram", "cipher", "coordinate", "cryptic", "emote", "fairyring", "falobard", "hotcold", "map", "music", "skillchallenge"];
 const MAP_INTERFACES = require("./data/map-interfaces.json");
 
@@ -48,11 +50,15 @@ function load(core, tier) {
   function outfit(row) {
     const outfitRow = value(row, "outfit") == null ? null : C.getDbRow(value(row, "outfit"));
     if (!outfitRow) return [];
-    // One requirement per worn slot: any listed item, or any item carrying the listed param.
+    // One requirement per worn slot: any listed item, any item carrying the listed param, or, where
+    // the slot lists the cache's blank object ("Have nothing equipped at all"), nothing worn there.
+    const blank = C.getObjId("blankobject");
     return C.getDbColumns(outfitRow.tableId).filter(name => name?.startsWith("wearpos_")).flatMap(name => {
       const listed = values(outfitRow, name);
       if (!listed.length) return [];
-      return name.startsWith("wearpos_param_") ? [{ param: listed[0] }] : [{ anyOf: listed.filter(id => id >= 0) }];
+      if (name.startsWith("wearpos_param_")) return [{ param: listed[0] }];
+      if (listed.includes(blank)) return [{ emptySlot: core.Equipment[WORN_SLOTS[name.slice("wearpos_".length)]] }];
+      return [{ anyOf: listed.filter(id => id >= 0) }];
     });
   }
   function music(row) {

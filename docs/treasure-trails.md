@@ -14,7 +14,9 @@ From easy upwards, every step is its own "Clue scroll (<tier>)" item, and item p
 that step's clue-helper row. `Catalogue.TreasureTrails.js` joins the two, so the item in the
 player's hand *is* the step. For each step it resolves:
 - the target: an NPC (with its live morphs), a loc or a tile;
-- the outfit: one requirement per worn slot, either "any of these items" or "any item with this param";
+- the outfit: one requirement per worn slot, either "any of these items", "any item with this param",
+  or "nothing worn here", which the cache writes as its `blankobject` item. Two easy steps say
+  "Have nothing equipped at all";
 - the emote slot and the STASH loc;
 - the music track (DB table `music`, `midi` column).
 
