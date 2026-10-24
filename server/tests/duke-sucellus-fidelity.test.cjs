@@ -20,7 +20,7 @@ test('salt mining reaches the far edge of its three-tile cache footprint',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items;
   h.move([3036,6448]);h.add(i.ironPickaxe);
   h.api.onCustomEvent('mining:best-pickaxe',e=>{e.pickaxe={animation:625,attemptIntervalTicks:4};});
-  assert.equal(h.Prep.mine(s,[3033,6448]),true);h.step();
+  assert.equal(h.Prep.mine(s,[3033,6448]),true);h.step(4);
   assert.ok(h.p.getInventory().getAmount(i.salt)>0);
 });
 
@@ -87,10 +87,24 @@ test('Duke records count a lethal result and an in-instance player death once ea
 test('salt mining is cancelled by the same keyed action cancellation as other skills',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3033,6447]);
   h.api.onCustomEvent('mining:best-pickaxe',e=>{e.pickaxe={attemptIntervalTicks:3,animation:new h.core.Animation(625)};});
-  assert.equal(h.Prep.mine(s,[3033,6448]),true);h.step();
+  assert.equal(h.Prep.mine(s,[3033,6448]),true);h.step(3);
   const held=h.p.getInventory().getAmount(i.salt);assert.ok(held>0);
   h.core.TaskManager.cancelTasks(h.p.getIndex());h.step(12);
   assert.equal(h.p.getInventory().getAmount(i.salt),held);
+});
+
+test('iron-pickaxe salt mining animates on response but first yields six ticks later, then every seven',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3034,6447]);
+  h.p.getSkillManager().setCurrentLevel(h.core.Skill.MINING,99);
+  const animations=[];h.p.performAnimation=animation=>animations.push(animation.getId());
+  h.api.onCustomEvent('mining:best-pickaxe',e=>{e.pickaxe={attemptIntervalTicks:7,animation:new h.core.Animation(626)};});
+  assert.equal(h.Prep.mine(s,[3033,6448]),true);
+  h.step();assert.deepEqual(animations,[626]);assert.equal(h.p.getInventory().getAmount(i.salt),0);
+  h.step(5);assert.equal(h.p.getInventory().getAmount(i.salt),0);
+  h.step();assert.equal(h.p.getInventory().getAmount(i.salt),6);
+  h.step(6);assert.equal(h.p.getInventory().getAmount(i.salt),6);
+  h.step();assert.equal(h.p.getInventory().getAmount(i.salt),12);
+  h.step(7);assert.equal(h.p.getInventory().getAmount(i.salt),18);
 });
 
 test('a new grinding click cancels the previous mushroom batch',t=>{

@@ -59,11 +59,14 @@ function mine(session,at) {
   const request={player:session.player,pickaxe:null};
   C.api.emitCustomEvent('mining:best-pickaxe',request);
   if(!request.pickaxe) { session.player.sendMessage('You need a pickaxe you can use to mine the salt.'); return true; }
-  const action={kind:'salt',at,start:C.source(session,session.player.getLocation()),next:session.tick+1,
-    interval:Math.max(2,request.pickaxe.attemptIntervalTicks || 4),until:session.tick+500,pickaxe:request.pickaxe};
+  const interval=Math.max(2,request.pickaxe.attemptIntervalTicks || 4);
+  const action={kind:'salt',at,start:C.source(session,session.player.getLocation()),next:session.tick+interval,
+    interval,until:session.tick+500,pickaxe:request.pickaxe};
   C.core.TaskManager.cancelTasks(session.player.getIndex());
   session.action=action;
   session.player.getCombat().reset();
+  // Start swinging on the click response; salt arrives after the pickaxe cycle.
+  session.player.performAnimation(action.pickaxe.animation);
   C.core.TaskManager.submit(new(class extends C.core.Task {
     constructor(){super(1,session.player.getIndex(),false);}
     execute(){

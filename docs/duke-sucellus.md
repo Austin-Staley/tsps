@@ -78,17 +78,26 @@ but one route does not establish the full cone footprint, damage-check cycle or
 whether quest and current postquest coverage differ. The documented safe
 run-through route alone is insufficient to certify every off-centre tile.
 
-Ordinary 1703's iron-pickaxe sequence 626 starts at 10673/10679/10686/10693
-while stationary at `3034,6447`: three restart gaps of 6/7/7 ticks. Sequence
-restarts alone do not prove successful salt-yield cadence or the first-action
-delay. The existing seven-tick iron-pickaxe interval remains an approximation
-until salt inventory deltas or Mining XP updates distinguish attempts from
-yields. Protected magic maximum 24 and covered gas maximum 4 likewise remain
+The additional privacy-filtered decoder helper
+`9d836fe28973fa4f22cca49ef0d7519be37a01c7c6196aa075b46c91889692b7`
+exports only salt item 28349's inventory deltas and Mining stat 14 for this
+measurement. Ordinary 1703's iron-pickaxe sequence 626 starts at
+10673/10679/10686/10693 while stationary at `3034,6447`. Salt first changes
+0→6 at 10679, then 6→12 at 10686 and 12→18 at 10693; the latter two Mining
+XP updates each increase by 5, with Mining level 99. These three successful
+yields distinguish the initial animation from collection: the first response
+has no salt, the first yield arrives six ticks after it, then repeats every
+seven ticks. Mining now starts its animation on the click response and waits
+the pickaxe interval for its first yield, fixing the previous immediate grant.
+The regression failed on the early six-salt grant before the fix. Other pickaxe
+tiers and tick-manipulated gathering still lack controlled ordinary samples.
+
+Protected magic maximum 24 and covered gas maximum 4 remain
 unconfirmed: these captures do not supply a controlled ordinary postquest sample
 with verified equipment, prayer and damage modifiers. No Leagues damage value is
 used to set either bound, and no awakened value is imported.
 
-This coverage correction passes a fresh TypeScript build and all 67 focused Duke
+These coverage/mining corrections pass a fresh TypeScript build and all 68 focused Duke
 tests. The additional measurement narrows the evidence gaps; it does not close
 the unidentified algorithms or the unresolved cone coverage.
 
