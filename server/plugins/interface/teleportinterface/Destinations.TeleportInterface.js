@@ -47,13 +47,16 @@ function wildernessLevel(entry) {
   return wildernessLevels.get(entry.key);
 }
 
-function row(entry) {
+function row(entry, panelOf) {
   const level = wildernessLevel(entry);
-  return { id: entry.id, name: entry.name, icon: iconId(entry), detail: level > 0 ? ` Lvl ${level}` : "", terms: entry.terms ?? "" };
+  return {
+    id: entry.id, name: entry.name, icon: iconId(entry), detail: level > 0 ? ` Lvl ${level}` : "", terms: entry.terms ?? "",
+    ...(panelOf ? { panel: panelOf(entry) } : {}),
+  };
 }
 
 /** Rows under headers, in the order each header first appears, each section sorted by name. */
-function grouped(entries, headerOf) {
+function grouped(entries, headerOf, panelOf) {
   const sections = new Map();
   for (const entry of entries) {
     const header = headerOf(entry);
@@ -63,18 +66,18 @@ function grouped(entries, headerOf) {
   const rows = [];
   for (const [header, members] of sections) {
     rows.push({ id: HEADER_ID_BASE + rows.length, name: header, header: true });
-    for (const entry of [...members].sort((a, b) => a.name.localeCompare(b.name))) rows.push(row(entry));
+    for (const entry of [...members].sort((a, b) => a.name.localeCompare(b.name))) rows.push(row(entry, panelOf));
   }
   return rows;
 }
 
 /** Favourites by name, then the most recent teleports, newest first. */
-function savedRows(favouriteKeys, recentKeys) {
+function savedRows(favouriteKeys, recentKeys, panelOf) {
   const rows = [];
   const section = (name, entries) => {
     if (entries.length === 0) return;
     rows.push({ id: HEADER_ID_BASE + rows.length, name, header: true });
-    for (const entry of entries) rows.push(row(entry));
+    for (const entry of entries) rows.push(row(entry, panelOf));
   };
   const known = (keys) => keys.map((key) => BY_KEY.get(key)).filter(Boolean);
   section("Favourites", known(favouriteKeys).sort((a, b) => a.name.localeCompare(b.name)));
@@ -82,10 +85,11 @@ function savedRows(favouriteKeys, recentKeys) {
   return rows;
 }
 
-function rowsFor(tab, favouriteKeys = [], recentKeys = []) {
-  if (tab === TAB.SAVED) return savedRows(favouriteKeys, recentKeys);
-  if (tab === TAB.ALL) return grouped(DESTINATIONS, (entry) => TAB_LABELS[entry.tabs[0]]);
-  return grouped(DESTINATIONS.filter((entry) => entry.tabs.includes(tab)), (entry) => entry.group ?? TAB_LABELS[tab]);
+/** A tab's rows; `panelOf(entry)` adds each row's details-panel text. */
+function rowsFor(tab, favouriteKeys = [], recentKeys = [], panelOf = undefined) {
+  if (tab === TAB.SAVED) return savedRows(favouriteKeys, recentKeys, panelOf);
+  if (tab === TAB.ALL) return grouped(DESTINATIONS, (entry) => TAB_LABELS[entry.tabs[0]], panelOf);
+  return grouped(DESTINATIONS.filter((entry) => entry.tabs.includes(tab)), (entry) => entry.group ?? TAB_LABELS[tab], panelOf);
 }
 
 module.exports = {

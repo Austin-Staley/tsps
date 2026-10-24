@@ -60,6 +60,17 @@ export type CustomInterfaceDeclaration = {
         headerLabel?: string;
         /** Clicking a row sends its id to the server as the action's slot. */
         clickable?: boolean;
+        /**
+         * Shows a clicked row's details at once, without waiting a tick for the server: each
+         * `texts` component takes the row's `panel` value of that name, `iconComponent` takes
+         * its icon, and `showComponents` appear. Only the `op` click selects (default op 1).
+         */
+        select?: {
+            op?: number;
+            texts?: Record<string, number>;
+            iconComponent?: number;
+            showComponents?: number[];
+        };
         /** Text lists have no inventory item associated with each row. */
         textOnly?: boolean;
     };
@@ -96,6 +107,8 @@ export type CustomInterfaceRow = {
     terms?: string;
     /** A section title: not clickable, and kept only while a row under it matches. */
     header?: boolean;
+    /** Text for the declared select panel, by name; server markup is kept. */
+    panel?: Record<string, string>;
 };
 
 function toRow(row: any): CustomInterfaceRow {
@@ -106,6 +119,11 @@ function toRow(row: any): CustomInterfaceRow {
         detail: typeof row.detail === "string" ? row.detail : undefined,
         terms: typeof row.terms === "string" ? row.terms : undefined,
         header: row.header === true,
+        panel: row.panel && typeof row.panel === "object"
+            ? Object.fromEntries(
+                  Object.entries(row.panel).filter(([, value]) => typeof value === "string"),
+              ) as Record<string, string>
+            : undefined,
     };
 }
 
@@ -180,6 +198,7 @@ export class CustomInterfaceRuntime {
     /** Row shown in each list slot, for clickable lists. */
     private slotRows: (CustomInterfaceRow | undefined)[] = [];
     private labelActions = new Map<number, unknown>();
+    private selectedRowId: number | undefined;
     private scrollbarState = new Map<number, string>();
     private fetchTimer: ReturnType<typeof setTimeout> | undefined;
     private fetchSequence = 0;
@@ -227,7 +246,10 @@ export class CustomInterfaceRuntime {
             } catch {
                 this.sourceRows = [];
             }
-            this.scheduleFetch();
+            // New data for the same list (a favourite toggled) keeps the scroll; a new query
+            // starts from the top.
+            this.scheduleFetch(false);
+            if (this.selectedRowId !== undefined) this.applySelection(this.selectedRowId);
             return true;
         }
         if (!search || uid !== this.uid(search.inputComponent)) {
@@ -258,6 +280,42 @@ export class CustomInterfaceRuntime {
             }
         }
         return undefined;
+    }
+
+    /** A clickable row was sent with this op: the select op shows the row's details now. */
+    handleRowOp(rowId: number, opId: number): void {
+        const select = this.declaration?.list?.select;
+        if (!select || (opId | 0) !== (select.op ?? 1)) return;
+        this.applySelection(rowId);
+    }
+
+    private applySelection(rowId: number): void {
+        const select = this.declaration?.list?.select;
+        const row = this.sourceRows.find((candidate) => candidate.id === rowId && !candidate.header);
+        if (!select || !row) return;
+        this.selectedRowId = rowId;
+        for (const [field, component] of Object.entries(select.texts ?? {})) {
+            this.setText(component, row.panel?.[field] ?? "");
+        }
+        const icon = select.iconComponent === undefined ? undefined : this.widget(select.iconComponent);
+        if (icon) {
+            const itemId = row.icon ?? -1;
+            icon.itemId = itemId;
+            icon.itemQuantity = itemId >= 0 ? 1 : 0;
+            icon.itemAmount = itemId >= 0 ? 1 : 0;
+            markWidgetInteractionDirty(icon);
+            this.deps.widgetManager.invalidateWidgetRender(icon);
+        }
+        for (const component of select.showComponents ?? []) {
+            const widget = this.widget(component);
+            if (!widget) continue;
+            if (!widget.hidden && !widget.isHidden) continue;
+            widget.hidden = false;
+            widget.isHidden = false;
+            markWidgetInteractionDirty(widget);
+            // Showing can change layout, which hidden widgets skip.
+            this.deps.widgetManager.invalidateWidget(widget, "custom-interface-select");
+        }
     }
 
     handleWidgetClick(groupId: number, childId: number): boolean {
@@ -358,6 +416,7 @@ export class CustomInterfaceRuntime {
         this.renderedVersion = -1;
         this.visibleStartRow = -1;
         this.slotRows = [];
+        this.selectedRowId = undefined;
         this.labelActions.clear();
         this.scrollbarState.clear();
     }
@@ -435,7 +494,7 @@ export class CustomInterfaceRuntime {
         }
     }
 
-    private scheduleFetch(): void {
+    private scheduleFetch(resetScroll = true): void {
         const search = this.declaration?.search;
         if (!search) {
             return;
@@ -448,7 +507,7 @@ export class CustomInterfaceRuntime {
             this.rows = filterRows(this.sourceRows, query);
             this.total = this.rows.filter((row) => !row.header).length;
             this.version++;
-            this.renderRows(true);
+            this.renderRows(resetScroll);
             return;
         }
         if (query.trim().length === 0) {

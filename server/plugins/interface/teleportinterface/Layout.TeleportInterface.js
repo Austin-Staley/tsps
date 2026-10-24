@@ -110,6 +110,16 @@ function buildInterface() {
       backgroundStart: COMPONENT.ROW_BACKGROUND_START, iconStart: COMPONENT.ROW_ICON_START, iconBaseY: 1,
       labelStart: COMPONENT.ROW_LABEL_START, itemLabel: "%name<col=ff5f5f>%detail</col>",
       headerLabel: "<col=ff981f>%name</col>", clickable: true,
+      // The details panel is filled client-side from each row's `panel` text.
+      select: {
+        op: 1,
+        texts: {
+          title: COMPONENT.PANEL_TITLE, subtitle: COMPONENT.PANEL_SUBTITLE, info: COMPONENT.PANEL_WILDERNESS,
+          info2: COMPONENT.PANEL_KILLS, description: COMPONENT.PANEL_DESCRIPTION, favourite: COMPONENT.FAVOURITE_LABEL,
+        },
+        iconComponent: COMPONENT.PANEL_ICON,
+        showComponents: [COMPONENT.TELEPORT_BUTTON, COMPONENT.TELEPORT_LABEL, COMPONENT.FAVOURITE_BUTTON, COMPONENT.FAVOURITE_LABEL],
+      },
     },
     status: { component: COMPONENT.STATUS, matches: "Destinations: %total", empty: "No destinations." },
   };

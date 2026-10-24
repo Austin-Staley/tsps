@@ -264,16 +264,17 @@ async function main(): Promise<void> {
             iconStart: 10, labelStart: 20, labelBaseY: 4, backgroundStart: 30,
             itemLabel: "%name<col=ff0000>%detail</col>", headerLabel: "<col=ff981f>%name</col>",
             clickable: true,
+            select: { texts: { title: 40, note: 41 }, iconComponent: 42, showComponents: [43] },
         },
     });
-    for (const component of [1, 2, 3, 10, 11, 20, 21, 30, 31]) {
+    for (const component of [1, 2, 3, 10, 11, 20, 21, 30, 31, 40, 41, 42, 43]) {
         widgets.set(listUid(component), { uid: listUid(component), width: 200, height: 40, scrollY: 0,
             actions: component >= 20 && component < 30 ? ["Select", "Teleport"] : undefined });
     }
     runtime.onInterfaceOpened(LIST_GROUP);
     runtime.handleSetText(listUid(2), JSON.stringify([
         { id: 1, name: "Bosses", header: true },
-        { id: 2, name: "Nex", icon: 26348, terms: "godwars ancient" },
+        { id: 2, name: "Nex", icon: 26348, terms: "godwars ancient", panel: { title: "<col=ff981f>Nex</col>", note: "Kill count: 3" } },
         { id: 3, name: "Callisto", icon: 13178, detail: " Lvl 44" },
         { id: 4, name: "Minigames", header: true },
         { id: 5, name: "Barrows", icon: 4708 },
@@ -305,6 +306,31 @@ async function main(): Promise<void> {
     runtime.handleSetText(listUid(1), "barrows");
     assert.equal(widgets.get(listUid(20)).text, "<col=ff981f>Minigames</col>", "headers without matches drop out");
     assert.equal(runtime.rowIdAt(LIST_GROUP, 21), 5);
+    // Selecting shows the row's panel at once; only the select op does.
+    widgets.get(listUid(43)).hidden = true;
+    widgets.get(listUid(43)).isHidden = true;
+    runtime.handleRowOp(2, 2);
+    assert.equal(widgets.get(listUid(40)).text, undefined, "other ops leave the panel to the server");
+    runtime.handleRowOp(2, 1);
+    assert.equal(widgets.get(listUid(40)).text, "<col=ff981f>Nex</col>", "panel text keeps server markup");
+    assert.equal(widgets.get(listUid(41)).text, "Kill count: 3");
+    assert.equal(widgets.get(listUid(42)).itemId, 26348, "the panel icon is the row's");
+    assert.equal(widgets.get(listUid(43)).hidden, false, "declared components appear");
+    runtime.handleRowOp(5, 1);
+    assert.equal(widgets.get(listUid(40)).text, "", "a row without panel text clears it");
+    runtime.handleRowOp(2, 1);
+    runtime.handleSetText(listUid(1), "");
+    listView.scrollY = 20;
+    runtime.handleSetText(listUid(2), JSON.stringify([
+        { id: 2, name: "Nex", icon: 26348, panel: { title: "Nex", note: "Kill count: 4" } },
+        { id: 3, name: "Callisto" },
+        { id: 5, name: "Barrows" },
+        { id: 6, name: "Zulrah" },
+    ]));
+    assert.equal(widgets.get(listUid(41)).text, "Kill count: 4", "new data redraws the selected row's panel");
+    assert.equal(listView.scrollY, 20, "new data for the same list keeps the scroll");
+    runtime.handleSetText(listUid(1), "nex");
+    assert.equal(listView.scrollY, 0, "a new query starts from the top");
     runtime.onInterfaceClosed(LIST_GROUP);
 
     console.log("custom-interface-runtime.test.ts: all tests passed");

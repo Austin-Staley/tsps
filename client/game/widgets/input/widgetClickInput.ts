@@ -509,6 +509,9 @@ export function processWidgetClickInput(
                             if (customRowId === null) break;
                             if (customRowId !== undefined) payload.slot = customRowId;
                             sendWidgetAction(payload);
+                            if (customRowId !== undefined) {
+                                deps.getCustomInterfaces().handleRowOp(customRowId, opId);
+                            }
                         }
                     } catch (err) {
                         console.warn("[OsrsClient] widget action send failed", err);

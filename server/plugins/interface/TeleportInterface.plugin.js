@@ -40,7 +40,8 @@ function showTab(player, tab) {
     const colour = current === tab ? "ffffff" : "ffd27f";
     sender.sendString(`<col=${colour}>${TAB_LABELS[current]}</col>`, uid(COMPONENT.TAB_LABEL_START + index));
   });
-  const rows = Destinations.rowsFor(tab, favourites(player), recent(player));
+  const favouriteKeys = favourites(player);
+  const rows = Destinations.rowsFor(tab, favouriteKeys, recent(player), (entry) => panelText(player, entry, favouriteKeys));
   sender.sendString(JSON.stringify(rows), uid(COMPONENT.DATA));
 }
 
@@ -58,35 +59,36 @@ function wildernessLine(entry) {
   return `<col=ff5f5f>Level ${level} Wilderness${core.Wilderness.isMulti(x, y, z) ? ", multi-combat" : ""}</col>`;
 }
 
-/** Fills the details panel with the selected destination, or a prompt when there is none. */
-function showPanel(player) {
-  const entry = Destinations.byKey(player.getAttribute(SELECTED_ATTRIBUTE));
-  const sender = player.getPacketSender();
-  const panelHidden = !entry;
-  for (const component of [COMPONENT.TELEPORT_BUTTON, COMPONENT.TELEPORT_LABEL, COMPONENT.FAVOURITE_BUTTON, COMPONENT.FAVOURITE_LABEL]) {
-    sender.sendInterfaceDisplayState(uid(component), panelHidden);
-  }
-  if (!entry) {
-    sender.clearItemOnInterface(uid(COMPONENT.PANEL_ICON));
-    sender.sendString("Teleports", uid(COMPONENT.PANEL_TITLE))
-      .sendString("", uid(COMPONENT.PANEL_SUBTITLE))
-      .sendString("", uid(COMPONENT.PANEL_WILDERNESS))
-      .sendString("", uid(COMPONENT.PANEL_KILLS))
-      .sendString("Select a destination to see where it goes. Right-click one to teleport straight there or keep it as a favourite.",
-        uid(COMPONENT.PANEL_DESCRIPTION));
-    return;
-  }
+/**
+ * What the details panel shows for a destination. It travels with the rows, so the client
+ * fills the panel the moment a row is clicked (Layout's list.select) instead of a tick later.
+ */
+function panelText(player, entry, favouriteKeys) {
   // The Wilderness and kill-count lines fill from the top, so a missing one leaves no gap.
-  const [infoLine, secondInfoLine = ""] = [wildernessLine(entry), killCountLine(player, entry)].filter(Boolean);
-  const icon = Destinations.iconId(entry);
-  if (icon >= 0) sender.sendItemOnInterface(uid(COMPONENT.PANEL_ICON), icon, 0, 1);
-  else sender.clearItemOnInterface(uid(COMPONENT.PANEL_ICON));
-  sender.sendString(entry.name, uid(COMPONENT.PANEL_TITLE))
-    .sendString(entry.group ?? TAB_LABELS[entry.tabs[0]], uid(COMPONENT.PANEL_SUBTITLE))
-    .sendString(infoLine ?? "", uid(COMPONENT.PANEL_WILDERNESS))
-    .sendString(secondInfoLine, uid(COMPONENT.PANEL_KILLS))
-    .sendString(entry.description ?? "", uid(COMPONENT.PANEL_DESCRIPTION))
-    .sendString(favourites(player).includes(entry.key) ? "Unfavourite" : "Favourite", uid(COMPONENT.FAVOURITE_LABEL));
+  const [info = "", info2 = ""] = [wildernessLine(entry), killCountLine(player, entry)].filter(Boolean);
+  return {
+    title: entry.name,
+    subtitle: entry.group ?? TAB_LABELS[entry.tabs[0]],
+    info,
+    info2,
+    description: entry.description ?? "",
+    favourite: favouriteKeys.includes(entry.key) ? "Unfavourite" : "Favourite",
+  };
+}
+
+/** The panel before anything is selected; selecting is drawn by the client. */
+function showEmptyPanel(player) {
+  const sender = player.getPacketSender();
+  for (const component of [COMPONENT.TELEPORT_BUTTON, COMPONENT.TELEPORT_LABEL, COMPONENT.FAVOURITE_BUTTON, COMPONENT.FAVOURITE_LABEL]) {
+    sender.sendInterfaceDisplayState(uid(component), true);
+  }
+  sender.clearItemOnInterface(uid(COMPONENT.PANEL_ICON));
+  sender.sendString("Teleports", uid(COMPONENT.PANEL_TITLE))
+    .sendString("", uid(COMPONENT.PANEL_SUBTITLE))
+    .sendString("", uid(COMPONENT.PANEL_WILDERNESS))
+    .sendString("", uid(COMPONENT.PANEL_KILLS))
+    .sendString("Select a destination to see where it goes. Right-click one to teleport straight there or keep it as a favourite.",
+      uid(COMPONENT.PANEL_DESCRIPTION));
 }
 
 function open(player, query = "") {
@@ -94,9 +96,10 @@ function open(player, query = "") {
   player.getPacketSender().sendSubInterface(MAIN_MODAL_UID, GROUP_ID, 0, {
     postScripts: [{ scriptId: 227, args: [uid(COMPONENT.FRAME), "Server Teleports"] }],
   });
+  player.setAttribute(SELECTED_ATTRIBUTE, undefined);
   showTab(player, query ? TAB.ALL : selectedTab(player));
   player.getPacketSender().sendString(query.slice(0, SEARCH_MAX_LENGTH), uid(COMPONENT.SEARCH_INPUT));
-  showPanel(player);
+  showEmptyPanel(player);
 }
 
 function rememberTeleport(player, entry) {
@@ -137,13 +140,13 @@ function toggleFavourite(player, entry) {
   const keys = favourites(player);
   const kept = keys.filter((key) => key !== entry.key);
   player.setAttribute(FAVOURITES_ATTRIBUTE, kept.length === keys.length ? [...keys, entry.key] : kept);
-  if (selectedTab(player) === TAB.SAVED) showTab(player, TAB.SAVED);
-  if (player.getAttribute(SELECTED_ATTRIBUTE) === entry.key) showPanel(player);
+  // Fresh rows carry the new Favourite label; the client keeps its scroll and selection.
+  showTab(player, selectedTab(player));
 }
 
+/** The client has already drawn the panel; the panel's buttons act on this selection. */
 function select(player, entry) {
   player.setAttribute(SELECTED_ATTRIBUTE, entry.key);
-  showPanel(player);
 }
 
 function openTeleports({ player, parts }) {
@@ -160,7 +163,9 @@ function openTeleports({ player, parts }) {
 function clickTab({ player, buttonId }) {
   if (!isOpen(player)) return false;
   showTab(player, TAB_ORDER[TAB_UIDS.indexOf(buttonId)]);
-  // A tab is a fresh list; searching every tab at once is what All is for.
+  // A tab is a fresh list; searching every tab at once is what All is for. The query was typed
+  // client-side, so the server's copy of the box is stale and must not swallow the clear.
+  player.getFrameUpdater().clear(uid(COMPONENT.SEARCH_INPUT));
   player.getPacketSender().sendString("", uid(COMPONENT.SEARCH_INPUT));
   return true;
 }

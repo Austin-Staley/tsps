@@ -1116,6 +1116,20 @@
       "terms": "tob raids 2"
     },
     {
+      "key": "fractured-archive",
+      "name": "The Fractured Archive",
+      "tab": "minigames",
+      "group": "Raids",
+      "tile": [
+        4127,
+        5508,
+        0
+      ],
+      "icon": "guthixbook_complete",
+      "description": "The archive lobby.",
+      "terms": "tfa raids 4"
+    },
+    {
       "key": "tombs-of-amascut",
       "name": "Tombs of Amascut",
       "tab": "minigames",
@@ -1228,19 +1242,6 @@
       "description": "The Colosseum lobby.",
       "kc": "Sol Heredit",
       "terms": "colosseum varlamore"
-    },
-    {
-      "key": "fractured-archive",
-      "name": "Fractured Archive",
-      "tab": "minigames",
-      "group": "Minigames",
-      "tile": [
-        4127,
-        5508,
-        0
-      ],
-      "icon": "guthixbook_complete",
-      "description": "The archive lobby."
     },
     {
       "key": "gnome-ball",

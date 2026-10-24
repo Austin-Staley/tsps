@@ -93,6 +93,7 @@ assert.equal(widgetInteraction.clickedWidgetHandled, true, "release must not dis
 const rowWidget = { ...widget, uid: (30007 << 16) | 80, groupId: 30007, fileId: 80, eventHandlers: {}, actions: ["Select"] };
 const rowFrame = { ...frame, collectFromAllRoots: () => [rowWidget], getWidgetFlags: () => 1 << 1 };
 const rowManager = { ...widgetManager, getWidgetFlags: () => 1 << 1 };
+const selections: number[][] = [];
 const clickRow = (rowId: number | null | undefined) => {
     const payload: any = { widgetId: rowWidget.uid, opId: 1 };
     let built = false;
@@ -104,8 +105,11 @@ const clickRow = (rowId: number | null | undefined) => {
             getCs2Vm: () => ({ invokeEventHandler: () => false }),
             buildWidgetActionPayload: () => { built = true; return payload; },
             resolveTransmitFlagWidget: () => rowWidget,
-            getCustomInterfaces: () => ({ rowIdAt: (groupId: number, childId: number) =>
-                groupId === 30007 && childId === 80 ? rowId : undefined }),
+            getCustomInterfaces: () => ({
+                rowIdAt: (groupId: number, childId: number) =>
+                    groupId === 30007 && childId === 80 ? rowId : undefined,
+                handleRowOp: (id: number, opId: number) => selections.push([id, opId]),
+            }),
         },
         state,
         rowFrame,
@@ -119,5 +123,6 @@ const clickRow = (rowId: number | null | undefined) => {
 };
 assert.equal(clickRow(66).slot, 66, "a left-clicked row carries its id");
 assert.equal(clickRow(undefined).slot, undefined, "other widgets keep their own slot");
+assert.deepEqual(selections, [[66, 1]], "the row's op goes to the list at once, other widgets' do not");
 
 console.log("widget primary operation context test passed");

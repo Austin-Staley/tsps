@@ -123,6 +123,7 @@ export class WidgetActionRouter {
             if (!payload || (opId > 0 && !shouldTransmitAction(flags, opId - 1))) return;
             payload.slot = customRowId;
             sendWidgetAction(payload);
+            this.deps.getCustomInterfaces().handleRowOp(customRowId, opId);
             return;
         }
 

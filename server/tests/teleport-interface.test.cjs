@@ -68,6 +68,7 @@ function player() {
     getInterfaceId: () => interfaceId,
     setInterfaceId: (id) => { interfaceId = id; },
     getPacketSender: () => sender,
+    getFrameUpdater: () => ({ clear: (id) => texts.delete(id) }),
     getDialogueManager: () => ({ startDialogues() {} }),
   };
 }
@@ -75,6 +76,7 @@ function player() {
 const run = (p, ...parts) => commands.get("teleports")({ player: p, parts: ["teleports", ...parts] });
 const rows = (p) => JSON.parse(p.texts.get(uid(COMPONENT.DATA)));
 const click = (p, buttonId, extra = {}) => buttons.get(buttonId)({ player: p, buttonId, ...extra });
+const rowFor = (p, key) => rows(p).find((row) => row.id === Destinations.byKey(key).id);
 const clickRow = (p, key, opId) => click(p, ROW_UIDS[0], { slot: Destinations.byKey(key).id, opId });
 
 test("every destination lands on a free tile, with a known icon, type and tab", () => {
@@ -102,6 +104,9 @@ test("each tab sends its destinations under sorted headers, with Wilderness leve
   const p = player();
   run(p);
   const all = rows(p);
+  // Widget text travels in a packet with a 16-bit length; keep the biggest tab well inside it.
+  const allBytes = Buffer.byteLength(p.texts.get(uid(COMPONENT.DATA)), "latin1");
+  assert.ok(allBytes < 48000, `the All tab's rows are ${allBytes} bytes, too close to the 65535-byte packet limit`);
   assert.equal(all.filter((row) => !row.header).length, Destinations.DESTINATIONS.length, "All lists everything once");
   click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.BOSSES)]);
   const bosses = rows(p);
@@ -121,23 +126,26 @@ test("each tab sends its destinations under sorted headers, with Wilderness leve
   assert.equal(p.texts.get(uid(COMPONENT.SEARCH_INPUT)), "god wars", "a search opens All with the query");
   click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.BOSSES)]);
   assert.equal(p.texts.get(uid(COMPONENT.SEARCH_INPUT)), "", "switching tabs clears the search");
+  p.texts.delete(uid(COMPONENT.SEARCH_INPUT));
+  click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.BOSSES)]);
+  assert.equal(p.texts.get(uid(COMPONENT.SEARCH_INPUT)), "", "every switch clears it, even after an earlier clear");
 });
 
-test("selecting fills the panel; the panel and right-click both teleport", () => {
+test("rows carry their panel text; selecting arms the panel and right-click both teleport", () => {
   const p = player();
   run(p);
   assert.equal(p.hidden.get(uid(COMPONENT.TELEPORT_BUTTON)), true, "nothing selected, no buttons");
+  assert.equal(p.texts.get(uid(COMPONENT.PANEL_TITLE)), "Teleports");
+  assert.deepEqual(rowFor(p, "zulrah").panel, {
+    title: "Zulrah", subtitle: "Bosses", info: "Kill count: <col=ffffff>12</col>", info2: "",
+    description: Destinations.byKey("zulrah").description, favourite: "Favourite",
+  }, "outside the Wilderness the kill count takes the first line");
+  assert.match(rowFor(p, "callisto").panel.info, /^<col=ff5f5f>Level \d+ Wilderness/);
+  assert.equal(rowFor(p, "callisto").panel.info2, "Kill count: <col=ffffff>0</col>");
+  assert.equal(rowFor(p, "elvarg").panel.info, "", "no Wilderness and no kill count, no lines");
+  const sent = p.texts.size;
   clickRow(p, "zulrah", OP.SELECT);
-  assert.equal(p.texts.get(uid(COMPONENT.PANEL_TITLE)), "Zulrah");
-  assert.equal(p.texts.get(uid(COMPONENT.PANEL_WILDERNESS)), "Kill count: <col=ffffff>12</col>",
-    "outside the Wilderness the kill count takes the first line");
-  assert.equal(p.texts.get(uid(COMPONENT.PANEL_KILLS)), "");
-  clickRow(p, "callisto", OP.SELECT);
-  assert.match(p.texts.get(uid(COMPONENT.PANEL_WILDERNESS)), /^<col=ff5f5f>Level \d+ Wilderness/);
-  assert.equal(p.texts.get(uid(COMPONENT.PANEL_KILLS)), "Kill count: <col=ffffff>0</col>");
-  clickRow(p, "zulrah", OP.SELECT);
-  assert.equal(p.items.get(uid(COMPONENT.PANEL_ICON)), Destinations.iconId(Destinations.byKey("zulrah")));
-  assert.equal(p.hidden.get(uid(COMPONENT.TELEPORT_BUTTON)), false);
+  assert.equal(p.texts.size, sent, "the client draws the selection; the server sends nothing");
   teleports.length = 0;
   click(p, uid(COMPONENT.TELEPORT_BUTTON));
   assert.deepEqual([teleports[0].location.getX(), teleports[0].location.getY()], [2196, 3056]);
@@ -193,11 +201,13 @@ test("favourites and recents fill the Saved tab; ::teleports last repeats the ne
   click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.SAVED)]);
   assert.deepEqual(rows(p).map((row) => row.name),
     ["Favourites", "Barrows", "Zulrah", "Recent", "Yama", "Scurrius", "Giant Mole", "Kraken", "Nex"]);
+  assert.equal(rowFor(p, "zulrah").panel.favourite, "Unfavourite");
   clickRow(p, "zulrah", OP.SELECT);
-  assert.equal(p.texts.get(uid(COMPONENT.FAVOURITE_LABEL)), "Unfavourite");
   click(p, uid(COMPONENT.FAVOURITE_BUTTON));
-  assert.equal(p.texts.get(uid(COMPONENT.FAVOURITE_LABEL)), "Favourite");
-  assert.ok(!rows(p).some((row) => row.name === "Zulrah" && rows(p).indexOf(row) < 3), "the Saved tab redraws");
+  assert.ok(!rows(p).slice(0, 3).some((row) => row.name === "Zulrah"), "the Saved tab redraws");
+  click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.BOSSES)]);
+  clickRow(p, "zulrah", OP.FAVOURITE);
+  assert.equal(rowFor(p, "zulrah").panel.favourite, "Unfavourite", "any tab resends rows with the new label");
   p.setAttribute(TeleportInterface._test.FAVOURITES_ATTRIBUTE, ["barrows", "a-removed-destination"]);
   click(p, TAB_UIDS[Destinations.TAB_ORDER.indexOf(TAB.SAVED)]);
   assert.deepEqual(rows(p).slice(0, 2).map((row) => row.name), ["Favourites", "Barrows"], "unknown keys are skipped");
