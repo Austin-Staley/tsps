@@ -98,6 +98,7 @@ const isDeveloperQueuedAttackSpec = (entity: Mobile): entity is Player => {
 export class CombatFactory {
     private static readonly RANDOM = new RandomGen();
     public static readonly RECOIL_DAMAGE_ATTRIBUTE = "ring-of-recoil:damage";
+    public static readonly RECOIL_IMMUNE_ATTRIBUTE = "combat:recoil-immune";
     public static readonly CRYSTAL_BOW_SHOTS_ATTRIBUTE = "crystal-bow:shots-in-stage";
     public static readonly CRYSTAL_BOW_ITEM_ATTRIBUTE = "crystal-bow:tracked-item";
     /**
@@ -1022,11 +1023,17 @@ export class CombatFactory {
         return damage > 0 ? Math.floor(damage / 10) + 1 : 0;
     }
 
+    /** Content may disable ring recoil without suppressing other reflected damage. */
+    public static canReceiveRecoil(target: Mobile): boolean {
+        return target.getAttribute?.(CombatFactory.RECOIL_IMMUNE_ATTRIBUTE) !== true;
+    }
+
     /**
      * Rebounds ring of recoil damage to the attacker. The ring's 40 charges are
      * tracked per player and its last recoil deals only what is left.
      */
     public static handleRecoil(player: Player, attacker: Mobile, damage: number) {
+        if (!CombatFactory.canReceiveRecoil(attacker)) return;
         let returnDmg = CombatFactory.recoilDamage(damage);
         if (returnDmg <= 0) {
             return;

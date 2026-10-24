@@ -66,7 +66,14 @@ From `server/`:
 ```powershell
 npx.cmd tsc --noEmit
 node --test tests/farming-model.test.cjs
+node --test tests/farming-hespori-recoil.test.cjs tests/ring-of-recoil.test.cjs tests/ring-of-suffering.test.cjs
 ```
+
+The grown Farming Hespori is immune to ordinary-ring and Ring of Suffering recoil.
+Its content sets the generic `combat:recoil-immune` policy used by both recoil paths;
+Vengeance/Retribution retain their existing reflected-damage behavior. Tests verify
+the actual boss wake-up, unchanged flowers, charge conservation and normal recoil.
+Source: [Hespori](https://oldschool.runescape.wiki/w/Hespori).
 
 The second command checks the state machine and mocked hooks without server startup
 or sockets. It covers offline/save equivalence,
