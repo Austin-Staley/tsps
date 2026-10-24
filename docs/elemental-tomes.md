@@ -47,3 +47,18 @@ if fewer than20 slots remain below capacity it is not topped beyond20,000.
 
 Binding spell base-damage discrepancies, global Hofuthand configuration and exact
 boss encounter timing/RNG are separate work; this feature does not establish their parity.
+
+## Native verification
+
+An isolated revision241 world was exercised using native item-use, amount-entry,
+equipment, spell-cast, bank-widget and logout/login packets. Burnt Fire, searing
+Fire, Water and Earth each accepted two pages, changed40 charges to39 on a paid
+Wave cast, and retained their independent page kind after relogging. Both Fire
+page kinds remained normal charged item20714 with usable Check/Pages controls.
+An Earth bank target of59 charged its withdrawn39-charge tome from one banked
+soiled page; the saved account retained both that target and all four tome states.
+
+Focused verification covers104 combined checks, including actual cache item
+actions, per-item serialization, all15 matching spell payments, all9 Water curse
+payments, splashes, last charges, delayed impacts, lower damage bounds and bank
+search conservation. Scoped and whole-branch reviews were independently performed.
