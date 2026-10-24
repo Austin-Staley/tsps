@@ -9,6 +9,7 @@ const Guardians = require("./magetrainingarena/Guardians.MageTrainingArena");
 const Lobby = require("./magetrainingarena/Lobby.MageTrainingArena");
 const Enchanting = require("./magetrainingarena/Enchanting.MageTrainingArena");
 const Alchemists = require("./magetrainingarena/Alchemists.MageTrainingArena");
+const Graveyard = require("./magetrainingarena/Graveyard.MageTrainingArena");
 
 module.exports = {
   name: "MageTrainingArena",
@@ -19,5 +20,6 @@ module.exports = {
     Lobby.attach(api);
     Enchanting.attach(api);
     Alchemists.attach(api);
+    Graveyard.attach(api);
   },
 };

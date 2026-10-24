@@ -5,7 +5,8 @@
       "entranceGuardian": "magictraining_guard_entrance",
       "enchantmentGuardian": "magictraining_guard_encha",
       "hat": "magictraining_pizazz_hat",
-      "alchemyGuardian": "magictraining_guard_alchem"
+      "alchemyGuardian": "magictraining_guard_alchem",
+      "graveyardGuardian": "magictraining_guard_grave"
     },
     "locs": {
       "enchantPortal": "magictraining_enchantdoor",
@@ -22,7 +23,13 @@
       "cupboard2": "magictraining_alchem_cupboard2_open",
       "cupboard3": "magictraining_alchem_cupboard3_open",
       "cupboard4": "magictraining_alchem_cupboard4_open",
-      "cupboard5": "magictraining_alchem_cupboard5_open"
+      "cupboard5": "magictraining_alchem_cupboard5_open",
+      "graveyardPortal": "magictraining_gravedoor",
+      "bonePile1": "magictraining_bones_pile1",
+      "bonePile2": "magictraining_bones_pile2",
+      "bonePile3": "magictraining_bones_pile3",
+      "bonePile4": "magictraining_bones_pile4",
+      "foodChute": "magictraining_grave_foodshute"
     },
     "items": {
       "hatDull": "magictraining_proghat_dull",
@@ -43,12 +50,22 @@
       "emerald": "magictraining_emerald",
       "longsword": "magictraining_rune_longsword",
       "arenaCoins": "magictraining_coins",
-      "coins": "coins"
+      "coins": "coins",
+      "bones1": "magictraining_bones1",
+      "bones2": "magictraining_bones2",
+      "bones3": "magictraining_bones3",
+      "bones4": "magictraining_bones4",
+      "banana": "banana",
+      "peach": "peach",
+      "water": "waterrune",
+      "earth": "earthrune",
+      "nature": "naturerune"
     },
     "interfaces": {
       "lobby": "magictraining_main",
       "enchanting": "magictraining_encha",
-      "alchemists": "magictraining_alchem"
+      "alchemists": "magictraining_alchem",
+      "graveyard": "magictraining_grave"
     },
     "components": {
       "lobbyTelekinetic": "magictraining_main:magictrain_tele_points",
@@ -70,7 +87,8 @@
       "free2": "magictraining_alchem:magictrain_lay2",
       "free3": "magictraining_alchem:magictrain_lay3",
       "free4": "magictraining_alchem:magictrain_lay4",
-      "free5": "magictraining_alchem:magictrain_lay5"
+      "free5": "magictraining_alchem:magictrain_lay5",
+      "graveyardPoints": "magictraining_grave:magictrain_grave_pts"
     }
   },
   "lobby": {
@@ -132,7 +150,14 @@
     "deposited": "You deposit {coins} coin{cs} and earn {points} Alchemist Pizazz Point{s}.",
     "nothingToDeposit": "You don't have any coins to deposit.",
     "coinsToBank": "{coins} coins have been added to your bank.",
-    "_free": "the guardian's own spellings for the items (Wiki, Alchemy_Guardian)"
+    "_free": "the guardian's own spellings for the items (Wiki, Alchemy_Guardian)",
+    "noBones": "You aren't holding any bones!",
+    "peachesLocked": "You have to unlock that spell to use it inside of Mage Training Arena.",
+    "noFruit": "You don't have any fruit to deposit.",
+    "fruitDeposited": "You deposit {fruit} fruit and earn {points} Graveyard Pizazz Point{s}.",
+    "runesForFruit": "You receive {amount} {rune} for the fruit you deposited.",
+    "noRunes": "You do not have enough runes to cast this spell.",
+    "_graveyard": "noBones and peachesLocked are the Wiki's; the rest have no capture"
   },
   "alchemists": {
     "_bounds": "plane 2 of the arena's basement (the Enchanting Chamber is plane 0, the Graveyard plane 1)",
@@ -159,5 +184,43 @@
       "emerald": "emerald",
       "longsword": "rune long sword"
     }
+  },
+  "graveyard": {
+    "_bounds": "plane 1 of the arena's basement",
+    "bounds": [3340, 3386, 9615, 9662, 1],
+    "arrive": [3363, 9637, 1],
+    "level": 15,
+    "_piles": "each pile type gives the next bone after every 4 taken from it (Wiki); the count is kept per player",
+    "bonesPerChange": 4,
+    "_fruit": "fruit per bone: version 1 gives 1, version 4 gives 4",
+    "spells": {
+      "Bones to Bananas": {
+        "level": 15,
+        "xp": 25,
+        "fruit": "banana",
+        "runes": [
+          ["nature", 1],
+          ["earth", 2],
+          ["water", 2]
+        ]
+      },
+      "Bones to Peaches": {
+        "level": 60,
+        "xp": 35.5,
+        "fruit": "peach",
+        "runes": [
+          ["nature", 2],
+          ["earth", 4],
+          ["water", 4]
+        ],
+        "unlock": true
+      }
+    },
+    "fruitPerPoint": 16,
+    "_fruitPerPoint": "a peach counts as 2 fruit; the rest is a chance of one more point",
+    "maxPoints": 3,
+    "bananaXp": 5,
+    "peachXp": 10,
+    "rewardRunes": ["water", "earth", "nature", "death", "blood"]
   }
 }
