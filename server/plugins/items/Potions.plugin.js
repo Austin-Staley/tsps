@@ -109,7 +109,12 @@ function damageButKeepAlive(player, amount) {
   player.setHitpoints(next);
 }
 
-function applyPoisonImmunity(player, seconds, message = true) {
+function applyPoisonImmunity(player, seconds, message = true, fullVenomCure = false) {
+  if (player.isVenomed() && !fullVenomCure) {
+    curePoison(player);
+    if (message) player.sendMessage("The potion weakens the venom to poison.");
+    return;
+  }
   curePoisonAndVenom(player);
   // Wiki (7 April 2016): drinking any kind of antipoison will no longer
   // decrease your poison immunity, so a weaker dose never shortens the timer.
@@ -839,12 +844,17 @@ registerPotion({
 registerPotion({
   name: "Anti-venom",
   chains: [doseChain("ANTI_VENOM_4_", "ANTI_VENOM_3_", "ANTI_VENOM_2_", "ANTI_VENOM_1_")],
-  effect: (player) => applyPoisonImmunity(player, 720),
+  effect: (player) => applyPoisonImmunity(player, 738, true, true),
 });
 registerPotion({
   name: "Anti-venom+",
   chains: [doseChain("ANTI_VENOM_4__3", "ANTI_VENOM_3__3", "ANTI_VENOM_2__3", "ANTI_VENOM_1__3")],
-  effect: (player) => applyPoisonImmunity(player, 900),
+  effect: (player) => applyPoisonImmunity(player, 900, true, true),
+});
+registerPotion({
+  name: "Extended anti-venom+",
+  chains: [doseChain("EXTENDED_ANTI_VENOM_4_", "EXTENDED_ANTI_VENOM_3_", "EXTENDED_ANTI_VENOM_2_", "EXTENDED_ANTI_VENOM_1_")],
+  effect: (player) => applyPoisonImmunity(player, 1062, true, true),
 });
 
 registerPotion({
@@ -873,6 +883,12 @@ registerPotion({
   chains: [doseChain("ANTIPOISON_MIX_2_", "ANTIPOISON_MIX_1_")],
   requiresFoodPermission: true,
   effect: applyMix((player) => applyPoisonImmunity(player, 90, false), 3),
+});
+registerPotion({
+  name: "Anti-poison supermix",
+  chains: [doseChain("ANTI_POISON_SUPERMIX_2_", "ANTI_POISON_SUPERMIX_1_")],
+  requiresFoodPermission: true,
+  effect: applyMix((player) => applyPoisonImmunity(player, 360, false)),
 });
 registerPotion({
   name: "Restore mix",
@@ -1429,9 +1445,10 @@ function componentIds(api, names) {
 const CURE_POTIONS = new Map([
   ["Guthix rest", 0],
   ["Antipoison", 1], ["Antipoison mix", 1],
-  ["Superantipoison", 2], ["Sanfew serum", 2],
+  ["Superantipoison", 2], ["Sanfew serum", 2], ["Anti-poison supermix", 2],
   ["Antidote+", 3], ["Antidote+ mix", 3],
   ["Antidote++", 4], ["Anti-venom", 5], ["Anti-venom+", 6],
+  ["Extended anti-venom+", 7],
 ]);
 
 /**

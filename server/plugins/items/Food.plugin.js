@@ -284,7 +284,7 @@ function applyFood(player, food, random = Math.random) {
   applyStats(player, food);
   if (food.poisonImmunity) {
     const immunity = player.getCombat().getPoisonImmunityTimer();
-    if (immunity.secondsRemaining() < food.poisonImmunity) immunity.start(food.poisonImmunity);
+    immunity.protectBriefly(food.poisonImmunity, food.cureVenom === true);
   }
   if (food.then) scheduleSecondHeal(player, food.then);
   const healMessage = food.healMessage === undefined ? HEAL_MESSAGE : food.healMessage;
