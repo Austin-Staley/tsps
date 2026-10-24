@@ -13,6 +13,7 @@
  * (rare drop table, gem, herb, seed) held in the subtables file.
  */
 
+const OrderedRewards = require("./OrderedRewards.NpcDrops");
 const fs = require("fs");
 const path = require("path");
 
@@ -588,6 +589,7 @@ function killContext(player, npc) {
  * with `rolls` repeats everything but the guaranteed, tertiary and `once_per_kill` drops that many times.
  */
 function rollTable(table, player, npc, context = killContext(player, npc)) {
+  const selected = OrderedRewards.select(table, player, pluginApi, Math.random, rate => rareMultiplier(table, rate));
   const drops = [];
   const entries = Array.isArray(table.entries) ? table.entries : [];
   for (const entry of entries) {
@@ -596,11 +598,17 @@ function rollTable(table, player, npc, context = killContext(player, npc)) {
     }
   }
   const rolls = Number.isInteger(table.rolls) && table.rolls > 1 ? table.rolls : 1;
-  for (let roll = 0; roll < rolls; roll++) {
+  if (selected.entry) drops.push(...resolveEntry(selected.entry, player, context));
+  else for (let roll = 0; roll < rolls; roll++) {
     drops.push(...rollOnce(table, entries, player, roll === 0, context));
   }
 
-  const rules = table.tertiary?.length ? tertiaryRules(player, npc) : [];
+  const rules = table.tertiary?.length || table.tertiary_groups?.length ? tertiaryRules(player, npc) : [];
+  for (const group of table.tertiary_groups || []) {
+    if (group.type !== "exclusive") throw new Error("Unsupported tertiary group");
+    const entry = OrderedRewards.group(group.entries, row => tertiaryMultiplier(row, rules) * rareMultiplier(table, row));
+    if (entry) drops.push(...resolveEntry(entry, player, context));
+  }
   for (const entry of table.tertiary || []) {
     // A tertiary at 1/1 is a conditional drop, not a guaranteed one: the wiki writes
     // "Always" for things that always drop *given* a condition (an active clue step, a quest,
@@ -617,6 +625,7 @@ function rollTable(table, player, npc, context = killContext(player, npc)) {
     }
   }
 
+  selected.commit?.();
   return context?.handledItemIds?.size
     ? drops.filter(drop => !context.handledItemIds.has(drop.itemId))
     : drops;
