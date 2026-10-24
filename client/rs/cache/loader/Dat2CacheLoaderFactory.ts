@@ -89,6 +89,8 @@ import { IndexType } from "../IndexType";
 import { CacheLoaderFactory } from "./CacheLoaderFactory";
 
 export class Dat2CacheLoaderFactory implements CacheLoaderFactory {
+    private enumTypeLoader?: EnumTypeLoader;
+
     constructor(
         readonly cacheInfo: CacheInfo,
         readonly cacheType: CacheType,
@@ -219,12 +221,13 @@ export class Dat2CacheLoaderFactory implements CacheLoaderFactory {
     }
 
     getEnumTypeLoader(): EnumTypeLoader | undefined {
+        if (this.enumTypeLoader) return this.enumTypeLoader;
         const configIndex = this.cacheSystem.getIndex(IndexType.DAT2.configs);
         if (!configIndex.archiveExists(ConfigType.DAT2.enums)) return undefined;
 
         // The browser streams config archives on demand. Reading it here can race
         // startup and permanently leave the CS2 VM without enum definitions.
-        return new DeferredArchiveEnumTypeLoader(this.cacheInfo, () =>
+        return this.enumTypeLoader = new DeferredArchiveEnumTypeLoader(this.cacheInfo, () =>
             configIndex.getArchive(ConfigType.DAT2.enums),
         );
     }

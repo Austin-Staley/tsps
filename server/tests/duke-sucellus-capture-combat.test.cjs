@@ -4,6 +4,68 @@ const Harness = require("./helpers/duke-sucellus.cjs");
 
 before(Harness.initialize);
 
+for(const style of ['melee','magic']) test(`Duke ${style} strike triggers one actual Elysian reaction`,t=>{
+  const h=Harness.harness(t);h.enter();h.step(40);h.fight.wake();h.fight.nextAttack=Infinity;
+  const graphics=[];
+  h.p.getEquipment().set(h.core.Equipment.SHIELD_SLOT,new h.core.Item(h.core.ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
+  t.mock.method(h.p,'performGraphic',graphic=>{if(graphic.getId()===321)graphics.push(321);});
+  t.mock.method(Math,'random',()=>.5);
+  h.C.strike(h.fight,style,40);h.step();
+  assert.equal(h.p.getHitpoints(),84,'one 25-percent reduction of the rolled 20');
+  assert.deepEqual(graphics,[321]);
+});
+
+for(const terminal of ['stop','fell']) test(`Duke ${terminal} cancels strike retaliation as well as displayed damage`,t=>{
+  const h=Harness.harness(t);h.enter();h.step(40);h.fight.wake();h.fight.nextAttack=Infinity;
+  t.mock.method(Math,'random',()=>.999);
+  h.p.setHasVengeance(true);
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT,new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  const boss=h.fight.boss,hp=boss.getHitpoints();
+  h.C.strike(h.fight,'melee',40);
+  h.fight[terminal]();h.step();boss.getCombat().getHitQueue().process(h.core.World.getProcessCycle());
+  assert.equal(h.p.getHitpoints(),99);
+  assert.equal(h.p.hasVengeanceReturn(),true,'a cancelled zero hit must not consume Vengeance');
+  assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),undefined);
+  assert.equal(boss.getHitpoints(),hp);
+});
+
+test('a late Duke strike after stop cannot damage the player or consume retaliation',t=>{
+  const h=Harness.harness(t);h.enter();h.step(40);h.fight.wake();h.fight.nextAttack=Infinity;
+  h.p.setHasVengeance(true);h.fight.stop();
+  t.mock.method(Math,'random',()=>.999);
+  h.C.strike(h.fight,'melee',40);h.step();
+  assert.equal(h.p.getHitpoints(),99);
+  assert.equal(h.p.hasVengeanceReturn(),true);
+});
+
+test('protected Duke magic keeps its selected range and reflects only damage after Elysian reduction',t=>{
+  const h=Harness.harness(t);h.enter();h.step(40);h.fight.wake();h.fight.nextAttack=Infinity;
+  h.p.getPrayerActive()[h.core.PrayerHandler.PROTECT_FROM_MAGIC]=true;
+  h.p.setHasVengeance(true);
+  h.p.getEquipment().set(h.core.Equipment.SHIELD_SLOT,new h.core.Item(h.core.ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT,new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  t.mock.method(Math,'random',()=>.5);
+  const boss=h.fight.boss,hp=boss.getHitpoints(),rolled=Math.floor((h.C.data.normal.protectedMagic+1)*.5),taken=Math.floor(rolled*.75);
+  h.C.strike(h.fight,'magic',h.C.data.normal.protectedMagic,{evenZero:true});h.step();
+  boss.getCombat().getHitQueue().process(h.core.World.getProcessCycle());
+  assert.ok(taken>0);assert.equal(h.p.getHitpoints(),99-taken);
+  assert.equal(h.p.hasVengeanceReturn(),false);
+  assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),Math.floor(taken/10)+1);
+  assert.equal(boss.getHitpoints(),hp-Math.floor(taken*.75)-Math.floor(taken/10)-1);
+  assert.equal(h.fight.perfect,false);
+});
+
+test('Duke raw hazards retain their non-reflecting damage path',t=>{
+  const h=Harness.harness(t);h.enter();h.step(40);h.fight.wake();h.fight.nextAttack=Infinity;
+  h.p.setHasVengeance(true);
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT,new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  const boss=h.fight.boss,hp=boss.getHitpoints();
+  h.C.hurt(h.fight,20,{min:20});h.step();boss.getCombat().getHitQueue().process(h.core.World.getProcessCycle());
+  assert.equal(h.p.getHitpoints(),79);assert.equal(boss.getHitpoints(),hp);
+  assert.equal(h.p.hasVengeanceReturn(),true);
+  assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),undefined);
+});
+
 test("normal-world gaze warning and successful avoidance retain their captured colours", (t) => {
   const h = Harness.harness(t);
   h.enter();
