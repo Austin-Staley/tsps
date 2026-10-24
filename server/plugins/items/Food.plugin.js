@@ -11,6 +11,7 @@ const DATA = require("./data/food.json");
 const {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByMax,
   restoreSkillToBaseWithFormula,
@@ -174,7 +175,8 @@ function applyStats(player, effect) {
   }
   if (effect.runEnergy) restoreRunEnergy(player, effect.runEnergy);
   if (effect.stamina) pluginApi.emitCustomEvent("potions:apply-stamina", { player, energy: 20 });
-  if (effect.curePoison) curePoisonAndVenom(player);
+  if (effect.cureVenom) curePoisonAndVenom(player);
+  else if (effect.curePoison) curePoison(player);
 }
 
 /** Wiki (Kebab): a random skill but Hitpoints, never drained below 1 nor when 2 or lower. */
