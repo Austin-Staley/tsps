@@ -248,14 +248,17 @@ function defensiveAction(request) {
     }
     return;
   }
-  const here = player.getLocation();
-  if (Math.max(Math.abs(here.getX() - retreat.exit.x), Math.abs(here.getY() - retreat.exit.y)) <= 1) {
+  const gateAt = new core.Location(retreat.exit.x, retreat.exit.y, 0);
+  const gate = core.MapObjects.get(core.ObjectIdentifiers.ARENA_13, gateAt, player.getPrivateArea());
+  const definition = gate?.getDefinition();
+  if (gate && core.PathFinder.reachedObject(player, retreat.exit.x, retreat.exit.y,
+      definition.getSizeX(), definition.getSizeY(), gate.getFace(), gate.getType(), definition.getBlockingMask())) {
     clearMovementRequest(player);
-    Entry.exitArena({ player, location: new core.Location(retreat.exit.x, retreat.exit.y, 0) });
+    Entry.exitArena({ player, location: gateAt });
     return;
   }
   player.setRunning(player.getRunEnergy() > 0);
-  queueRouteAndFlagAppearance(player, retreat.exit.x, retreat.exit.y, { state, nowMs, reason: "bounty_hunter_retreat" });
+  queueRouteAndFlagAppearance(player, retreat.exit.x, retreat.exit.y, { state, nowMs, basicPather: true, reason: "bounty_hunter_retreat" });
 }
 
 function clearRetreat({ player }) {

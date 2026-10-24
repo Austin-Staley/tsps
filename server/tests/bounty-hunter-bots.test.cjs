@@ -18,6 +18,7 @@ const core = PluginManager.getCoreApi();
 
 before(async () => {
   await CachePipeline.initialize();
+  core.RegionManager.init();
   require('../plugins/items/Food.plugin').register({
     core, persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
   });
@@ -172,7 +173,7 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
   const { PvpDefensiveActionNode } = require('../plugins/bots/behaviours/nodes/pvp/PvpDefensiveActionNode.PlayerBots');
   const { PvpController } = require('../plugins/bots/brain/pvp/PvpController.PlayerBots');
   const { EatFoodActionNode } = require('../plugins/bots/behaviours/nodes/actions/EatFoodActionNode.PlayerBots');
-  const { peekMovementRequest, clearMovementRequest } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
+  const { peekMovementRequest, clearMovementRequest, dispatchMovementRequest } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const bh = require('../plugins/minigames/bountyhunter/State.BountyHunter');
   const runtime = { botStatesByName: new Map() };
   const api = PluginManager.createApi('BountyHunterRetreatRegression');
@@ -326,5 +327,35 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     assert.ok(f.player.getEquipment().getValidItems().length > 0);
     assert.equal(f.logouts(), 0);
     assert.deepEqual(errors, [], 'the custom hook never claims a pending shared recovery');
+  });
+
+  for (const [index, exit] of bh.CRATER.exits.entries()) await t.test(`actual map retreat reaches gate ${index + 1} from the arena side`, (t) => {
+    const f = fixture(t, `bh_map_${index}`);
+    t.mock.method(Math, 'random', () => 0.99);
+    let cycle = 1000;
+    t.mock.method(core.World, 'getProcessCycle', () => cycle);
+    const x = exit.x + Math.sign(exit.x - exit.to.x) * 5;
+    const y = exit.y + Math.sign(exit.y - exit.to.y) * 5;
+    f.player.moveTo(new core.Location(x, y));
+    f.player.setNeedsPlacement(false);
+    core.RegionManager.loadMapFiles(exit.x, exit.y);
+    assert.equal(core.RegionManager.blocked(f.player.getLocation(), null), false);
+    f.tick(cycle * 600);
+    const request = peekMovementRequest(f.player);
+    assert.deepEqual([request.x, request.y], [exit.x, exit.y]);
+    const routed = dispatchMovementRequest(f.player, request, f.state);
+    assert.equal(routed.hasRoute, true, 'actual clipping must yield a reachable approach to the solid gate');
+    const queue = f.player.getMovementQueue();
+    for (let step = 0; step < 12 && !bh.isLobbyTile(f.player.getLocation()); step++) {
+      cycle++;
+      queue.beginCycle();
+      queue.process();
+      assert.equal(core.RegionManager.blocked(f.player.getLocation(), null), false, 'the bot never stands on the solid gate');
+      f.tick(cycle * 600);
+    }
+    assert.equal(bh.isLobbyTile(f.player.getLocation()), true, 'real movement reaches canonical object-operating distance');
+    assert.deepEqual([f.player.getLocation().getX(), f.player.getLocation().getY()], [exit.to.x, exit.to.y]);
+    f.tick((cycle + 1) * 600);
+    assert.equal(f.logouts(), 1);
   });
 });
