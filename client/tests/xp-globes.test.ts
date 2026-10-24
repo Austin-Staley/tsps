@@ -3,7 +3,7 @@ import { GameStateChanged, StatChanged } from "@runelite/api/events";
 import { GameState } from "@runelite/api/GameState";
 import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { inject } from "@runelite/client/plugins/PluginInjector";
-import { onConfigurationRequest } from "@runelite/client/plugins/config/configurationRequests";
+import { onConfigurationRequest, openConfiguration, takePendingConfiguration } from "@runelite/client/plugins/config/configurationRequests";
 import { OverlayRenderer } from "@runelite/client/ui/overlay/OverlayRenderer";
 import { XpGlobesConfig } from "../game/plugins/xpglobes/XpGlobesConfig";
 import { XpGlobesPlugin } from "../game/plugins/xpglobes/XpGlobesPlugin";
@@ -74,6 +74,25 @@ assert.deepEqual(tooltipLines(globe, 500, undefined, all).map((l) => l.left), ["
 
 // --- Plugin and overlay ------------------------------------------------------------------------
 async function main(): Promise<void> {
+    // An unavailable Configuration plugin must not leave a surprise request for its next start.
+    openConfiguration(XpGlobesPlugin);
+    assert.equal(takePendingConfiguration(), undefined, "no listener: nothing is queued");
+    const openPanel = onConfigurationRequest(() => {});
+    openConfiguration(XpGlobesPlugin);
+    assert.equal(takePendingConfiguration(), XpGlobesPlugin, "an active plugin defers until its panel mounts");
+    assert.equal(takePendingConfiguration(), undefined, "a deferred request is consumed once");
+    openConfiguration(XpGlobesPlugin);
+    openPanel();
+    const restarted = onConfigurationRequest(() => {});
+    assert.equal(takePendingConfiguration(), undefined, "shutdown discards an unconsumed request");
+    const panel = onConfigurationRequest(() => takePendingConfiguration());
+    openConfiguration(XpGlobesPlugin);
+    assert.equal(takePendingConfiguration(), undefined, "a mounted panel consumes the request immediately");
+    panel();
+    openConfiguration(XpGlobesPlugin);
+    assert.equal(takePendingConfiguration(), XpGlobesPlugin, "closing only the panel still permits deferred opening");
+    restarted();
+
     const config = inject(ConfigManager);
     const client: any = { gameState: 30, inputManager: { mouseX: -1, mouseY: -1 } };
     const plugin = new XpGlobesPlugin(client);
