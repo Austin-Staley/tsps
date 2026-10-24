@@ -51,11 +51,11 @@ test('smoke throws ten real blockers and ray cover blocks its final blast', t =>
   h.fight.nextSpecial = 'smoke';
   h.fight.beginSpecial();
   h.move([2074, 6379]);
-  h.step(10);
+  h.step(13);
   h.move([2074, 6371]);
   h.fight.hazards.place([2075, 6371]);
   random = 0.999;
-  h.step(3);
+  h.step(6);
   assert.equal(h.fight.special, null);
   assert.equal(h.p.getHitpoints(), 99);
   assert.ok(h.fight.hazards.blockers.has('2075,6371'));
@@ -71,10 +71,10 @@ test('uncovered smoke applies damage and is not cancelled by entering enrage', t
   h.step();
   assert.equal(h.fight.enraged, true);
   assert.equal(h.fight.special, 'smoke');
-  h.step(9);
+  h.step(12);
   h.move([2074, 6371]);
   random = 0.999;
-  h.step(3);
+  h.step(6);
   assert.equal(h.fight.special, null);
   assert.equal(h.p.getHitpoints(), 40);
   assert.equal(h.fight.perfect, false);
@@ -83,13 +83,97 @@ test('lightning strikes its marked tile later; moving avoids it and stationary c
   const h = H.harness(t);
   t.mock.method(Math, 'random', () => 0.999);
   h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial();
-  h.step(); h.move([2073, 6370]);
+  h.step(5); h.move([2073, 6370]);
   h.step(); h.move([2074, 6370]);
   h.step();
   assert.equal(h.p.getHitpoints(), 99);
   h.step(2);
   assert.ok(h.p.getHitpoints() < 99);
   assert.equal(h.fight.perfect, false);
+});
+
+test('normal smoke preserves its filmed retaliation, throws, explosion charge and recovery', t => {
+  const h = H.harness(t), throws = [], blasts = [];
+  t.mock.method(Math, 'random', () => 0);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => {
+    if (graphic.getId() === 2506) throws.push(h.fight.tick);
+    if (graphic.getId() === 2494) blasts.push(h.fight.tick);
+  } : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.tier = 1;
+  h.fight.nextSpecial = 'smoke'; h.fight.beginSpecial();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10282);
+  h.step(3);
+  assert.equal(h.fight.boss.getAnimation().getId(), 10288);
+  assert.deepEqual(throws, []);
+  h.step(10);
+  assert.deepEqual(throws, [4,5,6,7,8,9,10,11,12,13]);
+  h.step();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10290);
+  assert.deepEqual(blasts, []);
+  h.step(2);
+  assert.deepEqual(blasts, [16]);
+  h.step(2);
+  assert.equal(h.fight.special, 'smoke');
+  h.step();
+  assert.equal(h.fight.special, null);
+  h.step();
+  assert.equal(h.fight.boss.getGraphic()?.getId(), undefined, 'recovery ending is not the first orb startup');
+  h.step();
+  assert.equal(h.fight.tick, 21);
+  assert.equal(h.fight.boss.getGraphic().getId(), 2486);
+});
+
+test('normal lightning stages its native animations and thirty-five pulses across the filmed phase', t => {
+  const h = H.harness(t), warnings = [], strikes = [];
+  t.mock.method(Math, 'random', () => 0);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => {
+    if (graphic.getId() === 2503) warnings.push(h.fight.tick);
+    if (graphic.getId() === 2504) strikes.push(h.fight.tick);
+  } : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.tier = 1;
+  h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10285);
+  h.step(2);
+  assert.deepEqual(warnings, []);
+  h.step();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10286);
+  h.step(2);
+  assert.deepEqual(warnings, [5]);
+  assert.deepEqual(strikes, []);
+  h.step(2);
+  assert.deepEqual(strikes, [7]);
+  h.step(34);
+  assert.equal(warnings.length, 35);
+  assert.equal(strikes.length, 35);
+  assert.equal(warnings.at(-1), 39);
+  assert.equal(strikes.at(-1), 41);
+  h.step();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10287);
+  h.step();
+  assert.equal(h.fight.special, 'lightning', 'the native end animation must finish before normal attacks resume');
+  h.step();
+  assert.equal(h.fight.special, null);
+  h.step();
+  assert.equal(h.fight.boss.getGraphic()?.getId(), undefined, 'the normal volley still waits its attack interval');
+  h.step();
+  assert.equal(h.fight.tick, 46);
+  assert.equal(h.fight.boss.getGraphic().getId(), 2486);
+});
+
+test('the documented low-health lightning launches a tick earlier than its normal-health counterpart', t => {
+  const h = H.harness(t, false, 25), strikes = [];
+  t.mock.method(Math, 'random', () => 0);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => {
+    if (graphic.getId() === 2504) strikes.push(h.fight.tick);
+  } : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial();
+  h.step(5);
+  assert.deepEqual(strikes, []);
+  h.step();
+  assert.deepEqual(strikes, [6]);
 });
 test('normal specials reduce all incoming damage by one third; magic rear boost preserves accuracy rules', t => {
   const h = H.harness(t);

@@ -77,8 +77,19 @@ class Hazards {
   }
   lightning() {
     const fight = this.fight, { inferred } = Common.data;
+    // Normal Wiki and 2024 footage measure this envelope from the applied rear
+    // punishment, where beginSpecial is called. Frame-derived boundaries retain
+    // a one-tick uncertainty; see the evidence ledger, not packet-exact claims.
+    const schedule = fight.awakened ? {
+      firstWarningTicks: 1, pulses: inferred.lightningDurationTicks,
+      endAnimationTicks: inferred.lightningDurationTicks + inferred.lightningDelayTicks + 1,
+      endTicks: inferred.lightningDurationTicks + inferred.lightningDelayTicks + 1,
+    } : Common.data.normalLightning;
     Common.animate(fight.boss, "lightning");
-    for (let tick = 1; tick <= inferred.lightningDurationTicks; tick++) fight.at(tick, () => {
+    if (schedule.loopStartTicks) fight.at(schedule.loopStartTicks, () => {
+      if (fight.alive() && fight.special === 'lightning') Common.animate(fight.boss, 'lightningLoop');
+    });
+    for (let pulse = 0; pulse < schedule.pulses; pulse++) fight.at(schedule.firstWarningTicks + pulse, () => {
       if (!fight.alive() || fight.special !== "lightning") return;
       const target = this.playerTile();
       this.graphic(target, "lightningGround");
@@ -92,24 +103,41 @@ class Hazards {
       const tiles = [...this.floor].map(key => key.split(',').map(Number)).filter(at => Model.distance(at, Common.data.arena.centre) > 6);
       if (tiles.length) this.drop(Common.pick(tiles), false, delay);
     });
-    fight.at(inferred.lightningDurationTicks + inferred.lightningDelayTicks + 1, () => {
-      if (fight.special === "lightning") { Common.animate(fight.boss, "lightningEnd"); fight.endSpecial(); }
+    fight.at(schedule.endAnimationTicks, () => {
+      if (fight.alive() && fight.special === "lightning") Common.animate(fight.boss, "lightningEnd");
+    });
+    fight.at(schedule.endTicks, () => {
+      if (fight.alive() && fight.special === "lightning") fight.endSpecial();
     });
   }
   smoke() {
     const fight = this.fight;
-    Common.animate(fight.boss, "smoke");
+    const schedule = fight.awakened ? {
+      startTicks: 0, firstThrowTicks: 1, chargeTicks: 13, blastTicks: 13, endTicks: 13,
+    } : Common.data.normalSmoke;
+    if (schedule.startTicks) {
+      Common.animate(fight.boss, 'roar');
+      fight.at(schedule.startTicks, () => {
+        if (fight.alive() && fight.special === 'smoke') Common.animate(fight.boss, 'smoke');
+      });
+    } else Common.animate(fight.boss, 'smoke');
     // Ten aimed rocks, one per tick, taking two ticks to reach the marked tile.
-    for (let tick = 1; tick <= 10; tick++) fight.at(tick, () => {
-      if (fight.alive()) { Common.animate(fight.boss, "smokeLoop"); this.drop(this.playerTile()); }
+    for (let rock = 0; rock < 10; rock++) fight.at(schedule.firstThrowTicks + rock, () => {
+      if (fight.alive() && fight.special === 'smoke') { Common.animate(fight.boss, "smokeLoop"); this.drop(this.playerTile()); }
     });
-    fight.at(13, () => {
-      if (!fight.alive()) return;
-      Common.animate(fight.boss, "smokeBlast");
+    // The five-tick explosion sequence charges before the visible blast and
+    // finishes afterward. Starting it on the damage tick cut off both stages.
+    fight.at(schedule.chargeTicks, () => {
+      if (fight.alive() && fight.special === 'smoke') Common.animate(fight.boss, 'smokeBlast');
+    });
+    fight.at(schedule.blastTicks, () => {
+      if (!fight.alive() || fight.special !== 'smoke') return;
       this.graphic(Common.data.arena.centre, "smoke");
       if (!Model.covered(Common.data.arena.centre, this.playerTile(), this.blockers))
         Common.damage(fight, Common.random(0, fight.stats.smokeMax));
-      fight.endSpecial();
+    });
+    fight.at(schedule.endTicks, () => {
+      if (fight.alive() && fight.special === 'smoke') fight.endSpecial();
     });
   }
   spawnPathfinder() {

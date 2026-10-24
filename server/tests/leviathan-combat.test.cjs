@@ -70,6 +70,34 @@ test('shadow stuns are spell-ID based, front cap and ranged rear punishment lead
   assert.notEqual(h.fight.special, first);
 });
 
+test('a shadow stun holds the native stunned idle after the three-tick reaction and releases at fifteen ticks', t => {
+  const h = H.harness(t);
+  h.fight.nextAttack = Infinity;
+  h.fight.stun();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10282);
+  h.step(2);
+  assert.equal(h.fight.boss.getAnimation().getId(), 10282);
+  h.step();
+  assert.equal(h.fight.boss.getAnimation().getId(), 10294);
+  h.step(11);
+  assert.equal(h.fight.stunnedUntil > h.fight.tick, true);
+  h.step();
+  assert.equal(h.fight.stunnedUntil, 0);
+  assert.equal(h.fight.boss.getAnimation().getId(), 65535);
+});
+
+test('a rear punishment before the stun reaction ends cannot be overwritten by its queued idle', t => {
+  const h = H.harness(t);
+  t.mock.method(Math, 'random', () => 0);
+  h.fight.nextSpecial = 'lightning';
+  h.fight.stun();
+  h.fight.boss.setHitpoints(899);
+  h.fight.afterDamage(1, true);
+  h.step(3);
+  assert.equal(h.fight.boss.getAnimation().getId(), 10286);
+  assert.equal(h.fight.special, 'lightning');
+});
+
 test('enrage has a moving 5x5 aura, impact prayer piercing outside and no shadow restun', t => {
   const h = H.harness(t);
   let random = 0;

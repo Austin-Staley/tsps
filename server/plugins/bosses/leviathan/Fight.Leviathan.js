@@ -50,6 +50,7 @@ class Fight {
     if (this.stunnedUntil) {
       if (this.tick < this.stunnedUntil) return;
       this.stunnedUntil = 0;
+      if (!this.awakened) this.boss.performAnimation(Common.core.Animation.DEFAULT_RESET_ANIMATION);
       this.nextAttack = this.tick + Model.volley(this.tier).interval;
     }
     if (this.special || this.tick < this.nextAttack) return;
@@ -106,6 +107,15 @@ class Fight {
     this.stunHealth = this.boss.getHitpoints();
     this.stunnedUntil = this.tick + this.stats.stunTicks;
     Common.animate(this.boss, "stun");
+    if (!this.awakened) {
+      const epoch = this.volleyEpoch;
+      // Cache reaction 10282 lasts ninety client cycles. The filmed back stays
+      // exposed afterward; use its native idle until expiry or punishment.
+      this.at(3, () => {
+        if (this.alive() && this.volleyEpoch === epoch && this.stunnedUntil > this.tick && !this.special)
+          Common.animate(this.boss, 'stunIdle');
+      });
+    }
     this.player.getCombat().setAttackDelay(0);
     return true;
   }

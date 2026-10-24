@@ -127,7 +127,13 @@ test('actual kill respawns a fresh normal fight in the same instance and logout 
   Site.climb({ player: h.p, objectId: 47593 });
   const first = session.fight;
   first.boss.getCombat().addDamage(h.p, 1); first.boss.setHitpoints(0);
-  h.step(8 + h.Common.data.inferred.respawnTicks);
+  // Original ordinary-world footage: loot at 6:28.6, next spawn at 6:46.8.
+  // Count from the real reward/death hook, not the earlier lethal hit.
+  for (let tick = 0; tick < 8 && !first.rewarded; tick++) h.step();
+  assert.equal(first.rewarded, true);
+  h.step(29);
+  assert.equal(session.fight, first, 'respawn must wait the full thirty ticks after rewards');
+  h.step();
   assert.notEqual(session.fight, first);
   assert.equal(first.stopped, true);
   assert.equal(session.fight.perfect, true);

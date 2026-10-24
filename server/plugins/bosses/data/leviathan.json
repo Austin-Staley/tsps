@@ -14,10 +14,12 @@
     { "npc": "tailRing3", "tile": [2096,6389,0], "face": "SOUTH_WEST", "bite": "tailBite3" }
   ],
   "roar": { "flightTicks": 7, "graphicDelayCycles": 50, "tellRegions": { "lightning": [[2072,6371,2074,6373], [2088,6371,2090,6373]], "smoke": [[2081,6364,2083,6366], [2080,6378,2082,6380]] } },
+  "normalLightning": { "loopStartTicks": 3, "firstWarningTicks": 5, "pulses": 35, "endAnimationTicks": 42, "endTicks": 44 },
+  "normalSmoke": { "startTicks": 3, "firstThrowTicks": 4, "chargeTicks": 14, "blastTicks": 16, "endTicks": 19 },
   "normal": { "hitpoints": 900, "attack": 300, "strength": 360, "defence": 250, "ranged": 160, "magic": 160, "enrageInterval": 2, "auraRadius": 2, "stunTicks": 15, "smokeMax": 59 },
   "awakened": { "hitpoints": 2700, "attack": 525, "strength": 630, "defence": 287, "ranged": 280, "magic": 280, "enrageInterval": 1, "auraRadius": 3, "stunTicks": 8, "smokeMax": 79 },
   "damage": { "magic": 32, "ranged": 24, "melee": 50, "debris": 25, "roar": 7, "lightning": 30, "tornado": 45 },
-  "inferred": { "firstAttackTicks": 4, "respawnTicks": 50, "lightningDurationTicks": 20, "lightningDelayTicks": 2, "debrisFlightTicks": 2, "tornadoStepTicks": 2, "awakenedStunRounding": "15/2 rounded up to8", "awakenedSmokeAndTornadoMaxima": "conservative bounds from Wiki70+/40+, not measured exact maxima" },
+  "inferred": { "firstAttackTicks": 4, "respawnTicks": 30, "lightningDurationTicks": 20, "lightningDelayTicks": 2, "debrisFlightTicks": 2, "tornadoStepTicks": 2, "awakenedStunRounding": "15/2 rounded up to8", "awakenedSmokeAndTornadoMaxima": "conservative bounds from Wiki70+/40+, not measured exact maxima" },
   "cache": {
     "npcs": { "tailRing1": "leviathan_tail_ring_1", "tailRing2": "leviathan_tail_ring_2", "tailRing3": "leviathan_tail_ring_3", "boss": "leviathan", "pathfinder": "leviathan_buff_npc", "tornado": "leviathan_tornado" },
     "locs": { "debris": "leviathan_rubble", "entry": "leviathan_wall_climb", "questEntry": "leviathan_wall_climb_quest" },
