@@ -33,16 +33,19 @@ function iconId(entry) {
   return iconIds.get(entry.key);
 }
 
-function location(entry) {
-  return new core.Location(...entry.tile);
+function location(tile) {
+  return new core.Location(...tile);
 }
 
-/** The Wilderness level a destination lands in; 0 off PvP ground (Corp's cave sits in a levelled box). */
+/** The Wilderness level of a tile; 0 off PvP ground (Corp's cave sits in a levelled box). */
+function levelAt(tile) {
+  return core.Wilderness.isInLocation(location(tile)) ? core.Wilderness.levelAt(tile[0], tile[1]) : 0;
+}
+
+/** The Wilderness level a fixed destination lands in; a live one is only known when used. */
 function wildernessLevel(entry) {
-  if (!wildernessLevels.has(entry.key)) {
-    const level = core.Wilderness.isInLocation(location(entry)) ? core.Wilderness.levelAt(entry.tile[0], entry.tile[1]) : 0;
-    wildernessLevels.set(entry.key, level);
-  }
+  if (!entry.tile) return 0;
+  if (!wildernessLevels.has(entry.key)) wildernessLevels.set(entry.key, levelAt(entry.tile));
   return wildernessLevels.get(entry.key);
 }
 
@@ -101,7 +104,7 @@ function layouts(favouriteKeys = [], recentKeys = []) {
 }
 
 module.exports = {
-  TAB, TAB_ORDER, TAB_LABELS, DESTINATIONS, init, iconId, location, wildernessLevel, catalog, layouts,
+  TAB, TAB_ORDER, TAB_LABELS, DESTINATIONS, init, iconId, location, levelAt, wildernessLevel, catalog, layouts,
   byId: (id) => BY_ID.get(id),
   byKey: (key) => BY_KEY.get(key),
 };

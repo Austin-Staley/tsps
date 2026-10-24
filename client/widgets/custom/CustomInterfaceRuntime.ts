@@ -34,6 +34,11 @@ export type CustomInterfaceDeclaration = {
         endpoint?: string;
         /** Hidden text component receiving JSON rows over the authenticated game socket. */
         dataComponent?: number;
+        /**
+         * More hidden components whose rows follow `dataComponent`'s, in order. A widget text
+         * packet carries at most 64 KB, so a long list arrives in parts.
+         */
+        extraDataComponents?: number[];
         queryParam?: string;
         limit?: number;
         debounceMs?: number;
@@ -218,6 +223,7 @@ export class CustomInterfaceRuntime {
     private labelActions = new Map<number, unknown>();
     private selectedRowId: number | undefined;
     private catalog = new Map<number, CustomInterfaceRow>();
+    private dataParts: CustomInterfaceRow[][] = [];
     private tabLayouts: Array<Array<number | { header: string }>> = [];
     private activeTab = 0;
     private scrollbarState = new Map<number, string>();
@@ -257,7 +263,11 @@ export class CustomInterfaceRuntime {
     /** The server can drive the query too - prefill, clear, or correct it. */
     handleSetText(uid: number, text: string): boolean {
         const search = this.declaration?.search;
-        if (search?.dataComponent !== undefined && uid === this.uid(search.dataComponent)) {
+        const dataComponents = search?.dataComponent === undefined
+            ? []
+            : [search.dataComponent, ...(search.extraDataComponents ?? [])];
+        const part = dataComponents.findIndex((component) => uid === this.uid(component));
+        if (part >= 0) {
             let rows: CustomInterfaceRow[] = [];
             try {
                 const parsed = JSON.parse(text);
@@ -269,6 +279,8 @@ export class CustomInterfaceRuntime {
             } catch {
                 rows = [];
             }
+            this.dataParts[part] = rows;
+            rows = dataComponents.flatMap((_, index) => this.dataParts[index] ?? []);
             if (this.declaration?.tabs) {
                 this.catalog = new Map(rows.map((row) => [row.id, row]));
                 this.sourceRows = this.tabRows();
@@ -513,6 +525,7 @@ export class CustomInterfaceRuntime {
         this.slotRows = [];
         this.selectedRowId = undefined;
         this.catalog = new Map();
+        this.dataParts = [];
         this.tabLayouts = [];
         this.activeTab = 0;
         this.labelActions.clear();

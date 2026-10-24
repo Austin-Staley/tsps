@@ -387,6 +387,29 @@ async function main(): Promise<void> {
     assert.equal(widgets.get(tabUid(40)).text, "Zulrah (favourite)", "the selection redraws from a new catalog");
     runtime.onInterfaceClosed(TAB_GROUP);
 
+    // A long list arrives in parts, joined in their declared order.
+    const PART_GROUP = 30011;
+    const partUid = (component: number) => (PART_GROUP << 16) | component;
+    setCustomInterface({
+        groupId: PART_GROUP,
+        widgets: [{ uid: partUid(0), parentUid: -1 }],
+        search: { inputComponent: 1, dataComponent: 2, extraDataComponents: [5] },
+        list: { viewComponent: 3, slotCount: 3, columns: 1, rowHeight: 20, iconStart: 10, backgroundStart: 30, itemLabel: "%name", textOnly: true },
+        status: { component: 4, matches: "%total" },
+    });
+    for (const component of [1, 2, 3, 4, 5, 10, 11, 12, 30, 31, 32]) {
+        widgets.set(partUid(component), { uid: partUid(component), width: 200, height: 60, scrollY: 0 });
+    }
+    runtime.onInterfaceOpened(PART_GROUP);
+    runtime.handleSetText(partUid(5), JSON.stringify([{ id: 3, name: "Three" }]));
+    runtime.handleSetText(partUid(2), JSON.stringify([{ id: 1, name: "One" }, { id: 2, name: "Two" }]));
+    assert.equal(widgets.get(partUid(4)).text, "3", "every part counts");
+    assert.deepEqual([10, 11, 12].map((component) => widgets.get(partUid(component)).text), ["One", "Two", "Three"],
+        "parts join in declared order, whichever arrives first");
+    runtime.handleSetText(partUid(5), "[]");
+    assert.equal(widgets.get(partUid(4)).text, "2", "a part can be replaced on its own");
+    runtime.onInterfaceClosed(PART_GROUP);
+
     console.log("custom-interface-runtime.test.ts: all tests passed");
 }
 

@@ -13,7 +13,11 @@ const COMPONENT = {
   PANEL: 8, PANEL_ICON: 9, PANEL_TITLE: 10, PANEL_SUBTITLE: 11, PANEL_WILDERNESS: 12, PANEL_KILLS: 13,
   PANEL_DESCRIPTION: 14, TELEPORT_BUTTON: 15, TELEPORT_LABEL: 16, FAVOURITE_BUTTON: 17, FAVOURITE_LABEL: 18, LAYOUT: 19,
   TAB_START: 20, TAB_LABEL_START: 30, ROW_BACKGROUND_START: 40, ROW_ICON_START: 60, ROW_LABEL_START: 80,
+  DATA_PART_START: 100,
 };
+// The catalog goes out in parts, one per hidden text component (a text packet holds 64 KB).
+const DATA_PARTS = 3;
+const DATA_PART_COMPONENTS = [COMPONENT.DATA, ...Array.from({ length: DATA_PARTS - 1 }, (_, index) => COMPONENT.DATA_PART_START + index)];
 const TAB_COUNT = 7;
 const TAB_WIDTH = 60;
 const TAB_STEP = 64;
@@ -47,7 +51,7 @@ function addList(add, root) {
   add(COMPONENT.SEARCH_BOX, root, box(18, 56, 274, 20, { color: 0x2b241b, mouseOverColor: 0x3a3125, actions: ["Search"], flags: FLAG_OP1 }));
   add(COMPONENT.SEARCH_INPUT, root, text(24, 56, 262, 20, { yTextAlignment: 1, actions: ["Search"], flags: FLAG_OP1 }));
   add(COMPONENT.STATUS, root, text(18, 78, 274, 16, { textColor: 0xffd27f, yTextAlignment: 1 }));
-  add(COMPONENT.DATA, root, { type: TYPE_TEXT, hidden: true, isHidden: true });
+  for (const component of DATA_PART_COMPONENTS) add(component, root, { type: TYPE_TEXT, hidden: true, isHidden: true });
   add(COMPONENT.LAYOUT, root, { type: TYPE_TEXT, hidden: true, isHidden: true });
   const list = add(COMPONENT.LIST_VIEW, root, {
     rawX: LIST.x, rawY: LIST.y, rawWidth: LIST.width, rawHeight: LIST.height,
@@ -103,7 +107,7 @@ function buildInterface(tabLabels) {
     groupId: GROUP_ID, widgets,
     search: {
       inputComponent: COMPONENT.SEARCH_INPUT, backgroundComponent: COMPONENT.SEARCH_BOX,
-      dataComponent: COMPONENT.DATA, maxLength: 40, placeholder: "<col=8f7f66>Search destinations...</col>",
+      dataComponent: COMPONENT.DATA, extraDataComponents: DATA_PART_COMPONENTS.slice(1), maxLength: 40, placeholder: "<col=8f7f66>Search destinations...</col>",
       caret: "|", textTemplate: "%s", focusColor: 0x3a3125, blurColor: 0x2b241b,
     },
     list: {
@@ -134,4 +138,4 @@ function buildInterface(tabLabels) {
   };
 }
 
-module.exports = { GROUP_ID, MAIN_MODAL_UID, COMPONENT, TAB_COUNT, ROW_SLOTS, uid, buildInterface };
+module.exports = { GROUP_ID, MAIN_MODAL_UID, COMPONENT, DATA_PART_COMPONENTS, TAB_COUNT, ROW_SLOTS, uid, buildInterface };

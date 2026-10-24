@@ -15,6 +15,7 @@ const FAVOURITES_ATTRIBUTE = "teleports:favourites";
 const RECENT_ATTRIBUTE = "teleports:recent";
 const SKIP_WILDERNESS_WARNING_ATTRIBUTE = "teleports:skip-wilderness-warning";
 const RECENT_LIMIT = 5;
+const DATA_PART_BYTES = 40000;
 const OP = { SELECT: 1, TELEPORT: 2, FAVOURITE: 3 };
 const SEARCH_MAX_LENGTH = 40;
 const TAB_UIDS = TAB_ORDER.map((_, index) => uid(COMPONENT.TAB_START + index));
@@ -33,6 +34,25 @@ function selectedTab(player) {
   return TAB_ORDER.includes(tab) ? tab : TAB.ALL;
 }
 
+/** Rows in order, in parts that each fit a widget text packet with room to spare. */
+function splitRows(rows) {
+  const parts = [[]];
+  let bytes = 2;
+  for (const row of rows) {
+    const size = Buffer.byteLength(JSON.stringify(row), "latin1") + 1;
+    if (bytes + size > DATA_PART_BYTES && parts.at(-1).length > 0) {
+      parts.push([]);
+      bytes = 2;
+    }
+    parts.at(-1).push(row);
+    bytes += size;
+  }
+  if (parts.length > Layout.DATA_PART_COMPONENTS.length) {
+    throw new Error(`[teleports] ${rows.length} rows need ${parts.length} data parts; Layout declares ${Layout.DATA_PART_COMPONENTS.length}`);
+  }
+  return parts;
+}
+
 /**
  * Every destination's row (with its panel text) and each tab's layout. The client switches
  * tabs from these itself; `active` is sent only on open, so a refresh never moves the tab.
@@ -40,7 +60,8 @@ function selectedTab(player) {
 function sendRows(player, active = undefined) {
   const favouriteKeys = favourites(player);
   const sender = player.getPacketSender();
-  sender.sendString(JSON.stringify(Destinations.catalog((entry) => panelText(player, entry, favouriteKeys))), uid(COMPONENT.DATA));
+  const parts = splitRows(Destinations.catalog((entry) => panelText(player, entry, favouriteKeys)));
+  Layout.DATA_PART_COMPONENTS.forEach((component, index) => sender.sendString(JSON.stringify(parts[index] ?? []), uid(component)));
   const layout = { tabs: Destinations.layouts(favouriteKeys, recent(player)) };
   if (active !== undefined) layout.active = TAB_ORDER.indexOf(active);
   sender.sendString(JSON.stringify(layout), uid(COMPONENT.LAYOUT));
@@ -111,22 +132,30 @@ function rememberTeleport(player, entry) {
   player.setAttribute(RECENT_ATTRIBUTE, keys.slice(0, RECENT_LIMIT));
 }
 
-function go(player, entry) {
-  const destination = Destinations.location(entry);
+function go(player, entry, tile) {
+  const destination = Destinations.location(tile);
   if (!core.TeleportHandler.checkReqs(player, destination)) return;
   for (const [key, value] of Object.entries(entry.attributes ?? {})) player.setAttribute(key, value);
   rememberTeleport(player, entry);
   core.TeleportHandler.teleport(player, destination, core.TeleportType[entry.type], false);
 }
 
-function confirmWilderness(player, entry, level) {
+/** Where a destination lands now: its tile, or what its owning plugin answers for a live one. */
+function tileOf(player, entry) {
+  if (!entry.live) return entry.tile;
+  const request = { player };
+  pluginApi.emitCustomEvent(entry.live, request);
+  return request.tile;
+}
+
+function confirmWilderness(player, entry, tile, level) {
   const { DialogueChainBuilder, OptionDialogue } = core;
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
     new OptionDialogue(0, {
       executeOption(option) {
         player.getPacketSender().sendInterfaceRemoval();
         if (Number(option) === 3) player.setAttribute(SKIP_WILDERNESS_WARNING_ATTRIBUTE, true);
-        if (Number(option) === 1 || Number(option) === 3) go(player, entry);
+        if (Number(option) === 1 || Number(option) === 3) go(player, entry, tile);
       },
     }, "Yes.", "No.", "Yes, and don't ask again.").setTitle(`Teleport into level ${level} Wilderness?`),
   ));
@@ -134,9 +163,14 @@ function confirmWilderness(player, entry, level) {
 
 function teleport(player, entry) {
   player.getPacketSender().sendInterfaceRemoval();
-  const level = Destinations.wildernessLevel(entry);
-  if (level > 0 && !player.getAttribute(SKIP_WILDERNESS_WARNING_ATTRIBUTE)) confirmWilderness(player, entry, level);
-  else go(player, entry);
+  const tile = tileOf(player, entry);
+  if (!tile) {
+    player.getPacketSender().sendMessage(entry.unavailable ?? "You can't teleport there right now.");
+    return;
+  }
+  const level = entry.live ? Destinations.levelAt(tile) : Destinations.wildernessLevel(entry);
+  if (level > 0 && !player.getAttribute(SKIP_WILDERNESS_WARNING_ATTRIBUTE)) confirmWilderness(player, entry, tile, level);
+  else go(player, entry, tile);
 }
 
 function toggleFavourite(player, entry) {

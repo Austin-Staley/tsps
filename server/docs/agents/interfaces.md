@@ -42,6 +42,9 @@ Rules for both:
   once, and `tabs.layoutComponent` gets `{ active?, tabs: [[rowId | { header }]] }`. A tab
   click shows that tab's rows at once (still telling the server, which can remember it);
   only send `active` when opening, so a later refresh doesn't pull the player back.
+  A widget text packet carries at most 64 KB, so a long list can arrive in parts:
+  `search.extraDataComponents` lists more hidden components whose rows follow
+  `dataComponent`'s, and each part can be replaced on its own.
   `plugins/interface/TeleportInterface.plugin.js` uses all of these.
 - `sendString` skips text equal to the last it sent to that component. Text the client
   changes on its own (a typed search) is unknown to the server, so clear its copy with

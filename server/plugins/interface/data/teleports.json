@@ -676,13 +676,10 @@
       "name": "Gemstone Crab",
       "tab": "bosses",
       "group": "Bosses",
-      "tile": [
-        1277,
-        3168,
-        0
-      ],
+      "live": "gemstone-crab:location",
+      "unavailable": "The Gemstone Crab hasn't surfaced yet.",
       "icon": "uncut_diamond",
-      "description": "The first of the Gemstone Crab's three mines. It moves between them.",
+      "description": "The mine the Gemstone Crab is in now, or rises at next while it burrows.",
       "terms": "crab"
     },
     {
@@ -1470,6 +1467,1221 @@
       "terms": "defender"
     },
     {
+      "key": "port-port-sarim",
+      "name": "Port Sarim",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        3050,
+        3193,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Port Sarim dock, where a boat lets you ashore. Sailing 1 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-the-pandemonium",
+      "name": "The Pandemonium",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        3069,
+        2987,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The The Pandemonium dock, where a boat lets you ashore. Sailing 1 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-lands-end",
+      "name": "Land's End",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1506,
+        3403,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Land's End dock, where a boat lets you ashore. Sailing 5 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-musa-point",
+      "name": "Musa Point",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2960,
+        3146,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Musa Point dock, where a boat lets you ashore. Sailing 10 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-hosidius",
+      "name": "Hosidius",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1726,
+        3453,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Hosidius dock, where a boat lets you ashore. Sailing 5 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-rimmington",
+      "name": "Rimmington",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2907,
+        3225,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Rimmington dock, where a boat lets you ashore. Sailing 18 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-catherby",
+      "name": "Catherby",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2796,
+        3413,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Catherby dock, where a boat lets you ashore. Sailing 20 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-port-piscarilius",
+      "name": "Port Piscarilius",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1845,
+        3688,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Port Piscarilius dock, where a boat lets you ashore. Sailing 15 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-brimhaven",
+      "name": "Brimhaven",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2759,
+        3230,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Brimhaven dock, where a boat lets you ashore. Sailing 25 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-ardougne",
+      "name": "Ardougne",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2671,
+        3266,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Ardougne dock, where a boat lets you ashore. Sailing 28 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-port-khazard",
+      "name": "Port Khazard",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2685,
+        3162,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Port Khazard dock, where a boat lets you ashore. Sailing 30 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-witchaven",
+      "name": "Witchaven",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2746,
+        3305,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Witchaven dock, where a boat lets you ashore. Sailing 34 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-entrana",
+      "name": "Entrana",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2878,
+        3336,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Entrana dock, where a boat lets you ashore. Sailing 36 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-civitas-illa-fortis",
+      "name": "Civitas illa Fortis",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1776,
+        3142,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Civitas illa Fortis dock, where a boat lets you ashore. Sailing 38 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-corsair-cove",
+      "name": "Corsair Cove",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2579,
+        2844,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Corsair Cove dock, where a boat lets you ashore. Sailing 40 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-cairn-isle",
+      "name": "Cairn Isle",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2751,
+        2952,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Cairn Isle dock, where a boat lets you ashore. Sailing 42 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-sunset-coast",
+      "name": "Sunset Coast",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1513,
+        2974,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Sunset Coast dock, where a boat lets you ashore. Sailing 44 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-the-summer-shore",
+      "name": "The Summer Shore",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        3174,
+        2368,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The The Summer Shore dock, where a boat lets you ashore. Sailing 45 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-aldarin",
+      "name": "Aldarin",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1452,
+        2969,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Aldarin dock, where a boat lets you ashore. Sailing 46 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-ruins-of-unkah",
+      "name": "Ruins of Unkah",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        3145,
+        2825,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Ruins of Unkah dock, where a boat lets you ashore. Sailing 48 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-void-knights-outpost",
+      "name": "Void Knights' Outpost",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2651,
+        2677,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Void Knights' Outpost dock, where a boat lets you ashore. Sailing 50 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-port-roberts",
+      "name": "Port Roberts",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1862,
+        3307,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Port Roberts dock, where a boat lets you ashore. Sailing 50 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-red-rock",
+      "name": "Red Rock",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2808,
+        2509,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Red Rock dock, where a boat lets you ashore. Sailing 52 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-rellekka",
+      "name": "Rellekka",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2630,
+        3704,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Rellekka dock, where a boat lets you ashore. Sailing 62 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-etceteria",
+      "name": "Etceteria",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2613,
+        3841,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Etceteria dock, where a boat lets you ashore. Sailing 65 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-port-tyras",
+      "name": "Port Tyras",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2144,
+        3121,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Port Tyras dock, where a boat lets you ashore. Sailing 66 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-deepfin-point",
+      "name": "Deepfin Point",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        1923,
+        2759,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Deepfin Point dock, where a boat lets you ashore. Sailing 67 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-jatizso",
+      "name": "Jatizso",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2412,
+        3781,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Jatizso dock, where a boat lets you ashore. Sailing 68 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-neitiznot",
+      "name": "Neitiznot",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2310,
+        3782,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Neitiznot dock, where a boat lets you ashore. Sailing 68 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-prifddinas",
+      "name": "Prifddinas",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2158,
+        3325,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Prifddinas dock, where a boat lets you ashore. Sailing 70 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-piscatoris",
+      "name": "Piscatoris",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2305,
+        3689,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Piscatoris dock, where a boat lets you ashore. Sailing 75 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-lunar-isle",
+      "name": "Lunar Isle",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2151,
+        3881,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Lunar Isle dock, where a boat lets you ashore. Sailing 76 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-isle-of-souls",
+      "name": "Isle of Souls",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2282,
+        2822,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Isle of Souls, where a moored boat lets you off. Sailing 55 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-waterbirth-island",
+      "name": "Waterbirth Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2542,
+        3765,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Waterbirth Island, where a moored boat lets you off. Sailing 74 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-weiss",
+      "name": "Weiss",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2861,
+        3970,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Weiss, where a moored boat lets you off. Sailing 80 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-dognose-island",
+      "name": "Dognose Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        3060,
+        2638,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Dognose Island, where a moored boat lets you off. Sailing 40 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-remote-island",
+      "name": "Remote Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2971,
+        2602,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on a remote island, where a moored boat lets you off. Sailing 45 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-the-little-pearl",
+      "name": "The Little Pearl",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        3354,
+        2215,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Little Pearl, where a moored boat lets you off. Sailing 45 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-the-onyx-crest",
+      "name": "The Onyx Crest",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2997,
+        2287,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Onyx Crest, where a moored boat lets you off. Sailing 47 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-last-light",
+      "name": "Last Light",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2851,
+        2326,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Last Light, where a moored boat lets you off. Sailing 52 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-charred-island",
+      "name": "Charred Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2660,
+        2393,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Charred Island, where a moored boat lets you off. Sailing 60 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-vatrachos-island",
+      "name": "Vatrachos Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1871,
+        2984,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Vatrachos Island, where a moored boat lets you off. Sailing 46 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-anglers-retreat",
+      "name": "Anglers' Retreat",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2465,
+        2720,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Anglers' Retreat, where a moored boat lets you off. Sailing 51 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-minotaurs-rest",
+      "name": "Minotaurs' Rest",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1957,
+        3116,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Minotaurs' Rest, where a moored boat lets you off. Sailing 54 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-isle-of-bones",
+      "name": "Isle of Bones",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2533,
+        2529,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Isle of Bones, where a moored boat lets you off. Sailing 56 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-tear-of-the-soul",
+      "name": "Tear of the Soul",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2319,
+        2772,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Tear of the Soul, where a moored boat lets you off. Sailing 61 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-wintumber-island",
+      "name": "Wintumber Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2056,
+        2605,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Wintumber Island, where a moored boat lets you off. Sailing 63 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-the-crown-jewel",
+      "name": "The Crown Jewel",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1764,
+        2658,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Crown Jewel, where a moored boat lets you off. Sailing 64 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-rainbows-end",
+      "name": "Rainbow's End",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2344,
+        2269,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Rainbow's End, where a moored boat lets you off. Sailing 69 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-sunbleak-island",
+      "name": "Sunbleak Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2189,
+        2325,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Sunbleak Island, where a moored boat lets you off. Sailing 72 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-shimmering-atoll",
+      "name": "Shimmering Atoll",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1556,
+        2772,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on the Shimmering Atoll, where a moored boat lets you off. Sailing 49 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-laguna-aurorae",
+      "name": "Laguna Aurorae",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1202,
+        2731,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Laguna Aurorae, where a moored boat lets you off. Sailing 58 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-chinchompa-island",
+      "name": "Chinchompa Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1892,
+        3429,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Chinchompa Island, where a moored boat lets you off. Sailing 42 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-lledrith-island",
+      "name": "Lledrith Island",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2096,
+        3187,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Lledrith Island, where a moored boat lets you off. Sailing 66 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-ynysdail",
+      "name": "Ynysdail",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2221,
+        3464,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Ynysdail, where a moored boat lets you off. Sailing 73 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-buccaneers-haven",
+      "name": "Buccaneers' Haven",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2080,
+        3689,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Buccaneers' Haven, where a moored boat lets you off. Sailing 76 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-drumstick-isle",
+      "name": "Drumstick Isle",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2149,
+        3529,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Drumstick Isle, where a moored boat lets you off. Sailing 79 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-brittle-isle",
+      "name": "Brittle Isle",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        1954,
+        4054,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Brittle Isle, where a moored boat lets you off. Sailing 81 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-grimstone",
+      "name": "Grimstone",
+      "tab": "places",
+      "group": "Islands",
+      "tile": [
+        2927,
+        4055,
+        0
+      ],
+      "icon": "sailing_charting_spyglass",
+      "description": "Ashore on Grimstone, where a moored boat lets you off. Sailing 87 to sail there.",
+      "terms": "sailing port dock boat island"
+    },
+    {
+      "key": "port-wyrmscraig",
+      "name": "Wyrmscraig",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2569,
+        2294,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Wyrmscraig dock, where a boat lets you ashore. Sailing 62 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "port-wyrmscraig-cave",
+      "name": "Wyrmscraig Cavern",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2583,
+        8605,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The Wyrmscraig Cavern dock, where a boat lets you ashore. Sailing 62 to sail there.",
+      "terms": "sailing port dock boat"
+    },
+    {
+      "key": "shipyard",
+      "name": "Shipyard",
+      "tab": "places",
+      "group": "Ports",
+      "tile": [
+        2086,
+        2724,
+        0
+      ],
+      "icon": "sailing_skillguide_anchor",
+      "description": "The shipyard, where boats are built and fitted.",
+      "terms": "sailing boat"
+    },
+    {
+      "key": "house-rimmington",
+      "name": "Rimmington",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        2954,
+        3224,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Rimmington.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-taverley",
+      "name": "Taverley",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        2894,
+        3465,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Taverley.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-pollnivneach",
+      "name": "Pollnivneach",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        3340,
+        3004,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Pollnivneach.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-hosidius",
+      "name": "Hosidius",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        1744,
+        3517,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Hosidius.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-aldarin",
+      "name": "Aldarin",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        1422,
+        2965,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Aldarin.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-rellekka",
+      "name": "Rellekka",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        2670,
+        3632,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Rellekka.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-brimhaven",
+      "name": "Brimhaven",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        2758,
+        3178,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Brimhaven.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-yanille",
+      "name": "Yanille",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        2544,
+        3095,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Yanille.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "house-prifddinas",
+      "name": "Prifddinas",
+      "tab": "places",
+      "group": "House portals",
+      "tile": [
+        3239,
+        6076,
+        0
+      ],
+      "icon": "poh_tablet_teleporttohouse",
+      "description": "The house portal in Prifddinas.",
+      "terms": "poh house portal construction"
+    },
+    {
+      "key": "slayer-turael",
+      "name": "Turael",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        2931,
+        3537,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Burthorpe. No combat level needed.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-spria",
+      "name": "Spria",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        3091,
+        3267,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Draynor Village. No combat level needed.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-mazchna",
+      "name": "Mazchna",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        3511,
+        3508,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Canifis. Needs combat level 20.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-vannaka",
+      "name": "Vannaka",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        3147,
+        9913,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Edgeville Dungeon. Needs combat level 40.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-chaeldar",
+      "name": "Chaeldar",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        2444,
+        4432,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Zanaris. Needs combat level 70.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-konar-quo-maten",
+      "name": "Konar quo Maten",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        1308,
+        3785,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Mount Karuulm. Needs combat level 75; every task names where to kill it.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-nieve",
+      "name": "Nieve",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        2465,
+        3491,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "The Tree Gnome Stronghold. Needs combat level 85.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-duradel",
+      "name": "Duradel",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        2869,
+        2983,
+        1
+      ],
+      "icon": "slayer_gem",
+      "description": "Shilo Village, upstairs in his hut. Needs combat level 100 and 50 Slayer.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-mortimer",
+      "name": "Mortimer",
+      "tab": "places",
+      "group": "Slayer masters",
+      "tile": [
+        2589,
+        8615,
+        0
+      ],
+      "icon": "slayer_gem",
+      "description": "Needs combat level 100 and 70 Slayer.",
+      "terms": "slayer master task"
+    },
+    {
+      "key": "slayer-tower",
+      "name": "Slayer Tower",
+      "tab": "places",
+      "group": "Dungeons",
+      "tile": [
+        3428,
+        3533,
+        0
+      ],
+      "icon": "slayer_ring_8",
+      "description": "Outside the Slayer Tower door in Morytania.",
+      "terms": "slayer"
+    },
+    {
+      "key": "catacombs-of-kourend",
+      "name": "Catacombs of Kourend",
+      "tab": "places",
+      "group": "Dungeons",
+      "tile": [
+        1639,
+        3673,
+        0
+      ],
+      "icon": "cata_totem",
+      "description": "By the statue in Kourend Castle's courtyard, over the catacombs.",
+      "terms": "slayer"
+    },
+    {
+      "key": "stronghold-of-security",
+      "name": "Stronghold of Security",
+      "tab": "places",
+      "group": "Dungeons",
+      "tile": [
+        3081,
+        3421,
+        0
+      ],
+      "icon": "fake_coins",
+      "description": "The entrance in Barbarian Village.",
+      "terms": "sos"
+    },
+    {
+      "key": "edgeville-dungeon",
+      "name": "Edgeville Dungeon",
+      "tab": "places",
+      "group": "Dungeons",
+      "tile": [
+        3096,
+        3467,
+        0
+      ],
+      "icon": "slayer_ring_8",
+      "description": "Beside the trapdoor in Edgeville.",
+      "terms": "slayer"
+    },
+    {
+      "key": "wyrmscraig",
+      "name": "Wyrmscraig",
+      "tab": "places",
+      "group": "Dungeons",
+      "tile": [
+        2592,
+        2220,
+        0
+      ],
+      "icon": "slayer_ring_8",
+      "description": "The town on the Wyrmscraig coast.",
+      "terms": "wyrms slayer"
+    },
+    {
+      "key": "wyrmscraig-cave",
+      "name": "Wyrmscraig cave",
+      "tab": "places",
+      "group": "Dungeons",
+      "tile": [
+        2530,
+        2205,
+        0
+      ],
+      "icon": "slayer_ring_8",
+      "description": "Outside the cave below Wyrmscraig.",
+      "terms": "wyrms slayer"
+    },
+    {
+      "key": "shooting-star",
+      "name": "Shooting star",
+      "tab": "skilling",
+      "group": "Skilling",
+      "live": "shooting-stars:current",
+      "unavailable": "No shooting star has landed at the moment.",
+      "icon": "star_dust",
+      "description": "Beside the star that has crashed most recently, while one is down.",
+      "terms": "mining stardust"
+    },
+    {
       "key": "artio",
       "name": "Artio",
       "tab": "wilderness",
@@ -1728,6 +2940,76 @@
       "terms": "agility"
     },
     {
+      "key": "ferox-enclave",
+      "name": "Ferox Enclave",
+      "tab": "wilderness",
+      "group": "Places",
+      "tile": [
+        3151,
+        3636,
+        0
+      ],
+      "icon": "ring_of_dueling_8",
+      "description": "The safe enclave, with a bank and a pool.",
+      "terms": "ferox safe bank"
+    },
+    {
+      "key": "revenant-caves-south",
+      "name": "Revenant Caves (south)",
+      "tab": "wilderness",
+      "group": "Places",
+      "tile": [
+        3080,
+        3655,
+        0
+      ],
+      "icon": "wild_cave_shard",
+      "description": "By the southern entrance to the Revenant Caves.",
+      "terms": "revenants revs"
+    },
+    {
+      "key": "revenant-caves-middle",
+      "name": "Revenant Caves (middle)",
+      "tab": "wilderness",
+      "group": "Places",
+      "tile": [
+        3074,
+        3739,
+        0
+      ],
+      "icon": "wild_cave_shard",
+      "description": "By the middle entrance to the Revenant Caves.",
+      "terms": "revenants revs"
+    },
+    {
+      "key": "revenant-caves-north",
+      "name": "Revenant Caves (north)",
+      "tab": "wilderness",
+      "group": "Places",
+      "tile": [
+        3128,
+        3832,
+        0
+      ],
+      "icon": "wild_cave_shard",
+      "description": "By the northern entrance to the Revenant Caves.",
+      "terms": "revenants revs"
+    },
+    {
+      "key": "chaos-altar",
+      "name": "Chaos altar",
+      "tab": "wilderness",
+      "group": "Altars",
+      "tile": [
+        2948,
+        3819,
+        0
+      ],
+      "icon": "dragon_bones",
+      "description": "The Chaos Temple altar, where bones offered may be saved.",
+      "terms": "prayer bones gilded"
+    },
+    {
       "key": "cooking-guild",
       "name": "Cooking Guild",
       "tab": "skilling",
@@ -1838,6 +3120,20 @@
       "icon": "bronze_axe",
       "description": "Outside the Woodcutting Guild.",
       "terms": "guild"
+    },
+    {
+      "key": "ectofuntus",
+      "name": "Ectofuntus",
+      "tab": "skilling",
+      "group": "Skilling",
+      "tile": [
+        3659,
+        3522,
+        0
+      ],
+      "icon": "ectophial",
+      "description": "Beside the Ectofuntus in Port Phasmatys.",
+      "terms": "prayer bones ecto"
     },
     {
       "key": "blast-furnace",

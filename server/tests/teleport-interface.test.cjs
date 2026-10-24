@@ -15,6 +15,7 @@ const TeleportInterface = require("../plugins/interface/TeleportInterface.plugin
 
 const { COMPONENT, TAB, TAB_UIDS, ROW_UIDS, OP, Destinations, uid } = TeleportInterface._test;
 const teleports = [];
+const liveTiles = new Map();
 let dialogue;
 let commands;
 let buttons;
@@ -41,7 +42,10 @@ before(async () => {
     persistAttribute() {},
     registerCommand: (name, handler) => commands.set(name, handler),
     onInterfaceActionButton: (ids, handler) => ids.forEach((id) => buttons.set(id, handler)),
-    emitCustomEvent: (name, request) => { if (name === "combat-achievements:count") request.total = request.monster === "Zulrah" ? 12 : 0; },
+    emitCustomEvent: (name, request) => {
+      if (name === "combat-achievements:count") request.total = request.monster === "Zulrah" ? 12 : 0;
+      if (liveTiles.has(name)) request.tile = liveTiles.get(name);
+    },
   });
 });
 
@@ -73,7 +77,8 @@ function player() {
 }
 
 const run = (p, ...parts) => commands.get("teleports")({ player: p, parts: ["teleports", ...parts] });
-const catalog = (p) => JSON.parse(p.texts.get(uid(COMPONENT.DATA)));
+const { DATA_PART_COMPONENTS } = require("../plugins/interface/teleportinterface/Layout.TeleportInterface");
+const catalog = (p) => DATA_PART_COMPONENTS.flatMap((component) => JSON.parse(p.texts.get(uid(component))));
 const layout = (p) => JSON.parse(p.texts.get(uid(COMPONENT.LAYOUT)));
 /** What the client lists on a tab (by default the player's), as the runtime builds it. */
 const rows = (p, tab = p.getAttribute("teleports:tab")) => {
@@ -97,7 +102,11 @@ test("every destination lands on a free tile, with a known icon, type and tab", 
     assert.ok(core.TeleportType[entry.type], `${entry.key}: unknown type ${entry.type}`);
     assert.ok(entry.tabs.every((tab) => TAB_ORDER.includes(tab) && tab !== TAB.SAVED && tab !== TAB.ALL), `${entry.key}: bad tab`);
     assert.ok(entry.description, `${entry.key}: no description`);
-    if (RegionManager.blocked(Destinations.location(entry), null)) blocked.push(`${entry.key} ${entry.tile}`);
+    if (entry.live) {
+      assert.ok(!entry.tile && entry.unavailable, `${entry.key}: a live destination has no tile but says when it's unavailable`);
+      continue;
+    }
+    if (RegionManager.blocked(Destinations.location(entry.tile), null)) blocked.push(`${entry.key} ${entry.tile}`);
   }
   assert.deepEqual(blocked, [], "landing tiles must be walkable");
   for (const entry of DESTINATIONS.filter((row) => row.tabs.includes(TAB.WILDERNESS))) {
@@ -109,9 +118,11 @@ test("every destination lands on a free tile, with a known icon, type and tab", 
 test("one catalog and a layout per tab; the client switches tabs, the server remembers", () => {
   const p = player();
   run(p);
-  // Widget text travels in a packet with a 16-bit length; keep the catalog well inside it.
-  const catalogBytes = Buffer.byteLength(p.texts.get(uid(COMPONENT.DATA)), "latin1");
-  assert.ok(catalogBytes < 48000, `the catalog is ${catalogBytes} bytes, too close to the 65535-byte packet limit`);
+  // Widget text travels in a packet with a 16-bit length; every part stays well inside it.
+  for (const component of DATA_PART_COMPONENTS) {
+    const bytes = Buffer.byteLength(p.texts.get(uid(component)), "latin1");
+    assert.ok(bytes < 48000, `a catalog part is ${bytes} bytes, too close to the 65535-byte packet limit`);
+  }
   assert.equal(catalog(p).length, Destinations.DESTINATIONS.length, "every destination is sent once");
   assert.equal(layout(p).active, Destinations.TAB_ORDER.indexOf(TAB.ALL), "a first open shows All");
   assert.equal(layout(p).tabs.length, Destinations.TAB_ORDER.length);
@@ -222,4 +233,41 @@ test("favourites and recents fill the Saved tab; ::teleports last repeats the ne
   teleports.length = 0;
   run(p, "last");
   assert.deepEqual([teleports[0].location.getX(), teleports[0].location.getY()], Destinations.byKey("yama").tile.slice(0, 2));
+});
+
+test("live destinations ask their plugin where to go, and say so when there's nowhere", () => {
+  const p = player();
+  teleports.length = 0;
+  run(p);
+  clickRow(p, "shooting-star", OP.TELEPORT);
+  assert.deepEqual(p.messages, ["No shooting star has landed at the moment."]);
+  assert.equal(teleports.length, 0);
+  liveTiles.set("shooting-stars:current", [3029, 3348, 0]);
+  run(p);
+  clickRow(p, "shooting-star", OP.TELEPORT);
+  assert.deepEqual([teleports[0].location.getX(), teleports[0].location.getY()], [3029, 3348]);
+  assert.equal(p.getAttribute(TeleportInterface._test.RECENT_ATTRIBUTE)[0], "shooting-star");
+  dialogue = undefined;
+  liveTiles.set("shooting-stars:current", [3093, 3756, 0]);
+  run(p);
+  clickRow(p, "shooting-star", OP.TELEPORT);
+  assert.match(dialogue?.title ?? "", /^Teleport into level \d+ Wilderness\?$/, "a star in the Wilderness asks first");
+  liveTiles.clear();
+});
+
+test("the shooting star and Gemstone Crab plugins answer where they are", () => {
+  const Common = require("../plugins/skills/shootingstars/Common.ShootingStars");
+  const request = {};
+  Common.locateStar(request);
+  assert.equal(request.tile, undefined, "no star, no tile");
+  Common.world.star = { x: 3030, y: 3348, z: 0, gone: false };
+  Common.locateStar(request);
+  assert.deepEqual(request.tile, [3029, 3348, 0], "the tile west of the star's footprint");
+  Common.world.star = null;
+  const Crab = require("../plugins/bosses/GemstoneCrab.plugin")._test;
+  const answer = (setup) => { Object.assign(Crab.state, setup); const r = {}; Crab.locate(r); return r.tile; };
+  assert.equal(answer({ spot: -1, nextSpot: -1, crab: null, burrow: null }), undefined, "before the first crab");
+  assert.deepEqual(answer({ spot: 1, nextSpot: 2, crab: {}, burrow: null }), [...Crab.SPOTS[1].exit, 0], "the active crab's mine");
+  assert.deepEqual(answer({ spot: 1, nextSpot: 2, crab: {}, burrow: {} }), [...Crab.SPOTS[2].exit, 0], "burrowing: the next mine");
+  Object.assign(Crab.state, { spot: -1, nextSpot: -1, crab: null, burrow: null });
 });
