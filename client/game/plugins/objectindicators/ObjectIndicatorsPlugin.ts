@@ -15,6 +15,7 @@ import {
     fromLocalInstance,
     fromRegion,
     regionIdOf,
+    sceneRegionIds,
     toLocalInstance,
     type InstanceScene,
     type WorldPoint,
@@ -253,8 +254,8 @@ export class ObjectIndicatorsPlugin extends Plugin {
     /** RuneLite's getUsedColors: colours of the points in the loaded regions. */
     private usedColors(fill: boolean): number[] {
         const used: (number | undefined)[] = [];
-        for (const points of this.points.values()) {
-            for (const p of points) used.push(fill ? p.fillColor : p.borderColor);
+        for (const region of sceneRegionIds(this.instanceScene())) {
+            for (const p of this.points.get(region) ?? []) used.push(fill ? p.fillColor : p.borderColor);
         }
         return colorChoices(used, fill);
     }
@@ -295,7 +296,7 @@ export class ObjectIndicatorsPlugin extends Plugin {
             outlines.push({
                 loc: object.loc,
                 color: argb & 0xffffff,
-                alpha: (argb >>> 24 || 255) / 255,
+                alpha: (argb >>> 24) / 255,
                 width: Number(this.config.borderWidth()) || 2,
             });
         }
@@ -397,7 +398,7 @@ export class ObjectIndicatorsPlugin extends Plugin {
         Object.assign(input.style, { position: "fixed", left: "-100px", top: "0", opacity: "0", pointerEvents: "none" });
         input.addEventListener("change", () => {
             const rgb = parseInt(input.value.slice(1), 16);
-            const alpha = (current >>> 24) || 0xff;
+            const alpha = current >>> 24;
             if (Number.isInteger(rgb)) apply(((alpha << 24) | rgb) >>> 0);
             input.remove();
         }, { once: true });

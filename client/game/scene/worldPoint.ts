@@ -36,6 +36,25 @@ export function rotateInChunk(point: WorldPoint, rotation: number): WorldPoint {
 /** An instance's chunk templates and scene base (ClientState's). */
 export type InstanceScene = { templates: number[][][] | null; baseX: number; baseY: number };
 
+/** The map regions in the 13-chunk scene, or the source regions copied into an instance. */
+export function sceneRegionIds(scene: InstanceScene): Set<number> {
+    const regions = new Set<number>();
+    if (scene.templates) {
+        for (const plane of scene.templates) for (const column of plane) for (const packed of column) {
+            if (packed === -1 || packed === undefined) continue;
+            const { chunkX, chunkY } = unpackTemplateChunk(packed);
+            regions.add(regionIdOf(chunkX * CHUNK_SIZE, chunkY * CHUNK_SIZE));
+        }
+    } else {
+        const lastX = (scene.baseX + 13 * CHUNK_SIZE - 1) >> 6;
+        const lastY = (scene.baseY + 13 * CHUNK_SIZE - 1) >> 6;
+        for (let x = scene.baseX >> 6; x <= lastX; x++) {
+            for (let y = scene.baseY >> 6; y <= lastY; y++) regions.add((x << 8) | y);
+        }
+    }
+    return regions;
+}
+
 /**
  * RuneLite's WorldPoint.fromLocalInstance: inside an instance, the template (real-world) tile
  * a scene tile was copied from; outside one, the tile itself.

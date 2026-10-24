@@ -23,13 +23,16 @@ function rgba(argb: number): Rgba {
 export class ObjectIndicatorsOverlay implements WidgetOverlay {
     readonly drawBelowWidgets = true;
     private shapes?: Shape[];
+    private signatureShapes: Shape[] = [];
+    private revision = 0;
 
     constructor(private readonly plugin: ObjectIndicatorsPlugin) {}
 
     signature(): string {
         this.shapes = this.build();
-        if (this.shapes.length === 0) return "";
-        return JSON.stringify(this.shapes.map((s) => [s.points.map(([x, y]) => [Math.round(x), Math.round(y)]), s.stroke, s.fill, s.width]));
+        if (!sameShapes(this.shapes, this.signatureShapes)) this.revision++;
+        this.signatureShapes = this.shapes;
+        return this.shapes.length === 0 ? "" : String(this.revision);
     }
 
     draw(context: WidgetOverlayDrawContext): { x: number; y: number; w: number; h: number }[] {
@@ -121,4 +124,21 @@ export class ObjectIndicatorsOverlay implements WidgetOverlay {
         }
         return out;
     }
+}
+
+/** Repaint only when the rounded screen geometry or its styling changes. */
+function sameShapes(a: readonly Shape[], b: readonly Shape[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        const left = a[i], right = b[i];
+        if (left.width !== right.width || left.points.length !== right.points.length) return false;
+        for (let c = 0; c < 4; c++) {
+            if (left.stroke[c] !== right.stroke[c] || left.fill[c] !== right.fill[c]) return false;
+        }
+        for (let p = 0; p < left.points.length; p++) {
+            if (Math.round(left.points[p][0]) !== Math.round(right.points[p][0]) ||
+                Math.round(left.points[p][1]) !== Math.round(right.points[p][1])) return false;
+        }
+    }
+    return true;
 }

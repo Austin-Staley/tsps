@@ -189,13 +189,29 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS, LocHighlightTarget, NpcHighlightTarget } from "../constants";
 
+type LocModelPoints = ReadonlyArray<readonly [number, number, number]>;
+type LocModelHighlightParts = ReadonlyArray<LocModelPoints>;
+type LocHighlightCacheEntry = { dependencies: readonly unknown[]; parts: LocModelHighlightParts };
+
+// Keep world-space geometry together at the shared hull/outline boundary. Entries are bounded
+// per renderer; discarded renderers and the flattened points can be collected independently.
+const LOC_HIGHLIGHT_CACHE_LIMIT = 256;
+const locHighlightCaches = new WeakMap<WebGLOsrsRendererHost, Map<string, LocHighlightCacheEntry>>();
+const flattenedLocParts = new WeakMap<LocModelHighlightParts, LocModelPoints>();
+
 /** The loc's model triangles, all of its models together (a wall corner has two). */
 export function buildLocModelHighlightTriangles(host: WebGLOsrsRendererHost,
         target: LocHighlightTarget,
     ): ReadonlyArray<readonly [number, number, number]> | undefined {
         const parts = buildLocModelHighlightParts(host, target);
         if (!parts || parts.length === 0) return undefined;
-        return parts.length === 1 ? parts[0] : parts.flat();
+        if (parts.length === 1) return parts[0];
+        let points = flattenedLocParts.get(parts);
+        if (!points) {
+            points = parts.flat();
+            flattenedLocParts.set(parts, points);
+        }
+        return points;
 }
 
 /**
@@ -210,7 +226,8 @@ export function buildLocModelHighlightParts(host: WebGLOsrsRendererHost,
         const locModelLoader = host.getInteractLocModelLoader();
         if (!locModelLoader) return undefined;
 
-        let locType = host.osrsClient.locTypeLoader.load(target.locId | 0);
+        const sourceType = host.osrsClient.locTypeLoader.load(target.locId | 0);
+        let locType = sourceType;
         if (!locType) return undefined;
         let sizeX = Math.max(1, Number(locType.sizeX ?? 1));
         let sizeY = Math.max(1, Number(locType.sizeY ?? 1));
@@ -284,6 +301,30 @@ export function buildLocModelHighlightParts(host: WebGLOsrsRendererHost,
             baseY += host.getWorldEntityDeckHeight(0, 0) / 128.0;
         }
 
+        const key = `${target.locId},${target.tileX},${target.tileY},${target.plane},${rawType},${rawRotation},${!!target.overworldProxy}`;
+        const dependencies: unknown[] = [host.osrsClient.locTypeLoader, sourceType, locType,
+            locModelLoader, host.mapManager, locMap, heightMap, seqId, seqFrame, baseY,
+            baseEntityX, baseEntityZ, isOverlay,
+            ...(locMap?.tileLocIdsByLevel ?? []), ...(locMap?.tileLocTypeRotByLevel ?? []),
+        ];
+        // Validate wall placement every call: a wall's form can change independently of the
+        // decoration. This lookup is cheap compared with animating and extracting every face.
+        for (const part of parts) dependencies.push(part.modelType, part.modelRotation, part.dx, part.dz);
+        const modelDependencies = () => parts.map((part) => locModelLoader.modelCache?.get(
+            locType.types
+                ? part.modelRotation + (part.modelType << 3) + (locType.id << 10)
+                : part.modelRotation + (locType.id << 10),
+        ));
+        const currentDependencies = [...dependencies, ...modelDependencies()];
+        let cache = locHighlightCaches.get(host);
+        const cached = cache?.get(key);
+        if (cached && cached.dependencies.length === currentDependencies.length &&
+            cached.dependencies.every((value, index) => value === currentDependencies[index])) {
+            cache!.delete(key);
+            cache!.set(key, cached);
+            return cached.parts;
+        }
+
         const out: ReadonlyArray<readonly [number, number, number]>[] = [];
         for (const part of parts) {
             let model = locModelLoader.getModelAnimated(
@@ -320,6 +361,21 @@ export function buildLocModelHighlightParts(host: WebGLOsrsRendererHost,
             }));
             if (points && points.length >= 3) out.push(points);
         }
+        // getModelAnimated can temporarily return a base pose while animation assets load.
+        // Never freeze that fallback (or a partially loaded multi-model loc) into the cache.
+        let animationReady = seqId < 0 || seqFrame < 0;
+        if (!animationReady) {
+            const sequence = locModelLoader.seqTypeLoader.load(seqId);
+            animationReady = sequence.isSkeletalSeq()
+                ? !!locModelLoader.skeletalSeqLoader?.load(sequence.skeletalId)
+                : !sequence.frameIds?.length || !!locModelLoader.seqFrameLoader.load(sequence.frameIds[seqFrame]);
+        }
+        if (locMap && out.length === parts.length && animationReady && !target.overworldProxy) {
+            if (!cache) locHighlightCaches.set(host, cache = new Map());
+            cache.delete(key);
+            cache.set(key, { dependencies: [...dependencies, ...modelDependencies()], parts: out });
+            if (cache.size > LOC_HIGHLIGHT_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+        } else cache?.delete(key);
         return out.length > 0 ? out : undefined;
     
 }

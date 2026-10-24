@@ -152,6 +152,29 @@ async function main(): Promise<void> {
     assert.deepEqual(menu.map((e) => e.option), ["Bank", UNMARK, "Mark border color", "Mark fill color", "Mark style", "Examine", "Cancel"]);
     assert.deepEqual(menu[3].subEntries!.map((e) => e.option).slice(-2), ["Pick color", "Reset"]);
     assert.deepEqual(menu[4].subEntries!.map((e) => e.option), ["Hull", "Outline", "Clickbox", "Tile", "Reset"]);
+
+    // Colour suggestions come from loaded regions, including saved marks not currently visible.
+    const farRegion = regionIdOf(6400, 6400);
+    const neighborRegion = regionIdOf(ClientState.baseX, ClientState.baseY);
+    plugin.points.set(farRegion, [{ ...point, regionId: farRegion, borderColor: 0xff123456, fillColor: 0x15123456 }]);
+    plugin.points.set(neighborRegion, [{ ...point, regionId: neighborRegion, borderColor: 0xff112233, fillColor: 0x15112233 }]);
+    const colorOptions = (index: number) => plugin.transformMenuEntries(examine(booth, "Bank booth"), world)[index].subEntries!.map((e) => e.option);
+    assert.ok(!colorOptions(2).includes("<col=123456>Set color"), "distant saved border colours are excluded");
+    assert.ok(!colorOptions(3).includes("<col=123456>Set color"), "distant saved fill colours are excluded");
+    assert.ok(colorOptions(2).includes("<col=112233>Set color"), "all points in a loaded region can supply colours");
+    assert.ok(colorOptions(3).includes("<col=112233>Set color"));
+
+    // Inside an instance, the copied template regions supply the colours, not its local coordinates.
+    ClientState.inInstance = true;
+    ClientState.instanceTemplateChunks = [0, 1, 2, 3].map(() => Array.from({ length: 13 }, () => new Array(13).fill(-1)));
+    ClientState.instanceTemplateChunks[0][0][0] = packTemplateChunk(0, 800, 800, 0);
+    assert.ok(colorOptions(2).includes("<col=123456>Set color"), "a loaded template region is included");
+    assert.ok(!colorOptions(2).includes("<col=112233>Set color"), "ordinary scene regions are excluded inside instances");
+    ClientState.inInstance = false;
+    ClientState.instanceTemplateChunks = null;
+    plugin.points.delete(farRegion);
+    plugin.points.delete(neighborRegion);
+
     menu[2].subEntries![0].onClick!();
     assert.equal(plugin.objects[0].point.borderColor, 0xffffff00, "the colour in use is offered first");
     menu[2].subEntries![1].onClick!();
@@ -160,15 +183,53 @@ async function main(): Promise<void> {
     assert.equal(plugin.objects[0].point.clickbox, true);
 
     // Overlay: the point's own style (clickbox) replaces the global hull; tile on top when toggled.
-    let sig = JSON.parse(plugin.widgetOverlay.signature());
-    assert.equal(sig.length, 1, "clickbox only");
+    const drawnShapeCount = () => {
+        let count = 0;
+        plugin.widgetOverlay.signature();
+        plugin.widgetOverlay.draw({ renderer: { drawPolygon() { count++; } } } as any);
+        return count;
+    };
+    assert.equal(drawnShapeCount(), 1, "clickbox only");
     menu = plugin.transformMenuEntries(examine(booth, "Bank booth"), world);
     menu[4].subEntries![4].onClick!();
     config.setConfigValue(ObjectIndicatorsConfig, "highlightTile", true);
-    sig = JSON.parse(plugin.widgetOverlay.signature());
-    assert.equal(sig.length, 2, "global: hull and tile");
+    assert.equal(drawnShapeCount(), 2, "global: hull and tile");
+    const originalStringify = JSON.stringify;
+    let serializations = 0;
+    try {
+        JSON.stringify = ((...args: any[]) => { serializations++; return (originalStringify as any)(...args); }) as typeof JSON.stringify;
+        const signature = plugin.widgetOverlay.signature();
+        assert.equal(plugin.widgetOverlay.signature(), signature, "stationary shapes reuse the repaint signature");
+        const project = client.sceneGeometry.worldToScreen;
+        client.sceneGeometry.worldToScreen = (x: number, h: number, y: number) => [x * 10 + 10, y * 10 + h * 10];
+        assert.notEqual(plugin.widgetOverlay.signature(), signature, "camera movement invalidates the projected shapes");
+        client.sceneGeometry.worldToScreen = project;
+        assert.equal(serializations, 0, "frame invalidation does not serialize all projected vertices");
+    } finally {
+        JSON.stringify = originalStringify;
+    }
     config.setConfigValue(ObjectIndicatorsConfig, "highlightOutline", true);
     assert.equal(plugin.locOutlines().length, 1);
+    plugin.updateObjectConfig(booth, (p) => { p.borderColor = 0x00ff0000; });
+    assert.equal(plugin.locOutlines()[0].alpha, 0, "transparent borders do not acquire opaque outlines");
+    const oldDocument = globalThis.document;
+    const pickerEvents = new Map<string, () => void>();
+    const picker = { dataset: {}, style: {}, value: "", remove() {}, showPicker() {},
+        addEventListener: (name: string, handler: () => void) => pickerEvents.set(name, handler) };
+    try {
+        (globalThis as any).document = { querySelectorAll: () => [], createElement: () => picker, body: { appendChild() {} } };
+        const borderMenu = plugin.transformMenuEntries(examine(booth, "Bank booth"), world)[2];
+        borderMenu.subEntries!.find((entry) => entry.option === "Pick color")!.onClick!();
+        picker.value = "#abcdef";
+        pickerEvents.get("change")!();
+        assert.equal(plugin.objects[0].point.borderColor, 0x00abcdef, "the colour picker preserves zero alpha too");
+    } finally {
+        if (oldDocument === undefined) delete (globalThis as any).document;
+        else (globalThis as any).document = oldDocument;
+    }
+    plugin.updateObjectConfig(booth, (p) => { p.borderColor = 0x80ff0000; });
+    assert.equal(plugin.locOutlines()[0].alpha, 128 / 255, "partial outline transparency is retained");
+    plugin.updateObjectConfig(booth, (p) => { p.borderColor = 0xffff0000; });
     config.setConfigValue(ObjectIndicatorsConfig, "highlightOutline", false);
     config.setConfigValue(ObjectIndicatorsConfig, "highlightTile", false);
 
