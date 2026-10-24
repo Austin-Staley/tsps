@@ -727,14 +727,15 @@ export function drawWrappedTextGL(
     const maxDescent = (font.maxDescent ?? 0) | 0;
     const autoWrap = shouldAutoWrapText(logicalH, resolvedLineHeight, maxAscent, maxDescent);
     // short text widgets disable automatic wrapping and only honor explicit <br>.
-    const lines = autoWrap
-        ? wrapTextToWidth(text, Math.max(1, logicalW), measure)
-        : splitExplicitLineBreaks(text);
+    const paragraphs = splitExplicitLineBreaks(text).map((paragraph) => autoWrap
+        ? wrapTextToWidth(paragraph, Math.max(1, logicalW), measure)
+        : [paragraph]);
+    const lines = paragraphs.flat();
 
     const lineSegments: (TextSegment[] | null)[] = new Array(lines.length);
     const lineWidths: number[] = new Array(lines.length);
-    // Styles carry from one line to the next, as the OSRS client draws wrapped text.
-    const wrappedSegments = useMarkup ? parseWrappedOsrsMarkup(lines, color) : null;
+    // Automatic wraps carry styles; explicit breaks reset them, as AbstractFont does.
+    const wrappedSegments = useMarkup ? paragraphs.flatMap((lines) => parseWrappedOsrsMarkup(lines, color)) : null;
     for (let i = 0; i < lines.length; i++) {
         if (wrappedSegments) {
             const segs = wrappedSegments[i];
