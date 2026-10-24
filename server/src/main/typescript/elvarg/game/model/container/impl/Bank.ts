@@ -114,6 +114,9 @@ export class Bank extends ItemContainer {
                 }
 
                 slot = player.getBank(itemTab).getSlotForItemId(item);
+                // The aggregate count can include other charge/metadata states.
+                // Only clone the amount held by this exact source stack.
+                amount = Math.min(amount, player.getBank(itemTab).getItems()[slot].getAmount());
 
                 player.getBank(itemTab).switchsItem(
                     player.getInventory(),

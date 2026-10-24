@@ -49,5 +49,3 @@ module.exports = {
   META_KEY, MAX_CHARGES, CHARGES_PER_PAGE,
   get core() { return core; },
 };
-
-
