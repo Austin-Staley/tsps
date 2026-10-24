@@ -47,3 +47,44 @@ This is functional normal content, not complete1:1 parity. The28–42 melee dist
 The branch retains PR893 `a92357d8add71092ec5618f710e1f5b6744cca1c` and PR896 `ca5a794d7fda0bcf39491d1e32b6cc94566708ad`. Named transport/fragment hooks, generated Ketla dialogue integration, messages, visited varbit and colored duration/PB output coexist with the later phase/achievement/record work. Only unnamed scoreboard parents need a guarded generic fallback. Source-generated JSON is unchanged from main.
 
 Tests use real cache definitions, players, NPC processing, inventories, private areas and hit queues. Added integration regressions preserve launched volleys during melee recovery and cancel them on stop; existing real-NPC clocks verify boss/column/soul HP. The own-worktree MCP smoke verified north6371→6374 wake,900HP boss, a threshold screech with all eight columns, and exit reset of realm/HUD with no visible encounter actors. Client animation feel was not visually retested. Final build/suite totals are in the integration PR.
+
+
+### Whole-footprint diagonal pursuit regression (24 October 2026)
+
+The local release d583823ab still restricted diagonal movement to size-one actors,
+while upstream065d29b68 already permits all sizes when their entire footprint can
+travel. This is an observable normal Whisperer movement gap, separate from choosing
+an unmeasured binding duration. Two real MovementQueue regressions now cover it.
+
+Original [RSProx recording3285](https://rsprox.net/download/3285) has normal actor12205
+walk from2655,6360 at23066 to2654,6361 at23067 and2653,6362 at23068. The player remains
+at2649,6369. The recording belongs to an altered world; these NPC coordinates establish
+geometry only, not an ordinary freeze timer, damage roll or probability. Capture
+SHA2568cfd915cc9172769c3b871b17640f5b6141468f8e3796abf75d3ff461dace3da;
+filtered derived stream SHA256fb8225e522011e3311443d6a80e86581ea74d81300eaf2343f19549733110864.
+No player names, chat, saves or raw video are included in the regression.
+
+The first test asserts the NPC's size remains3 through transformation and follows
+both recorded steps using actual cache clipping. A second overlays an obstruction
+at2654,6363 in its private area: this blocks the diagonal's outer3x3 corner while
+leaving the cardinal west fallback open. It must square that corner, not pass
+through it. The old size-one guard was temporarily restored and rebuilt: the first
+regression failed at2654,6360 instead of2654,6361; restoring upstream and rebuilding
+passes both. The upstream change is regression-only; the local integration selects
+just the already-merged generic guard correction and excludes unrelated movement,
+raid, client and generated-data changes.
+
+This audit also reacquired two original ordinary videos: ManaCharge's [full kill](https://www.youtube.com/watch?v=gqwJCArI818)
+(uploaded15August2023) explicitly uses freeze counters; ImperatorBTW's [three tips](https://www.youtube.com/watch?v=5_WV8Wbhv4s)
+(uploaded6August2023) is an edited guide. Neither establishes a controlled natural
+expiry. Extile's previously incomplete [guide](https://www.youtube.com/watch?v=KsA9ENMEQII)
+is now recovered completely; its normal wake is consistent with known N/S faces,
+but its countered/edited binding sequence does not resolve8versus9ticks. The earlier
+incomplete-download note is historical, not the current source availability.
+
+A ten-tile centre-distance probe was rejected as an oracle: the Wiki does not define
+that distance convention for every direction and illustrates specific N/S lanes.
+Review also caught stale compiled movement code after switching branches, so all
+subsequent guard comparisons rebuild first. No binding/pursuit constant is changed
+from those exploratory failures. Wake directions, optional-bind selection, natural
+expiry, melee distribution/recovery and other listed numerical gaps remain open.
