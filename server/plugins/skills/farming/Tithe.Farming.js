@@ -9,6 +9,7 @@ const CROPS = [
     { name: "Bologano", level: 54, xp: 14, object: core.ObjectIdentifiers.BOLOGANO_SEEDLING },
     { name: "Logavano", level: 74, xp: 23, object: core.ObjectIdentifiers.LOGAVANO_SEEDLING },
 ];
+const TANGLEROOT_BASE_DENOMINATOR = 7_494_389;
 const REWARDS = [["Farmer's strawhat", 75], ["Farmer's jacket", 150], ["Farmer's shirt", 150],
     ["Farmer's boro trousers", 125], ["Farmer's boots", 50], ["Compost", 1], ["Supercompost", 5], ["Grape seed", 2],
     ["Gricoller's can", 200], ["Seed box", 250], ["Herb sack", 250], ["Herb box", 30], ["Seed pack", 30], ["Bologa's blessing", 1, 20]];
@@ -139,7 +140,7 @@ function titheObject(event) {
     else if (plant.stage === 3) {
         if (Patches.give(player, Data.itemId(CROPS[plant.crop].name + " fruit"))) {
             Patches.award(player, CROPS[plant.crop].xp);
-            core.PluginManager.emitCustomEvent("farming:success", { player, petChance: 7494000 - player.getSkillManager().getMaxLevel(core.Skill.FARMING) * 25 });
+            core.PluginManager.emitCustomEvent("farming:success", { player, petBase: TANGLEROOT_BASE_DENOMINATOR });
             player.performAnimation(new core.Animation(2282));
             plot.plant = undefined;
         }
