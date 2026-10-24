@@ -51,11 +51,16 @@ function fillLeak({ player, objectId }) {
     player.sendMessage(Shared.message("noPaste"));
     return true;
   }
-  if (!voyage.patch(player, index)) return true;
-  player.getInventory().deleteNumber(paste, 1);
+  if (voyage.leaks[index] !== Shared.DATA.values.hull.leak) return true;
+  // Captured: human_pickuptable with synth 2581, the paste used a tick later.
   Shared.animate(player, Shared.ids().seqs.fill);
-  player.sendMessage(Shared.message("filled"));
-  voyage.sync(player);
+  player.getPacketSender().sendSound(Shared.DATA.sounds.fill, 255, 0);
+  Shared.later(Shared.DATA.timing.fillDelay, () => {
+    if (Sea.sea.voyage !== voyage || !Shared.carries(player, paste) || !voyage.patch(player, index)) return;
+    player.getInventory().deleteNumber(paste, 1);
+    player.sendMessage(Shared.message("filled"));
+    voyage.sync(player);
+  });
   return true;
 }
 
@@ -116,7 +121,15 @@ function inspectBoatNet({ player, objectId }) {
 
 /** Which side a tentacle is on: the port one rises north of the deck. */
 function tentacleSide(npc) {
-  return npc.getLocation().getY() >= 4826 ? "port" : "starboard";
+  return npc.getLocation().getY() >= Shared.DATA.portFromY ? "port" : "starboard";
+}
+
+/** The trawler's own hack animation for this axe (human_trawler_hack_axe_<axe>), else its chop. */
+function hackAnimation(axe) {
+  const cache = Shared.core().CacheDefinitions;
+  const name = cache.getObjNames().get(axe.id) ?? "";
+  const kind = name.replace(/_axe.*$/, "").replace(/^trailblazer$/, "trailblazer");
+  return cache.getSeqId(`human_trawler_hack_axe_${kind}`) ?? axe.animationId ?? null;
 }
 
 function chopTentacle({ player, npc }, random = Math.random) {
@@ -124,13 +137,15 @@ function chopTentacle({ player, npc }, random = Math.random) {
   if (!voyage) return false;
   const request = { player, axe: null };
   Shared.api().emitCustomEvent("woodcutting:axe", request);
-  if (!request.axe) {
+  // A blessed axe can't chop it (Wiki).
+  if (!request.axe || request.axe.id === Shared.ids().items.blessedAxe) {
     player.sendMessage(Shared.message("noAxe"));
     return true;
   }
   // A calibrated curve: the Wiki says only that the axe and Woodcutting level matter.
   const chance = Math.min(0.9, 0.3 + Shared.level(player, "WOODCUTTING") / 200 + (request.axe.tier ?? 0) * 0.04);
-  Shared.animate(player, request.axe.animationId ?? Shared.ids().seqs.hammer);
+  const animation = hackAnimation(request.axe);
+  if (animation !== null) Shared.animate(player, animation);
   if (random() >= chance) {
     player.sendMessage(Shared.message("chopFail"));
     return true;
@@ -211,5 +226,5 @@ function attachActions(api) {
   api.onObjectInteraction("Axes", { Take: takeAxe });
 }
 
-module.exports = { attachActions, tentacleRoute, fillLeak, bail, emptyBucket, mendNet, chopTentacle, fixRail, tentacleSide, takeFromCrate, resolveSpots };
+module.exports = { attachActions, tentacleRoute, hackAnimation, fillLeak, bail, emptyBucket, mendNet, chopTentacle, fixRail, tentacleSide, takeFromCrate, resolveSpots };
 module.exports._crates = { takeBucket, takeBuckets5, takeBuckets10, takeBucketsX, takeHammer, takeAxe };

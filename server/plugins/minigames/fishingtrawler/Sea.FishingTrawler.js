@@ -2,7 +2,9 @@
 
 /**
  * The trawler at sea and the wreck it can become (Wiki: Fishing Trawler):
- * - the crew sails on the trawler (an Area round the boat), with trawler_overlay up;
+ * - sailing out and back shows ship_journey for 21 ticks (captured); at sea trawler_start and
+ *   trawler_overlay are up and trawler_status is 2;
+ * - the crew sails on the trawler (an Area round the boat);
  * - each tick runs the voyage and sends every player's HUD and boat varbits;
  * - back in port, each player's share goes to the net (Rewards.FishingTrawler.js);
  * - sunk, the crew is in the sea by the barrels; climbing one swims them ashore north of Port
@@ -27,16 +29,28 @@ function launch(players, random = Math.random) {
   if (sea.voyage || players.length === 0) return null;
   const voyage = new Voyage(players, random);
   sea.voyage = voyage;
-  const { arrive } = Shared.DATA.boat;
   for (const player of players) {
     player.setAttribute(Shared.AT_SEA_ATTRIBUTE, true);
-    player.moveTo(Shared.loc(arrive));
-    player.sendMessage(Shared.message("depart"));
-    player.getPacketSender().sendSubInterface(Shared.OVERLAY_HUD_UID, Shared.ids().interfaces.overlay, 1);
+    player.getPacketSender().sendInterface(Shared.ids().interfaces.journey);
+  }
+  Shared.later(Shared.DATA.timing.sailTicks, () => arrive(voyage));
+  return voyage;
+}
+
+/** The crew comes aboard at sea: the start interface, the HUD, and the trip starts ticking. */
+function arrive(voyage) {
+  if (sea.voyage !== voyage) return;
+  const ids = Shared.ids();
+  for (const player of voyage.crewList()) {
+    const sender = player.getPacketSender();
+    sender.sendInterfaceRemoval();
+    player.moveTo(Shared.loc(Shared.DATA.boat.arrive));
+    sender.sendInterface(ids.interfaces.start);
+    sender.sendSubInterface(Shared.OVERLAY_HUD_UID, ids.interfaces.overlay, 1);
+    Shared.setVarbit(player, ids.varbits.status, Shared.DATA.values.status.atSea);
     voyage.sync(player);
   }
   sea.task = Shared.everyTick(tickSea);
-  return voyage;
 }
 
 function tickSea() {
@@ -74,19 +88,31 @@ function endFor(voyage, crew) {
   }
   if (voyage.result === "returned") {
     for (const player of crew) {
-      player.setAttribute(Shared.AT_SEA_ATTRIBUTE, false);
-      player.moveTo(Shared.loc(Shared.DATA.port));
-      try {
-        Rewards.award(player, voyage);
-      } catch (error) {
-        console.error("[FishingTrawler] reward failed", error);
-      }
+      for (const line of voyage.summaryFor(player)) player.sendMessage(line);
+      player.sendMessage(Shared.message("toShore"));
+      player.getPacketSender().sendInterface(Shared.ids().interfaces.journey);
     }
+    Shared.later(Shared.DATA.timing.sailTicks, () => dock(voyage, crew));
   } else if (voyage.result === "sunk") {
     for (const player of crew) {
       player.sendMessage(Shared.message("sinking"));
       player.moveTo(Shared.loc(Shared.DATA.wreck.arrive));
       player.sendMessage(Shared.message("sunk"));
+    }
+  }
+}
+
+/** Back at Port Khazard: each player's share goes into the net. */
+function dock(voyage, crew) {
+  for (const player of crew) {
+    if (player.isRegistered?.() === false) continue;
+    player.getPacketSender().sendInterfaceRemoval();
+    player.setAttribute(Shared.AT_SEA_ATTRIBUTE, false);
+    player.moveTo(Shared.loc(Shared.DATA.port));
+    try {
+      Rewards.award(player, voyage);
+    } catch (error) {
+      console.error("[FishingTrawler] reward failed", error);
     }
   }
 }
@@ -181,4 +207,4 @@ function attachSea(api) {
   api.onPlayerLogin(recoverOnLogin);
 }
 
-module.exports = { attachSea, sea, atSea, launch, tickSea, finish, onOver, swimAshore, climbBarrel, recoverOnLogin };
+module.exports = { attachSea, sea, atSea, launch, arrive, dock, tickSea, finish, onOver, swimAshore, climbBarrel, recoverOnLogin };

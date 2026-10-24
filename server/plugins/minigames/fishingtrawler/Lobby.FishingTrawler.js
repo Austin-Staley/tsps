@@ -2,8 +2,9 @@
 
 /**
  * The trawler docked at Port Khazard (Wiki: Fishing Trawler): its deck is the waiting area.
- * The first player aboard starts a one-minute countdown; when it runs out the trawler sails
- * with everyone on deck. Only one trawler is at sea per world: while it is out, players wait
+ * The first player aboard starts a one-minute countdown, with "Trawler will leave in 20 seconds."
+ * and "... 10 seconds." to everyone aboard (captured); when it runs out the trawler sails with
+ * everyone on deck. Only one trawler is at sea per world: while it is out, players wait
  * aboard and the countdown starts again when it is back. Sailing destroys any catch a player
  * left uncollected in the net, as the Wiki warns.
  */
@@ -23,17 +24,12 @@ function now() {
 
 function startCountdown() {
   lobby.departAt = now() + Shared.DATA.timing.departTicks;
-  for (const player of waiting()) tellCountdown(player);
   ensureTicking();
 }
 
+/** Boarding while a trawler is out: the wait is for the next one. */
 function tellCountdown(player) {
-  if (Sea.atSea()) {
-    player.sendMessage(Shared.message("boardBusy"));
-    return;
-  }
-  const ticks = Math.max(0, (lobby.departAt ?? now()) - now());
-  player.sendMessage(Shared.message("boardWait", { seconds: Math.ceil((ticks * 0.6)) }));
+  if (Sea.atSea()) player.sendMessage(Shared.message("boardBusy"));
 }
 
 function ensureTicking() {
@@ -51,7 +47,11 @@ function tickLobby() {
   }
   if (Sea.atSea()) return true;
   if (lobby.departAt === null) startCountdown();
-  if (now() < lobby.departAt) return true;
+  const left = lobby.departAt - now();
+  for (const warning of Shared.DATA.timing.departWarnings) {
+    if (left === warning.ticksLeft) for (const player of aboard) player.sendMessage(Shared.message("departIn", { seconds: warning.seconds }));
+  }
+  if (left > 0) return true;
   lobby.departAt = null;
   depart(aboard);
   return true;
