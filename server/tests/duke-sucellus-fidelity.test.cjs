@@ -103,17 +103,20 @@ test('a Slayer assignment cancelled during preparation does not taint the later 
 
 test('Duke scoreboard opens its cache-native interface with persisted personal records',t=>{
   const h=H.harness(t),R=require('../plugins/bosses/dukesucellus/Records.DukeSucellus');
+  h.api.onCustomEvent('quest:is-complete',event=>{event.complete=true;});
   R.resetWorld();R.attach(h.api);
   h.p.setAttribute(h.C.KILLS,12);h.p.setAttribute(h.C.BEST,73);h.p.setAttribute(R.DEATHS,3);
   assert.equal(R.read({player:h.p,objectId:1}),false);
   assert.equal(R.read({player:h.p,objectId:47563}),true);
   assert.ok(h.packets.some(x=>x[0]==='sendInterface'&&x[1]===828));
   const text=id=>h.packets.find(x=>x[0]==='sendString'&&x[2]===((828<<16)|id))?.[1];
-  assert.equal(text(9),'12');assert.equal(text(11),'3');assert.equal(text(13),'0:43.8');
+  assert.equal(text(9),'12');assert.equal(text(11),'3 (recorded)');assert.equal(text(13),'0:43.8');
+  assert.equal(text(15),'0 (recorded)');assert.equal(text(17),'0 (recorded)');
 });
 
 test('the native Duke scoreboard parent Read click opens normal records before null-name dispatch',t=>{
   const h=H.harness(t),R=require('../plugins/bosses/dukesucellus/Records.DukeSucellus');R.attach(h.api);
+  h.api.onCustomEvent('quest:is-complete',event=>{event.complete=true;});
   const event={player:h.p,objectId:46091,clickType:1,handled:false};
   h.dispatch('onBeforeObjectInteraction',event);
   assert.equal(event.handled,true);
@@ -122,6 +125,20 @@ test('the native Duke scoreboard parent Read click opens normal records before n
   assert.equal(R.read({player:h.p,objectId:47564}),false,'awakened records remain unavailable');
   const other={player:h.p,objectId:46091,clickType:2,handled:false};
   h.dispatch('onBeforeObjectInteraction',other);assert.equal(other.handled,false);
+});
+
+test('Duke scoreboard rejects forged parent and resolved Read clicks until the quest is complete',t=>{
+  const h=H.harness(t),R=require('../plugins/bosses/dukesucellus/Records.DukeSucellus');R.attach(h.api);
+  let complete=false;h.api.onCustomEvent('quest:is-complete',event=>{event.complete=complete;});
+  h.p.setAttribute(h.C.KILLS,50);
+  assert.equal(R.read({player:h.p,objectId:47563}),false);
+  const event={player:h.p,objectId:46091,clickType:1,handled:false};
+  h.dispatch('onBeforeObjectInteraction',event);
+  assert.equal(event.handled,false);
+  assert.equal(h.packets.some(packet=>packet[0]==='sendInterface'&&packet[1]===828),false);
+  complete=true;h.dispatch('onBeforeObjectInteraction',event);
+  assert.equal(event.handled,true);
+  assert.equal(R.read({player:h.p,objectId:47563}),true);
 });
 
 test('Duke records count a lethal result and an in-instance player death once each',t=>{

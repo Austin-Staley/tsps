@@ -23,9 +23,12 @@ function died(player){player.setAttribute(DEATHS,C.count(player,DEATHS)+1);world
 function time(ticks){if(!(ticks>0))return '-';const tenths=Math.round(ticks*6);return `${Math.floor(tenths/600)}:${String(Math.floor(tenths/10)%60).padStart(2,'0')}.${tenths%10}`;}
 function read(event){
   if(![C.data.objects.scoreboardParent,C.data.objects.scoreboard].includes(event.objectId??event.definition?.id))return false;
-  const p=event.player,w=worldRecords(),sender=p.getPacketSender();
+  const p=event.player,quest={player:p,key:C.data.quest,complete:false};
+  C.api.emitCustomEvent('quest:is-complete',quest);
+  if(quest.complete!==true)return false;
+  const w=worldRecords(),sender=p.getPacketSender();
   sender.sendInterface(INTERFACE);
-  for(const [component,value] of [[9,C.kills(p)],[11,C.count(p,DEATHS)],[13,time(C.count(p,C.BEST))],[15,w.kills],[17,w.deaths],[19,time(w.best)]])
+  for(const [component,value] of [[9,C.kills(p)],[11,`${C.count(p,DEATHS)} (recorded)`],[13,time(C.count(p,C.BEST))],[15,`${w.kills} (recorded)`],[17,`${w.deaths} (recorded)`],[19,time(w.best)]])
     sender.sendString(String(value),(INTERFACE<<16)|component);
   return true;
 }

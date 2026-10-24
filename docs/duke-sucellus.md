@@ -38,6 +38,62 @@ The normal fight implements aimed melee chip/slam, magic, pillar-hidden freezing
 
 ## Evidence and limits
 
+### Remaining normal-mode audit plan, 24 October 2026
+
+This bounded pass checks the primary protection-prayer exception references
+and indexed Jagex developer answers for exact protected magic/covered gas
+rules; then checks native feeding, hazard timing and records against any new
+explicit source facts. Existing ordinary videos are reused only when they can
+distinguish a specific mechanic, with decoded PTS checked before timestamps.
+Only reproduced owned-plugin mismatches will change code. Unpublished random
+selection or unmeasured distributions will remain separately identified from
+functional completion; another finite sample is not treated as an exact RNG
+formula. Focused regression/build checks and independent review precede any
+local commit, and the parent task owns publication and installation.
+
+### Quest-gated records and a confirmed gathering gap, 24 October 2026
+
+The native scoreboard transform unlock depends on Desert Treasure II completion.
+A forged raw-parent Read could previously open interface 828 before completion,
+even though the client displays the inactive board. Records now requires the
+authoritative `quest:is-complete` response to be exactly true for both 46091 and
+47563. Existing kill counts do not substitute for completion. The new regression
+failed before the guard and passes for both routes after completion. Personal
+death and local-world kill/death totals now say `(recorded)`, matching their
+prospective accounting; personal kill counts and best times retain their saved
+values. The records-label assertion also failed before this correction.
+
+The current [normal strategies page](https://oldschool.runescape.wiki/w/Duke_Sucellus/Strategies)
+explicitly describes delaying the skilling timer with an action such as cutting
+celastrus bark while approaching a resource, then obtaining two resource yields.
+Its original [salt clip](https://oldschool.runescape.wiki/images/Duke_Sucellus_-_tick_manip_%28salt%29.mp4?2237c)
+was uploaded 14 February 2024 at 01:38:27 UTC (30 fps, 6.037188 seconds), and its
+[mushroom clip](https://oldschool.runescape.wiki/images/Duke_Sucellus_-_tick_manip_%28mushroom%29.mp4?dda52)
+at 01:38:31 UTC (30 fps, 10.031020 seconds). Actual decoded inventory frames
+show the salt stack changing from absent at the 2.8-second sample to 12 at 2.9
+seconds, without an intermediate six in that 0.1-second sampling; the mushroom
+clip shows two mushrooms before grinding. Salt's first decoded PTS is zero.
+These are historical preparation demonstrations referenced by current normal
+instructions; their cropped scenes alone do not distinguish quest from postquest.
+They establish the published double-yield behavior, not its exact timer phase.
+Salt SHA-256 is `df88a1965f84f0d1ff052a699a7f4194938ea0cb5e0c9cbe3e10173024b1377f`;
+mushroom SHA-256 is `87efba562a0cf63f2e49013681e9e0660fae88e1298c8fe6e0185b381d147a82`.
+
+This is a remaining functional gap, distinct from unidentified RNG. Duke gathering
+and generic Fletching currently use separate action counters; there is no shared
+skilling-clock event to preserve the bark action's phase across arrival. A correct
+implementation needs an evidenced start/delay/arrival contract and shared skill
+regressions. An isolated bark-triggered extra Duke yield would not implement that
+contract. No generic skill or Duke action-timer behavior changes in this batch.
+
+Fresh checks of Protection prayers, Protect from Magic, Gas mask, Slayer helmet,
+Ward of Arceuus and indexed Duke/JagexAsh protection answers did not publish exact
+normal protected magic or covered gas bounds. The Ward reference concerns spell
+applicability, not either maximum. No new source identified an exact extremity
+check window, vent initialization/tie/lifetime rule or salt/ice RNG formula.
+Those numerical gaps remain as documented below; the new footage does not resolve
+them. Fresh TypeScript build and all 81 focused Duke tests pass.
+
 ### Awake Slayer eligibility and native scoreboard Read, 24 October 2026
 
 The current [Duke Sucellus Speed-Runner page](https://oldschool.runescape.wiki/w/Duke_Sucellus_Speed-Runner?oldid=15307346)
