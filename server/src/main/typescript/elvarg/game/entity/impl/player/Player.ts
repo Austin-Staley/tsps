@@ -43,7 +43,7 @@ import { PlayerDeathTask } from "../../../task/impl/PlayerDeath"
 import { PlayerSession } from "../../../../net/PlayerSession"
 import { PacketSender } from "../../../../net/packet/PacketSender"
 import { FrameUpdater } from "../../../../util/FrameUpdater"
-import { Stopwatch } from "../../../../util/Stopwatch";
+import { TickStopwatch } from "../../../../util/TickStopwatch";
 import { TimerKey } from "../../../../util/timers/TimerKey";
 import { emptySailingState, type SailingState } from "../../../content/sailing/SailingState";
 import { Trading } from "../../../content/Trading";
@@ -92,8 +92,8 @@ export class Player extends Mobile {
     public quickPrayers = new QuickPrayers(this);
     public inventory = new Inventory(this);
     public equipment = new Equipment(this);
-    private clickDelay = new Stopwatch();
-    private lastItemPickup = new Stopwatch();
+    private clickDelay = new TickStopwatch();
+    private lastItemPickup = new TickStopwatch();
     private aggressionTolerance = new AggressionTolerance(this);
     // Delay for restoring special attack
     private specialAttackRestore = new SecondsTimer();
@@ -130,7 +130,7 @@ export class Player extends Mobile {
     private playerBot = false;
     private botAreaProcessTick = 0;
     private runEnergy = 100;
-    private lastRunRecovery = new Stopwatch();
+    private lastRunRecovery = new TickStopwatch();
     private isDying: boolean;
     public forceMovement: ForceMovement;
     private skillAnimation: number;
@@ -1025,7 +1025,7 @@ export class Player extends Mobile {
         return activated;
     }
 
-    public getLastItemPickup(): Stopwatch {
+    public getLastItemPickup(): TickStopwatch {
         return this.lastItemPickup;
     }
 
@@ -1073,7 +1073,7 @@ export class Player extends Mobile {
         this.skullTimer = skullTimer;
     }
 
-    public getClickDelay(): Stopwatch {
+    public getClickDelay(): TickStopwatch {
         return this.clickDelay;
     }
 

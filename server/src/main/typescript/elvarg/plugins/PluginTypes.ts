@@ -301,6 +301,13 @@ export interface PluginPrayerDisabledEvent {
   message?: string;
 }
 
+export interface PluginSpecialAttackDisabledEvent {
+  player: any;
+  disabled: boolean | null;
+  /** Shown to the player when disabled is true. */
+  message?: string;
+}
+
 export interface PluginCanLogoutEvent {
   player: any;
   allow: boolean | null;
@@ -865,6 +872,8 @@ export interface PluginApi {
     objectName: string,
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
+  /** Conditional interaction ownership before normal object handlers. Leave unclaimed events untouched. */
+  onBeforeObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
   /** Conditional interaction ownership before normal NPC handlers. Leave unclaimed events untouched. */
   onBeforeNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
@@ -943,6 +952,8 @@ export interface PluginApi {
   onCanSpawnNpc(handler: (event: PluginCanSpawnNpcEvent) => void): void;
   onCanStockItem(handler: (event: PluginCanStockItemEvent) => void): void;
   onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
+  /** Refuse turning the special attack bar on (a duel or minigame rule); set `disabled` and a `message`. */
+  onSpecialAttackDisabled(handler: (event: PluginSpecialAttackDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
   onPlayerBeforeDeath(handler: (event: PluginPlayerBeforeDeathEvent) => void): void;

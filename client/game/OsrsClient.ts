@@ -1,3 +1,4 @@
+import type { MinimapGeometry, SceneGeometry } from "./scene/SceneGeometry";
 import { vec3 } from "gl-matrix";
 import { closeOpenModal } from "./widgets/input/widgetKeyboardInput";
 import { getNpcMenuActions } from "./menu/WorldMenuBuilder";
@@ -837,6 +838,10 @@ export class OsrsClient {
 
     // ECS stores
     npcEcs: NpcEcs = new NpcEcs();
+    /** The active renderer's scene geometry, for plugins drawing over the scene in 2D. */
+    sceneGeometry?: SceneGeometry;
+    /** The minimap as last drawn, for plugins marking it. */
+    minimapGeometry?: MinimapGeometry;
     playerEcs: PlayerEcs = new PlayerEcs();
     private continuousMovement?: ContinuousMovement;
     playerAnimController!: PlayerAnimController;
@@ -1302,6 +1307,7 @@ export class OsrsClient {
             getMapElementTypeLoader: () => this.mapElementTypeLoader,
             getTextureLoader: () => this.textureLoader,
             getVarManager: () => this.varManager,
+            getWorkerPool: () => this.workerPool,
             getWidgetManager: () => this.widgetManager,
             getCs2Vm: () => this.cs2Vm,
             getRenderer: () => this.renderer,
@@ -5390,17 +5396,17 @@ export class OsrsClient {
                 setTimeout(() => {
                     if (this.gameState === GameState.LOADING_GAME) {
                         this.updateGameState(GameState.LOGGED_IN);
-                        this.startSparsePrefetchWhenMapStreamingIdle();
+                        this.startSparsePrefetchWhenSceneReady();
                     }
                 }, remaining);
             });
         }
     }
 
-    private startSparsePrefetchWhenMapStreamingIdle(): void {
+    private startSparsePrefetchWhenSceneReady(): void {
         const waitForIdle = () => {
             if (this.gameState !== GameState.LOGGED_IN) return;
-            if (this.renderer.hasPendingMapStreamingWork()) {
+            if (!this.renderer.mapManager.isSceneReady(this.renderer.stats.frameCount)) {
                 setTimeout(waitForIdle, 100);
                 return;
             }
@@ -6222,11 +6228,13 @@ export class OsrsClient {
         const url = this.minimapImageUrls.get(mapId);
         if (url) {
             this.minimapImageAccess.set(mapId, performance.now());
+        } else {
+            void this.renderer?.requestMinimapImage(mapX, mapY, level);
         }
         return url;
     }
 
-    setMinimapImageUrl(mapX: number, mapY: number, url: string, level: number = 0): void {
+    setMinimapImageUrl(mapX: number, mapY: number, url: string | undefined, level: number = 0): void {
         const mapId = this.getMinimapImageKey(mapX, mapY, level);
         const old = this.minimapImageUrls.get(mapId);
         if (old) {
@@ -6234,12 +6242,14 @@ export class OsrsClient {
             this.minimapImageUrls.delete(mapId);
             this.minimapImageAccess.delete(mapId);
         }
+        if (!url) return;
         this.minimapImageUrls.set(mapId, url);
         this.minimapImageAccess.set(mapId, performance.now());
         this.pruneMinimapImageUrls();
     }
 
     clearMinimapImageUrls(): void {
+        this.renderer?.clearMinimapSources();
         for (const url of this.minimapImageUrls.values()) {
             this.releaseMinimapImageUrl(url);
         }

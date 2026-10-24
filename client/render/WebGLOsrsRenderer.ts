@@ -336,7 +336,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public observedGridRevision: number = -1;
     // Skip the 1-second fog fade-in for maps loaded after a cross-region
     // teleport so the destination appears instantly.
-    public skipMapFadeIn: boolean = false;
     public activeStreamGeneration: number = 0;
     public activeStreamExpectedMapIds: Set<number> = new Set();
     public pendingStreamMapsByGeneration: Map<number, StreamMapBatch> = new Map();
@@ -388,6 +387,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     colorTarget?: Renderbuffer;
     depthTarget?: Renderbuffer;
     framebuffer?: Framebuffer;
+    sceneResolveColorTarget?: Renderbuffer;
+    sceneResolveFramebuffer?: Framebuffer;
     /**
      * Desktop 3D scene resolution as a share of the canvas (0.5-1), set in the debug panel. The
      * scene is drawn smaller and scaled up; the interface stays at full resolution.
@@ -719,8 +720,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     // Track if we've notified LoadingTracker that map data is ready
     public mapDataLoadedNotified: boolean = false;
-    // Time (in seconds) when height data first became valid (for fog fade-in delay)
-    public heightValidAtTime: number | undefined = undefined;
 
     // Optional override: force a specific idle SeqType id for player animation
     playerIdleSeqId: number = -1;
@@ -810,6 +809,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
                 npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
+        this.osrsClient.sceneGeometry = {
+            tileHeight: (x, y, plane) => this.getTileHeightAtPlane(x, y, plane),
+            worldToScreen: (x, height, y) => {
+                const p = this.worldToScreen(x, height, y);
+                return p ? [p[0], p[1]] : undefined;
+            },
+            npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
+            npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+        };
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);
@@ -1440,8 +1448,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.queueStreamMapData(this, mapData, streamGeneration);
     }
 
-    public applyReadyStreamGenerationBatch(time: number): number {
-        return render.applyReadyStreamGenerationBatch(this, time);
+    public applyReadyStreamGenerationBatch(): number {
+        return render.applyReadyStreamGenerationBatch(this);
     }
 
     initMaterialsTexture(): void {
@@ -1637,9 +1645,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         waterTextures: Texture,
         sceneUniformBuffer: UniformBuffer,
         mapData: SdMapData,
-        time: number,
     ): void {
-        return render.loadMap(this, mainProgram, mainAlphaProgram, npcProgram, textureArray, textureMaterials, waterTextures, sceneUniformBuffer, mapData, time);
+        return render.loadMap(this, mainProgram, mainAlphaProgram, npcProgram, textureArray, textureMaterials, waterTextures, sceneUniformBuffer, mapData);
     }
 
     isValidMapData(mapData: SdMapData): boolean {
@@ -2373,17 +2380,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     public getFrameOverheadPrayerMaxEntries(): number {
         return render.getFrameOverheadPrayerMaxEntries(this);
-    }
-
-    public updateAnimatedDrawRanges(
-        map: WebGLMapSquare,
-        drawCall: DrawCall,
-        drawRanges: DrawRange[],
-        transparent: boolean,
-        isInteract: boolean,
-        isLod: boolean,
-    ): void {
-        return render.updateAnimatedDrawRanges(this, map, drawCall, drawRanges, transparent, isInteract, isLod);
     }
 
     public renderGeometryPass(transparent: boolean): void {

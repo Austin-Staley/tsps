@@ -18,6 +18,8 @@ const INTERVAL_CONFIG = "ShootingStars:intervalMinutes";
 const ANNOUNCE_CONFIG = "ShootingStars:announce";
 
 const TICKS_PER_MINUTE = 100;
+// shortcut: use the star's existing 15-tile vicinity; replace when the OSRS exclusion radius is captured.
+const RANDOM_EVENT_RADIUS = 15;
 
 let api = null;
 let core = null;
@@ -67,6 +69,14 @@ function isNextToStar(player, star) {
   const dx = at.getX() - star.x;
   const dy = at.getY() - star.y;
   return at.getZ() === star.z && dx >= -1 && dx <= 2 && dy >= -1 && dy <= 2;
+}
+
+function denyRandomEvents(request) {
+  const star = world.star;
+  if (!star || star.gone || star.landingTicks > 0) return;
+  const at = request.player.getLocation();
+  if (at.getZ() === star.z && Math.abs(at.getX() - star.x) <= RANDOM_EVENT_RADIUS &&
+    Math.abs(at.getY() - star.y) <= RANDOM_EVENT_RADIUS) request.allowed = false;
 }
 
 function starCentre(star) {
@@ -165,6 +175,7 @@ module.exports = {
   intervalMinutes,
   isMembersWorld,
   isNextToStar,
+  denyRandomEvents,
   starCentre,
   playersNear,
   areaSound,

@@ -278,6 +278,7 @@ export async function doInstanceSceneBuild(host: WebGLOsrsRendererHost,
                 } border=${mapData.borderSize} extraLocs=${extraLocs?.length ?? 0}`,
             );
             // Clear any in-flight normal map loads that arrived during the async instance build
+            WebGLMapSquare.cancelPreparedLoads(host.app);
             host.mapsToLoad.clear();
             host.pendingStreamMapsByGeneration.clear();
             // Bypass grid/generation checks — instance scenes are always valid
@@ -308,7 +309,6 @@ export function replaceSceneWithInstance(host: WebGLOsrsRendererHost, mapData: S
             if (animated) host.carriedLocAnimations.push(...animated);
         }
         host.clearMaps();
-        host.skipMapFadeIn = true;
         host.mapManager.loadingMapIds.add(getMapSquareId(mapData.mapX, mapData.mapY));
         // Its NPCs belong to this one square now, wherever in the scene they stand.
         host.instanceSceneMap = { mapX: mapData.mapX | 0, mapY: mapData.mapY | 0 };

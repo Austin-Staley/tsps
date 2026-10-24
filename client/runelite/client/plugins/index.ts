@@ -11,8 +11,10 @@ import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItems
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight/InteractHighlightConfig";
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
+import { InventoryTagsPlugin } from "../../../game/plugins/inventorytags/InventoryTagsPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
+import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
@@ -28,6 +30,8 @@ import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkers
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
+import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
+import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
 import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
@@ -43,7 +47,10 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     InteractHighlightPlugin,
     TileMarkersPlugin,
     MenuSwapperPlugin,
+    // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
+    InventoryTagsPlugin,
     NotesPlugin,
+    NpcIndicatorsPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -58,6 +65,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StretchedModePlugin,
     GpuPlugin,
     CameraPlugin,
+    XpTrackerPlugin,
+    XpGlobesPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

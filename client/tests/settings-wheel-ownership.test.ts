@@ -5,12 +5,14 @@ import { InputManager } from "../game/InputManager";
 
 let invoked: number[] = [];
 let grantedWheel = 0;
-const deps: any = { getCs2Vm: () => ({ invokeEventHandler: (widget: any) => invoked.push(widget.uid) }), executeScriptListener: (widget: any) => invoked.push(widget.uid) };
+const deps: any = { getCs2Vm: () => ({ context: { getViewportFovValues() {} }, invokeEventHandler: (widget: any) => invoked.push(widget.uid) }), executeScriptListener: (widget: any) => invoked.push(widget.uid) };
 const manager: any = { isEffectivelyHidden: (uid: number) => uid === 99 };
 const viewport = { uid: 1, type: 0, eventHandlers: { onScroll: { scriptId: 39 } } };
 const scroll = (hits: any[]) => {
     invoked = [];
-    const frame: any = { input: { wheelDeltaY: 120, viewportWheelDeltaY: 0 }, mx: 20, hits };
+    const input = new InputManager();
+    input.wheelDeltaY = 120;
+    const frame: any = { input, mx: 20, hits };
     processWidgetScrollWheelInput(deps, frame, manager, { isDraggingWidget: false } as any);
     grantedWheel = frame.input.viewportWheelDeltaY;
     return frame.input.wheelDeltaY;
@@ -39,6 +41,16 @@ const pickingManager: any = { getInputRoots: () => [modal], getStaticChildrenByP
 const pickingState: any = { lastHoverHitX: 20, lastHoverHitY: 20, cachedHoverHits: [viewport] };
 const picked = buildWidgetInputFrame({} as any, pickingState, { mouseX: 20, mouseY: 20, wheelDeltaY: 120 } as any, pickingManager, {} as any)!;
 assert.ok(picked.hits.includes(modal), "wheel repicks a newly opened Settings modal at an unchanged pointer position");
+
+const pinchInput = new InputManager();
+pinchInput.pinchZoomDelta = 0.25;
+const pinchPicked = buildWidgetInputFrame({} as any, pickingState, Object.assign(pinchInput, { mouseX: 20, mouseY: 20 }), pickingManager, {} as any)!;
+assert.ok(pinchPicked.hits.includes(modal), "fractional pinch also repicks a newly opened modal");
+invoked = [];
+processWidgetScrollWheelInput(deps, { input: pinchInput, mx: 20, hits: [viewport, settings] } as any, manager, { isDraggingWidget: false } as any);
+assert.equal(pinchInput.getCameraZoomDelta(), 0, "a Settings scroll owner consumes partial pinch before the viewport");
+assert.equal(pinchInput.viewportWheelDeltaY, 0);
+assert.deepEqual(invoked, [], "fractional pinch must not send a whole scroll step to Settings");
 
 const input = new InputManager();
 input.viewportWheelDeltaY = 120; input.wheelDeltaY = 120;

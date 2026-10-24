@@ -23,8 +23,10 @@ The catalogue contains 26 initial clues:
 
 `Data.BeginnerTreasureTrails.js` resolves clue text, row identities, NPC IDs,
 coordinates and outfits from named cache tables and columns. The old composite
-map interfaces are `trail_map01/06/15/05/03`, respectively. These use their actual
-cache components/models rather than a substitute text clue. Emote areas use
+map interfaces are `trail_map01/02/03/06/11` (groups 346/347/348/351/356),
+respectively. These use their actual cache components/models rather than a
+substitute text clue. The cache does not link a map row to its interface, so each
+pairing was matched by eye against the OSRS Wiki map clue images. Emote areas use
 small radii around cache targets, with a wider area for Al Kharid mine.
 
 ## State and interaction ownership
@@ -139,8 +141,10 @@ was used. The local run record is `exports/beginner-clues/natural-route.json`
 (SHA-256 `31365266cf4c0bf3caa2415fef379030dfa6756f3142af68f769408d23c958a3`).
 
 A separate real browser account on client 3106/game 43706 rendered the authentic
-anagram parchment (`Carpet Ahoy`) and the south-east Varrock mine map (group
-351) from actual Read interactions. WebGPU rendering was confirmed. The browser
+anagram parchment (`Carpet Ahoy`) and a map clue from actual Read interactions.
+That map was group 351, which is the Falador standing stones map, although the
+clue had assigned it to the south-east Varrock mine; the row-to-map pairings were
+corrected later. WebGPU rendering was confirmed. The browser
 tab used an isolated context and was closed after verification. Client builds
 pass with the repository's existing five ESLint warnings; the first build with
 CI warning promotion failed on those unchanged warnings, and the normal build
