@@ -238,8 +238,8 @@ function hesporiNpc(event) {
     Patches.choose(player, [[farm.deathbankPaid ? "Collect your items" : "Retrieve items (25,000 coins)", () => {
         if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
         if (!farm.deathbankPaid) {
-            if (player.getInventory().getAmount(Data.itemId("Coins")) < 25000) { player.sendMessage("You need 25,000 coins."); return; }
-            player.getInventory().deleteNumber(Data.itemId("Coins"), 25000);
+            if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < 25000) { player.sendMessage("You need 25,000 coins."); return; }
+            player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, 25000);
             farm.deathbankPaid = true;
         }
         while (farm.deathbank.length && player.getInventory().getFreeSlots()) {
