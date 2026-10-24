@@ -3,9 +3,11 @@
 /**
  * The catch (Wiki: Fishing Trawler, Angler's outfit): back in port, each player with at least 50
  * contribution and 15 Fishing has their share waiting in the trawler net on the Port Khazard
- * dock. Each fish is one the player can catch at their base Fishing level, with up to two junk
- * items; a 1 in 12 roll for each angler's piece they don't own adds it to the net. Inspecting
- * the net sends the catch to the bank with its Fishing experience (the fish's own trawler XP).
+ * dock. Each fish tries the highest tier the player can catch first, then the next one down, so
+ * higher tiers take over as the level rises (the Wiki's success chart); up to two junk items come
+ * with it. Each catch has a 1 in 12 chance of an angler's piece the player doesn't own. A
+ * successful trip also rolls the heron at 1/5,000, 1/2,500 with a full meter. Inspecting the net
+ * sends the catch to the bank with its Fishing experience (the fish's own trawler XP).
  * The catch survives logging out; the next trip throws it back (Lobby.FishingTrawler.js).
  */
 
@@ -31,6 +33,18 @@ function rollJunk(random) {
 }
 
 /** The items and experience for `fishCount` fish at `fishingLevel`: { items: [[id, n]], xp }. */
+/** One fish: the highest tier the level allows, else the next down, down to the lowest. */
+function rollFish(eligible, random) {
+  const byLevel = [...eligible].sort((a, b) => b.level - a.level);
+  const success = Shared.DATA.catch.tierSuccess;
+  for (let i = 0; i < byLevel.length - 1; i++) {
+    if (random() < success) return byLevel[i];
+  }
+  // The lowest tier shares out evenly (shrimps, anchovies and sardines all come at 15).
+  const lowest = byLevel.filter((fish) => fish.level === byLevel[byLevel.length - 1].level);
+  return lowest[Math.floor(random() * lowest.length)];
+}
+
 function rollCatch(fishCount, fishingLevel, random = Math.random, ownsPiece = () => false) {
   const ids = Shared.ids();
   const eligible = ids.fish.filter((fish) => fish.level <= fishingLevel);
@@ -38,7 +52,7 @@ function rollCatch(fishCount, fishingLevel, random = Math.random, ownsPiece = ()
   let xp = 0;
   const add = (id, n = 1) => counts.set(id, (counts.get(id) ?? 0) + n);
   for (let i = 0; i < fishCount && eligible.length > 0; i++) {
-    const fish = eligible[Math.floor(random() * eligible.length)];
+    const fish = rollFish(eligible, random);
     add(fish.id);
     xp += fish.xp;
   }
@@ -47,14 +61,13 @@ function rollCatch(fishCount, fishingLevel, random = Math.random, ownsPiece = ()
     add(ids.junk[Math.floor(random() * ids.junk.length)]);
     xp += Shared.DATA.junkXp;
   }
+  // One roll per catch, for a piece the player doesn't own (Wiki).
   const angler = [];
-  for (const piece of ANGLER_PIECES) {
-    const id = ids.items[piece];
-    if (ownsPiece(id)) continue;
-    if (Math.floor(random() * Shared.DATA.anglerChance) === 0) {
-      add(id);
-      angler.push(id);
-    }
+  const missing = ANGLER_PIECES.map((piece) => ids.items[piece]).filter((id) => !ownsPiece(id));
+  if (missing.length > 0 && Math.floor(random() * Shared.DATA.anglerChance) === 0) {
+    const id = missing[Math.floor(random() * missing.length)];
+    add(id);
+    angler.push(id);
   }
   return { items: [...counts], xp: Math.round(xp * 10) / 10, angler };
 }
@@ -72,8 +85,17 @@ function award(player, voyage, random = Math.random) {
   }
   const reward = rollCatch(voyage.shareFor(player), Shared.baseLevel(player, "FISHING"), random, (id) => owns(player, id));
   player.setAttribute(Shared.REWARD_ATTRIBUTE, { items: reward.items, xp: reward.xp });
-  player.sendMessage(Shared.message("success"));
+  rollHeron(player, points);
   return reward;
+}
+
+/** The heron: 1/5,000 on a successful trip, 1/2,500 with a full meter (Wiki), through Pets. */
+function rollHeron(player, points) {
+  const { chance, fullMeterChance } = Shared.DATA.heron;
+  const petChance = points >= Shared.DATA.points.max ? fullMeterChance : chance;
+  const api = Shared.api();
+  if (typeof api?.emitCustomEvent !== "function") return;
+  api.emitCustomEvent("fishing:success", { player, skill: Shared.core().Skill.FISHING, petChance, itemId: null, source: "fishing-trawler" });
 }
 
 /** Inspect the trawler net on the dock: the catch to the bank, its experience to Fishing. */
@@ -118,4 +140,4 @@ function inspectNetOrBoat(event) {
   return false;
 }
 
-module.exports = { attachRewards, rollCatch, award, inspectNet, ANGLER_PIECES };
+module.exports = { attachRewards, rollCatch, rollFish, rollHeron, award, inspectNet, ANGLER_PIECES };

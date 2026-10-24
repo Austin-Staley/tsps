@@ -91,14 +91,18 @@ test('open leaks let water in, bailing takes it out, a full hull sinks the trawl
   assert.equal(voyage.result, 'sunk');
 });
 
-test('leaks spring every 5 ticks when the roll allows, on a hull spot not already leaking', () => {
+test('every 5 ticks the hull is back to 6-11 leaking spots at once, with no message', () => {
   const player = fakePlayer();
   const voyage = new Voyage([player], () => 0);
+  voyage.leaks[0] = Shared.DATA.values.hull.patched;
   for (let i = 0; i < 4; i++) voyage.tick();
   assert.equal(voyage.openLeaks(), 0);
   voyage.tick();
-  assert.equal(voyage.openLeaks(), 1);
-  assert.ok(player.messages.includes(Shared.message('leak')));
+  assert.equal(voyage.openLeaks(), 6, 'the smallest batch, patched spots included');
+  assert.ok(!player.messages.some((m) => /leak/i.test(m)), 'no leak message');
+  const most = new Voyage([fakePlayer()], () => 0.999);
+  for (let i = 0; i < 5; i++) most.tick();
+  assert.equal(most.openLeaks(), 11);
 });
 
 test('a torn net catches nothing; an attacking tentacle halves the catch', () => {
@@ -116,30 +120,53 @@ test('a torn net catches nothing; an attacking tentacle halves the catch', () =>
   assert.ok(Math.abs(voyage.catch - whole * 1.5) < 1e-9);
 });
 
-test('a tentacle left alone rips the net and breaks its rail; three chops drive it off', () => {
+test('the captured tentacle cycle: 2, then 3 with the Kraken ripping the net, then 2; its rail 1 then 2', () => {
   const player = fakePlayer();
   const { timing, values } = Shared.DATA;
-  const voyage = new Voyage([player], () => 0.99);
-  voyage.tickCount = timing.tentacleEvery - 1;
-  voyage.tickTentacles();
-  voyage.tickCount += 1;
-  voyage.tickTentacles();
-  assert.equal(voyage.tentacles.port.state, values.tentacle.rising);
-  voyage.tickCount += timing.tentacleRiseTicks;
-  voyage.tickTentacles();
-  assert.equal(voyage.tentacles.port.state, values.tentacle.attacking);
-  voyage.tickCount += timing.tentacleWreckTicks;
-  voyage.tickTentacles();
-  assert.equal(voyage.rails.port, values.rail.broken);
+  const voyage = new Voyage([player], () => 0.999);
+  const at = (tick) => { voyage.tickCount = tick; voyage.tickTentacles(); };
+  at(timing.tentacleEvery);
+  assert.equal(voyage.tentacles.port.state, values.tentacle.attacking, '0 -> 2 as it appears');
+  assert.equal(player.messages.at(-1), Shared.message('kraken'));
+  at(timing.tentacleEvery + timing.railDamagedAt);
+  assert.equal(voyage.rails.port, values.rail.damaged, 'the rail 1 three ticks in');
+  at(timing.tentacleEvery + timing.tentacleRipAt);
+  assert.equal(voyage.tentacles.port.state, values.tentacle.sweeping);
   assert.equal(voyage.netRipped, true);
-  assert.equal(voyage.tentacles.port.state, values.tentacle.leaving);
+  assert.equal(player.messages.at(-1), Shared.message('krakenRipped'));
+  assert.equal(voyage.chop(player, 'port'), null, 'not choppable while it sweeps');
+  at(timing.tentacleEvery + timing.tentacleRipAt + timing.tentacleSweepTicks);
+  assert.equal(voyage.tentacles.port.state, values.tentacle.attacking);
+  at(timing.tentacleEvery + voyage.tentacles.port.breaksIn);
+  assert.equal(voyage.rails.port, values.rail.broken, 'broken 12-17 ticks after that');
+  at(timing.tentacleEvery + timing.tentacleLifetime);
+  assert.equal(voyage.tentacles.port.state, values.tentacle.none);
+  assert.equal(voyage.rails.port, values.rail.broken, 'a broken rail stays broken until fixed');
 
-  voyage.tentacles.starboard = { state: values.tentacle.attacking, since: voyage.tickCount, chops: 0 };
+  voyage.tentacles.starboard = { state: values.tentacle.attacking, since: voyage.tickCount, chops: 0, breaksIn: 99 };
+  voyage.rails.starboard = values.rail.damaged;
   assert.equal(voyage.chop(player, 'starboard'), 'hit');
   assert.equal(voyage.chop(player, 'starboard'), 'hit');
   assert.equal(voyage.chop(player, 'starboard'), 'drove');
-  assert.equal(voyage.tentacles.starboard.state, values.tentacle.leaving);
-  assert.equal(voyage.chop(player, 'starboard'), null);
+  assert.equal(voyage.tentacles.starboard.state, values.tentacle.none);
+  assert.equal(voyage.rails.starboard, values.rail.intact, 'driven off before it broke, the rail is whole again');
+});
+
+test('trawler_timeinfo: 5 at the start, 4 from 27 ticks in, then one less every 100', () => {
+  const voyage = new Voyage([fakePlayer()], () => 0.999);
+  const minutes = (tick) => { voyage.tickCount = tick; return voyage.minutesLeft(); };
+  assert.deepEqual([0, 26, 27, 126, 127, 427, 499].map(minutes), [5, 5, 4, 4, 3, 0, 0]);
+});
+
+test('crossing 50 says the share is earned; the end lists what the player did', () => {
+  const player = fakePlayer();
+  const voyage = new Voyage([player], () => 0.999);
+  for (let i = 0; i < 10; i++) voyage.addPoints(player, 5, 'leaks');
+  assert.equal(player.messages.filter((m) => m === Shared.message('earned')).length, 1);
+  voyage.addPoints(player, 7, 'nets');
+  const [contributed, summary] = voyage.summaryFor(player);
+  assert.equal(contributed, 'You have contributed enough to earn rewards! Contribution:57/255');
+  assert.equal(summary, 'Nets fixed:<col=ff0000>1</col> Leaks patched:<col=ff0000>10</col> Water bailed:<col=ff0000>0</col> Tentacles hacked and railings fixed:<col=ff0000>0</col>.');
 });
 
 test('the trip comes back after five minutes, and the share follows the HUD meter', () => {
@@ -170,7 +197,7 @@ test('a bigger crew catches less each, down to the floor', () => {
   assert.ok(Math.abs(big.catch - solo.catch * Shared.DATA.catch.crewFloor) < 1e-9);
 });
 
-test('the catch only holds fish the player can catch, up to two junk, and missing angler pieces', () => {
+test('the catch only holds fish the player can catch, up to two junk, and one angler roll a catch', () => {
   const ids = Shared.ids();
   const reward = Rewards.rollCatch(40, 40, sequence([], 0.5));
   const levels = new Map(ids.fish.map((fish) => [fish.id, fish.level]));
@@ -179,9 +206,25 @@ test('the catch only holds fish the player can catch, up to two junk, and missin
   for (const [id] of reward.items) if (levels.has(id)) assert.ok(levels.get(id) <= 40);
   const junk = reward.items.filter(([id]) => ids.junk.includes(id)).reduce((sum, [, n]) => sum + n, 0);
   assert.ok(junk <= 2);
-  // A roll of 0 gives every angler piece but the owned hat.
+  // A roll of 0 wins the one angler roll: a single piece, never the owned hat.
   const lucky = Rewards.rollCatch(1, 99, () => 0, (id) => id === ids.items.anglerHat);
-  assert.deepEqual(lucky.angler, [ids.items.anglerTop, ids.items.anglerLegs, ids.items.anglerBoots]);
+  assert.equal(lucky.angler.length, 1);
+  assert.notEqual(lucky.angler[0], ids.items.anglerHat);
+});
+
+test("higher tiers take over with level: about 0.67 lobster at 40, about 0.21 at 50 (the Wiki's chart)", () => {
+  const ids = Shared.ids();
+  let seed = 12345;
+  const random = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  const lobster = ids.fish.find((fish) => fish.level === 40).id;
+  const share = (level) => {
+    const eligible = ids.fish.filter((fish) => fish.level <= level);
+    let hits = 0;
+    for (let i = 0; i < 4000; i++) if (Rewards.rollFish(eligible, random).id === lobster) hits++;
+    return hits / 4000;
+  };
+  assert.ok(Math.abs(share(40) - 0.67) < 0.05);
+  assert.ok(Math.abs(share(50) - 0.21) < 0.05);
 });
 
 test('a share needs 50 contribution and 15 Fishing', () => {
@@ -240,4 +283,25 @@ test('a full bank keeps the rest of the catch in the net', () => {
   assert.deepEqual(banked, [317]);
   assert.deepEqual(player.getAttribute(Shared.REWARD_ATTRIBUTE).items, [[321, 2]]);
   assert.equal(player.messages.at(-1), Shared.message('bankFull'));
+});
+
+test('balance: an idle crew sinks before the end, a steady patcher lasts the whole trip', () => {
+  let seed = 7;
+  const random = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  const idle = new Voyage([fakePlayer()], random);
+  for (let i = 0; i < Shared.DATA.timing.trawlTicks && !idle.ended; i++) idle.tick();
+  assert.equal(idle.result, 'sunk');
+
+  const player = fakePlayer();
+  const busy = new Voyage([player], random);
+  for (let i = 0; i < Shared.DATA.timing.trawlTicks && !busy.ended; i++) {
+    busy.tick();
+    // About one patch every 2 ticks, as a player does walking between leaks.
+    if (i % 2 === 0) {
+      const spot = busy.leaks.indexOf(Shared.DATA.values.hull.leak);
+      if (spot >= 0) busy.patch(player, spot);
+    }
+  }
+  assert.equal(busy.result, 'returned');
+  assert.equal(busy.contribution.get(player), Shared.DATA.points.max);
 });
