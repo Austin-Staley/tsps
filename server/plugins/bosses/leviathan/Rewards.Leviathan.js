@@ -1,5 +1,6 @@
 const Common = require('./Common.Leviathan');
 const { own } = require('./Fight.Leviathan');
+const Records = require('./Records.Leviathan');
 const MONSTER = Common.MONSTER;
 function current(npc, player = null) {
   const f = own(npc);
@@ -29,15 +30,15 @@ function died({ npc, killer }) {
   const bestKey = awakened ? Common.AWAKENED_BEST_ATTRIBUTE : Common.BEST_ATTRIBUTE;
   const previous = Common.count(player, bestKey), ticks = fight.finishedTicks;
   if (!previous || ticks < previous) player.setAttribute(bestKey, ticks);
+  Records.won(fight);
   player.sendMessage(`Fight duration: ${(ticks * 0.6).toFixed(1)} seconds${!previous || ticks < previous ? ' (new personal best)' : ''}.`);
   const complete = task => Common.api.emitCustomEvent('combat-achievements:complete', { player, task });
   if (awakened) complete('Leviathan Sleeper');
   else {
+    if (fight.unconventional.eligible && fight.unconventional.fired) complete('Unconventional');
     if (fight.perfect && ++session.perfectKills >= 5) complete('Perfect Leviathan');
     if (fight.stuns <= 1) complete('Serpentine Solo');
-    const task = { player, npc, onTask: false };
-    Common.api.emitCustomEvent('slayer:on-task', task);
-    if (!task.onTask) for (const [name, seconds] of [['Trialist', 110], ['Chaser', 85], ['Runner', 70]])
+    if (!fight.onSlayerTask) for (const [name, seconds] of [['Trialist', 110], ['Chaser', 85], ['Runner', 70]])
       if (ticks * 0.6 < seconds) complete(`Leviathan Speed-${name}`);
   }
   session.scheduleRespawn?.(fight);

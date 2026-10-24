@@ -1,5 +1,6 @@
 const Common = require('./Common.Leviathan');
 const { Fight } = require('./Fight.Leviathan');
+const Records = require('./Records.Leviathan');
 // Revision241 cache locations, independently checked for Travel actions.
 const CAMP_BOAT = 49212, ISLAND_BOAT = 49213, SCAR_STONE = 49209;
 const sessions = new Map();
@@ -24,10 +25,21 @@ function areaClass() {
 class Session {
   constructor(player) {
     this.player = player; this.awakened = false; this.ended = false; this.fight = null; this.perfectKills = 0;
+    this.previousNpcViewDistance = player.getNpcViewDistance();
+    player.setNpcViewDistance(Math.max(this.previousNpcViewDistance, Common.data.npcViewDistance));
     this.area = new (areaClass())(); this.area.session = this;
     const { sourceChunkX, sourceChunkY, width, height, planes } = Common.data.instance;
     for (const z of planes) for (let x = 0; x < width; x++) for (let y = 0; y < height; y++)
       this.area.setChunk(z, x, y, { sourceChunkX: sourceChunkX + x, sourceChunkY: sourceChunkY + y, sourcePlane: z, rotation: 0 });
+    this.tails = Common.data.tails.map(({ npc, tile, face }) => {
+      const tail = this.spawn(Common.ids.npcs[npc], tile);
+      if (tail) {
+        tail.setScriptedMovement(true);
+        tail.getMovementQueue().setBlockMovement(true);
+        tail.setFace(Common.core.Direction[face]);
+      }
+      return tail;
+    }).filter(Boolean);
   }
   tile(tile) { return Common.tile(this.area, tile); }
   sourceTile(tile) { return Common.sourceTile(this.area, tile); }
@@ -35,6 +47,12 @@ class Session {
     const at = this.tile(tile), npc = Common.api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: this.player, ownerOnly: true, wanderRadius: 0 });
     if (npc) { npc.__skipDefaultRespawn = true; this.area.add(npc); }
     return npc;
+  }
+  biteTails() {
+    for (const tail of this.tails) {
+      const entry = Common.data.tails.find(entry => Common.ids.npcs[entry.npc] === tail.getId());
+      if (tail.isRegistered() && entry) Common.animate(tail, entry.bite);
+    }
   }
   start() {
     if (this.ended || this.fight && !this.fight.over) return;
@@ -57,6 +75,12 @@ class Session {
   end() {
     if (this.ended) return;
     this.ended = true; sessions.delete(this.player); this.fight?.stop();
+    this.player.setNpcViewDistance(this.previousNpcViewDistance);
+    for (const tail of this.tails) {
+      if (tail.getPrivateArea() === this.area) this.area.remove(tail);
+      Common.api.removeNpc(tail);
+    }
+    this.tails = [];
     this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
     if (this.player.getPrivateArea() === this.area) this.area.remove(this.player);
     if (!this.area.isDestroyed()) this.area.destroy();
@@ -131,14 +155,29 @@ function grave(request) {
 function death({ player }) {
   const session = sessionOf(player);
   if (!session) return;
+  if (session.fight && !session.fight.awakened && !session.fight.over && !session.fight.stopped) Records.died(player);
   // As in OSRS, unprotected carried items use the outside grave; existing floor loot is lost.
   session.end();
 }
+function readScoreboard({ player, objectId }) {
+  const locs = Common.ids.locs;
+  if (![locs.scoreboard, locs.scoreboardNormal, locs.scoreboardAwakened].includes(objectId) || !complete(player)) return false;
+  return Records.read(player);
+}
+function readScoreboardParent(event) {
+  // Direct/native event producers may retain the map parent's null name.
+  // Keep the fallback restricted to this parent and its normal Read option.
+  if (event.objectId !== Common.ids.locs.scoreboard || event.clickType !== 1) return;
+  if (readScoreboard(event)) event.handled = true;
+}
 function attach(api) {
+  Records.attach(api);
   api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
   api.onObjectInteraction('Rowboat', { Travel: travel });
   api.onObjectInteraction('Handholds', { Climb: climb });
   api.onObjectInteraction('Stepping Stone', { Cross: cross });
+  api.onObjectInteraction('Scoreboard', { Read: readScoreboard });
+  api.onBeforeObjectInteraction(readScoreboardParent);
   api.onNpcInteraction('Catalytic Guardian', { 'Talk-to': guardian });
   api.onPlayerLogin(recover);
   api.onPlayerDeath(death);

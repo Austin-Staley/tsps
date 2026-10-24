@@ -11,7 +11,13 @@ async function initialize() {
   core = PluginManager.getCoreApi();
   core.RegionManager.init();
 }
-function harness(t, awakened = false) {
+function harness(t, awakened = false, startingHitpoints = 99) {
+  // Encounter tests never read or write the live world's scoreboard records.
+  const fs = require('node:fs'), path = require('node:path');
+  const readFile = fs.readFileSync, writeFile = fs.writeFileSync;
+  const scoreboardFile = file => typeof file === 'string' && path.basename(file) === 'leviathan-scoreboard.json';
+  t.mock.method(fs, 'readFileSync', (file, ...args) => scoreboardFile(file) ? '{}' : readFile(file, ...args));
+  t.mock.method(fs, 'writeFileSync', (file, ...args) => { if (!scoreboardFile(file)) return writeFile(file, ...args); });
   const Common = require('../../plugins/bosses/leviathan/Common.Leviathan');
   const hooks = new Map(), custom = new Map(), tasks = [], spawned = [], emitted = [], messages = [];
   let cycle = 0;
@@ -28,7 +34,7 @@ function harness(t, awakened = false) {
   p.performGraphic = () => {};
   p.performGraphicInSlot = () => {};
   p.addTickHit = () => {};
-  p.getSkillManager().setCurrentLevel(core.Skill.HITPOINTS, 99);
+  p.getSkillManager().setCurrentLevel(core.Skill.HITPOINTS, startingHitpoints);
   p.getSkillManager().setMaxLevels(core.Skill.HITPOINTS, 99);
   p.getSkillManager().setCurrentLevel(core.Skill.PRAYER, 99);
   const api = new Proxy({
@@ -57,10 +63,13 @@ function harness(t, awakened = false) {
   t.mock.method(PluginManager, 'emitNpcDeath', event => dispatch('onNpcDeath', event));
   t.mock.method(PluginManager, 'emitNpcHitModify', (npc, hit) => { dispatch('onNpcHitModify', { npc, hit }); return hit; });
   t.mock.method(PluginManager, 'emitCombatHitRoll', event => dispatch('onCombatHitRoll', event));
+  t.mock.method(PluginManager, 'emitPlayerDealtDamage', event => dispatch('onPlayerDealtDamage', event));
+  t.mock.method(PluginManager, 'emitCustomEvent', (name, event) => api.emitCustomEvent(name, event));
   Common.init(api);
-  const area = new core.TemplatedInstanceArea(7, 8);
-  for (const plane of [0, 1]) for (let x = 0; x < 7; x++) for (let y = 0; y < 8; y++)
-    area.setChunk(plane, x, y, { sourceChunkX: 257 + x, sourceChunkY: 792 + y, sourcePlane: plane, rotation: 0 });
+  const { width, height, planes, sourceChunkX, sourceChunkY } = Common.data.instance;
+  const area = new core.TemplatedInstanceArea(width, height);
+  for (const plane of planes) for (let x = 0; x < width; x++) for (let y = 0; y < height; y++)
+    area.setChunk(plane, x, y, { sourceChunkX: sourceChunkX + x, sourceChunkY: sourceChunkY + y, sourcePlane: plane, rotation: 0 });
   const session = { player: p, area, awakened, ended: false, perfectKills: 0,
     tile: tile => Common.tile(area, tile), sourceTile: at => Common.sourceTile(area, at),
     spawn(id, tile) {
