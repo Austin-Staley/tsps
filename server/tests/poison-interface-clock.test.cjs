@@ -71,7 +71,8 @@ test('explicit cures, with or without protection, cancel the withheld hit', t =>
     curePoisonAndVenom(h.player);
     if (immunity) h.player.getCombat().getPoisonImmunityTimer().start(60);
     h.step(); h.setOpen(false); h.step(40);
-    assert.equal(h.hits.length, 0); assert.equal(h.task.isRunning(), false);
+    assert.equal(h.hits.length, 0); assert.equal(h.task.isRunning(), immunity);
+    if (immunity) assert.equal(h.player.getCombat().getPoisonClock().hasCounter(), true);
   }
 });
 

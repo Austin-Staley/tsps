@@ -23,7 +23,8 @@ export class CombatPoisonEffect extends Task {
 
   /** Resume saved affliction without reapplying or changing its damage. */
   public static resume(entity: Mobile): void {
-    if (!entity.isRegistered() || !entity.isPoisoned() || entity.getHitpoints() <= 0) return;
+    if (!entity.isRegistered() || entity.getHitpoints() <= 0) return;
+    if (!entity.isPoisoned() && !(entity.isPlayer() && entity.getCombat().getPoisonClock().hasCounter())) return;
     if (this.active.get(entity)?.isRunning()) return;
     TaskManager.submit(new CombatPoisonEffect(entity));
   }
@@ -46,11 +47,15 @@ export class CombatPoisonEffect extends Task {
     if (this.entity.getHitpoints() <= 0) {
       this.entity.setPoisonDamage(0);
       this.entity.setVenomed(false);
+      if (this.entity.isPlayer()) this.entity.getCombat().getPoisonClock().stop();
       this.stop();
       return;
     }
 
-    if (!this.entity.isPoisoned()) {
+    const player = this.entity.isPlayer() ? this.entity.getAsPlayer() : null;
+    const clock = player?.getCombat().getPoisonClock();
+    const afflicted = this.entity.isPoisoned();
+    if (!afflicted && !clock?.hasCounter()) {
       this.entity.setVenomed(false);
       this.stop();
       return;
@@ -59,14 +64,16 @@ export class CombatPoisonEffect extends Task {
     // Immunity prevents new afflictions in CombatFactory.poisonEntity; it does
     // not cure an existing one (for example when equipping a serpentine helm).
     // Explicit cures clear the affliction fields, handled by isPoisoned above.
-    const player = this.entity.isPlayer() ? this.entity.getAsPlayer() : null;
-    if (player && (player.getInterfaceId() > 0 || player.getPacketSender().hasInterruptibleInterface())) {
-      // Withhold damage/decay, but retain one due hit when elapsed time expires.
-      this.ticksUntilHit = Math.max(0, this.ticksUntilHit - 1);
-      return;
+    const modal = !!player && (player.getInterfaceId() > 0 || player.getPacketSender().hasInterruptibleInterface());
+    if (clock) {
+      if (!clock.tickPulse(modal)) return;
+      if (!afflicted) {
+        if (!clock.hasCounter()) this.stop();
+        return;
+      }
     }
 
-    if (--this.ticksUntilHit > 0) {
+    if (!clock && --this.ticksUntilHit > 0) {
       return;
     }
 
@@ -103,7 +110,7 @@ export class CombatPoisonEffect extends Task {
     this.ticksUntilHit = 30;
 
     if (currentValue <= 1) {
-      this.stop();
+      if (!clock?.hasCounter()) this.stop();
       return;
     }
   }
@@ -112,6 +119,10 @@ export class CombatPoisonEffect extends Task {
     // Cancelling a callback (notably before the logout save) is not a cure.
     if (CombatPoisonEffect.active.get(this.entity) === this) {
       CombatPoisonEffect.active.delete(this.entity);
+      if (this.entity.isPlayer() && !this.entity.isPoisoned() &&
+          !this.entity.getCombat().getPoisonClock().hasCounter()) {
+        this.entity.getCombat().getPoisonClock().resetPhase();
+      }
     }
     super.stop();
   }
@@ -135,6 +146,10 @@ export class CombatPoisonEffect extends Task {
     }
     if (entity.isPoisoned()) {
       return entity.getPoisonDamage();
+    }
+    if (entity.isPlayer()) {
+      const counter = entity.getCombat().getPoisonClock().getCounter();
+      return counter > 0 ? -counter : 0;
     }
     const immunity = entity.getCombat().getPoisonImmunityTimer().secondsRemaining();
     if (immunity > CombatPoisonEffect.ORB_IMMUNITY_MIN_SECONDS) {
