@@ -3,6 +3,22 @@ const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
 
+test('real normal rewards persist recorded world kills and best times once without touching live saves', t => {
+  const h = H.harness(t), fs = require('node:fs'), writes = [];
+  const originalWrite = fs.writeFileSync;
+  t.mock.method(fs, 'writeFileSync', (file, text, ...args) => {
+    if (String(file).endsWith('leviathan-scoreboard.json')) writes.push(JSON.parse(text));
+    else originalWrite(file, text, ...args);
+  });
+  require('../plugins/bosses/leviathan/Rewards.Leviathan').attach(h.api);
+  h.kill(); h.step(8);
+  assert.equal(writes.length, 1);
+  assert.ok(writes[0].kills > 0);
+  assert.equal(writes[0].bestTicks, 1);
+  h.dispatch('onNpcDeath', { npc: h.fight.boss, killer: h.p });
+  assert.equal(writes.length, 1);
+});
+
 function slayerState(h) {
   const { PacketSender } = require('../dist/net/packet/PacketSender');
   const Data = require('../plugins/skills/slayer/Data.Slayer');

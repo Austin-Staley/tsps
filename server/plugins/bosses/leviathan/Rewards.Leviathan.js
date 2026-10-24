@@ -1,5 +1,6 @@
 const Common = require('./Common.Leviathan');
 const { own } = require('./Fight.Leviathan');
+const Records = require('./Records.Leviathan');
 const MONSTER = Common.MONSTER;
 function current(npc, player = null) {
   const f = own(npc);
@@ -29,6 +30,7 @@ function died({ npc, killer }) {
   const bestKey = awakened ? Common.AWAKENED_BEST_ATTRIBUTE : Common.BEST_ATTRIBUTE;
   const previous = Common.count(player, bestKey), ticks = fight.finishedTicks;
   if (!previous || ticks < previous) player.setAttribute(bestKey, ticks);
+  Records.won(fight);
   player.sendMessage(`Fight duration: ${(ticks * 0.6).toFixed(1)} seconds${!previous || ticks < previous ? ' (new personal best)' : ''}.`);
   const complete = task => Common.api.emitCustomEvent('combat-achievements:complete', { player, task });
   if (awakened) complete('Leviathan Sleeper');

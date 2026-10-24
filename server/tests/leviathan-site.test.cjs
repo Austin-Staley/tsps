@@ -2,6 +2,119 @@ const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
+
+test('recorded world statistics survive reload, retain faster records and exclude awakened events', t => {
+  const h = H.harness(t), fs = require('node:fs'), strings = new Map(), persisted = [];
+  const moduleId = require.resolve('../plugins/bosses/leviathan/Records.Leviathan'), prior = require.cache[moduleId];
+  t.after(() => { if (prior) require.cache[moduleId] = prior; else delete require.cache[moduleId]; });
+  let stored = JSON.stringify({ kills: 9876, deaths: 222, bestTicks: 80 }), reads = 0;
+  const originalRead = fs.readFileSync, originalWrite = fs.writeFileSync;
+  t.mock.method(fs, 'readFileSync', (file, ...args) => {
+    if (String(file).endsWith('leviathan-scoreboard.json')) { reads++; return stored; }
+    return originalRead(file, ...args);
+  });
+  t.mock.method(fs, 'writeFileSync', (file, text, ...args) => {
+    if (String(file).endsWith('leviathan-scoreboard.json')) stored = text;
+    else originalWrite(file, text, ...args);
+  });
+  h.p.getPacketSender = () => ({ sendInterface() {}, sendString: (text, uid) => strings.set(uid & 65535, text) });
+  h.api.persistAttribute = (...args) => persisted.push(args);
+  delete require.cache[moduleId];
+  const Records = require(moduleId);
+  Records.attach(h.api); Records.read(h.p);
+  assert.deepEqual(persisted, [[h.Common.DEATHS_ATTRIBUTE, 0]]);
+  assert.equal(strings.get(13), 'No recorded best');
+  assert.equal(strings.get(15), '9,876 (recorded)');
+  assert.equal(strings.get(17), '222 (recorded)');
+  assert.equal(strings.get(19), '0:48.00');
+  Records.died(h.p);
+  Records.won({ finishedTicks: 100 });
+  assert.equal(JSON.parse(stored).bestTicks, 80, 'slower kills retain the world best');
+  Records.won({ finishedTicks: 40 });
+  Records.won({ awakened: true, finishedTicks: 1 });
+  assert.equal(reads, 1, 'the store is loaded once per module lifetime');
+  assert.deepEqual(JSON.parse(stored), { kills: 9878, deaths: 223, bestTicks: 40 });
+  delete require.cache[moduleId];
+  require(moduleId).read(h.p);
+  assert.equal(reads, 2);
+  assert.equal(strings.get(15), '9,878 (recorded)');
+  assert.equal(strings.get(17), '223 (recorded)');
+  assert.equal(strings.get(19), '0:24.00');
+  assert.equal(strings.get(11), '1 (recorded)');
+});
+
+function scoreboard(h) {
+  const bindings = new Map(), packets = [], strings = new Map();
+  h.api.onObjectInteraction = (name, handlers) => bindings.set(name, handlers);
+  h.api.onCustomEvent('quest:is-complete', request => { request.complete = true; });
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendInterface' ? id => packets.push(id)
+    : name === 'sendString' ? (text, uid) => strings.set(uid & 65535, text) : () => sender });
+  h.p.getPacketSender = () => sender;
+  const Site = require('../plugins/bosses/leviathan/Site.Leviathan');
+  Site.attach(h.api);
+  const read = bindings.get('Scoreboard')?.Read;
+  assert.equal(typeof read, 'function', 'the native scoreboard needs a scoped Read binding');
+  return { Site, read, packets, strings, bindings };
+}
+
+test('the Leviathan scoreboard uses the native cached statistics interface and existing personal records', t => {
+  const h = H.harness(t), board = scoreboard(h);
+  h.p.setAttribute(h.Common.KILLS_ATTRIBUTE, 1234);
+  h.p.setAttribute(h.Common.BEST_ATTRIBUTE, 160);
+  assert.equal(board.read({ player: h.p, objectId: 49475 }), true);
+  assert.deepEqual(board.packets, [831]);
+  assert.equal(board.strings.get(9), '1,234');
+  assert.equal(board.strings.get(11), '0 (recorded)');
+  assert.equal(board.strings.get(13), '1:36.00');
+  assert.match(board.strings.get(15), /^\d[\d,]* \(recorded\)$/);
+  assert.match(board.strings.get(17), /^\d[\d,]* \(recorded\)$/);
+  assert.ok(board.strings.get(19));
+  assert.equal(board.read({ player: h.p, objectId: 47588 }), true);
+  assert.equal(board.read({ player: h.p, objectId: 47589 }), true, 'Read on the awakened-capable object still opens normal statistics');
+  assert.equal(board.bindings.get('Scoreboard')['Read (Awakened)'], undefined);
+});
+
+test('the Leviathan scoreboard rejects other bosses and incomplete quests without opening an interface', t => {
+  const h = H.harness(t), board = scoreboard(h);
+  assert.equal(board.read({ player: h.p, objectId: 55198 }), false);
+  h.api.onCustomEvent('quest:is-complete', request => { request.complete = false; });
+  assert.equal(board.read({ player: h.p, objectId: 47588 }), false);
+  assert.deepEqual(board.packets, []);
+});
+
+test('a real active-fight death updates recorded personal/global deaths once, without counting a mere departure', t => {
+  const h = H.harness(t), board = scoreboard(h);
+  board.read({ player: h.p, objectId: 47588 });
+  const before = Number(board.strings.get(17).replace(/[^\d]/g, ''));
+  board.Site.travel({ player: h.p, objectId: 49212 });
+  board.Site.climb({ player: h.p, objectId: 47593 });
+  h.dispatch('onPlayerDeath', { player: h.p });
+  h.dispatch('onPlayerDeath', { player: h.p });
+  assert.equal(board.Site.sessionOf(h.p), null);
+  board.read({ player: h.p, objectId: 47588 });
+  assert.equal(board.strings.get(11), '1 (recorded)');
+  assert.equal(Number(board.strings.get(17).replace(/[^\d]/g, '')), before + 1);
+  board.Site.travel({ player: h.p, objectId: 49212 });
+  board.Site.leave(h.p);
+  board.read({ player: h.p, objectId: 47588 });
+  assert.equal(board.strings.get(11), '1 (recorded)');
+});
+
+test('normal death records exclude staging, completed fights and disabled awakened sessions', t => {
+  const h = H.harness(t), board = scoreboard(h);
+  for (const state of ['staging', 'completed', 'awakened']) {
+    board.Site.travel({ player: h.p, objectId: 49212 });
+    if (state !== 'staging') {
+      board.Site.climb({ player: h.p, objectId: 47593 });
+      const fight = board.Site.sessionOf(h.p).fight;
+      if (state === 'completed') fight.fell();
+      else fight.awakened = true;
+    }
+    h.dispatch('onPlayerDeath', { player: h.p });
+    assert.equal(h.Common.count(h.p, h.Common.DEATHS_ATTRIBUTE), 0, state);
+    assert.equal(board.Site.sessionOf(h.p), null);
+  }
+});
 test('island view includes all five distant tails through native NPC visibility and restores the previous radius on exit', t => {
   const h = H.harness(t), Site = require('../plugins/bosses/leviathan/Site.Leviathan');
   h.p.setNpcViewDistance(17);

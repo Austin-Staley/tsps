@@ -12,6 +12,12 @@ async function initialize() {
   core.RegionManager.init();
 }
 function harness(t, awakened = false, startingHitpoints = 99) {
+  // Encounter tests never read or write the live world's scoreboard records.
+  const fs = require('node:fs'), path = require('node:path');
+  const readFile = fs.readFileSync, writeFile = fs.writeFileSync;
+  const scoreboardFile = file => typeof file === 'string' && path.basename(file) === 'leviathan-scoreboard.json';
+  t.mock.method(fs, 'readFileSync', (file, ...args) => scoreboardFile(file) ? '{}' : readFile(file, ...args));
+  t.mock.method(fs, 'writeFileSync', (file, ...args) => { if (!scoreboardFile(file)) return writeFile(file, ...args); });
   const Common = require('../../plugins/bosses/leviathan/Common.Leviathan');
   const hooks = new Map(), custom = new Map(), tasks = [], spawned = [], emitted = [], messages = [];
   let cycle = 0;

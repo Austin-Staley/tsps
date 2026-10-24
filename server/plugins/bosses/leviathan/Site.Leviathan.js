@@ -1,5 +1,6 @@
 const Common = require('./Common.Leviathan');
 const { Fight } = require('./Fight.Leviathan');
+const Records = require('./Records.Leviathan');
 // Revision241 cache locations, independently checked for Travel actions.
 const CAMP_BOAT = 49212, ISLAND_BOAT = 49213, SCAR_STONE = 49209;
 const sessions = new Map();
@@ -154,14 +155,22 @@ function grave(request) {
 function death({ player }) {
   const session = sessionOf(player);
   if (!session) return;
+  if (session.fight && !session.fight.awakened && !session.fight.over && !session.fight.stopped) Records.died(player);
   // As in OSRS, unprotected carried items use the outside grave; existing floor loot is lost.
   session.end();
 }
+function readScoreboard({ player, objectId }) {
+  const locs = Common.ids.locs;
+  if (![locs.scoreboard, locs.scoreboardNormal, locs.scoreboardAwakened].includes(objectId) || !complete(player)) return false;
+  return Records.read(player);
+}
 function attach(api) {
+  Records.attach(api);
   api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
   api.onObjectInteraction('Rowboat', { Travel: travel });
   api.onObjectInteraction('Handholds', { Climb: climb });
   api.onObjectInteraction('Stepping Stone', { Cross: cross });
+  api.onObjectInteraction('Scoreboard', { Read: readScoreboard });
   api.onNpcInteraction('Catalytic Guardian', { 'Talk-to': guardian });
   api.onPlayerLogin(recover);
   api.onPlayerDeath(death);

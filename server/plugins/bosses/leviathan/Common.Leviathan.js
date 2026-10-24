@@ -4,6 +4,7 @@ const INSIDE_ATTRIBUTE = "leviathan:inside";
 const KILLS_ATTRIBUTE = "leviathan:kills";
 const AWAKENED_KILLS_ATTRIBUTE = "leviathan:awakened-kills";
 const BEST_ATTRIBUTE = "leviathan:best-ticks";
+const DEATHS_ATTRIBUTE = 'leviathan:deaths';
 const AWAKENED_BEST_ATTRIBUTE = "leviathan:awakened-best-ticks";
 const MONSTER = "Leviathan, The";
 let api, core, data, ids;
@@ -14,7 +15,7 @@ function init(pluginApi) {
   data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "leviathan.json"), "utf8"));
   const C = core.CacheDefinitions;
   const lookup = { npcs: name => C.getNpcId(name), locs: name => C.getLocId(name), seqs: name => C.getSeqId(name),
-    gfx: name => C.getSpotanimId(name), varps: name => C.getVarpId(name) };
+    gfx: name => C.getSpotanimId(name), varps: name => C.getVarpId(name), interfaces: name => C.getInterfaceId(name) };
   ids = {};
   for (const [group, values] of Object.entries(data.cache)) {
     ids[group] = {};
@@ -118,5 +119,5 @@ function shadowSpell(spell) {
 }
 module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, biteDamage, protectedFrom, projectile, smokeProjectile,
   shadowSpell,
-  INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, AWAKENED_BEST_ATTRIBUTE,
+  INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, AWAKENED_BEST_ATTRIBUTE, DEATHS_ATTRIBUTE,
   get api() { return api; }, get core() { return core; }, get data() { return data; }, get ids() { return ids; } };
