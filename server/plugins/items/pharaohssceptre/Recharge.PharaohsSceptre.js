@@ -71,8 +71,8 @@ function answerCondition({ player, definition, text }) {
     return carriedCount(player, material) < Common.data.cost[material];
   }
   if (material && value.includes("has at least")) return carriedCount(player, material) >= Common.data.cost[material];
-  if (value.includes("partially")) return Common.charges(player) > 0;
-  if (value.includes("was uncharged") || value.includes("has no charges")) return Common.charges(player) === 0;
+  if (value.includes("partially")) return Common.carriedCharges(player) > 0;
+  if (value.includes("was uncharged") || value.includes("has no charges")) return Common.carriedCharges(player) === 0;
   return null;
 }
 
@@ -95,7 +95,7 @@ function recharge(player, material) {
   const cost = Common.data.cost[material];
   const found = Common.findSceptre(player);
   if (!found || !cost || carriedCount(player, material) < cost || full(player)) return null;
-  const before = Common.charges(player);
+  const before = Common.carriedCharges(player);
   const after = Common.capacity(player);
   pay(player, material, cost);
   if (found.item.getId() !== Common.ids.objs.charged) Common.swapSceptre(player, found, Common.ids.objs.charged);

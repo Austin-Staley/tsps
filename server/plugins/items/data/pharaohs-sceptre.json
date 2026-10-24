@@ -6,7 +6,6 @@
       "charged": "pharaohs_sceptre_charged",
       "initial": "pharaohs_sceptre_charged_initial"
     },
-    "varps": { "charges": "pharaohs_sceptre" },
     "varbits": {
       "mummyMet": "pharaohs_sceptre_mummy_met",
       "lastTeleport": "pharaohs_sceptre_last_teleport",

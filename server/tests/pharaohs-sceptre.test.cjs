@@ -84,7 +84,14 @@ function fakePlayer() {
     setAttribute: (k, v) => { player.attributes[k] = v; },
     getPacketSender: () => ({
       sendConfig: (id, v) => { player.varps[id] = v; },
-      sendVarbit: (id, v) => { player.varbits[id] = v; },
+      sendVarbit: (id, v) => {
+        player.varbits[id] = v;
+        // As PacketSender does: the varbit's bits of its varp.
+        const bit = core.CacheDefinitions.getVarbit(id);
+        const varp = bit.varp ?? bit.baseVar ?? bit.index;
+        const mask = ((1 << (bit.endBit - bit.startBit + 1)) - 1) << bit.startBit;
+        player.varps[varp] = ((player.varps[varp] ?? 0) & ~mask) | ((v << bit.startBit) & mask);
+      },
     }),
     getInventory: () => inventory,
     getEquipment: () => equipment,
@@ -105,7 +112,6 @@ const action = (player, option, extra = {}) => {
 
 test('every id resolves from the cache; the artefacts come from Pyramid Plunder with their materials', () => {
   assert.deepEqual([ids().objs.uncharged, ids().objs.charged, ids().objs.initial], [26945, 26948, 26950]);
-  assert.equal(ids().varps.charges, 3420);
   assert.deepEqual([ids().varbits.mummyMet, ids().varbits.lastTeleport, ids().varbits.necropolis], [5007, 13838, 13839]);
   assert.equal(ids().locs.obelisk, 44296);
   assert.equal(ids().artefacts.size, 18, 'nine artefacts, unnoted and noted');
@@ -133,9 +139,9 @@ test('a sceptre found in Pyramid Plunder holds 3; a teleport spends one on arriv
   assert.deepEqual(casts.find((c) => c.tile).tile, [3232, 2897, 0]);
   assert.equal(casts[0].checked, 30, 'works up to level 30 Wilderness');
   assert.equal(Common.charges(player), 2);
-  assert.equal(player.varps[3420], 2);
   assert.equal(player.messages.at(-1), 'Your sceptre has 2 charges left.');
   assert.equal(player.attributes[Common.LAST_ATTRIBUTE], 3);
+  assert.equal(player.varps[3420] & 0x3f, 3, "last teleport: Jaldraocht");
   action(player, 'Last-Teleport');
   assert.deepEqual(casts.at(-1).tile, [3232, 2897, 0], 'Last-Teleport repeats it');
   action(player, 'Teleport', { subOpId: 2 });
@@ -275,4 +281,23 @@ test('using the sceptre or an artefact on him asks about charging; artefacts wit
   const other = { player, target: {}, definition: { getName: () => 'Simon Templeton' }, itemId: comb, handled: false };
   Recharge.itemOnMummy(other);
   assert.equal(other.handled, false);
+});
+
+test("Check on an uncharged sceptre says none, whatever the pool; the mummy treats it as uncharged", () => {
+  const player = fakePlayer();
+  player.attributes[Common.CHARGES_ATTRIBUTE] = 5; // a charged sceptre left in the bank
+  player.inventory.put(ids().objs.uncharged);
+  action(player, "Check");
+  assert.equal(player.messages.at(-1), "Your sceptre has no charges left.");
+  assert.equal(ask(player, "If the sceptre was partially-charged:"), false);
+  assert.equal(ask(player, "If the sceptre was uncharged:"), true);
+});
+
+test("communing looks for the sceptre in the pack, not the one worn", () => {
+  const player = fakePlayer();
+  player.equipment.put(ids().objs.charged);
+  assert.equal(Teleport.commune({ player, objectId: ids().locs.obelisk }), false, "worn only");
+  player.inventory.put(ids().objs.uncharged);
+  assert.equal(Teleport.commune({ player, objectId: ids().locs.obelisk }), true);
+  assert.equal(player.varps[3420] & 0x40, 0x40, "bit 6");
 });

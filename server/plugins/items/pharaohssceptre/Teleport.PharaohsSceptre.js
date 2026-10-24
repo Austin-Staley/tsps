@@ -72,8 +72,8 @@ function chooseDestination(player) {
   Common.api.sendMultiChatboxPrompt(player, Common.message("prompt"), ...options);
 }
 
-function check(player) {
-  const count = Common.charges(player);
+function check(player, itemId) {
+  const count = Common.chargesOf(player, itemId);
   player.sendMessage(count > 0 ? Common.message("check", Common.chargeWords(count)) : Common.message("checkEmpty"));
 }
 
@@ -103,7 +103,7 @@ function onItemAction(event) {
   const option = normalise(equipped ? (event.option ?? wornOptionName(event.itemId, event.clickType)) : event.option);
   if (option === "check") {
     event.handled = true;
-    check(player);
+    check(player, event.itemId);
     return;
   }
   if (!Common.isCharged(event.itemId)) return;
@@ -137,8 +137,8 @@ function onItemAction(event) {
 /** The Necropolis obelisk: communing with a sceptre in the pack opens Jaltevas for it (Wiki). */
 function commune({ player, objectId }) {
   if (objectId !== Common.ids.locs.obelisk) return false;
-  const found = Common.findSceptre(player);
-  if (!found || found.equipped) return false;
+  const inPack = (player.getInventory?.()?.getItems?.() ?? []).some((item) => Common.isSceptre(item?.getId?.()));
+  if (!inPack) return false;
   if (!Common.necropolisUnlocked(player)) {
     player.setAttribute(Common.NECROPOLIS_ATTRIBUTE, true);
     Common.sync(player);

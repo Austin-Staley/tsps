@@ -1,8 +1,9 @@
 /**
  * The Pharaoh's sceptre: what the units share - plugins/items/data/pharaohs-sceptre.json with its
  * gameval names resolved to cache ids, the Pyramid Plunder artefacts by material, the player's
- * charges (one pool, as the cache keeps them in varp pharaohs_sceptre) and how many the sceptre
- * holds for their Desert Diary.
+ * charges (one pool per player, saved here) and how many the sceptre holds for their Desert Diary.
+ * Varp pharaohs_sceptre packs the last teleport (bits 0-5), the Necropolis (6) and the mummy
+ * met (7) as varbits; the cache has no varbit for a count, so the charges are not sent in it.
  */
 const fs = require("fs");
 const path = require("path");
@@ -38,7 +39,6 @@ function init(pluginApi) {
   const cache = core.CacheDefinitions;
   ids = {
     objs: resolve(data.names.objs, (name) => cache.getObjId(name), "obj"),
-    varps: resolve(data.names.varps, (name) => cache.getVarpId(name), "varp"),
     varbits: resolve(data.names.varbits, (name) => cache.getVarbitId(name), "varbit"),
     locs: resolve(data.names.locs, (name) => cache.getLocId(name), "loc"),
     npcs: resolve(data.names.npcs, (name) => cache.getNpcId(name), "npc"),
@@ -95,7 +95,6 @@ function charges(player) {
 
 function sync(player) {
   const sender = player.getPacketSender();
-  sender.sendConfig(ids.varps.charges, charges(player));
   sender.sendVarbit(ids.varbits.mummyMet, player.getAttribute?.(MUMMY_MET_ATTRIBUTE) === true ? 1 : 0);
   sender.sendVarbit(ids.varbits.lastTeleport, Number(player.getAttribute?.(LAST_ATTRIBUTE)) || 0);
   sender.sendVarbit(ids.varbits.necropolis, necropolisUnlocked(player) ? 1 : 0);
@@ -108,6 +107,16 @@ function setCharges(player, value) {
 
 function necropolisUnlocked(player) {
   return player.getAttribute?.(NECROPOLIS_ATTRIBUTE) === true;
+}
+
+/** The charges for a sceptre in hand: none for an uncharged one, else the pool. */
+function chargesOf(player, itemId) {
+  return isCharged(itemId) ? charges(player) : 0;
+}
+
+/** The charges of the sceptre carried or worn: none unless a charged one is with the player. */
+function carriedCharges(player) {
+  return findSceptre(player, chargedIds()) ? charges(player) : 0;
 }
 
 /** Turns the sceptre into another form (charged, uncharged) where it is, worn or carried. */
@@ -131,7 +140,7 @@ function chargeWords(count) {
 }
 
 module.exports = {
-  init, sceptreIds, chargedIds, isSceptre, isCharged, findSceptre, capacity, charges, setCharges, sync,
+  init, sceptreIds, chargedIds, isSceptre, isCharged, findSceptre, capacity, charges, chargesOf, carriedCharges, setCharges, sync,
   necropolisUnlocked, swapSceptre, message, chargeWords,
   CHARGES_ATTRIBUTE, LAST_ATTRIBUTE, NECROPOLIS_ATTRIBUTE, MUMMY_MET_ATTRIBUTE,
   get api() { return api; },
