@@ -3,6 +3,18 @@ const {test,before}=require('node:test');
 const H=require('./helpers/duke-sucellus.cjs');
 before(H.initialize);
 
+test('Duke keeps sleeping and awake scripted HP through the real idle NPC regeneration clock',t=>{
+  const h=H.harness(t),s=h.enter(),boss=s.boss;
+  h.step(40);boss.getCombat().getLastAttack().reset(1);
+  boss.setHitpoints(50);boss.process();
+  assert.equal(boss.getHitpoints(),50,'the preparation meter must not be refilled by generic healing');
+  h.fight.wake();h.fight.nextAttack=Infinity;
+  boss.setHitpoints(300);boss.getCombat().getLastAttack().reset(1);
+  for(let i=0;i<5;i++){h.step();boss.process();}
+  assert.equal(boss.getHitpoints(),300,'waking does not restore idle regeneration');
+  s.reset();assert.equal(s.boss.hasFlag('combat:no-regen'),true,'every respawn owns the same scoped policy');
+});
+
 test('vat interactions reach every cache footprint edge, without reaching past it',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items,at=h.C.data.resources.vats[0];
   h.move([3036,6438]);h.add(i.arder,3);

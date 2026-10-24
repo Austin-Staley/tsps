@@ -1,5 +1,16 @@
 # Postquest Duke Sucellus
 
+### Owned-actor idle regeneration correction (24 October 2026)
+
+The cross-boss native staging audit found generic idle healing also affected
+Duke. A real `NPC.process()` clock regression reproduced sleeping HP 50→70
+after the existing 20-second threshold. The boss and passive actor spawn paths
+now set the existing `combat:no-regen` flag before their scripted setup. The
+regression preserves sleeping HP and awake HP 300 over repeated NPC updates,
+and verifies the next reset creates a newly protected actor. Generic defaults
+and attack timestamps are unchanged. This does not resolve the separately
+documented shared skilling-clock/double-yield gathering gap.
+
 ## Normal fidelity audit, 24 October 2026
 
 ### Capture-backed corrections

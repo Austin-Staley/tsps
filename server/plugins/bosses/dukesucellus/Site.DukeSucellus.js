@@ -48,7 +48,7 @@ class Session {
   spawnPassive(id,tile,face=0) {
     const at=this.tile(tile),npc=C.api.spawnNpc({id,x:at.getX(),y:at.getY(),z:at.getZ(),owner:this.player,wanderRadius:0,face});
     if(!npc)return null;
-    npc.__skipDefaultRespawn=true;npc.setScriptedMovement(true);npc.setUntargetable(true);npc.setFlag('combat:no-retaliate');
+    npc.__skipDefaultRespawn=true;npc.setFlag('combat:no-regen');npc.setScriptedMovement(true);npc.setUntargetable(true);npc.setFlag('combat:no-retaliate');
     this.area.add(npc);this.passive.add(npc);return npc;
   }
   removePassive(npc) {
@@ -68,6 +68,7 @@ class Session {
     this.boss=C.api.spawnNpc({id:C.data.npcs.awake,x:at.getX(),y:at.getY(),z:at.getZ(),owner:this.player,wanderRadius:0,face:C.core.Direction.SOUTH.getId()});
     if(!this.boss) { this.end(); return; }
     this.boss.__skipDefaultRespawn=true;
+    this.boss.setFlag('combat:no-regen');
     this.boss.setScriptedMovement(true); this.boss.setNpcTransformationId(C.data.npcs.asleep);
     this.boss.setMaxHitpoints(C.data.normal.meter); this.boss.setHitpoints(C.data.normal.meter);
     this.area.add(this.boss);
