@@ -97,14 +97,14 @@ function ride(player, from, to) {
   Common.fade(player, true);
   Common.later(Common.data.travelTicks, () => {
     riding.delete(player);
-    if (player.isRegistered?.() === false) return;
+    const disconnected = !Common.core.World.isPlayerSessionConnected(player) || player.isRegistered?.() === false;
     const dying = player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0;
-    if (dying || !canPay(player)) {
+    if (disconnected || dying || !canPay(player)) {
       // No ride: the screen comes back where they are (death keeps its own movement block).
       Common.closeFade(player);
       if (!dying) {
         movement?.setBlockMovement?.(false);
-        refuseFare(player, from);
+        if (!disconnected) refuseFare(player, from);
       }
       return;
     }

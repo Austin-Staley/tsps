@@ -11,6 +11,10 @@ Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerSession } = require('../dist/net/PlayerSession');
+const { HeadlessBinaryChannel } = require('../dist/net/BinaryChannel');
+const { ClientConnection } = require('../dist/net/NetworkBuilder');
 
 let Common, Travel, QuestRuntime, tasks, starts, spawned, questDone;
 
@@ -55,6 +59,7 @@ function fakePlayer(x = 1519, y = 3732, coins = 100) {
     getLocation: () => tile,
     moveTo: (to) => { tile = to; },
     isRegistered: () => true,
+    getSession: () => ({ getChannel: () => ({ readyState: 1 }) }),
     getHitpoints: () => 99,
     sendMessage: (m) => player.messages.push(m),
     getInterfaceId: () => player.interface,
@@ -198,4 +203,56 @@ test('the real server startup event spawns all six missing conductors without ho
   assert.deepEqual(errors, []);
   assert.deepEqual(spawned.map((npc) => npc.id).sort((a, b) => a - b), [12702, 12703, 12704, 12705, 12706, 12707]);
   assert.ok(spawned.every((npc) => npc.wanderRadius === 0 && npc.z === 0));
+});
+
+test('a closed connection held in combat never arrives or pays its fare', () => {
+  const channel = new HeadlessBinaryChannel();
+  const connection = new ClientConnection(channel);
+  const player = new Player(new PlayerSession(channel));
+  let closed = 0;
+  const sender = new Proxy({ closeSubInterface: () => { closed += 1; } }, { get: (target, key) => target[key] ?? (() => sender) });
+  player.getPacketSender = () => sender;
+  player.setUsername('minecart-close');
+  player.setRegistered(true);
+  player.moveTo(loc(1519, 3732));
+  player.getInventory().adds(995, 100);
+  player.getCombat().setUnderAttack(new Player(null));
+  connection.player = player;
+  Travel.ride(player, station('lovakengj'), station('arceuus'));
+  try {
+    channel.close();
+    assert.equal(core.World.isPlayerSessionConnected(player), false);
+    assert.ok(core.World.getRemovePlayerQueue().includes(player));
+    assert.equal(player.readyToLeaveWorld(), false);
+    assert.equal(player.isRegistered(), true);
+    flush();
+    assert.deepEqual(at(player), [1519, 3732]);
+    assert.equal(player.getInventory().getAmount(995), 100);
+    assert.equal(player.getMovementQueue().isMovementBlocked(), false);
+    assert.equal(closed, 1);
+  } finally {
+    const queue = core.World.getRemovePlayerQueue();
+    const index = queue.indexOf(player);
+    if (index >= 0) queue.splice(index, 1);
+  }
+});
+
+test('native task order lets a death cancel the three-tick ride before respawn', (t) => {
+  t.mock.method(Common.core.TaskManager, 'submit', (task) => core.TaskManager.submit(task));
+  const player = new Player(new PlayerSession(new HeadlessBinaryChannel()));
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.setUsername('minecart-death');
+  player.setRegistered(true);
+  player.moveTo(loc(1519, 3732));
+  player.getInventory().adds(995, 100);
+  Travel.ride(player, station('lovakengj'), station('arceuus'));
+  player.setHitpoints(0);
+  player.appendDeath();
+  core.TaskManager.process();
+  core.TaskManager.process();
+  core.TaskManager.process();
+  assert.equal(player.isDyingReturn(), false, 'the actual death task completed');
+  assert.deepEqual(at(player), [3089, 3524], 'the death respawn owns the final position');
+  assert.equal(player.getInventory().getAmount(995), 100, 'the cancelled ride took no fare');
 });
