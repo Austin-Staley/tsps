@@ -1459,7 +1459,9 @@ function cureFromHealthOrb({ player }) {
     handlePotionDrink(player, selected.itemId, selected.slot);
     return;
   }
-  player.sendMessage("You haven't got anything capable of curing your poison.");
+  const fallback = { player, handled: false };
+  pluginApi.emitCustomEvent("poison:cure-from-orb", fallback);
+  if (!fallback.handled) player.sendMessage("You haven't got anything capable of curing your poison.");
 }
 
 module.exports = {

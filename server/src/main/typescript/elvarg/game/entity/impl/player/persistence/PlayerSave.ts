@@ -149,6 +149,7 @@ export class PlayerSave {
     private poisonDamage: number;
     /** Whether poisonDamage represents an active venom (vs. ordinary poison) affliction. */
     private venomed: boolean;
+    private lastVenomDamage?: number;
     private poisonImmunityTimer: number;
     private fireImmunityTimer: number;
     private teleblockTimer: number;
@@ -592,6 +593,7 @@ export class PlayerSave {
         player.setSpecialPercentage(this.specPercentage);
         player.setPoisonDamage(this.poisonDamage);
         player.setVenomed(this.venomed);
+        player.setLastVenomDamage(this.lastVenomDamage);
 
         player.getCombat().getPoisonImmunityTimer().start(this.poisonImmunityTimer);
         player.getCombat().getFireImmunityTimer().start(this.fireImmunityTimer);
@@ -694,6 +696,7 @@ export class PlayerSave {
         playerSave.specPercentage = player.getSpecialPercentage();
         playerSave.poisonDamage = player.getPoisonDamage();
         playerSave.venomed = player.isVenomed();
+        playerSave.lastVenomDamage = player.isVenomed() ? player.getLastVenomDamage() : undefined;
 
         playerSave.poisonImmunityTimer = player.getCombat().getPoisonImmunityTimer().secondsRemaining();
         playerSave.fireImmunityTimer = player.getCombat().getFireImmunityTimer().secondsRemaining();
