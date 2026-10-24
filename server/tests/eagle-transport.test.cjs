@@ -11,6 +11,8 @@ Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerDeathTask } = require('../dist/game/task/impl/PlayerDeath');
 
 let Common, Flight, Eyries, QuestRuntime, tasks, cycle, questDone, spawned, removed, clipped;
 
@@ -21,6 +23,7 @@ before(async () => {
   Eyries = require('../plugins/world/eagletransport/Eyries.EagleTransport');
   QuestRuntime = require('../plugins/quests/QuestRuntime');
   const api = new Proxy({
+    ...PluginManager.createApi('EagleTransportTest'),
     core: {
       ...core,
       TaskManager: { submit: (task) => tasks.push(task) },
@@ -31,7 +34,7 @@ before(async () => {
     spawnNpc: (def) => { const n = { ...def, getId: () => def.id, getLocation: () => loc(def.x, def.y, def.z) }; spawned.push(n); return n; },
     removeNpc: (n) => removed.push(n),
   }, { get: (target, key) => target[key] ?? (() => {}) });
-  Common.init(api);
+  require('../plugins/world/EagleTransport.plugin').register(api);
   // The quest's completion, as QuestRuntime answers it.
   const original = QuestRuntime.getRegisteredQuests;
   QuestRuntime.getRegisteredQuests = () => [{ name: "Eagles' Peak", isComplete: () => questDone }, ...original()];
@@ -131,6 +134,76 @@ test('a second click mid-flight does nothing; dying on the way is left to the de
   flush();
   assert.deepEqual(at(player), [2022, 4960, 3], 'not moved');
   assert.equal(player.blocked, true, 'the death keeps movement blocked');
+});
+
+
+test('a completed real death cancels the old flight before its arrival', () => {
+  const player = new Player(null);
+  const closed = [];
+  const sender = new Proxy({ closeSubInterface: (id) => closed.push(id) }, { get: (target, key) => target[key] ?? (() => sender) });
+  player.getPacketSender = () => sender;
+  player.setUsername('eagle-death');
+  player.setRegistered(true);
+  player.moveTo(loc(2022, 4960, 3));
+  Common.travel(player, Common.data.eyries.jungle.arrive, Common.data.flightTicks);
+  player.isDying = true;
+  player.setHitpoints(0);
+  const death = new PlayerDeathTask(player);
+  death.execute();
+  death.execute();
+  death.execute();
+  const respawn = at(player);
+  assert.equal(player.isDyingReturn(), false);
+  assert.ok(player.getHitpoints() > 0);
+  flush();
+  assert.deepEqual(at(player), respawn, 'the old flight cannot overwrite the completed respawn');
+  assert.equal(Boolean(player.__eagleTravelling), false);
+  assert.ok(closed.includes((161 << 16) | 1), 'the flight overlay is removed');
+});
+
+test('death start cancels flight without unblocking death movement', () => {
+  const player = fakePlayer();
+  Common.travel(player, Common.data.eyries.jungle.arrive, Common.data.flightTicks);
+  player.dead = true;
+  PluginManager.emitPlayerBeforeDeath({ player, preventDeath: false });
+  assert.equal(Boolean(player.__eagleTravelling), false);
+  assert.equal(player.blocked, true);
+  flush();
+  assert.deepEqual(at(player), [2022, 4960, 3]);
+  assert.equal(player.blocked, true);
+});
+
+test('logout and disconnect invalidate old callbacks even after a new flight starts', () => {
+  for (const emit of ['emitPlayerLogout', 'emitPlayerDisconnect']) {
+    const player = fakePlayer();
+    let closed = 0;
+    player.getPacketSender = ((original) => () => ({ ...original(), closeSubInterface: () => { closed += 1; } }))(player.getPacketSender);
+    Common.travel(player, Common.data.eyries.jungle.arrive, Common.data.flightTicks);
+    const oldArrival = tasks.shift();
+    PluginManager[emit]({ player, username: 'eagle-logout' });
+    assert.equal(Boolean(player.__eagleTravelling), false);
+    assert.equal(player.blocked, false, 'disconnect releases the living traveller');
+    assert.equal(closed, 1);
+    Common.travel(player, Common.data.eyries.desert.arrive, Common.data.flightTicks);
+    oldArrival.execute();
+    assert.deepEqual(at(player), [2022, 4960, 3], 'a stale arrival cannot move or cancel the new trip');
+    assert.equal(player.blocked, true);
+    flush();
+    assert.deepEqual(at(player), Common.data.eyries.desert.arrive);
+  }
+});
+
+test("the vine cannot consume an item or save growth before Eagles' Peak is complete", () => {
+  questDone = false;
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.getInventory().adds(Common.ids.objs.teasingStick, 1);
+  const event = { player, objectId: Common.ids.locs.vine, itemId: Common.ids.objs.teasingStick, handled: false };
+  Eyries.guideVine(event);
+  assert.equal(event.handled, true);
+  assert.equal(player.getInventory().getAmount(Common.ids.objs.teasingStick), 1);
+  assert.equal(player.getAttribute(Eyries.VINE_ATTRIBUTE), undefined);
 });
 
 test('the Peak eyrie\'s eagles fly out to their eyrie; the far ones only fly back to the Peak', () => {

@@ -13,6 +13,7 @@ module.exports = {
   members: true,
   register(api) {
     Common.init(api);
+    Common.attach(api);
     Flight.attach(api);
     Eyries.attach(api);
   },

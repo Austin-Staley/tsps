@@ -82,21 +82,41 @@ function fade(player, out) {
 function travel(player, tile, ticks, onArrival = null) {
   const movement = player.getMovementQueue?.();
   if (player.__eagleTravelling) return false;
-  player.__eagleTravelling = true;
+  const trip = {};
+  player.__eagleTravelling = trip;
   movement?.setBlockMovement?.(true);
   movement?.reset?.();
   fade(player, true);
   later(ticks, () => {
-    player.__eagleTravelling = false;
-    // Dying on the way leaves the player to the death (it blocks movement itself).
-    if (player.isRegistered?.() === false || player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0) return;
+    if (player.__eagleTravelling !== trip) return;
+    if (player.isRegistered?.() === false || player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0) {
+      cancelTravel({ player });
+      return;
+    }
     movement?.setBlockMovement?.(false);
     player.moveTo(toLocation(tile));
     fade(player, false);
     onArrival?.();
-    later(2, () => player.getPacketSender().closeSubInterface(OVERLAY_ATMOSPHERE_UID));
+    later(2, () => {
+      if (player.__eagleTravelling === trip) cancelTravel({ player });
+    });
   });
   return true;
+}
+
+/** Invalidates both arrival and fade cleanup without releasing the death's movement block. */
+function cancelTravel({ player }) {
+  if (!player.__eagleTravelling) return;
+  player.__eagleTravelling = null;
+  player.getPacketSender().closeSubInterface(OVERLAY_ATMOSPHERE_UID);
+  if (player.isDyingReturn?.() !== true && player.getHitpoints?.() > 0) player.getMovementQueue()?.setBlockMovement?.(false);
+}
+
+function attach(api) {
+  api.onPlayerBeforeDeath(cancelTravel);
+  api.onPlayerDeath(cancelTravel);
+  api.onPlayerLogout(cancelTravel);
+  api.onPlayerDisconnect(cancelTravel);
 }
 
 /** A message box, as the transcript's {{tbox}} lines are. */
@@ -113,7 +133,7 @@ function message(key, values = {}) {
 }
 
 module.exports = {
-  init, later, toLocation, questComplete, inBox, fade, travel, box, message,
+  init, attach, later, toLocation, questComplete, inBox, fade, travel, box, message,
   get api() { return api; },
   get core() { return core; },
   get data() { return data; },

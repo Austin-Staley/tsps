@@ -75,6 +75,7 @@ function guideVine(event) {
   const { player } = event;
   if (event.objectId !== Common.ids.locs.vine || !guideItems().includes(event.itemId)) return;
   event.handled = true;
+  if (!Common.questComplete(player)) return;
   if (vineState(player)) {
     player.sendMessage(Common.message("vineAlready"));
     return;
