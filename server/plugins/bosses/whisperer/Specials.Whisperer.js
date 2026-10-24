@@ -100,8 +100,7 @@ function render(fight) {
             column.x = x;
             column.npc.moveTo(new Common.core.Location(x, column.y, 0));
             column.npc.setNpcTransformationId(fight.shadow ? Common.data.npcs.columnShadow : Common.data.npcs.column);
-            if (fight.shadow)
-                column.npc.addTickHit(new Common.core.HitDamage(0, Common.core.HitMask.BLUE));
+            columnHealth(fight,column);
         }
     if (special.kind === 'souls')
         for (const soul of special.souls) {
@@ -113,6 +112,13 @@ function render(fight) {
             if (fight.shadow)
                 soul.npc.forceChat(Common.data.soulSets[soul.group].phrase);
         }
+}
+function columnHealth(fight,column) {
+    const bar = Common.data.specials.columnHeadbar;
+    if (fight.shadow)
+        column.npc.showHeadbar(bar.id,{fill:Math.ceil(column.hp * bar.width / bar.maximum)});
+    else
+        column.npc.removeHeadbar(bar.id);
 }
 function finish(fight) {
     clear(fight);
@@ -152,6 +158,9 @@ function process(fight) {
         Common.fragment(fight,false);
     }
     if (special.kind === 'screech' && [21,27].includes(special.age)) animate(Common.data.animations.screech);
+    if (special.kind === 'screech' && fight.shadow)
+        for (const column of special.columns)
+            if (column.active) columnHealth(fight,column);
     special.left--;
     if (special.kind === 'seeds') {
         const p = fight.player.getLocation();
@@ -193,8 +202,10 @@ function process(fight) {
                     c.active = false;
                     Common.remove(c.npc);
                 }
-                else
+                else {
                     c.npc.setHitpoints(c.hp);
+                    if (fight.shadow) columnHealth(fight,c);
+                }
             }
         if (--special.blasts <= 0)
             finish(fight);

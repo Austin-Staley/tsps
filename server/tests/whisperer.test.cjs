@@ -916,3 +916,56 @@ test('a binding melee attack retains its form through both hits and restores bef
     while (f.fight.tick < nextVolley) f.fight.process();
     assert.equal(f.boss.getNpcTransformationId(), 12204);
 });
+
+test('ordinary Disturb preserves each adjacent approach tile when entering the private cathedral', () => {
+    for (const [x, y] of [[2656,6371], [2656,6367], [2654,6369], [2658,6369]]) {
+        const f = fixture();
+        f.session.area.remove(f.player);
+        f.player.moveTo(new core.Location(x, y, 0));
+        f.player.getInventory().adds(core.ItemIdentifiers.BLACKSTONE_FRAGMENT_2, 1);
+        Common.init({core,
+            emitCustomEvent(name, event) { if (name === 'quest:is-complete') event.complete = true; },
+            removeNpc() {},
+            spawnNpc({id,x,y,z,owner}) {
+                const npc = core.NPC.create(id, new core.Location(x,y,z));
+                npc.setOwner(owner);
+                return npc;
+            },
+        });
+        const beforeClip = core.RegionManager.getClipping(x,y,0,null);
+        const figure = core.NPC.create(Common.data.npcs.figure, new core.Location(2655,6368,0));
+        Site.disturb({player:f.player,npc:figure});
+        const session = Site.sessionOf(f.player);
+        assert.ok(session);
+        assert.equal(f.player.getPrivateArea(),session.area);
+        assert.deepEqual([f.player.getLocation().getX(),f.player.getLocation().getY()],[x,y]);
+        assert.equal(core.RegionManager.getClipping(x,y,0,session.area),beforeClip);
+        assert.equal(beforeClip & 0x200100,0,'the real cache approach tile is walkable');
+        assert.equal(session.area.canAttack(f.player,session.fight.boss),false);
+        Site.leave({player:f.player});
+    }
+    Common.init({core,emitCustomEvent(){},removeNpc(){}});
+});
+
+test('shadow columns use clean native forty-pixel health bars and remove them outside the realm', () => {
+    const f = fixture();
+    f.fight.setShadow(true);
+    startSpecial(f.fight,'screech');
+    const fills = {20:14,40:27,60:40};
+    for (const column of f.fight.special.columns) {
+        assert.deepEqual(column.npc.getTickHits(),[],'revealing health does not create a blue zero hitsplat');
+        assert.deepEqual(column.npc.getHeadbars(),[{id:2,fill:fills[column.hp],endFill:fills[column.hp],duration:0,delay:0}]);
+        column.npc.resetUpdating();
+    }
+    Specials.process(f.fight);
+    assert.ok(f.fight.special.columns.every(column=>column.npc.getHeadbars().length===1),'shadow bars refresh without hits each tick');
+    const strongest = f.fight.special.columns.find(column=>column.hp===60);
+    while (f.fight.special.age<17) Specials.process(f.fight);
+    assert.equal(strongest.hp,40);
+    assert.deepEqual(strongest.npc.getHeadbars(),[{id:2,fill:27,endFill:27,duration:0,delay:0}]);
+    f.fight.setShadow(false);
+    for (const column of f.fight.special.columns.filter(column=>column.active)) {
+        assert.deepEqual(column.npc.getTickHits(),[]);
+        assert.deepEqual(column.npc.getHeadbars(),[{id:2,remove:true}]);
+    }
+});

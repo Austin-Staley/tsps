@@ -104,7 +104,6 @@ function disturb({ player, npc }) {
     const session = new Session(player);
     sessions.set(player, session);
     session.area.enter(player);
-    player.moveTo(Common.location(Common.data.site.arrival));
     player.setAttribute(Common.INSIDE_ATTRIBUTE, true);
     session.start();
     return true;
