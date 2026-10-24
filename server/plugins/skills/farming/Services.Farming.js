@@ -159,7 +159,8 @@ function farmingItemPair(event) {
         const can = a === seedling.seedling ? b : a;
         if (!/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(can).name)) return;
         event.handled = true;
-        if (!Patches.water(player, can)) return;
+        const canSlot = a === seedling.seedling ? event.usedWithItemSlot : event.usedItemSlot;
+        if (!Patches.water(player, can, canSlot)) return;
         const slot = a === seedling.seedling ? event.usedItemSlot : event.usedWithItemSlot;
         const saplingAt = Model.nextGrowth(Date.now(), 5, Patches.farmFor(player).offset);
         inventory.forSlot(slot).setId(seedling.wateredSeedling).setMetaValue("farming:sapling-at", saplingAt);

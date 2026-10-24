@@ -167,7 +167,7 @@ function titheItem(event) {
             plot.plant.fertilized = true;
             plot.plant.nextAt = Date.now() + Math.max(0, plot.plant.nextAt - Date.now()) / 2;
             player.performAnimation(new core.Animation(2283));
-        } else if (/watering can|Gricoller's can/i.test(core.CacheDefinitions.getItem(id).name) && !plot.plant.watered && Patches.water(player, id)) plot.plant.watered = true;
+        } else if (/watering can|Gricoller's can/i.test(core.CacheDefinitions.getItem(id).name) && !plot.plant.watered && Patches.water(player, id, event.itemSlot)) plot.plant.watered = true;
     }
     redraw(game, plot);
 }
