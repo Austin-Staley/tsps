@@ -1,5 +1,5 @@
 {
-  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Seed/pillar positions are a bounded playable layout pending capture parity; see docs/whisperer.md.",
+  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Independently normal level791 actors in Grid Master recording3285 corroborate seed grids/anchors and column coordinates against ordinary Wiki diagrams. Remaining evidence audit: docs/whisperer.md.",
   "quest": "desert_treasure_ii",
   "npcs": {
     "figure": 12203,
@@ -14,14 +14,8 @@
   "animations": {
     "spawn": 10227,
     "melee": 10234,
-    "ranged": [
-      10237,
-      10238
-    ],
-    "magic": [
-      10243,
-      10244
-    ],
+    "ranged": 10237,
+    "magic": 10243,
     "teleport": 10247,
     "screech": 10250,
     "seeds": 10254,
@@ -30,12 +24,22 @@
     "tentacleSpawn": 10263,
     "tentacleAttack": 10266,
     "pickup": 827,
-    "flyback": 9799
+    "flyback": 9799,
+    "wakeKnockback": 9799,
+    "rangedAlt": 10238,
+    "magicAlt": 10244,
+    "appear": 10248,
+    "screechHold": 10251,
+    "screechBlast": 10252,
+    "binding": 10254,
+    "soulChant": 10257,
+    "soulResolve": 10259
   },
   "projectiles": {
     "ranged": 2444,
     "magic": 2445,
-    "bind": 2467
+    "bind": 2467,
+    "screech": 2471
   },
   "objects": {
     "seedLight": 47573,
@@ -52,12 +56,12 @@
     ],
     "arrival": [
       2656,
-      6374,
+      6380,
       0
     ],
     "boss": [
       2655,
-      6369,
+      6368,
       0
     ],
     "grave": [
@@ -71,13 +75,13 @@
       2640,
       2676,
       6352,
-      6386,
+      6385,
       0
     ],
     "tentacleBounds": [
-      2644,
-      2668,
-      6356,
+      2641,
+      2675,
+      6353,
       6384
     ],
     "screechY": 6357
@@ -212,7 +216,11 @@
     "impactTicks": 3
   },
   "graphics": {
-    "bind": 2466
+    "bind": 2466,
+    "bindingCast": 177,
+    "bindingImpact": 2466,
+    "screech": 2470,
+    "screechWater": 2451
   },
   "sounds": {
     "disturb": 3201,
@@ -243,5 +251,276 @@
     "enrage": "<col=ff289d>The Whisperer pulls you into the Shadow Realm...",
     "insanity": "<col=ef1020>The darkness of the Shadow Realm begins to consume your mind!",
     "noFragment": "It would not be wise to proceed without a way to<br>traverse the Shadow Realm."
+  },
+  "scoreboard": {
+    "interface": 830,
+    "close": 2,
+    "parents": [
+      46092,
+      49474
+    ],
+    "readable": [
+      47580,
+      47581,
+      47582,
+      47583
+    ],
+    "components": {
+      "kills": 9,
+      "deaths": 11,
+      "best": 13,
+      "worldKills": 15,
+      "worldDeaths": 17,
+      "worldBest": 19
+    }
+  },
+  "wakeKnockback": {
+    "tiles": 3,
+    "cycles": 60,
+    "ticks": 2
+  },
+  "volley": {
+    "launchDelay": 30,
+    "arrivalCycles": 90,
+    "startHeight": 87.5,
+    "endHeight": 25,
+    "angle": 254,
+    "progress": 128,
+    "impactTicks": 3
+  },
+  "binding": {
+    "launchDelay": 80,
+    "arrivalCycles": 170,
+    "nearArrivalCycles": {
+      "3": 200,
+      "4": 180
+    },
+    "startHeight": 145,
+    "endHeight": 0,
+    "angle": 16,
+    "progress": 150,
+    "impactTicks": 6,
+    "pursuitTicks": 5
+  },
+  "specials": {
+    "screechWaveRows": [
+      [
+        -4,
+        -5,
+        2
+      ],
+      [
+        -3,
+        -6,
+        6
+      ],
+      [
+        -2,
+        -7,
+        7
+      ],
+      [
+        -1,
+        -8,
+        9
+      ],
+      [
+        0,
+        -8,
+        9
+      ],
+      [
+        1,
+        -8,
+        9
+      ],
+      [
+        2,
+        -8,
+        9
+      ],
+      [
+        3,
+        -8,
+        9
+      ],
+      [
+        4,
+        -13,
+        11
+      ],
+      [
+        5,
+        -13,
+        11
+      ],
+      [
+        6,
+        -13,
+        11
+      ],
+      [
+        7,
+        -12,
+        11
+      ],
+      [
+        8,
+        -11,
+        11
+      ],
+      [
+        9,
+        -10,
+        10
+      ],
+      [
+        10,
+        -9,
+        9
+      ],
+      [
+        11,
+        -8,
+        8
+      ],
+      [
+        12,
+        -7,
+        7
+      ],
+      [
+        13,
+        -6,
+        6
+      ],
+      [
+        14,
+        -5,
+        5
+      ],
+      [
+        15,
+        -4,
+        4
+      ],
+      [
+        16,
+        -3,
+        3
+      ],
+      [
+        17,
+        -2,
+        2
+      ],
+      [
+        18,
+        -1,
+        1
+      ],
+      [
+        19,
+        0,
+        0
+      ]
+    ],
+    "screechProjectile": {
+      "cycles": 40,
+      "startHeight": 100,
+      "endHeight": 10,
+      "angle": 127,
+      "progress": 128
+    },
+    "columnHeadbar": {
+      "id": 2,
+      "width": 40,
+      "maximum": 60
+    },
+    "screechY": 6356,
+    "columns": [
+      [
+        2646,
+        6365
+      ],
+      [
+        2648,
+        6361
+      ],
+      [
+        2651,
+        6363
+      ],
+      [
+        2654,
+        6364
+      ],
+      [
+        2657,
+        6364
+      ],
+      [
+        2660,
+        6363
+      ],
+      [
+        2663,
+        6361
+      ],
+      [
+        2665,
+        6365
+      ]
+    ],
+    "souls": [
+      [
+        2650,
+        6375
+      ],
+      [
+        2650,
+        6373
+      ],
+      [
+        2648,
+        6373
+      ],
+      [
+        2660,
+        6375
+      ],
+      [
+        2662,
+        6373
+      ],
+      [
+        2648,
+        6366
+      ],
+      [
+        2650,
+        6364
+      ],
+      [
+        2652,
+        6362
+      ],
+      [
+        2662,
+        6362
+      ],
+      [
+        2662,
+        6364
+      ],
+      [
+        2664,
+        6364
+      ],
+      [
+        2664,
+        6371
+      ]
+    ]
   }
 }

@@ -55,7 +55,11 @@
         10354,
         0
       ]
-    }
+    },
+    "mouth": [
+      3039,
+      6453
+    ]
   },
   "normal": {
     "hitpoints": 485,
@@ -359,17 +363,31 @@
     },
     "ice": {
       "columns": [
+        3030,
         3031,
         3032,
+        3033,
+        3045,
         3046,
-        3047
+        3047,
+        3048
       ],
-      "minY": 6439,
-      "maxY": 6452
+      "minY": 6435,
+      "maxY": 6450,
+      "skipY": 6438,
+      "entranceColumns": [
+        3033,
+        3045
+      ],
+      "entranceMaxY": 6436
     },
     "freezeSlot": 4,
     "freezeHeight": 124,
-    "iceFreezeSlot": 2
+    "iceFreezeSlot": 2,
+    "eyeConeX": {
+      "west": 3028,
+      "east": 3046
+    }
   },
   "timing": {
     "wake": 5,

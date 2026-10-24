@@ -412,3 +412,24 @@ test('picking mushrooms continues every three ticks and respects the eight-pick 
   h.step(24);assert.equal(h.p.getInventory().getAmount(i.arder),8);
   h.core.TaskManager.cancelTasks(h.p.getIndex());h.step(3);assert.equal(h.p.getInventory().getAmount(i.arder),8);
 });
+
+test('Duke auxiliary actors keep scripted HP until their owner session removes them',t=>{
+  const h=H.harness(t),s=h.enter();
+  h.step(40);
+  const actors=[h.C.data.npcs.vatTimer,h.C.data.npcs.vent,...h.C.data.npcs.cones]
+    .map(id=>s.spawnPassive(id,[3039,6442]));
+  for(const npc of actors){
+    assert.ok(npc);
+    assert.equal(npc.hasFlag('combat:no-regen'),true);
+    npc.setMaxHitpoints(10);npc.setHitpoints(1);
+    npc.getCombat().getLastAttack().reset(1);
+    npc.process();
+    assert.equal(npc.getHitpoints(),1);
+  }
+  s.end();
+  for(const npc of actors){
+    assert.equal(npc.__removed,true);
+    assert.equal(npc.hasFlag('combat:no-regen'),true,'the policy lasts through removal');
+  }
+  assert.equal(s.passive.size,0);
+});
