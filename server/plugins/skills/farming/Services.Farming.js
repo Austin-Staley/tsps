@@ -380,8 +380,8 @@ function farmingNpc(event) {
             if (remove) {
                 if (!state.checked) { player.sendMessage("Check the tree's health first."); return; }
                 const price = crop.type === "REDWOOD" ? 2000 : 200;
-                if (player.getInventory().getAmount(Data.itemId("Coins")) < price) { player.sendMessage(`You need ${price} coins.`); return; }
-                player.getInventory().deleteNumber(Data.itemId("Coins"), price); Patches.clearPatch(player, p); return;
+                if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < price) { player.sendMessage(`You need ${price} coins.`); return; }
+                player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, price); Patches.clearPatch(player, p); return;
             }
             if (state.protected || state.status === "dead" || state.status === "grown" || !crop.payment.length) {
                 player.sendMessage("That crop does not need my protection."); return;
