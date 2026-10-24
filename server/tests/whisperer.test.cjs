@@ -169,6 +169,32 @@ test('all four published seed patterns contain their full light and dark layouts
         return [seeds.length, seeds.filter(s => s.light).length];
     }), [[24, 12], [24, 16], [28, 14], [28, 14]]);
 });
+
+test('the first two seed layouts use the ordinary-game tile grid rather than the rotated screenshot grid', () => {
+    // Wiki alternate-view tile diagram; corroborated by normal level791 capture3285 ticks20931/21824.
+    const positions = [[-2,0],[-2,4],[-4,2],[-4,0],[-3,-1],[2,0],[2,4],[4,2],[0,2],[4,0],[0,4],[1,3],[3,3],[3,1],[2,2],[-2,-4],[-4,-2],[-1,-3],[-3,-3],[-2,-2],[2,-4],[4,-2],[0,-2],[0,-4]];
+    const lights = [[-2,0],[-2,4],[-4,2],[2,0],[2,4],[4,2],[0,2],[-2,-4],[-4,-2],[2,-4],[4,-2],[0,-2]];
+    const sorted = values => values.map(value => value.join(',')).sort();
+    for (const pattern of [0, 1]) {
+        const seeds = Specials.seedLayout(pattern);
+        assert.deepEqual(sorted(seeds.map(s => [s.dx,s.dy])), sorted(positions));
+        assert.deepEqual(sorted(seeds.filter(s => s.light).map(s => [s.dx,s.dy])),
+            sorted(pattern ? [...lights,[-4,0],[4,0],[0,4],[0,-4]] : lights));
+    }
+});
+
+test('normal seed centre and all eight screech columns occupy the captured cathedral tiles in both realms', t => {
+    const f = fixture(); t.mock.method(Math, 'random', () => 0);
+    Specials.start(f.fight, 'seeds');
+    assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()], [2655,6368]);
+    assert.ok(f.fight.special.seeds.some(s => s.light && s.x === 2654 && s.y === 6369));
+    Specials.start(f.fight, 'screech');
+    assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()], [2655,6356]);
+    const expected = [[2646,6365],[2648,6361],[2651,6363],[2654,6364],[2657,6364],[2660,6363],[2663,6361],[2665,6365]];
+    assert.deepEqual(f.fight.special.columns.map(c => [c.x,c.y]), expected);
+    f.fight.setShadow(true);
+    assert.deepEqual(f.fight.special.columns.map(c => [c.x+256,c.y]), expected);
+});
 test('soul sets remain attackable only in shadow and timeout with no full set damages and heals', () => {
     const f = fixture();
     Specials.start(f.fight, 'souls');

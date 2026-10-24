@@ -1,11 +1,15 @@
 {
-  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Seed/pillar positions are a bounded playable layout pending capture parity; see docs/whisperer.md.",
+  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Normal level791 capture3285 corroborates seed grids/anchors and column coordinates against ordinary Wiki diagrams. Remaining evidence audit: docs/whisperer.md.",
   "quest": "desert_treasure_ii",
   "npcs": { "figure": 12203, "boss": 12204, "melee": 12205, "tentacle": 12208, "columnShadow": 12209, "column": 12210, "soul": 12211, "soulShadow": 12212 },
   "animations": { "spawn": 10227, "melee": 10234, "ranged": 10235, "magic": 10241, "teleport": 10247, "screech": 10250, "seeds": 10254, "souls": 10256, "death": 10260, "tentacleSpawn": 10263, "tentacleAttack": 10266 },
   "projectiles": { "ranged": 2444, "magic": 2445, "bind": 2467 },
   "objects": { "seedLight": 47573, "seedDark": 47574, "seedReal": 47575, "escape": 47584, "exit": 47586 },
-  "site": { "outside": [2656,6386,0], "arrival": [2656,6380,0], "boss": [2655,6369,0], "grave": [2922,5826,0], "realmOffset": 256 },
+  "site": { "outside": [2656,6386,0], "arrival": [2656,6380,0], "boss": [2655,6368,0], "grave": [2922,5826,0], "realmOffset": 256 },
+  "specials": {
+    "screechY": 6356,
+    "columns": [[2646,6365],[2648,6361],[2651,6363],[2654,6364],[2657,6364],[2660,6363],[2663,6361],[2665,6365]]
+  },
   "travel": {
     "sinkhole": [2922,5827,0], "ropeIds": [49477,48195,48196,48197], "returnRope": 48198,
     "undercity": [2587,6436,0],

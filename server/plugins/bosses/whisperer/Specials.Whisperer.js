@@ -1,13 +1,13 @@
 const Common = require('./Common.Whisperer');
-const centre = fight => [2655 - (fight.shadow ? 256 : 0), 6369];
+const centre = fight => [Common.data.site.boss[0] - (fight.shadow ? Common.data.site.realmOffset : 0), Common.data.site.boss[1]];
 /** Tile-grid transcription of the four route diagrams on the Wiki strategy page.
- * The first layout's camera is rotated; coordinates are normalized about its centre.
- * Absolute arena anchoring/orientation still needs packet-capture confirmation. */
+ * The first layout's camera is rotated: transform its diagonal grid into world tiles.
+ * Normal capture3285 corroborates every tile/color of all four Wiki patterns. */
 function seedLayout(pattern) {
     if (pattern < 2) {
         const grid = [[0, 0], [1, -1], [2, -2], [0, 1], [1, 0], [0, 2], [1, 1], [2, 0], [4, -2], [1, 2], [1, 3], [2, 2], [4, 0], [5, -1], [5, 0], [2, 4], [4, 2], [5, 1], [6, 0], [5, 2], [6, 1], [4, 4], [5, 3], [6, 2]];
         const light = new Set(pattern === 0 ? [0, 2, 5, 7, 8, 11, 12, 15, 16, 18, 21, 23] : [0, 1, 2, 5, 7, 8, 10, 11, 12, 13, 15, 16, 18, 21, 22, 23]);
-        return grid.map(([x, y], index) => ({ dx: x - 3, dy: y - 1, light: light.has(index) }));
+        return grid.map(([x, y], index) => ({ dx: (x - 3) - (y - 1), dy: (x - 3) + (y - 1), light: light.has(index) }));
     }
     const seeds = [];
     for (const y of [-6, -4, 4, 6])
@@ -23,7 +23,7 @@ function seedLayout(pattern) {
 function start(fight, kind) {
     clear(fight);
     const [x, y] = centre(fight);
-    fight.boss.moveTo(new Common.core.Location(x, kind === 'screech' ? 6357 : y, 0));
+    fight.boss.moveTo(new Common.core.Location(x, kind === 'screech' ? Common.data.specials.screechY : y, 0));
     fight.boss.performAnimation(new Common.core.Animation(Common.data.animations[kind]));
     fight.special = { kind, left: kind === 'souls' ? 20 : kind === 'seeds' ? 50 : 5 };
     if (kind === 'seeds') {
@@ -33,7 +33,6 @@ function start(fight, kind) {
     }
     else if (kind === 'screech') {
         fight.special.blasts = 3;
-        const positions = [[-10, 0], [-7, 2], [-4, 4], [-1, 5], [2, 5], [5, 4], [8, 2], [11, 0]];
         const health = Array(8).fill(20), strongest = Common.random(0, 7);
         health[strongest] = 60;
         health[strongest === 7 ? 6 : strongest + 1] = 40;
@@ -41,12 +40,13 @@ function start(fight, kind) {
             const candidates = health.flatMap((hp, index) => hp === 20 ? [index] : []);
             health[candidates[Common.random(0, candidates.length - 1)]] = 40;
         }
-        fight.special.columns = positions.map(([dx, dy], index) => {
+        fight.special.columns = Common.data.specials.columns.map(([columnX, columnY], index) => {
             const hp = health[index];
-            const npc = fight.session.spawn(Common.data.npcs.column, x + dx, y + dy);
+            const worldX = columnX - (fight.shadow ? Common.data.site.realmOffset : 0);
+            const npc = fight.session.spawn(Common.data.npcs.column, worldX, columnY);
             npc.setMaxHitpoints(60);
             npc.setHitpoints(hp);
-            return { x: x + dx, y: y + dy, hp, active: true, npc };
+            return { x: worldX, y: columnY, hp, active: true, npc };
         });
     }
     else {

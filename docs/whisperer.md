@@ -24,7 +24,7 @@ Rev241 cache gamevals/configs were inspected directly: NPCs 12203–12212, seque
 
 ## Verification limits
 
-This is not a verified 1:1 implementation. Absolute seed anchoring/orientation, eight-column placement and the distribution beyond published health constraints are inferred from diagrams/video. Special animation timings, seed duration and binding flight timing need a packet capture. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Realm switching is permitted during specials; the exact fragment deactivation window is not captured. No in-game client smoke run has been performed.
+This is not a verified 1:1 implementation. Seed/column geometry is now corroborated by normal-fight packet observations and ordinary-game diagrams, while the column-health distribution beyond published guarantees remains unresolved. Special animation timings, seed duration and binding flight timing are under capture analysis. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Realm switching is permitted during specials; the exact fragment deactivation window is under capture analysis. No in-game client smoke run has been performed.
 
 Awakened geometry, timing, full five-projectile patterns, stat/slayer immunity integration, prayer/sanity changes, special rotations and final-phase mechanics are not implemented. No Awakened CA is awarded.
 
@@ -37,8 +37,8 @@ All eight normal achievement paths are supplied: the generic CA handler owns Ade
 | Entry/wake | Cache Odd Figure/spawn sequence and clear entry tiles verified; Wiki describes knockback | Establish knockback destination and first-attack tick |
 | Normal volleys | Wiki patterns, impact prayer and ten-tick cycle verified | Ordered sequence variants, exact launch/impact timings |
 | Tentacles | Four-tile origin, X/plus progression, one hit per wave verified | Spawn/attack phase timing and complete traversed path |
-| Seeds | Four diagram patterns transcribed; light/dark reward and damage verified | Absolute anchors/orientation, activation/deadline timings (current 50 ticks provisional) |
-| Screech | Eight columns, health guarantees/cap, three blasts and exact cover rule verified | Absolute column positions, health distribution and phase timings (current five-tick spacing provisional) |
+| Seeds | Every tile/color of all four patterns and centre (2656,6369) corroborated by capture and ordinary tile diagram | Activation/deadline timings (current 50 ticks provisional) |
+| Screech | Eight exact column positions, three blasts and cover rule corroborated | Health-distribution discrepancy and phase timings (current five-tick spacing provisional) |
 | Souls | Twelve souls and 20-tick chant, group effects verified | Exact positions, phase animations and cast deadline relative to teleport |
 | Binding | Existing freeze counters and low-health pursuit cancellation verified | Flight/pursuit timing and optional-bind selection |
 | Fragment | Correct real/cache state identities and realm mirror verified | Screech deactivation/return window; unlimited toggling is still provisional |
@@ -46,6 +46,16 @@ All eight normal achievement paths are supplied: the generic CA handler owns Ade
 | Enrage/death | Wiki 140 HP, stat restore, two-tick paired styles, cancelled damage and 30-tick respawn verified | Exact phase animation/transition offsets and tentacle phase timing |
 
 The local captured-animation aggregate confirms sequence families but lacks ordered ticks. New shared RSProx decoding is being checked against original OSRS video and official event modifiers before event-world observations are used. Modified stats and reward rates cannot establish ordinary-world values. This audit remains open; achievement coverage does not establish full encounter parity.
+
+### Normal capture geometry evidence
+
+RSProx recording 3285 (revision234, Grid Master:Forestry) has SHA256 `8cfd915cc9172769c3b871b17640f5b6141468f8e3796abf75d3ff461dace3da`. Official decoder runtime1.0.5, inspected source `d997d071bc2783664d1658a80f4d1f881b355119`, indexes ticks by `ServerTickEnd`. Only anonymous derived encounter facts are used here.
+
+The observations used here are independently identified as **normal**, not inferred from a shared NPC ID: combat-level packets report791 (ticks20906/21347), volleys have three shots, screeches have three blasts and souls number twelve. Actor57079 from tick23232 is level1146/awakened and is excluded from normal inference. Ordinary Wiki sources identify the same normal characteristics. Grid masteries modify player attack rates, incoming damage, healing and prayer gains, so damage/stat/rate equivalence is not inferred from this recording.
+
+- Odd Figure/central boss southwest tile is (2655,6368); the seed grid centres on (2656,6369). The first two diagram layouts were previously compressed along a rotated screenshot grid. Their world-grid transform is `(dx-dy,dx+dy)`.
+- Complete shadow seed bursts at ticks20931/21824/21371/23113 show the four patterns, with12/16/14/14 light seeds and24/24/28/28 total seeds. Every tile/color agrees with the ordinary Wiki alternate-view tile diagram after the first two patterns' grid correction.
+- Screech columns first appear at20976: (2646,6365), (2648,6361), (2651,6363), (2654,6364), (2657,6364), (2660,6363), (2663,6361), (2665,6365). The boss stands at (2655,6356). Shadow counterparts subtract256 from x, retaining y. Tests assert exact coordinates and both realm renders.
 
 Focused tests use real rev241 cache configs, Player/NPC instances, equipment/inventory, HitDamage/HitQueue, skill levels, private areas and source hooks. Rendering/scheduling and deterministic accuracy are doubled only where the unit under test requires it. Build with `node node_modules/typescript/bin/tsc --build` and run `node --test tests/whisperer.test.cjs` from `server/`.
 
