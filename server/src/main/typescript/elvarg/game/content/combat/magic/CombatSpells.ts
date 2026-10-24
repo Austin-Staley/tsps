@@ -618,16 +618,13 @@ export class CombatSpells {
     });
 
     public static BIND = new CombatEffectSpell({
+        maximumHit: () => 0,
         castAnimation: () => {
             return new Animation(710);
         },
 
         castProjectile: (cast, castOn) => {
             return Projectile.createProjectile(cast, castOn, 178, 0, 20, 43, 31);
-        },
-
-        spellEffect: (cast, castOn) => {
-            getCombatFactory().freeze(castOn, 5);
         },
 
         endGraphic: () => {
@@ -901,15 +898,12 @@ export class CombatSpells {
     });
 
     public static SNARE = new CombatEffectSpell({
-        members: true,
+        maximumHit: () => 2,
         castAnimation() {
             return new Animation(710);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 178, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            getCombatFactory().freeze(castOn, 10);
         },
         endGraphic() {
             return new Graphic(180, GraphicHeight.HIGH);
@@ -922,7 +916,7 @@ export class CombatSpells {
         },
         splashExperience: () => 60,
         itemsRequired(player) {
-            return [new Item(555, 3), new Item(557, 4), new Item(561, 3)];
+            return [new Item(555, 4), new Item(557, 4), new Item(561, 3)];
         },
         levelRequired() {
             return 50;
@@ -1525,15 +1519,13 @@ export class CombatSpells {
     });
 
     public static ENTANGLE = new CombatEffectSpell({
+        maximumHit: () => 5,
         members: true,
         castAnimation() {
             return new Animation(710);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 178, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            getCombatFactory().freeze(castOn, 15);
         },
         endGraphic() {
             return new Graphic(179, GraphicHeight.HIGH);
