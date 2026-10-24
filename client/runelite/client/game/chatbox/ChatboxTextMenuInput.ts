@@ -1,4 +1,5 @@
-import { FONT_QUILL_8 } from "../../../../ui/fonts";
+// RuneLite's FontID.QUILL_8 is font 497 (q8_full), which ui/fonts names FONT_FANCY_8.
+import { FONT_FANCY_8 as FONT_QUILL_8 } from "../../../../ui/fonts";
 import {
     WidgetPositionMode,
     WidgetSizeMode,

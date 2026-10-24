@@ -123,9 +123,10 @@ export function setAction(widget: WidgetNode, index: number, action: string): vo
     markWidgetInteractionDirty(widget);
 }
 
-/** Widget.revalidate: lays the widget out again. */
+/** Widget.revalidate: lays the widget out again and redraws it (its text or colour may have changed). */
 export function revalidate(widgetManager: WidgetManager, widget: WidgetNode): void {
     widgetManager.invalidateWidget(widget);
+    widgetManager.invalidateWidgetRender(widget);
 }
 
 /** Widget.setTextColor: also redraws. */

@@ -9,7 +9,11 @@ import {
     RUNELITE_CHATBOX_PANEL,
 } from "@runelite/client/game/chatbox/ChatboxPanelManager";
 import type { ChatboxTextInput } from "@runelite/client/game/chatbox/ChatboxTextInput";
-import { FONT_QUILL_8 } from "../ui/fonts";
+import { FONT_FANCY_8 } from "../ui/fonts";
+
+/** RuneLite's FontID.QUILL_8. */
+const FONT_QUILL_8 = 497;
+assert.equal(FONT_FANCY_8, FONT_QUILL_8, "q8_full is RuneLite's QUILL_8");
 import { runWidgetJsOp } from "../widgets/custom/dynamicWidgets";
 import { deriveRawMenuEntriesForWidget } from "../widgets/menu/utils";
 
@@ -26,7 +30,8 @@ function fakeWidgets() {
         registerWidget: (w: any) => widgets.set(w.uid, w),
         unregisterWidgetTree: (w: any) => widgets.delete(w.uid),
         invalidateDynamicChildrenCache: () => {},
-        invalidateWidgetRender: () => {},
+        redrawn: new Set<number>(),
+        invalidateWidgetRender(w: any) { manager.redrawn.add(w.uid); },
         invalidateWidget: () => {},
         ensureLayout(w: any) {
             const parent = parentOf(w);
@@ -153,8 +158,11 @@ const children = (client: any) => (client.widgetManager.getWidgetByUid(CHATBOX_M
     assert.equal(children(client).find((w: any) => w.text === "abc").rawX, 235);
     assert.deepEqual([cursor().rawX, cursor().rawY, cursor().rawWidth, cursor().rawHeight], [235 + 15 - 1, 50, 2, 12]);
 
+    client.widgetManager.redrawn.clear();
     assert.equal(key(client, "d"), true, "typed characters are taken");
     assert.equal(input.getValue(), "abcd");
+    const typed = children(client).find((w: any) => w.text === "abcd");
+    assert.ok(typed && client.widgetManager.redrawn.has(typed.uid), "the new text is redrawn, not only laid out");
     key(client, "Backspace");
     key(client, "ArrowLeft");
     key(client, "x");
