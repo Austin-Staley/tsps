@@ -223,7 +223,7 @@ export { getInteractLocModelLoader } from "./interact/highlight";
 export { getInteractNpcModelLoader } from "./interact/highlight";
 export { hasNoVisibleFaces } from "./interact/highlight";
 export { findVisualProxyModel } from "./interact/highlight";
-export { buildLocModelHighlightTriangles } from "./interact/highlight2";
+export { buildLocModelHighlightTriangles, buildLocModelHighlightParts, locModelParts } from "./interact/highlight2";
 export { buildNpcModelHighlightTriangles } from "./interact/highlight2";
 export { buildModelTrianglePoints } from "./interact/highlight3";
 export { clearInteractHighlightActiveTarget } from "./interact/highlight3";

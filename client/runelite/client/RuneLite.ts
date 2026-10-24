@@ -20,6 +20,7 @@ import { CORE_PLUGINS, LEGACY_CONFIG_MIGRATIONS } from "./plugins";
 import { toRuneLiteGameState } from "../impl/GameStateMapping";
 import { bindNpcEvents } from "../impl/NpcEventSource";
 import { runLegacyConfigMigrations } from "../impl/LegacyConfigMigration";
+import { migrateTileMarkersConfig } from "../../game/plugins/tilemarkers/migrateTileMarkers";
 
 /**
  * Boots the RuneLite-shaped plugin runtime around an OsrsClient: singletons,
@@ -109,6 +110,7 @@ export class RuneLite {
         // Edit mode: no plugins, so nothing for the overlay renderer to lay out either.
         if (!this.loadPlugins) return;
         runLegacyConfigMigrations(LEGACY_CONFIG_MIGRATIONS, this.configManager);
+        migrateTileMarkersConfig(this.configManager);
         this.pluginManager.loadCorePlugins(CORE_PLUGINS);
 
         // Engine hooks (shader, camera, gameframe) follow each loaded plugin.

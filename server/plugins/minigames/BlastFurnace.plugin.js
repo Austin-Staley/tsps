@@ -248,6 +248,7 @@ function openAnvilGate({ player, objectId }) {
 // --- The coffer.
 
 function useCoffer({ player }) {
+  // Other minigames' "Coffer" locs (Bounty Hunter) fall through to their own handlers.
   const location = player.getLocation();
   if (location.getX() < ROOM.minX || location.getX() > ROOM.maxX ||
       location.getY() < ROOM.minY || location.getY() > ROOM.maxY || location.getZ() !== 0) return false;

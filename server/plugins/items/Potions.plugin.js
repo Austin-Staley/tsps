@@ -1,6 +1,7 @@
 const {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByCurrent,
   lowerSkillByMax,
@@ -240,9 +241,12 @@ function applyZamorakBrew(player) {
 }
 
 function applyGuthixRest(player) {
-  heal(player, 5);
+  const current = getCurrentLevel(player, Skill.HITPOINTS);
+  const base = getMaxLevel(player, Skill.HITPOINTS);
+  const extraCap = current >= base ? 5 : 0;
+  if (current < base + extraCap) heal(player, 5, extraCap);
   restoreRunEnergy(player, 5);
-  curePoisonAndVenom(player);
+  curePoison(player, 1);
 }
 
 /** Prayer restore that may over-heal by up to `overPercent` above base (ancient/forgotten brew). */
@@ -1250,6 +1254,15 @@ function handlePotionDrink(player, itemId, slot) {
 
   if (entry.potion.requiresFoodPermission && !canEat(player, itemId)) {
     player.sendMessage("You cannot eat here.");
+    return true;
+  }
+
+  // Quest and content plugins can explain an item-specific unlock before a
+  // drink consumes a dose, starts a cooldown or applies any effect.
+  const permission = { player, itemId, allowed: true, message: null };
+  pluginApi.emitCustomEvent("potions:validate-drink", permission);
+  if (permission.allowed === false) {
+    if (permission.message) player.sendMessage(permission.message);
     return true;
   }
 

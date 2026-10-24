@@ -16142,7 +16142,7 @@
   {"level":0,"name":"Balloon Animal","x":2091,"y":4461,"id":5490},
   {"level":0,"name":"Balloon Animal","x":2091,"y":4470,"id":5495},
   {"level":0,"name":"Prison Pete","x":2093,"y":4466,"id":368},
-  {"level":0,"name":"Key Master","x":1310,"y":1251,"id":5870},
+  {"level":0,"name":"Key Master","x":1310,"y":1251,"id":12599},
   {"level":0,"name":"Wolf","x":1665,"y":3553,"id":106},
   {"level":0,"name":"Wolf","x":1667,"y":3549,"id":106},
   {"level":0,"name":"Wolf","x":1669,"y":3556,"id":106},
@@ -30636,5 +30636,9 @@
   {"level":0,"name":"Temple Knight","x":4130,"y":5534,"id":16710,"direction":6,"wanderRadius":0,"source":"rsprox"},
   {"level":0,"name":"Temple Knight","x":4135,"y":5531,"id":16711,"direction":5,"wanderRadius":0,"source":"rsprox"},
   {"level":0,"name":"Temple Knight","x":4122,"y":5529,"id":16712,"direction":6,"wanderRadius":0,"source":"rsprox"},
-  {"level":0,"name":"Temple Knight","x":4125,"y":5532,"id":16713,"direction":6,"wanderRadius":0,"source":"rsprox"}
+  {"level":0,"name":"Temple Knight","x":4125,"y":5532,"id":16713,"direction":6,"wanderRadius":0,"source":"rsprox"},
+  {"level":0,"name":"Emblem Trader","x":3419,"y":4065,"id":12113,"wanderRadius":0,"source":"wiki"},
+  {"level":0,"name":"Corrupted Warrior","x":3427,"y":4065,"id":12114,"wanderRadius":1,"source":"wiki"},
+  {"level":0,"name":"Corrupted Warrior","x":3424,"y":4059,"id":12115,"wanderRadius":1,"source":"wiki"},
+  {"level":0,"name":"Corrupted Warrior","x":3137,"y":3622,"id":12118,"wanderRadius":1,"source":"wiki"}
 ]

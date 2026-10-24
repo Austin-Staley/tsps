@@ -696,6 +696,8 @@ export class OsrsClient {
 
     // Hovered tile state (for devoverlay label)
     hoveredTile?: { tileX: number; tileY: number; plane?: number };
+    /** RuneLite's getSelectedSceneTile: the tile under the mouse, as Walk here picks it each frame. */
+    selectedSceneTile?: { tileX: number; tileY: number; plane?: number };
     hoveredTileScreen?: { x: number; y: number };
 
     runMode: boolean = true; // Start as run mode to match orb's visual state because run is enabled by default on first login.

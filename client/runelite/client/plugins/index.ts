@@ -14,6 +14,7 @@ import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight
 import { InventoryTagsPlugin } from "../../../game/plugins/inventorytags/InventoryTagsPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
+import { ObjectIndicatorsPlugin } from "../../../game/plugins/objectindicators/ObjectIndicatorsPlugin";
 import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
@@ -26,7 +27,7 @@ import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
 } from "../../../game/plugins/statustimer/StatusTimerPlugin";
-import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkersConfig";
+import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migrateTileMarkers";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
@@ -51,6 +52,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     InventoryTagsPlugin,
     NotesPlugin,
     NpcIndicatorsPlugin,
+    ObjectIndicatorsPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -86,7 +88,8 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
     {
         name: "tilemarkers",
         legacyKey: "osrs.plugin.tile_markers.v1",
-        config: TileMarkersConfig,
+        // Into the old keys; migrateTileMarkersConfig then moves them to Tile Indicators'.
+        config: LegacyTileMarkersConfig,
         enabledKey: "tilemarkersplugin",
     },
     {
