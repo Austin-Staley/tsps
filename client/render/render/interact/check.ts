@@ -1086,6 +1086,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             stack,
                             menuName,
                         );
+                        // Only Take (the third option) is deprioritized, as RuneLite's Ground Items does.
                         const deprioritized = plugins.deprioritizeGroundItem(stack);
 
                         const actions = objType.groundActions ?? [];
@@ -1102,7 +1103,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                                     mapX: localX,
                                     mapY: localY,
                                     actionIndex: actionIdx,
-                                    deprioritized,
+                                    deprioritized: deprioritized && actionIdx === 2,
                                     onClick:
                                         option.toLowerCase() === "take"
                                             ? () => host.osrsClient.takeGroundItem(capturedStack)
