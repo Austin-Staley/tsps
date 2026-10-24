@@ -4,7 +4,7 @@ const {Server} = require("../dist/Server");
 Server.installProductionPathResolver();
 require("../dist/game/cache/CachePipeline").CachePipeline.initialize();
 const {Item} = require("../dist/game/model/Item");
-const {ItemOnGroundManager} = require("../dist/game/entity/impl/grounditem/ItemOnGroundManager");
+const {ItemOnGroundManager, OperationType} = require("../dist/game/entity/impl/grounditem/ItemOnGroundManager");
 const {ItemOnGround, State} = require("../dist/game/entity/impl/grounditem/ItemOnGround");
 const {PacketSender} = require("../dist/net/packet/PacketSender");
 const {Task} = require("../dist/game/task/Task");
@@ -30,8 +30,12 @@ function cycle(during = {}) {
 
 function withWorld(fn) {
   const items = World.getItems(), previous = items.splice(0), cycleBefore = World.getProcessCycle();
+  const finishedBefore = ItemOnGroundManager.finishedCycle;
   try { World.processCycle = 5000; cycle(); fn(); }
-  finally { items.splice(0, items.length, ...previous); World.processCycle = cycleBefore; }
+  finally {
+    items.splice(0, items.length, ...previous);
+    World.processCycle = cycleBefore; ItemOnGroundManager.finishedCycle = finishedBefore;
+  }
 }
 
 // Runs the world until the stack is gone; the cycle it turns public and the one it despawns in.
@@ -67,6 +71,33 @@ test("an NPC drop made during the task phase counts the cycle it was made in", (
   assert.equal(createdTick, World.getProcessCycle() - 1);
   assert.deepEqual(lifetime(pile), {publicAt: privateUntilTick, goneAt: expiresTick});
   assert.equal(expiresTick - createdTick, 300);
+}));
+
+test("a stack despawning does not delay the next stack's timer", () => withWorld(() => {
+  let first, second;
+  cycle({players: () => { first = ItemOnGroundManager.registers(player, new Item(1351)); }});
+  cycle({players: () => { second = ItemOnGroundManager.registers(player, new Item(1351)); }});
+  const timing = second.getTiming();
+  assert.equal(timing.expiresTick, first.getTiming().expiresTick + 1);
+  // The first stack is removed in the cycle before the second one's last.
+  assert.deepEqual(lifetime(second), {publicAt: timing.privateUntilTick, goneAt: timing.expiresTick});
+}));
+
+test("a public stack topped up by a stack going public reports its new timer", t => withWorld(() => {
+  const tile = new Location(3224, 3218), sent = [];
+  t.mock.method(ItemOnGroundManager, "perform", (item, type) => {
+    if (type === OperationType.ALTER) sent.push(item.getTiming());
+  });
+  const mine = ItemOnGroundManager.registerLocation(player, new Item(995, 10), tile);
+  for (let i = 0; i < 50; i++) cycle();
+  // Someone else's public coins on the same tile, later in the list than ours.
+  const theirs = new ItemOnGround(State.SEEN_BY_EVERYONE, "Other", tile, new Item(995, 5), false, -1, null);
+  ItemOnGroundManager.register(theirs);
+  while (!mine.isPendingRemoval()) cycle();
+  assert.equal(theirs.getItem().getAmount(), 15);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(theirs.getTiming(), sent[0]);
+  assert.equal(lifetime(theirs).goneAt, sent[0].expiresTick);
 }));
 
 test("public, owner-only, merged and permanent stacks follow the server's rules", () => withWorld(() => {

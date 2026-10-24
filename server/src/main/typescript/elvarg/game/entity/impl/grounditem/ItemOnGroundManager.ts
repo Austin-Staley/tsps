@@ -22,9 +22,9 @@ export class ItemOnGroundManager {
     // with a 300-tick total lifetime for revealable items.
     public static readonly PUBLIC_REVEAL_DELAY: number = 100
     public static readonly DESPAWN_DELAY: number = 300
-    // World cycle in which ground items last aged. Items registered earlier in a
-    // cycle (e.g. NPC deaths run as tasks) still age once more before it ends.
-    private static processedCycle = -1;
+    // World cycle whose ground-item pass has finished. Until then, an item that has
+    // not aged this cycle (e.g. an NPC drop made by a task) still ages once more.
+    private static finishedCycle = -1;
 
     public static onRegionChange(player: Player): void {
         player.getPacketSender().sendGroundItems(
@@ -33,8 +33,8 @@ export class ItemOnGroundManager {
     }
 
     public static process(): void {
-        this.processedCycle = World.getProcessCycle();
-        for (let item of World.getItems()) {
+        // Iterate a copy: removing from the live list mid-loop skips the next item's tick.
+        for (let item of [...World.getItems()]) {
             item.process();
             if (item.isPendingRemoval()) {
                 if (item.respawns()) {
@@ -44,6 +44,7 @@ export class ItemOnGroundManager {
                 World.getItems().splice(index, 1);
             }
         }
+        this.finishedCycle = World.getProcessCycle();
     }
     
 
@@ -51,12 +52,15 @@ export class ItemOnGroundManager {
      * goes public (0 if never) and despawns (0 if never), per {@link ItemOnGround.process}. */
     public static getTiming(item: ItemOnGround): { createdTick: number; privateUntilTick: number; expiresTick: number } {
         const cycle = World.getProcessCycle();
-        const createdTick = cycle - item.getTick() - (this.processedCycle === cycle ? 0 : 1);
+        const agesThisCycle = item.getAgedCycle() !== cycle && this.finishedCycle !== cycle;
+        const createdTick = cycle - item.getTick() - (agesThisCycle ? 1 : 0);
+        // The protocol carries int32s; 0 means unknown, so drop a tick past the wrap.
+        const tick = (value: number) => value <= 0x7fffffff ? value : 0;
         return {
             createdTick,
             privateUntilTick: item.getState() === State.SEEN_BY_PLAYER && item.getgoesGlobal()
-                ? createdTick + this.PUBLIC_REVEAL_DELAY : 0,
-            expiresTick: item.respawns() || item.isStaticSpawn() ? 0 : createdTick + this.DESPAWN_DELAY,
+                ? tick(createdTick + this.PUBLIC_REVEAL_DELAY) : 0,
+            expiresTick: item.respawns() || item.isStaticSpawn() ? 0 : tick(createdTick + this.DESPAWN_DELAY),
         };
     }
 
