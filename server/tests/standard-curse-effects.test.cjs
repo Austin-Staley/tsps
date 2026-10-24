@@ -97,7 +97,7 @@ test('Count Draynor garlic cannot turn any nondamaging curse into a damaging imp
   t.mock.method(Math, 'random', () => 0.999);
   const { PendingHit } = require('../dist/game/content/combat/hit/PendingHit');
   const { MagicCombatMethod } = require('../dist/game/content/combat/method/impl/MagicCombatMethod');
-  for (const [name] of cases) {
+  for (const [name] of [...cases, ['BIND']]) {
     const spell = core.CombatSpells[name];
     attacker.getCombat().setCastSpell(spell);
     assert.deepEqual(core.DamageFormulas.getMagicHitBounds(attacker, spell, target), { minimum: 0, maximum: 0 }, name);
@@ -108,7 +108,7 @@ test('Count Draynor garlic cannot turn any nondamaging curse into a damaging imp
   }
   assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, core.CombatSpells.FIRE_STRIKE), 9,
     'garlic still adds one to damaging spells');
-  assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, core.CombatSpells.BIND), 2,
+  assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, core.CombatSpells.TELEBLOCK), 2,
     'unspecified negative utility maximum retains its existing fallback');
 });
 
