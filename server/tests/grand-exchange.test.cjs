@@ -6,6 +6,11 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { GameConstants } = require('../dist/game/GameConstants');
+const { Item } = require('../dist/game/model/Item');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const plugin = require('../plugins/interface/GrandExchange.plugin');
 const {
   price,
   sellPrice,
@@ -18,7 +23,7 @@ const {
   LIMITS_ATTRIBUTE,
   LIMIT_WINDOW_MS,
   OFFERS_ATTRIBUTE,
-} = require('../plugins/interface/GrandExchange.plugin')._test;
+} = plugin._test;
 
 const definitions = new Map();
 const market = {};
@@ -28,6 +33,9 @@ function define(id, values = {}) {
     id,
     unNote: () => id,
     isNoted: () => false,
+    isTradeable: () => true,
+    isStackable: () => true,
+    getExamine: () => '',
     getName: () => `Item ${id}`,
     getGrandExchangeValue: () => 1,
     getGrandExchangeSellValue: () => 1,
@@ -138,6 +146,40 @@ test('crossing the guide fills fast, resting away from it waits', () => {
   assert.ok(sellAbove === 10 * 60_000, `resting sell took ${sellAbove}ms`);
 });
 
+test('selling the same quantity takes longer at lower market volume', () => {
+  const fast = fillDelayMs({ itemId: HIGH_VOLUME, sell: true, quantity: 100 }, half);
+  const slow = fillDelayMs({ itemId: SLOW, sell: true, quantity: 100 }, half);
+  assert.equal(fast, 5_000);
+  assert.ok(slow > fast);
+});
+
+test('worse margins increase delays even for high-volume and unquoted items', () => {
+  for (const volume of [20_000_000, 0]) {
+    market[PRICED].volume = volume;
+    for (const sell of [false, true]) {
+      const prices = sell ? [90, 91, 92] : [100, 99, 98];
+      const delays = prices.map(price => fillDelayMs({ itemId: PRICED, sell, quantity: 1, price }, half));
+      assert.ok(delays[1] > delays[0], `${sell}/${volume}: ${delays}`);
+      assert.ok(delays[2] > delays[1], `${sell}/${volume}: ${delays}`);
+    }
+  }
+  market[PRICED].volume = 1440;
+});
+
+test('worse margins raise the chance of never filling on either side', () => {
+  for (const sell of [false, true]) {
+    const guide = sell ? 90 : 100;
+    const offer = { itemId: PRICED, sell, quantity: 1 };
+    const halfway = { ...offer, price: sell ? guide * 2 : guide / 2 };
+    assert.ok(Number.isFinite(fillDelayMs(halfway, () => 0.49)));
+    assert.equal(fillDelayMs(halfway, half), null);
+    assert.equal(fillDelayMs({ ...offer, price: sell ? guide * 4 : guide / 4 }, () => 0.3), null);
+    assert.ok(Number.isFinite(fillDelayMs(halfway, () => 0.3)));
+    assert.ok(Number.isFinite(fillDelayMs({ ...offer, price: guide }, () => 0.999)));
+    assert.ok(Number.isFinite(fillDelayMs({ ...offer, price: sell ? guide / 2 : guide * 2 }, () => 0.999)));
+  }
+});
+
 test('unknown, zero, broken and negative volume is illiquid', () => {
   for (const itemId of [ILLIQUID, BROKEN_VOLUME, NEGATIVE_VOLUME]) {
     for (const random of [() => 0, half, () => 1]) {
@@ -164,7 +206,7 @@ function player() {
   };
 }
 
-test('buy and sell limits reset after four hours', () => {
+test('buy limits reset after four hours', () => {
   const p = player();
   const start = 1_000_000;
   assert.equal(remainingLimit(p, LIMITED, start), 150);
@@ -186,13 +228,122 @@ test('an unlimited item never runs out', () => {
   assert.equal(remainingLimit(p, UNLIMITED, 0), Infinity);
 });
 
-test('buying and selling share the same item limit', () => {
-  const p = player();
-  const now = 5_000_000;
-  recordLimit(p, LIMITED, 100, now);
-  assert.equal(remainingLimit(p, LIMITED, now), 50);
-  recordLimit(p, LIMITED, 30, now + 1);
-  assert.equal(remainingLimit(p, LIMITED, now + 2), 20);
+function exchange(t) {
+  const hooks = {};
+  const buttons = [];
+  const messages = [];
+  const timers = [];
+  const sender = new Proxy({}, { get: (_, key) => (...args) => {
+    if (key === 'sendMessage') messages.push(args[0]);
+    return sender;
+  } });
+  const p = {
+    ...player(),
+    getUsername: () => 'ge-test',
+    getInterfaceId: () => 465,
+    getPacketSender: () => sender,
+    sendMessage: message => messages.push(message),
+    setEnteredAmountAction: action => { p.amountAction = action; },
+    setEnteredSyntaxAction: action => { p.syntaxAction = action; },
+  };
+  const inventory = new Inventory(p);
+  p.getInventory = () => inventory;
+  t.mock.method(CacheDefinitions, 'hasItem', id => definitions.has(id));
+  t.mock.method(CacheDefinitions, 'getItem', id => ({ name: `Item ${id}` }));
+  t.mock.method(GameConstants.PLAYER_PERSISTENCE, 'save', () => {});
+  t.mock.method(global, 'setTimeout', (callback, delay) => {
+    timers.push({ callback, delay });
+    return timers.length;
+  });
+  plugin.register(new Proxy({
+    core: { WorldDefinition: { isMembersWorld: () => true } },
+    onInterfaceActionButton: (ids, handler) => buttons.push({ ids, handler }),
+  }, { get: (api, key) => api[key] ?? (handler => { hooks[key] = handler; }) }));
+
+  const click = (child, slot = 0) => {
+    const buttonId = (465 << 16) | child;
+    const { handler } = buttons.find(({ ids }) => Array.isArray(ids) && ids.includes(buttonId));
+    handler({ player: p, buttonId, slot, action: 1 });
+  };
+  const place = (sell, itemId, quantity, price, slot = 0) => {
+    click(7 + slot, sell ? 4 : 3);
+    if (sell) hooks.onItemFirstAction({ player: p, itemId, slot: inventory.getSlotForItemId(itemId) });
+    else p.syntaxAction.execute(String(itemId));
+    click(34, 7);
+    p.amountAction.execute(quantity);
+    if (price !== undefined) {
+      click(34, 12);
+      p.amountAction.execute(price);
+    }
+    click(30);
+    return p.getAttribute(OFFERS_ATTRIBUTE)[slot];
+  };
+  return { p, inventory, place, click, hooks, messages, timers };
+}
+
+test('selling above the buy limit succeeds and leaves the buy allowance unchanged', t => {
+  const { p, inventory, place } = exchange(t);
+  recordLimit(p, LIMITED, 100);
+  inventory.add(new Item(LIMITED, 1_000), false);
+  assert.equal(place(true, LIMITED, 1_000).quantity, 1_000);
+  assert.equal(inventory.getAmount(LIMITED), 0);
+  assert.equal(remainingLimit(p, LIMITED), 50);
+});
+
+test('selling still succeeds after the buy limit is exhausted', t => {
+  const { p, inventory, place } = exchange(t);
+  recordLimit(p, LIMITED, 150);
+  inventory.add(new Item(LIMITED, 200), false);
+  assert.equal(place(true, LIMITED, 200).quantity, 200);
+  assert.equal(remainingLimit(p, LIMITED), 0);
+});
+
+test('buying enforces and consumes the remaining four-hour allowance', t => {
+  const { p, inventory, place, messages } = exchange(t);
+  recordLimit(p, LIMITED, 100);
+  inventory.add(new Item(995, 1_000), false);
+  assert.equal(place(false, LIMITED, 51), undefined);
+  assert.equal(inventory.getAmount(995), 1_000);
+  assert.match(messages.at(-1), /only buy 150.*50 remaining/);
+  assert.equal(place(false, LIMITED, 50).quantity, 50);
+  assert.equal(inventory.getAmount(995), 950);
+  assert.equal(remainingLimit(p, LIMITED), 0);
+});
+
+test('unfillable offers survive saving and relogging, and abort refunds their input', t => {
+  t.mock.method(Math, 'random', () => 0.99);
+  for (const sell of [false, true]) {
+    const { p, inventory, place, click, hooks, timers } = exchange(t);
+    const inputId = sell ? PRICED : 995;
+    const unitPrice = sell ? 180 : 50;
+    const amount = sell ? 1 : unitPrice;
+    inventory.add(new Item(inputId, amount), false);
+    const offer = place(sell, PRICED, 1, unitPrice);
+    assert.equal(offer.finished, false);
+    assert.equal(offer.completesAt, null);
+    assert.equal(inventory.getAmount(inputId), 0);
+    assert.equal(timers.length, 0);
+    const saved = JSON.parse(JSON.stringify(p.getAttribute(OFFERS_ATTRIBUTE)));
+    p.setAttribute(OFFERS_ATTRIBUTE, saved);
+    hooks.onPlayerLogin({ player: p });
+    assert.equal(timers.length, 0);
+    assert.equal(saved[0].finished, false);
+    click(23);
+    click(24);
+    assert.equal(inventory.getAmount(inputId), amount);
+    assert.deepEqual(p.getAttribute(OFFERS_ATTRIBUTE), {});
+  }
+});
+
+test('offers with saved completion times still finish after relogging', t => {
+  const { p, hooks, timers } = exchange(t);
+  const offer = { itemId: PRICED, sell: false, slot: 0, quantity: 1, total: 100, completesAt: Date.now() - 1 };
+  p.setAttribute(OFFERS_ATTRIBUTE, { 0: offer });
+  hooks.onPlayerLogin({ player: p });
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 0);
+  timers[0].callback();
+  assert.equal(offer.finished, true);
 });
 
 test('register persists both attributes', () => {
@@ -202,7 +353,6 @@ test('register persists both attributes', () => {
       ? (attribute, value) => persisted.set(attribute, value)
       : () => {},
   });
-  const plugin = require('../plugins/interface/GrandExchange.plugin');
   plugin.register(api);
   assert.deepEqual([...persisted.keys()], [OFFERS_ATTRIBUTE, LIMITS_ATTRIBUTE]);
   assert.deepEqual(persisted.get(OFFERS_ATTRIBUTE), {});
