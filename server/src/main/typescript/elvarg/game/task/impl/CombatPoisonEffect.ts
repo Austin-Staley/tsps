@@ -41,8 +41,7 @@ export class CombatPoisonEffect extends Task {
       return;
     }
 
-    if (this.ticksUntilHit > 0) {
-      this.ticksUntilHit--;
+    if (--this.ticksUntilHit > 0) {
       return;
     }
 

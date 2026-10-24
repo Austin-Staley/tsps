@@ -91,7 +91,7 @@ export abstract class Mobile extends Entity {
      */
     interactingMobile: any;
     npcTransformationId = -1;
-    poisonDamage: number;
+    poisonDamage: number = 0;
     /**
      * True when the current affliction is venom rather than ordinary
      * poison. Venom uses a different damage curve (see CombatPoisonEffect):

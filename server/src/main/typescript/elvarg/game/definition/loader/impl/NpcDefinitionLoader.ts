@@ -243,12 +243,24 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         return CombatType.MELEE;
     }
 
+    /** Status rules have one canonical source, independent of combat-stat snapshots. */
+    public static applyStatusImmunities(definition: NpcDefinition, cacheName: string, source: any): void {
+        if (!source || typeof source.name !== "string" || normalizeName(source.name) !== normalizeName(cacheName)) return;
+        Object.assign(definition, {
+            immunePoison: source.immune_poison === true,
+            immuneVenom: source.immune_venom === true,
+        });
+    }
+
     load(): boolean {
         NpcDefinition.definitions.clear();
         const directory = path.resolve(GameConstants.DEFINITIONS_DIRECTORY);
         // Combat stats, including aggression, come straight from the vendored dump.
         // Animations are not in it and keep coming from the files below.
         const monsters = this.readOptional(directory, "monsters-complete.json") ?? {};
+        const statusSource = this.readOptional(directory, "npc-status-immunities.json");
+        if (statusSource && statusSource.schema_version !== 1) throw new Error("Unsupported NPC status immunity schema");
+        const statusImmunities = statusSource?.npcs ?? {};
         const animationFile = this.read(directory, "npc-combat-defs.json");
         const observedAnimations = this.read(directory, "npc-animations.json") as Record<string, number[]>;
         const animations: Record<string, CombatAnimation> = {};
@@ -349,6 +361,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
 
         const ids = new Set([
             ...Object.keys(monsters),
+            ...Object.keys(statusImmunities),
             ...Object.keys(animationFile.npcs ?? {}),
             ...Object.keys(animations), ...Object.keys(observedAnimations),
             ...Object.keys(projectiles),
@@ -400,6 +413,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             } else if (stat) {
                 mismatched++;
             }
+
+            NpcDefinitionLoader.applyStatusImmunities(definition, cached.name, statusImmunities[key]);
 
             if (Number.isInteger(projectiles[key])) {
                 definition.projectileId = projectiles[key];
