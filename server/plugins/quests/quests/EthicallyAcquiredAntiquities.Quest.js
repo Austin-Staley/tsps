@@ -838,9 +838,9 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   }
 
   /**
-   * CharterShips claims the charter crew's Talk-to, so play the quest variant first while
-   * EAA needs them: any crewmember at the Cothon, Trader Stan or a crewmember at the Port
-   * Sarim dock. Everyone else, and completed quests, fall through to the charter menu.
+   * The charter crew's Talk-to is their charter transcript, so play the quest variant first
+   * while EAA needs them: any crewmember at the Cothon, Trader Stan or a crewmember at the Port
+   * Sarim dock. Everyone else, and completed quests, fall through to the charter transcript.
    */
   function talkToTraderCrewmember(event) {
     const { player, npcId } = event;

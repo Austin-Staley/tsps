@@ -931,7 +931,9 @@ module.exports = {
       if (!pickVariant(record) && aliases.has(name)) record = data[aliases.get(name)];
       const forced = event.variant ? record?.variants?.[event.variant] : undefined;
       const steps = Array.isArray(forced) ? forced : pickVariant(record);
-      return steps ? withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context }) : null;
+      // A requested variant found by name is still that variant (npc-dialogue:start's `exact`).
+      const variant = Array.isArray(forced) ? event.variant : undefined;
+      return steps ? withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context, variant }) : null;
     };
 
     /**
