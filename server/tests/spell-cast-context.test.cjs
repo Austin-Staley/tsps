@@ -24,7 +24,7 @@ before(async()=>{
   });
 });
 function fixture(t,{runes=true,spellName='FIRE_STRIKE'}={}){
-  let cycle=10;t.mock.method(core.World,'getProcessCycle',()=>cycle);
+  let cycle=10;t.mock.method(core.World,'getProcessCycle',()=>cycle);t.mock.method(Date,'now',()=>cycle*600);
   const p=new Player(null);t.mock.method(p,'getSession',()=>({sendClientPacket:()=>true}));
   t.mock.method(p,'sendMessage',()=>{});
   p.getSkillManager().setMaxLevel(core.Skill.MAGIC,99);p.getSkillManager().setCurrentLevel(core.Skill.MAGIC,99,false);

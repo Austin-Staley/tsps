@@ -23,7 +23,7 @@ before(async()=>{
 function player(t){const p=new Player(null);t.mock.method(p,'getSession',()=>({sendClientPacket:()=>true}));t.mock.method(p,'sendMessage',()=>{});
  p.getSkillManager().setMaxLevel(core.Skill.MAGIC,99);p.getSkillManager().setCurrentLevel(core.Skill.MAGIC,99,false);return p;}
 function fixture(t,{element='earth',spellName=element.toUpperCase()+'_WAVE',charges=3,searing=false,pvp=false,damage=50,weakness=60,includeElement=false,level=100}={}){
- let cycle=10;t.mock.method(core.World,'getProcessCycle',()=>cycle);t.mock.method(core.Sounds,'sendSound',()=>{});
+ let cycle=10;t.mock.method(core.World,'getProcessCycle',()=>cycle);t.mock.method(Date,'now',()=>cycle*600);t.mock.method(core.Sounds,'sendSound',()=>{});
  const p=player(t);p.setAttribute(TEST,true);
  const definition=Object.assign(new NpcDefinition(),{stats:[level,level,level,level,level],elementalWeaknessType:['wind','water','earth','fire'].indexOf(element)+1,elementalWeaknessPercent:weakness});
  const target=pvp?player(t):new core.NPC(1,new core.Location(3200,3200));if(!pvp)t.mock.method(target,'getCurrentDefinition',()=>definition);

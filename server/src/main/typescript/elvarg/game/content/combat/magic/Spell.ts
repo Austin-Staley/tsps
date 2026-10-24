@@ -192,7 +192,7 @@ export abstract class Spell {
             );
         }
 
-        const context: SpellCastContext = { spell: this, tick: now, data: new Map() };
+        const context: SpellCastContext = { spell: this, tick: World.getProcessCycle(), data: new Map() };
         Spell.castContexts.set(player, context);
         PluginManager.emitCustomEvent("magic:cast-committed", { player, spell: this, context, runesSaved: runeSaving.saved });
 
