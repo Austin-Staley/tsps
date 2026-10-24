@@ -180,10 +180,12 @@ export class DamageFormulas {
     public static getMagicMaxhit(c: Mobile, spellOverride?: CombatSpell | null): number {
         let maxHit = 0;
         const spell = spellOverride ?? c.getCombat().getSelectedSpell();
+        const declaredMaximum = spell?.maximumHit();
 
-        if (spell && Number.isFinite(spell.maximumHit()) && spell.maximumHit() >= 0) {
-            // An explicit zero is a real spell maximum, not a missing definition.
-            maxHit = spell.maximumHit();
+        // Non-damaging spells must stay harmless through flat damage bonuses too.
+        if (declaredMaximum === 0) return 0;
+        if (Number.isFinite(declaredMaximum) && declaredMaximum > 0) {
+            maxHit = declaredMaximum;
         } else if (c.isNpc()) {
             maxHit = c.getAsNpc().getCurrentMaxHit(CombatType.MAGIC);
         } else {
