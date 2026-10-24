@@ -8,6 +8,8 @@ import { GroundItemsPlugin, collapse } from "../game/plugins/grounditems/GroundI
 import { STRING_GAP } from "../game/plugins/grounditems/GroundItemsOverlay";
 import { MenuTargetType } from "../rs/MenuEntry";
 import type { SimpleMenuEntry } from "../ui/menu/MenuEngine";
+import { guidePrice, loadItemPrices } from "../network/serverConnection/domain/itemPrices";
+import { state } from "../network/serverConnection/state";
 
 const SHIFT = 81;
 const COINS = 995, BONES = 526, WHIP = 4151, WHIP_NOTE = 4152, SCIM = 1333;
@@ -258,6 +260,49 @@ async function main(): Promise<void> {
     store.update({ kind: "delta", serial: 6, upserts: [], removes: scimStacks.map((s) => s.id) } as any);
     assert.equal(beamAt(3201, 3201), undefined, "taken: beam removed");
     assert.ok(killed.length > 0);
+
+    // Price-table readiness and login reloads update every derived view without a store mutation.
+    const previousSocket = state.socket, previousWebRtc = state.webRtcConfig;
+    try {
+        let quote!: (prices: Record<number, number>) => void;
+        state.webRtcConfig = {} as any;
+        state.socket = { fetchContent: () => new Promise((resolve) => { quote = resolve; }) } as any;
+        plugin.guidePrice = guidePrice;
+        set("highlightedItems", "");
+        set("hiddenItems", "");
+        set("showLootbeamForHighlighted", false);
+        set("valueCalculationMode", "GE");
+        changed();
+        const loading = loadItemPrices();
+        store.update({ kind: "snapshot", serial: 7, stacks: [stack(WHIP, 1), stack(WHIP_NOTE, 2, 3202, 3202)] } as any);
+        assert.equal(plugin.groundItemAt(3201, 3201, 0, WHIP)!.gePrice, 120_001, "loading uses the store value instead of stale facts");
+        assert.equal(beamAt(3201, 3201), undefined);
+        quote({ [WHIP]: 2_000_000 });
+        await loading;
+        const ready = plugin.groundItemAt(3201, 3201, 0, WHIP)!;
+        assert.equal(ready.gePrice, 2_000_000);
+        assert.equal(plugin.groundItemAt(3202, 3202, 0, WHIP_NOTE)!.gePrice, 2_000_000);
+        assert.equal(plugin.evaluate(ready).color, 0xffff9600);
+        plugin.widgetOverlay.signature();
+        plugin.onGameTick();
+        assert.equal(beamAt(3201, 3201)?.color, 0xffff9600, "late prices refresh beams even after labels already read them");
+
+        const reloading = loadItemPrices();
+        plugin.onGameTick();
+        assert.equal(beamAt(3201, 3201), undefined, "reloading clears the old beam without a ground update");
+        quote({ [WHIP]: 42 });
+        await reloading;
+        plugin.onGameTick();
+        const cheap = plugin.groundItemAt(3201, 3201, 0, WHIP)!;
+        assert.equal(cheap.gePrice, 42, "a new price table invalidates previously resolved facts");
+        assert.equal(plugin.evaluate(cheap).color, 0xffffffff, "tier evaluations follow the new price");
+        assert.equal(beamAt(3202, 3202), undefined, "noted-item beams follow the new quote too");
+        store.update({ kind: "delta", serial: 8, upserts: [stack(WHIP, 1, 3204, 3204)], removes: [] } as any);
+        assert.equal(plugin.groundItemAt(3204, 3204, 0, WHIP)!.gePrice, 42, "fresh drops cannot reuse a prior login's price");
+    } finally {
+        state.socket = previousSocket;
+        state.webRtcConfig = previousWebRtc;
+    }
 
     await plugin.stop();
     assert.equal([...plugin.lootbeams.keys()].length, 0, "shut down: no beams");

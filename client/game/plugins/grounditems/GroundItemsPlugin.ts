@@ -2,7 +2,7 @@ import type { ClientGroundItemStack, GroundItemMutation } from "../../data/groun
 import type { OsrsClient } from "../../OsrsClient";
 import { ClientState } from "../../ClientState";
 import { getClientCycle, getServerTickPhaseNow } from "../../../network/serverConnection/timing";
-import { guidePrice } from "../../../network/serverConnection/domain/itemPrices";
+import { getItemPricesRevision, guidePrice } from "../../../network/serverConnection/domain/itemPrices";
 import { ConfigChanged } from "@runelite/api/events";
 import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { Notifier } from "@runelite/client/Notifier";
@@ -98,6 +98,8 @@ export class GroundItemsPlugin extends Plugin {
     private itemsBuiltFor = "";
     private readonly firstSeenTick = new Map<string, number>();
     private readonly facts = new Map<number, ItemFacts>();
+    private factsPriceRevision = -1;
+    private beamPriceRevision = -1;
     private pricesPending = false;
     private readonly evaluations = new Map<string, Evaluation>();
     /** The guide price of an unnoted item: 0 for no quote, undefined while the table loads. */
@@ -206,6 +208,11 @@ export class GroundItemsPlugin extends Plugin {
 
     /** The item's prices and kind. GE is the guide price of the unnoted item (cache value until the table loads). */
     private itemFacts(id: number): ItemFacts {
+        const revision = getItemPricesRevision();
+        if (revision !== this.factsPriceRevision) {
+            this.facts.clear();
+            this.factsPriceRevision = revision;
+        }
         const cached = this.facts.get(id);
         if (cached) return cached;
         let obj: any;
@@ -270,7 +277,7 @@ export class GroundItemsPlugin extends Plugin {
     groundItems(): Map<string, GroundItem> {
         const store = this.osrsClient.groundItems;
         if (!store) return this.items;
-        const want = `${store.getVersion()}`;
+        const want = `${store.getVersion()}:${getItemPricesRevision()}`;
         if (want === this.itemsBuiltFor && !this.pricesPending) return this.items;
         this.pricesPending = false;
         const next = new Map<string, GroundItem>();
@@ -582,8 +589,14 @@ export class GroundItemsPlugin extends Plugin {
     }
 
     onGameTick(): void {
+        if (!this.isStarted()) return;
         // A renderer switch drops its graphics; the beams follow the new one.
-        if (this.isStarted()) this.refreshLootbeamHost();
+        this.refreshLootbeamHost();
+        const revision = getItemPricesRevision();
+        if (revision !== this.beamPriceRevision) {
+            this.beamPriceRevision = revision;
+            this.handleLootbeams();
+        }
     }
 }
 
