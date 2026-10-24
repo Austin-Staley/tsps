@@ -103,6 +103,10 @@ function finishJob(player, job) {
   if (!job || jobs.get(player) !== job) return;
   jobs.delete(player);
   core.TaskManager.cancelTasks(job);
+  if (!scenes.get(player) && player.getAttribute(RETURN_ATTRIBUTE)) {
+    player.setAttribute(RETURN_ATTRIBUTE, null);
+    scenes.closeFade(player);
+  }
   setVar(player, "canoe_avoid_if", 0);
   player.getMovementQueue().setBlockMovement(false);
   player.performAnimation(new core.Animation(-1));

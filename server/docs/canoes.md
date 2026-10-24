@@ -5,6 +5,8 @@ River Lum network and the members River Dougne network introduced on 1 April 202
 networks are separate. Canoe state is private to the player, survives walking/teleporting away,
 and clears on logout, use, or starting at another station. Axe storage survives logout and
 preserves the item's metadata, including charges.
+Death or logout during the departure fade clears the recovery marker, so a later login
+does not move the player away from their normal respawn or logout position.
 
 ## Evidence
 

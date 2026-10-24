@@ -164,6 +164,29 @@ test("shaping success uses Wiki interpolation and caps above 100 percent", () =>
   assert.equal(plugin._test.chance(99, [112, 350]), 1);
 });
 
+test("death or logout before the rowing scene clears recovery instead of teleporting on relog", () => {
+  const from = stations[3];
+  for (const interruption of ["death", "logout"]) {
+    const p = player(from);
+    make(p, from, TYPES[3]);
+    plugin._test.paddle({ player: p, object: object(from) }); choose(p, 953, 17);
+    assert.ok(p.getAttribute("canoes:return"));
+    let closedFade = false;
+    const sender = p.getPacketSender();
+    sender.closeSubInterface = () => { closedFade = true; return sender; };
+    if (interruption === "death") p.getHitpoints = () => 0;
+    else plugin._test.logout({ player: p });
+    advance(2);
+    assert.equal(p.getAttribute("canoes:return"), null, interruption);
+    assert.equal(p.blocked, false);
+    assert.equal(closedFade, true);
+    p.location = new Location(3222, 3218, 0);
+    p.getHitpoints = () => 99;
+    plugin._test.restore({ player: p });
+    assert.deepEqual([p.location.getX(), p.location.getY()], [3222, 3218], interruption);
+  }
+});
+
 test("carving rechecks its axe and location at the award tick", () => {
   const s = stations[0];
   for (const interrupt of [(p) => { p.hasAxe = false; }, (p) => { p.location = new Location(3000, 3000, 0); }]) {
