@@ -61,6 +61,29 @@ not identify the random sample count, independent per-tile probability, weightin
 or seed. In particular, the sparse corner counts do not justify treating the
 current uniform per-tile roll as recovered OSRS RNG.
 
+The coherent ordinary 1703 window above has 234 warning opportunities, including
+two empty opportunities at 10679/10782. Its count histogram for 0 through 11
+warnings per opportunity is `2/7/15/43/53/46/29/24/11/2/1/1`. Normal 1827's
+first uninterrupted preparation window, 1252–1656, has 204 opportunities,
+900 warnings and histogram `3/10/14/37/44/41/31/13/7/3/1/0`; its empty
+opportunities are 1260/1362/1656. Both windows cover 94 distinct tiles. Counts
+vary, so they do not support a fixed warning count; the observed maximum of 11
+does not establish an actual cap. Neither window repeats a tile within one tick,
+consistent with the current independent per-tile roll, but also with sampling
+without replacement. Later 1827 preparation clocks have different phases, so
+the first window's phase cannot supply a whole-recording opportunity count.
+
+Packet observability limits spatial-frequency inference. Restricting each
+opportunity to a player position where all 94 tiles are within Chebyshev distance
+15 leaves 139 opportunities/640 warnings/10 corner warnings in 1703, and
+99/434/9 in the first 1827 window. At distance 12 the counts are 96/439/6 and
+38/167/2. A uniform independent 1/20 roll would expect 27.8/19.8 corner warnings
+in the distance-15 subsets and 19.2/7.6 in the distance-12 subsets. The remaining
+packet-frequency bias after these distance controls is not proof of unequal RNG
+weights: server zone visibility, line of sight and actual tile eligibility remain
+uncontrolled. The existing 1/20 roll remains provisional; these finite samples
+do not justify a replacement algorithm.
+
 Combat vents also cannot be assigned a recovered lifetime distribution. In 1751,
 the normal two-spit sequence at 11037/11040 creates actors at 11039/11042 and
 ends them at 11053/11054 (14/12 ticks). Several shorter observed lifetimes end
@@ -112,7 +135,7 @@ Primary behavior sources:
 
 Installed revision-241 gamevals, definitions and map placements establish NPC/item/object IDs, options, animations, the 7x7 boss footprint, pillars, vents and resource coordinates. The authored `bosses/data/duke-sucellus.json` is encounter configuration, not a generated drop artifact.
 
-This is a functional normal-mode implementation, not a claim of capture-exact OSRS parity. The capture-backed corrections above supersede the initial provisional visual effects and timing choices. Exact icefall selection, vent lifetime distributions, mining cadence and complete extremity coverage remain empirical. Normal protected magic max 24 and covered gas max 4 are provisional reductions; the source establishes reduced damage but does not explicitly give both bounds. A future capture can replace these values without changing the instance or reward contracts. Awakened hazards and achievements are intentionally not offered.
+This is a functional normal-mode implementation, not a claim of capture-exact OSRS parity. The capture-backed corrections above supersede the initial provisional visual effects and timing choices. Iron-pickaxe salt gathering now follows the ordinary measured first-yield delay and seven-tick repeats; other pickaxe tiers and tick manipulation remain unverified. Exact icefall selection, vent lifetime distributions and complete extremity coverage remain empirical. Normal protected magic max 24 and covered gas max 4 are provisional reductions; the source establishes reduced damage but does not explicitly give both bounds. A future capture can replace these values without changing the instance or reward contracts. Awakened hazards and achievements are intentionally not offered.
 
 The generic grave multiplier defaults to one, accepts only finite values from zero through one, and affects gravestone reclamation rather than Death's Office. Duke supplies .25 until five normal kills. Merged graves retain the larger multiplier, a conservative policy preventing discounting previously normal-fee contents; that merge policy is not asserted as capture-confirmed OSRS behavior.
 
