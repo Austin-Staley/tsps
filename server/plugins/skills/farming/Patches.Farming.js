@@ -231,7 +231,7 @@ function waterPatch(player, patch, id) {
     if (state.watered) { player.sendMessage("This crop is already watered."); return; }
     if (water(player, id)) state.watered = true;
 }
-function fertilize(player, patch, tier, consume = true) {
+function fertilize(player, patch, tier, consume = true, xp = [0, 18, 26, 36][tier]) {
     const state = stateFor(player, patch);
     if (state.weeds || state.compost || state.status === "dead" || ["ANIMA", "GRAPES", "CORAL"].includes(patch.type)) {
         player.sendMessage(state.compost ? "This patch has already been treated." : "You cannot compost this patch now."); return false;
@@ -244,7 +244,7 @@ function fertilize(player, patch, tier, consume = true) {
     }
     state.compost = tier;
     if (state.status === "grown" && Data.COMPOSTABLE_YIELD.has(patch.type)) state.lives += tier;
-    award(player, [0, 18, 26, 36][tier]);
+    award(player, xp);
     animate(player, ANIM.COMPOST);
     syncPatch(player, patch);
     return true;
