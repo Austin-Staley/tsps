@@ -193,10 +193,9 @@ function buy(player, slot, requested) {
     }
   }
   const inventory = player.getInventory();
-  const stackable = Common.core.ItemDefinition.forId(itemId).isStackable();
   if (itemId !== items.peachSpell) {
     // Upgrading frees each old wand's slot as the new one takes it.
-    const room = stackable ? (inventory.contains(itemId) || inventory.getFreeSlots() > 0 ? amount : 0) : inventory.getFreeSlots() + (previous !== null ? Math.min(amount, inventory.getAmount(previous)) : 0);
+    const room = inventory.getAddableAmount(new Common.core.Item(itemId, amount)) + (previous !== null ? Math.min(amount, inventory.getAmount(previous)) : 0);
     amount = Math.min(amount, room);
     if (amount <= 0) {
       player.sendMessage(Common.message("shopNoRoom"));

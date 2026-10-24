@@ -66,6 +66,11 @@ function fakePlayer(x = 3363, y = 9644, z = 0) {
       deleteNumber: (id, n) => items.set(id, (items.get(id) ?? 0) - n),
       adds: (id, n) => items.set(id, (items.get(id) ?? 0) + n),
       getFreeSlots: () => free,
+      getAddableAmount: (item) => {
+        if (!core.ItemDefinition.forId(item.getId()).isStackable()) return Math.min(item.getAmount(), free);
+        const held = items.get(item.getId()) ?? 0;
+        return held > 0 || free > 0 ? Math.min(item.getAmount(), 0x7fffffff - held) : 0;
+      },
       getItems: () => player.slots ?? [],
     }),
     getEquipment: () => ({ get: () => null }),
@@ -645,4 +650,111 @@ test('Select, a quantity and Confirm buy through the interface', () => {
   player.shopOpen = false;
   Rewards.confirm({ player });
   assert.equal(player.items.get(564), 29, 'nothing bought with the shop closed');
+});
+
+test('training-room deaths keep real gear and Hardcore status, clean room items and respawn in the hall', async (t) => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PlayerDeathTask } = require('../dist/game/task/impl/PlayerDeath');
+  const { GameConstants } = require('../dist/game/GameConstants');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const areas = [];
+  const api = PluginManager.createApi('MageTrainingArenaDeathRegression');
+  const registerArea = api.registerArea;
+  api.registerArea = (area) => { areas.push(area); registerArea(area); };
+  const deaths = new Map();
+  api.onPlayerDeath((event) => deaths.set(event.player, event));
+  const Ironman = require('../plugins/modes/ironman/Common.Ironman');
+  Ironman.init(api);
+  require('../plugins/modes/ironman/Hardcore.Ironman')(api);
+  require('../plugins/minigames/MageTrainingArena.plugin').register(api);
+  t.mock.method(ItemOnGroundManager, 'registerLocation', () => {});
+  t.mock.method(core.TaskManager, 'submit', () => {});
+  const saves = [];
+  t.mock.method(GameConstants.PLAYER_PERSISTENCE, 'requestSave', (player, reason) => {
+    saves.push({ player, reason, location: player.getLocation().clone(), items: player.getInventory().getValidItems().map((item) => item.getId()) });
+  });
+  const roomData = Object.entries(Common.data).filter(([key, room]) => key !== 'lobby' && room?.bounds && room?.arrive);
+  for (const [name, room] of roomData) await t.test(name, (t) => {
+    const player = new Player(null, Common.toLocation(room.arrive));
+    player.setUsername('mta_safe_death');
+    player.setRegistered(true);
+    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+    t.mock.method(player, 'sendMessage', () => {});
+    t.after(() => player.setRegistered(false));
+    player.setAttribute('ironman:mode', 'hardcore');
+    const area = areas.find((area) => area.getBoundaries().some((bounds) => bounds.inside(player.getLocation())));
+    assert.ok(area, 'the native plugin registered this room');
+    area.enter(player);
+    player.setArea(area);
+    const carried = [556, 557, 558, 559];
+    for (const id of carried) player.getInventory().adds(id, 100);
+    player.getEquipment().setItem(core.Equipment.HEAD_SLOT, new core.Item(1155, 1));
+    const roomItem = { enchanting: Common.ids.items.cube, alchemists: Common.ids.items.arenaCoins, graveyard: Common.ids.items.banana }[name];
+    player.getInventory().adds(roomItem, 1);
+    const task = new PlayerDeathTask(player);
+    task.execute();
+    task.execute();
+    task.execute();
+    assert.equal(deaths.get(player)?.itemsLost, false);
+    assert.equal(Ironman.modeOf(player), 'hardcore');
+    for (const id of carried) assert.equal(player.getInventory().getAmount(id), 100);
+    assert.equal(player.getEquipment().get(core.Equipment.HEAD_SLOT).getId(), 1155);
+    assert.equal(player.getInventory().getAmount(roomItem), 0, 'room-only items are cleaned before the respawn save');
+    assert.equal(area.hasMember(player), false);
+    assert.equal(player.getArea(), null);
+    assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], Common.data.lobby.arrive);
+    const saved = saves.findLast((save) => save.player === player && save.reason === 'respawn');
+    assert.ok(saved);
+    assert.equal(saved.items.includes(roomItem), false);
+  });
+  const outside = new Player(null, loc(3200, 3200));
+  assert.equal(PluginManager.emitShouldDropItemsOnDeath(outside, null), null, 'normal deaths keep their existing policy');
+});
+
+test('native reward purchases charge only what fits in real rune stacks and freed wand slots', async (t) => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  function shopper(t) {
+    const player = new Player(null, loc(3362, 3318, 1));
+    player.setUsername('mta_shop_limit');
+    player.setRegistered(true);
+    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+    t.mock.method(player, 'sendMessage', () => {});
+    t.after(() => player.setRegistered(false));
+    player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, true);
+    for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 1000);
+    return player;
+  }
+  const id = Common.ids.items.death;
+  for (const room of [0, 3]) await t.test(`rune stack with ${room} spaces left`, (t) => {
+    const player = shopper(t);
+    player.getInventory().adds(id, 0x7fffffff - room);
+    const before = Common.POINT_TYPES.map((type) => Common.points(player, type));
+    const cost = Rewards.price(id);
+    Rewards.open(player);
+    Rewards.select({ player, slot: slotOf(id) });
+    Rewards.quantity(10)({ player });
+    Rewards.confirm({ player });
+    assert.equal(player.getInventory().getAmount(id), 0x7fffffff);
+    const after = Common.POINT_TYPES.map((type, i) => before[i] - (cost[type] ?? 0) * room);
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), after);
+    Rewards.confirm({ player });
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), after, 'a full stack cannot charge again');
+  });
+  await t.test('wand upgrade uses the old wand slot in a full inventory', (t) => {
+    const player = shopper(t);
+    const beginner = core.ItemIdentifiers.BEGINNER_WAND;
+    const apprentice = core.ItemIdentifiers.APPRENTICE_WAND;
+    player.getInventory().adds(beginner, 1);
+    player.getInventory().adds(core.ItemIdentifiers.BRONZE_FULL_HELM, 27);
+    assert.equal(player.getInventory().getFreeSlots(), 0);
+    const before = Common.POINT_TYPES.map((type) => Common.points(player, type));
+    Rewards.open(player);
+    Rewards.select({ player, slot: slotOf(apprentice) });
+    Rewards.confirm({ player });
+    assert.equal(player.getInventory().getAmount(beginner), 0);
+    assert.equal(player.getInventory().getAmount(apprentice), 1);
+    assert.equal(player.getInventory().getFreeSlots(), 0);
+    const cost = Rewards.price(apprentice);
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), Common.POINT_TYPES.map((type, i) => before[i] - (cost[type] ?? 0)));
+  });
 });

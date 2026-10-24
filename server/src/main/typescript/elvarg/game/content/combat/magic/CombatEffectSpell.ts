@@ -5,11 +5,13 @@ import { CombatSpell } from "./CombatSpell";
 import { Animation } from "../../../model/Animation";
 import { Graphic } from "../../../model/Graphic";
 import { Projectile } from "../../../model/Projectile";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 interface CombatEffectSpellInterface {
+    maximumHit?: () => number;
     castAnimation: () => Animation;
     castProjectile: (cast: Mobile, castOn: Mobile) => Projectile;
-    spellEffect: (cast: Mobile, castOn: Mobile) => void;
+    spellEffect?: (cast: Mobile, castOn: Mobile) => void;
     endGraphic: () => Graphic;
     startGraphic: () => Graphic;
     baseExperience: () => number;
@@ -62,7 +64,7 @@ export class  CombatEffectSpell extends CombatSpell {
         return this.options.endGraphic();
     }
     public maximumHit(): number {
-        return -1;
+        return this.options.maximumHit?.() ?? -1;
     }
     public equipmentRequired(player: Player): Item[] {
         return null;
@@ -74,7 +76,11 @@ export class  CombatEffectSpell extends CombatSpell {
         }
     }
     public spellEffect(cast: Mobile, castOn: Mobile) {
-        this.options.spellEffect(cast, castOn);
+        const event = { attacker: cast, target: castOn, spell: this, allowed: true, handled: false };
+        PluginManager.emitCustomEvent("magic:utility-effect-check", event);
+        if (!event.allowed) return;
+        PluginManager.emitCustomEvent("magic:utility-effect", event);
+        if (!event.handled) this.options.spellEffect?.(cast, castOn);
     }
 
 
