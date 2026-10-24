@@ -99,9 +99,10 @@ test('Travel on a conductor opens the list; a pick rides there for 20 coins', ()
   const pick = { player, groupId: Common.ids.menu, childId: 3, slot: 0, handled: false };
   Travel.chooseOption(pick);
   assert.equal(pick.handled, true);
-  assert.equal(player.coins(), 80, '20 coins a ride');
   assert.equal(player.blocked, true);
+  assert.equal(Travel.ride(player, station('lovakengj'), station('portPiscarilius')), false, 'one ride at a time');
   flush();
+  assert.equal(player.coins(), 80, '20 coins a ride, taken once, on arrival');
   assert.deepEqual(at(player), [1669, 3833], 'beside the Arceuus cart');
   assert.equal(player.blocked, false);
 });
@@ -155,5 +156,36 @@ test("a station's minecart has Travel too, from the station it stands at", () =>
 test('the six 2024 stations\' conductors are placed (the generated spawns lack them)', () => {
   Travel.spawnConductors();
   assert.deepEqual(spawned.map((s) => s.id).sort((a, b) => a - b), [12702, 12703, 12704, 12705, 12706, 12707]);
+  spawned = [];
+  Travel.spawnConductors(new Set([12702, 12703, 12704, 12705, 12706, 12707]));
+  assert.equal(spawned.length, 0, 'not twice, once the generated spawns have them');
   assert.ok(spawned.every((s) => s.wanderRadius === 0 && s.z === 0));
+});
+
+test('after The Forsaken Tower the talk is the free one, and the fare conditions answer "has the coins"', () => {
+  const player = fakePlayer(1519, 3732, 0);
+  assert.equal(Travel.chooseVariant({ player, npcId: 7227 }), null, 'before the quest: the default (paid) talk');
+  questDone = true;
+  assert.equal(Travel.chooseVariant({ player, npcId: 7227 }), 'standard-dialogue-after-completing-the-forsaken-tower');
+  assert.equal(Travel.chooseVariant({ player, npcId: 1 }), null);
+  assert.equal(Travel.answerCondition({ player, npcId: 7227, text: 'If the player does not have 20 coins in their inventory:' }), false);
+});
+
+test('a death on the way: no ride, no fare, the screen back; a closed list forgets its pick', () => {
+  const player = fakePlayer();
+  let faded = 0;
+  player.getPacketSender = ((sender) => () => ({ ...sender(), closeSubInterface: () => { faded += 1; } }))(player.getPacketSender);
+  Travel.ride(player, station('lovakengj'), station('arceuus'));
+  player.getHitpoints = () => 0;
+  flush();
+  assert.deepEqual(at(player), [1519, 3732]);
+  assert.equal(player.coins(), 100);
+  assert.equal(faded, 1);
+
+  const other = fakePlayer();
+  Travel.travelNpc({ player: other, npc: { getId: () => 7227 } });
+  Travel.menuClosed({ player: other, interfaceId: Common.ids.menu });
+  const pick = { player: other, groupId: Common.ids.menu, childId: 3, slot: 0, handled: false };
+  Travel.chooseOption(pick);
+  assert.equal(pick.handled, false, 'another menu on the same interface keeps its own pick');
 });
