@@ -86,7 +86,13 @@ node --test tests/farming-model.test.cjs
 node --test tests/farming-redwood.test.cjs tests/woodcutting-guild.test.cjs
 node --test tests/bologa-blessing.test.cjs tests/belladonna-harvest.test.cjs
 node --test tests/farming-coral-yields.test.cjs
+node --test tests/farming-herb-sack-withdraw-order.test.cjs tests/herblore.test.cjs
 ```
+
+Herb-sack Empty uses the canonical Herblore cleaning levels through `herblore:clean`,
+so limited inventory space is filled from the lowest-level herb first (including
+Huasca before Snapdragon). Regression checks cover both sack variants, partial/repeated
+withdrawals and full inventories. Source: [Herb sack](https://oldschool.runescape.wiki/w/Herb_sack).
 
 The second command checks the state machine and mocked hooks without server startup
 or sockets. It covers offline/save equivalence,

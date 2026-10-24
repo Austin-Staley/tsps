@@ -194,12 +194,23 @@ function storageAction(event) {
     } else {
         const stored = (container.getMetaValue("farming:stored") ?? {});
         if (action === "check") event.player.sendMessage(Object.entries(stored).map(([id, amount]) => `${amount} ${core.CacheDefinitions.getItem(+id).name}`).join(", ") || "The container is empty.");
-        else for (const [id, count] of Object.entries(stored)) {
+        else for (const [id, count] of withdrawalEntries(stored, kind)) {
             const amount = Math.min(count, kind === "seed" ? inventory.contains(+id) || !inventory.isFull() ? count : 0 : inventory.getFreeSlots());
             if (amount && Patches.give(event.player, +id, amount)) { stored[id] -= amount; if (!stored[id]) delete stored[id]; }
         }
     }
     inventory.refreshItems();
+}
+// https://oldschool.runescape.wiki/w/Herb_sack: Empty starts with the lowest-level herb.
+function withdrawalEntries(stored, kind) {
+    const entries = Object.entries(stored);
+    if (kind !== "herb") return entries;
+    const levels = new Map(entries.map(([id]) => {
+        const request = { grimyId: +id };
+        core.PluginManager.emitCustomEvent("herblore:clean", request);
+        return [id, request.level ?? Infinity];
+    }));
+    return entries.sort(([a], [b]) => levels.get(a) - levels.get(b) || +a - +b);
 }
 function guildObject(event) {
     if (event.definition?.getName()?.toLowerCase() !== "seed vault") return;
