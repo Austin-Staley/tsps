@@ -104,7 +104,7 @@ test('ordinary poison and venom strike on thirty-tick intervals rather than drif
   for(const venomed of [false,true]){
     let severity=venomed?6:30;
     const hits=[];
-    const entity={isRegistered:()=>true,isPlayer:()=>false,isPoisoned:()=>severity>0,
+    const entity={isRegistered:()=>true,isPlayer:()=>false,getHitpoints:()=>99,isPoisoned:()=>severity>0,
       isVenomed:()=>venomed,getPoisonDamage:()=>severity,setPoisonDamage:n=>severity=n,
       getCombat:()=>({getPoisonImmunityTimer:()=>({finished:()=>true}),
         getHitQueue:()=>({addPendingDamage:parts=>hits.push(...parts)})})};
