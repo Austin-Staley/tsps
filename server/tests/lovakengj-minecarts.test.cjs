@@ -20,11 +20,12 @@ before(async () => {
   Travel = require('../plugins/world/lovakengjminecarts/Travel.LovakengjMinecarts');
   QuestRuntime = require('../plugins/quests/QuestRuntime');
   const api = new Proxy({
+    ...PluginManager.createApi('LovakengjMinecartsTest'),
     core: { ...core, TaskManager: { submit: (task) => tasks.push(task) } },
     emitCustomEvent(name, event) { if (name === 'npc-dialogue:start') starts.push(event); },
     spawnNpc: (def) => { spawned.push(def); return def; },
   }, { get: (target, key) => target[key] ?? (() => {}) });
-  Common.init(api);
+  require('../plugins/world/LovakengjMinecarts.plugin').register(api);
   const original = QuestRuntime.getRegisteredQuests;
   QuestRuntime.getRegisteredQuests = () => [{ name: 'The Forsaken Tower', isComplete: () => questDone }, ...original()];
 });
@@ -188,4 +189,13 @@ test('a death on the way: no ride, no fare, the screen back; a closed list forge
   const pick = { player: other, groupId: Common.ids.menu, childId: 3, slot: 0, handled: false };
   Travel.chooseOption(pick);
   assert.equal(pick.handled, false, 'another menu on the same interface keeps its own pick');
+});
+
+test('the real server startup event spawns all six missing conductors without hook errors', (t) => {
+  const errors = [];
+  t.mock.method(console, 'error', (...args) => errors.push(args));
+  PluginManager.emitServerStartup({ timestamp: Date.now() });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spawned.map((npc) => npc.id).sort((a, b) => a - b), [12702, 12703, 12704, 12705, 12706, 12707]);
+  assert.ok(spawned.every((npc) => npc.wanderRadius === 0 && npc.z === 0));
 });

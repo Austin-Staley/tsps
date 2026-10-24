@@ -188,6 +188,10 @@ function generatedSpawnIds() {
   }
 }
 
+function onStartup() {
+  spawnConductors();
+}
+
 function attach(api) {
   api.onNpcDialogueVariant(chooseVariant);
   api.onNpcDialogueCondition(answerCondition);
@@ -198,7 +202,7 @@ function attach(api) {
   api.onCustomEvent("interface:close", closeMenu);
   api.onCustomEvent("interface:closed", menuClosed);
   api.onPlayerLogout(closeMenu);
-  api.onServerStartup(spawnConductors);
+  api.onServerStartup(onStartup);
 }
 
 module.exports = { attach, chooseVariant, answerCondition, openMenu, ride, chooseOption, menuClosed, travelNpc, travelCart, onAction, spawnConductors };
