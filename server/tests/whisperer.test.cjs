@@ -238,7 +238,8 @@ test('soul rewards count a lethal hit before its delayed death event', () => {
     assert.ok(f.fight.special.rewarded.has(0));
     assert.equal(f.player.getHitpoints(), 69, '20 percent of the base hitpoints level');
 });
-test('postquest entry needs a fragment, owns both realms and cleans actors and UI on leave', () => {
+test('postquest entry needs a fragment, owns both realms and cleans actors and UI on leave', t => {
+    const tasks=[]; t.mock.method(core.TaskManager,'submit',task=>tasks.push(task));
     const f = fixture();
     const removed = [];
     let questComplete = false;
@@ -259,6 +260,14 @@ test('postquest entry needs a fragment, owns both realms and cleans actors and U
     Site.disturb({ player: f.player, npc: figure });
     const session = Site.sessionOf(f.player);
     assert.ok(session);
+    assert.equal(session.fight,null,'pickup precedes the private figure spawn');
+    assert.equal(f.player.getLocation().getY(),6371);
+    tasks.shift().execute();
+    assert.equal(session.figure.getContentId(f.player),12203);
+    assert.equal(session.fight,null,'the figure plays its intro before transforming');
+    tasks.shift().execute(); // flyback ends three tiles north
+    assert.equal(f.player.getLocation().getY(),6374);
+    tasks.shift().execute(); // four ticks after the figure spawn
     const fight = session.fight;
     assert.equal(session.area.canAttack(f.player, fight.boss), true);
     assert.equal(session.area.canAttack(new Player(null), fight.boss), false);
@@ -284,11 +293,60 @@ test('the placeholder fragment is not accepted and a real fragment glows only du
     const f = fixture();
     assert.ok(core.CacheDefinitions.getItem(core.ItemIdentifiers.BLACKSTONE_FRAGMENT_3).placeholderTemplate >= 0);
     assert.deepEqual(Site.fragments(), [28356, 28357]);
-    f.player.getInventory().adds(28356, 1);
+    f.player.getInventory().adds(28357, 1);
     Specials.start(f.fight, 'seeds');
-    assert.equal(f.player.getInventory().contains(28357), true);
-    Specials.clear(f.fight);
     assert.equal(f.player.getInventory().contains(28356), true);
+    Specials.clear(f.fight);
+    assert.equal(f.player.getInventory().contains(28357), true);
+});
+
+test('normal recording volleys animate each projectile and use fixed flight cycles', t => {
+    const f = fixture(), animations = [], projectiles = [], impacts = [];
+    t.mock.method(f.boss,'getIndex',()=>5);
+    const {PacketSender}=require('../dist/net/packet/PacketSender');
+    const sender=new PacketSender(f.player);
+    f.player.getSession=()=>({sendClientPacket(packet){projectiles.push(packet);return true;},write(){}});
+    f.player.getPacketSender=()=>sender;
+    t.mock.method(core.World,'forEachNetworkPlayer',visit=>visit(f.player));
+    t.mock.method(f.boss, 'performAnimation', animation => animations.push(animation.getId()));
+    t.mock.method(f.fight, 'impact', style => impacts.push(style));
+    t.mock.method(Math, 'random', () => 0);
+    f.fight.volley();
+    assert.deepEqual(animations, [10237]);
+    f.fight.process(); f.fight.process();
+    assert.deepEqual(animations, [10237, 10238, 10237]);
+
+    const packets=projectiles.filter(packet=>packet.length>=31).map(packet=>packet.subarray(packet.length-29));
+    assert.equal(packets.length,3);
+    for (const entry of packets) {
+        assert.deepEqual([entry.readUInt16BE(7),entry.readUInt16BE(14),entry.readUInt16BE(19),entry.readUInt16BE(21)],[348,100,30,90]);
+        assert.equal(entry.readUInt16BE(2),2656,'projectiles originate at the 3x3 boss centre');
+        assert.equal(entry[23],2,'projectiles retain their source NPC');
+    }
+    assert.deepEqual(impacts, []);
+    f.fight.process();
+    assert.deepEqual(impacts, ['ranged']);
+});
+
+test('Ketla replacement uses her generated conversation and grants the plain fragment at its handout', () => {
+    const f = fixture(), variants = [], actions = [], npcHooks = [];
+    const api = new Proxy({core,
+        emitCustomEvent(name, event) {if(name==='quest:is-complete') event.complete=true;},
+        onNpcDialogueVariant(handler) {variants.push(handler);},
+        onCustomEvent(name, handler) {if(name==='npc-dialogue:action')actions.push(handler);},
+        onNpcInteraction(name, handlers) {npcHooks.push({name,handlers});},
+    }, {get:(target,name)=>target[name]??(()=>{})});
+    Common.init(api); Site.attach(api);
+    assert.ok(!npcHooks.some(h=>h.name==='Ketla'&&h.handlers['Talk-to']));
+    const variant=variants.map(fn=>fn({player:f.player,npcId:12232})).find(Boolean);
+    assert.equal(variant.variant, 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment');
+    assert.equal(f.player.getInventory().getAmount(28357),0,'talking does not grant an item immediately');
+    const event={player:f.player,npcId:12232,stepId:'5mQjA2',kind:'message'};
+    for(const fn of actions)fn(event);
+    assert.equal(f.player.getInventory().getAmount(28357),1);
+    assert.deepEqual(event.box.items,[28357]);
+    for(const fn of actions)fn(event);
+    assert.equal(f.player.getInventory().getAmount(28357),1,'duplicate handout delivery cannot duplicate the fragment');
 });
 test('normal source spawn suppression leaves quest and unrelated spawns untouched', () => {
     for (const [npcId, x, expected] of [[12204, 2655, false], [12206, 2399, null], [12204, 3000, null]]) {
@@ -394,4 +452,50 @@ test('postquest teleporter activations restore after quest login varbits are syn
     vars.set(15088,0); // Existing DT2 login hook runs later with its own saved discovery state.
     for(const task of tasks)task.execute();
     assert.equal(vars.get(15088),1);
+});
+
+
+test('capture messages accompany special activation, depletion and bind impact', t => {
+    const f=fixture(), messages=[],sounds=[],graphics=[];
+    f.player.sendMessage=text=>messages.push(text);
+    const sender=new Proxy({}, {get:(_,name)=>(...args)=>{if(name==='sendSoundEffect')sounds.push(args[0]);return sender;}});
+    f.player.getPacketSender=()=>sender;
+    f.player.performGraphicInSlot=(slot,graphic)=>graphics.push([slot,graphic.getId(),graphic.getHeight()]);
+    Specials.start(f.fight,'seeds');
+    assert.deepEqual(messages,[Common.data.messages.seeds,Common.data.messages.pulse]);
+    assert.deepEqual(sounds,[1664]);
+    f.fight.special.left=1;
+    Specials.process(f.fight);
+    assert.ok(messages.includes(Common.data.messages.deplete));
+    assert.ok(messages.includes(Common.data.messages.seedsFailed));
+    f.fight.tick=2;
+    for(const event of f.fight.events.filter(e=>e.due<=2))event.action();
+    assert.ok(messages.includes(Common.data.messages.bind));
+    assert.deepEqual(graphics,[[2,2466,100]]);
+});
+
+test('named interaction hooks match the cache display forms and leave global hooks unused', () => {
+    const hooks=[],items=[];
+    const api=new Proxy({core,onObjectInteraction(name,actions){hooks.push({name,actions});},onItemAction(name,actions){items.push({name,actions});},
+        onBeforeObjectInteraction(){assert.fail('travel must use named hooks');}}, {get:(o,key)=>o[key]??(()=>{})});
+    Common.init(api);Site.attach(api);
+    for(const [id,name,action] of [[48197,'Rock','Climb-rope'],[48198,'Rope','Climb-up'],[48201,'Teleporter','Activate'],[48202,'Teleporter','Use']]) {
+        const definition=core.CacheDefinitions.getObject(id);
+        assert.equal(definition.name,name);
+        assert.ok(definition.actions.includes(action));
+        assert.equal(typeof hooks.find(h=>h.name===name).actions[action],'function');
+    }
+    assert.deepEqual(items.map(h=>h.name),['Blackstone fragment']);
+});
+
+test('leaving during the intro cancels flyback and the delayed boss spawn', t => {
+    const f=fixture(),tasks=[];
+    t.mock.method(core.TaskManager,'submit',task=>tasks.push(task));
+    Common.init({core,emitCustomEvent(){},spawnNpc({id,x,y}){return f.session.spawn(id,x,y);},removeNpc(){}});
+    const session=new Site.Session(f.player);
+    session.area.enter(f.player);session.begin();tasks.shift().execute();
+    session.end();f.player.moveTo(Common.location(Common.data.site.outside));
+    for(const task of tasks)task.execute();
+    assert.equal(session.fight,null);
+    assert.equal(f.player.getLocation().getY(),6386);
 });

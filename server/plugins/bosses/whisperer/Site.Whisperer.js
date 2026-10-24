@@ -1,13 +1,20 @@
 const Common = require('./Common.Whisperer');
 const { Fight } = require('./Fight.Whisperer');
-const sessions = new Map();
+const Travel = require('./Travel.Whisperer');
+const sessions = Common.sessions;
+const RECLAIM_VARIANT = 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment';
+const RECLAIM_STEP = '5mQjA2';
 let AreaClass;
 function areaClass() {
     if (AreaClass)
         return AreaClass;
     const { PrivateArea, Boundary } = Common.core;
     AreaClass = class WhispererCathedral extends PrivateArea {
-        constructor(session) { super([new Boundary(2640, 2676, 6352, 6385, 0), new Boundary(2384, 2420, 6352, 6385, 0)]); this.session = session; }
+        constructor(session) {
+            const [minX,maxX,minY,maxY,plane]=Common.data.site.arena, offset=Common.data.site.realmOffset;
+            super([new Boundary(minX,maxX,minY,maxY,plane),new Boundary(minX-offset,maxX-offset,minY,maxY,plane)]);
+            this.session = session;
+        }
         getName() { return 'Sunken Cathedral'; }
         isMulti() { return true; }
         allowSummonPet() { return false; }
@@ -46,12 +53,13 @@ class Session {
     start() {
         if (this.ended || this.fight?.alive())
             return;
-        Common.remove(this.figure);
+        const figure = this.figure;
         this.figure = null;
         const [x, y] = Common.data.site.boss;
-        const npc = this.spawn(Common.data.npcs.boss, x, y);
+        const npc = figure ?? this.spawn(Common.data.npcs.boss, x, y);
         if (!npc)
             return;
+        npc.setNpcTransformationId(Common.data.npcs.boss);
         npc.setMaxHitpoints(900);
         npc.setHitpoints(900);
         npc.setFlag('combat:freezable', true);
@@ -60,15 +68,41 @@ class Session {
         Common.api.emitCustomEvent('combat-achievements:count',known);
         if(Number(known.total)>(Number(this.player.getAttribute(Common.KILLS_ATTRIBUTE))||0))this.player.setAttribute(Common.KILLS_ATTRIBUTE,known.total);
         npc.__whispererFight = this.fight;
-        npc.performAnimation(new Common.core.Animation(Common.data.animations.spawn));
         this.player.getPacketSender().sendSubInterface(Common.data.sanity.helper, Common.data.sanity.interface, 1);
         Common.sync(this.fight);
         Common.api.emitCustomEvent('boss-hud:show', { player: this.player, npcId: Common.data.npcs.boss, current: 900, maximum: 900 });
     }
+    begin() {
+        if (this.ended || this.starting || this.fight?.alive()) return;
+        this.starting = true;
+        const player = this.player, config = Common.data;
+        const x = player.getLocation().getX();
+        player.getMovementQueue().reset();
+        player.moveTo(new Common.core.Location(x,config.site.disturbY,0));
+        player.performAnimation(new Common.core.Animation(config.animations.pickup));
+        Common.later(config.timing.introPickup, () => {
+            if(this.ended) return;
+            if(!this.figure) {
+                const [bx,by]=config.site.boss;
+                this.figure=this.spawn(config.npcs.boss,bx,by);
+                if(this.figure) this.figure.setNpcTransformationId(config.npcs.figure);
+            }
+            if(!this.figure) {this.starting=false;return;}
+            this.figure.performAnimation(new Common.core.Animation(config.animations.spawn));
+            const start=player.getLocation().clone(), delta=new Common.core.Location(0,config.site.arrival[1]-start.getY());
+            Common.core.TaskManager.submit(new Common.core.ForceMovementTask(player,config.timing.flybackTicks,
+                new Common.core.ForceMovement(start,delta,0,config.timing.flybackCycles,0,config.animations.flyback)));
+            Common.sound(player,config.sounds.disturb);
+            player.getPacketSender().sendSong(config.song);
+            Common.later(config.timing.introTransform,()=>{if(!this.ended){this.starting=false;this.start();}});
+        });
+    }
+    respawn() { respawn(this); }
     end() {
         if (this.ended)
             return;
         this.ended = true;
+        this.player.setForceMovement(null);
         sessions.delete(this.player);
         this.fight?.stop();
         this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
@@ -79,34 +113,33 @@ class Session {
             this.area.destroy();
     }
 }
-const sessionOf = player => sessions.get(player);
+const sessionOf = Common.sessionOf;
 function complete(player) { const request = { player, key: Common.data.quest, complete: false }; Common.api.emitCustomEvent('quest:is-complete', request); return request.complete === true; }
-function fragments() { const I = Common.core.ItemIdentifiers; return [I.BLACKSTONE_FRAGMENT, I.BLACKSTONE_FRAGMENT_2]; }
+function fragments() { return [Common.data.items.fragmentActive,Common.data.items.fragment]; }
 function hasFragment(player) { return fragments().some(id => player.getInventory().contains(id)); }
 function disturb({ player, npc }) {
-    if (npc?.getId() !== Common.data.npcs.figure)
+    if (npc?.getId() !== Common.data.npcs.figure && npc?.getContentId?.(player) !== Common.data.npcs.figure)
         return false;
     if (!complete(player))
         return false;
     if (!hasFragment(player)) {
-        player.sendMessage('You need a blackstone fragment to fight the Whisperer. Speak to Ketla for a replacement.');
+        Common.objectBox(player,Common.data.items.fragment,Common.data.messages.noFragment);
         return true;
     }
     const existing = sessionOf(player);
     if (existing) {
         if (existing.figure === npc)
-            existing.start();
+            existing.begin();
         return true;
     }
     const p = npc.getLocation();
-    if (p.getX() < 2640 || p.getX() > 2676 || p.getY() < 6352 || p.getY() > 6386)
+    if (!Common.inBounds(Common.data.site.arena,p))
         return false;
     const session = new Session(player);
     sessions.set(player, session);
     session.area.enter(player);
-    player.moveTo(Common.location(Common.data.site.arrival));
     player.setAttribute(Common.INSIDE_ATTRIBUTE, true);
-    session.start();
+    session.begin();
     return true;
 }
 function leave({ player }) {
@@ -131,31 +164,36 @@ function fragmentAction(event) {
         return true;
     }
     if (!fight.special && !fight.shadow) {
-        event.player.sendMessage('The fragment is not responding.');
+        event.player.sendMessage(Common.data.messages.unresponsive);
         return true;
     }
     fight.setShadow(!fight.shadow);
     return true;
 }
-function reclaim({ player }) {
-    if (!complete(player))
-        return false;
-    if (hasFragment(player))
-        return false;
-    if (player.getInventory().getFreeSlots() <= 0) {
-        player.sendMessage('You need an inventory space for the blackstone fragment.');
-        return true;
+function ketlaVariant({player,npcId}) {
+    const {NpcIdentifiers}=Common.core;
+    if(![NpcIdentifiers.KETLA,NpcIdentifiers.KETLA_2].includes(npcId)||!complete(player)||hasFragment(player)) return null;
+    return {page:'Transcript:Desert Treasure II - The Fallen Empire',variant:RECLAIM_VARIANT};
+}
+function reclaim(event) {
+    const {player,npcId,stepId}=event, {NpcIdentifiers}=Common.core;
+    if(stepId!==RECLAIM_STEP||![NpcIdentifiers.KETLA,NpcIdentifiers.KETLA_2].includes(npcId)||!complete(player)) return;
+    if(hasFragment(player)) {event.handled=true;return;}
+    if(player.getInventory().getFreeSlots()<=0) {
+        event.text='You need an inventory space for the blackstone fragment.';
+        event.box={statement:true};
+        return;
     }
-    player.getInventory().adds(Common.core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 1);
-    player.sendMessage('Ketla gives you another blackstone fragment.');
-    return true;
+    player.getInventory().adds(Common.data.items.fragment,1);
+    event.box={items:[Common.data.items.fragment]};
 }
 function respawn(session) {
     if (session.ended)
         return;
     session.fight?.stop();
     const [x, y] = Common.data.site.boss;
-    session.figure = session.spawn(Common.data.npcs.figure, x, y);
+    session.figure = session.spawn(Common.data.npcs.boss, x, y);
+    session.figure?.setNpcTransformationId(Common.data.npcs.figure);
     Common.api.emitCustomEvent('boss-hud:hide', { player: session.player, fade: false, afterTicks: 0 });
 }
 function recover({ player }) {
@@ -176,7 +214,7 @@ function grave(request) {
 }
 function suppressSpawn(event) {
     const p = event.location;
-    if (event.npcId === Common.data.npcs.boss && p?.getX() >= 2640 && p.getX() <= 2676 && p.getY() >= 6352 && p.getY() <= 6386)
+    if (event.npcId === Common.data.npcs.boss && Common.inBounds(Common.data.site.arena,p))
         event.allow = false;
 }
 function startup() { const [x, y, z] = Common.data.site.boss; Common.api.spawnNpc({ id: Common.data.npcs.figure, x, y, z, wanderRadius: 0 }); }
@@ -186,19 +224,20 @@ function best(request) {
         request.best = Number(request.player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
 }
 function attach(api) {
-    require('./Travel.Whisperer').attach(api);
+    Travel.attach(api);
     api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
     api.persistAttribute(Common.KILLS_ATTRIBUTE, 0);
     api.persistAttribute(Common.BEST_ATTRIBUTE, 0);
     api.onCanSpawnNpc(suppressSpawn);
     api.onServerStartup(startup);
     api.onNpcInteraction('Odd Figure', { Disturb: disturb });
-    api.onNpcInteraction('Ketla', { 'Talk-to': reclaim });
+    api.onNpcDialogueVariant(ketlaVariant);
+    api.onCustomEvent('npc-dialogue:action',reclaim);
     api.onObjectInteraction('Tentacle', { Escape: leave, 'Quick-escape': leave, Leave: leave });
-    api.onItemAction(fragmentAction);
+    api.onItemAction('Blackstone fragment',{Activate:fragmentAction,Use:fragmentAction});
     api.onPlayerLogin(recover);
     api.onCustomEvent('gravestones:grave-location', grave);
     api.onCustomEvent('combat-achievements:kill-count', counts);
     api.onCustomEvent('combat-achievements:personal-best', best);
 }
-module.exports = { attach, Session, sessionOf, disturb, leave, fragmentAction, fragments, respawn, grave, suppressSpawn,travel:require('./Travel.Whisperer').travel };
+module.exports = { attach, Session, sessionOf, disturb, leave, fragmentAction, fragments, respawn, grave, suppressSpawn,travel:Travel.travel };

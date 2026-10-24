@@ -35,7 +35,9 @@ class Fight {
     changeSanity(amount) { this.sanity = Math.max(0, Math.min(100, this.sanity + amount)); Common.sync(this); }
     sanityTick() {
         if (this.sanity <= 0) {
+            if (!this.insanity) this.player.sendMessage(Common.data.messages.insanity);
             this.insanity = (this.insanity ?? 0) + 1;
+            // Provisional fallback: captures establish the warning, not this damage ramp.
             Common.damage(this, Math.min(99, 5 * this.insanity));
             return;
         }
@@ -63,6 +65,7 @@ class Fight {
             tentacle.targetX += offset;
         }
         this.shadow = shadow;
+        if (shadow) this.player.getPacketSender().sendVarbit(Common.data.sanity.visitedVarbit, 1);
         Specials.render(this);
         Common.sync(this);
     }
@@ -121,18 +124,22 @@ class Fight {
         const base = Common.random(0, 1) ? 'magic' : 'ranged';
         const pattern = this.pattern(base);
         this.attacks++;
-        this.boss.performAnimation(new Common.core.Animation(Common.data.animations[pattern[0]]));
-        pattern.forEach((style, index) => this.at(index + 1, () => {
+        pattern.forEach((style, index) => {
+          const launch = () => {
             if (this.inMelee()) {
                 this.events = [];
                 this.melee();
                 return;
             }
-            const { Projectile } = Common.core;
-            const travel = Math.max(1, Projectile.arrivalTicks(this.boss, this.player, 51));
-            Projectile.createProjectile(this.boss, this.player, Common.data.projectiles[style], 51, 46 + this.boss.getLocation().getDistance(this.player.getLocation()) * 10, 43, 31).sendProjectile();
-            this.at(travel, () => this.impact(style));
-        }));
+            const timing = Common.data.projectileTiming;
+            this.boss.performAnimation(new Common.core.Animation(Common.data.animations[style][index % 2]));
+            Common.core.Projectile.createProjectile(this.boss, this.player, Common.data.projectiles[style],
+                timing.start, timing.end, timing.startHeight, timing.endHeight).sendProjectile();
+            this.at(timing.impactTicks, () => this.impact(style));
+          };
+          if (index === 0) launch();
+          else this.at(index, launch);
+        });
         this.at(pattern.length + 3, () => this.spawnTentacles());
         this.nextAttack = this.tick + (this.enraged ? 2 : 10);
     }
@@ -171,6 +178,8 @@ class Fight {
         this.events = [];
         this.nextAttack = this.tick + 5;
         this.boss.performAnimation(new Common.core.Animation(Common.data.animations.melee));
+        // Provisional: the normal Wiki establishes max 42 and partial protection,
+        // but does not establish a 28 minimum or a 75% protected share.
         const damage = Common.random(28, 42);
         const amount = Common.protectedFrom(this.player, 'melee') ? Math.floor(damage * .75) : damage;
         Common.damage(this, amount);
@@ -181,7 +190,11 @@ class Fight {
         Common.core.Projectile.createProjectile(this.boss, this.player, Common.data.projectiles.bind, 51, 100, 43, 31).sendProjectile();
         this.at(2, () => {
             if (this.boundUntil > this.tick)
-                Common.core.CombatFactory.freezeTicks(this.player, 12);
+                {
+                    Common.core.CombatFactory.freezeTicks(this.player, 12);
+                    this.player.sendMessage(Common.data.messages.bind);
+                    this.player.performGraphicInSlot(2, new Common.core.Graphic(Common.data.graphics.bind, 0, 100));
+                }
         });
     }
     pursueBound() {
@@ -205,7 +218,7 @@ class Fight {
         const p = this.player.getLocation();
         const x = p.getX(), y = p.getY();
         const plus = this.completed >= 2 && Common.random(0, 1);
-        const offsets = this.enraged ? [[0, y > 6370 ? -4 : 4]] : plus ? [[0, -4], [4, 0], [0, 4], [-4, 0]] : [[-4, -4], [4, -4], [4, 4], [-4, 4]];
+        const offsets = this.enraged ? [[0, y > Common.data.site.boss[1] + 1 ? -4 : 4]] : plus ? [[0, -4], [4, 0], [0, 4], [-4, 0]] : [[-4, -4], [4, -4], [4, 4], [-4, 4]];
         const wave = { hit: false };
         for (const [dx, dy] of offsets) {
             const sx = x + dx, sy = y + dy;
@@ -219,8 +232,9 @@ class Fight {
         }
     }
     validTentacleTile(x, y) {
-        const shift = this.shadow ? 256 : 0, b = this.boss.getLocation();
-        return x >= 2644 - shift && x <= 2668 - shift && y >= 6356 && y <= 6384 &&
+        const shift = this.shadow ? Common.data.site.realmOffset : 0, b = this.boss.getLocation();
+        const [minX,maxX,minY,maxY] = Common.data.site.tentacleBounds;
+        return x >= minX - shift && x <= maxX - shift && y >= minY && y <= maxY &&
             !(x >= b.getX() && x < b.getX() + 3 && y >= b.getY() && y < b.getY() + 3) &&
             !Common.core.RegionManager.blocked(new Common.core.Location(x,y,0),this.session.area);
     }
@@ -286,6 +300,7 @@ function beforeDeath(event) {
         fight.attacks = 0;
         fight.nextAttack = fight.tick + 3;
         fight.setShadow(true);
+        fight.player.sendMessage(Common.data.messages.enrage);
     }
     else
         fight.finish();
@@ -336,16 +351,17 @@ function onDeath({ npc }) {
     Common.api.emitCustomEvent('combat-achievements:count',known);
     const count = Math.max((Number(player.getAttribute(Common.KILLS_ATTRIBUTE)) || 0) + 1,Number(known.total)||0);
     player.setAttribute(Common.KILLS_ATTRIBUTE, count);
-    player.getPacketSender().sendConfig(3969, count);
+    player.getPacketSender().sendConfig(Common.data.killCountVarp, count);
     player.sendMessage(`Your Whisperer kill count is: <col=ff0000>${count}</col>.`);
     const ticks = fight.elapsedTicks;
     const best = Number(player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
     if (!best || ticks < best)
         player.setAttribute(Common.BEST_ATTRIBUTE, ticks);
-    player.sendMessage(`Fight duration: ${Math.floor(ticks * .6 / 60)}:${String(Math.floor(ticks * .6) % 60).padStart(2, '0')}${!best || ticks < best ? ' (new personal best)' : ''}.`);
+    const duration = value => `${Math.floor(value * .6 / 60)}:${String(Math.floor(value * .6) % 60).padStart(2, '0')}`;
+    player.sendMessage(`Fight duration: <col=ff0000>${duration(ticks)}</col>${!best || ticks < best ? ' (new personal best)' : `. Personal best: ${duration(best)}`}`);
     Common.later(30, () => {
         if (!fight.session.ended && fight.session.fight === fight)
-            require('./Site.Whisperer').respawn(fight.session);
+            fight.session.respawn();
     });
 }
 function combatClass() {

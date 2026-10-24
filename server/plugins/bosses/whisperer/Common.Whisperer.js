@@ -4,6 +4,7 @@ const KILLS_ATTRIBUTE = 'whisperer:kills';
 const BEST_ATTRIBUTE = 'whisperer:best-ticks';
 const MONSTER = 'Whisperer, The';
 let api;
+const sessions = new Map();
 function init(value) { api = value; }
 function later(ticks, action) {
     const { Task, TaskManager } = api.core;
@@ -50,14 +51,13 @@ function sync(fight) {
     const sender = player.getPacketSender();
     sender.sendVarbit(data.sanity.varbit, fight.sanity);
     sender.sendVarbit(data.sanity.realmVarbit, fight.shadow ? 1 : 0);
-    sender.sendVarbit(15067, fight.special ? 1 : 0);
+    sender.sendVarbit(data.sanity.switchVarbit, fight.special ? 1 : 0);
 }
 function fragment(fight, glowing) {
-    const { ItemIdentifiers: I } = api.core;
     let changed = false;
     for (const item of fight.player.getInventory().getItems())
-        if (item.getId() === I.BLACKSTONE_FRAGMENT || item.getId() === I.BLACKSTONE_FRAGMENT_2) {
-            const next = glowing ? I.BLACKSTONE_FRAGMENT_2 : I.BLACKSTONE_FRAGMENT;
+        if (item.getId() === data.items.fragment || item.getId() === data.items.fragmentActive) {
+            const next = glowing ? data.items.fragmentActive : data.items.fragment;
             if (item.getId() !== next) {
                 item.setId(next);
                 changed = true;
@@ -67,4 +67,15 @@ function fragment(fight, glowing) {
         fight.player.getInventory().refreshItems();
     sync(fight);
 }
-module.exports = { data, init, get api() { return api; }, get core() { return api.core; }, later, location, random, protectedFrom, damage, cancelDamage, remove, sync, fragment, INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, BEST_ATTRIBUTE, MONSTER };
+function sessionOf(player) { return sessions.get(player); }
+function inBounds([minX,maxX,minY,maxY,plane], location) {
+    return location?.getZ() === plane && location.getX() >= minX && location.getX() <= maxX && location.getY() >= minY && location.getY() <= maxY;
+}
+function sound(player, id) { player.getPacketSender().sendSoundEffect(id, 1, 0, 255); }
+function messageBox(player, text) {
+    player.getDialogueManager().startDialogues(new api.core.DialogueChainBuilder().add(new api.core.StatementDialogue(0, text)));
+}
+function objectBox(player, itemId, text) {
+    player.getDialogueManager().startDialogues(new api.core.DialogueChainBuilder().add(new api.core.ItemStatementDialogue(0, itemId, text)));
+}
+module.exports = { data, init, get api() { return api; }, get core() { return api.core; }, later, location, random, protectedFrom, damage, cancelDamage, remove, sync, fragment, sessions, sessionOf, inBounds, sound, messageBox, objectBox, INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, BEST_ATTRIBUTE, MONSTER };

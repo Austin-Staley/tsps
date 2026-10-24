@@ -1,5 +1,5 @@
 const Common = require('./Common.Whisperer');
-const centre = fight => [2655 - (fight.shadow ? 256 : 0), 6369];
+const centre = fight => [Common.data.site.boss[0] - (fight.shadow ? Common.data.site.realmOffset : 0), Common.data.site.boss[1]];
 /** Tile-grid transcription of the four route diagrams on the Wiki strategy page.
  * The first layout's camera is rotated; coordinates are normalized about its centre.
  * Absolute arena anchoring/orientation still needs packet-capture confirmation. */
@@ -23,12 +23,12 @@ function seedLayout(pattern) {
 function start(fight, kind) {
     clear(fight);
     const [x, y] = centre(fight);
-    fight.boss.moveTo(new Common.core.Location(x, kind === 'screech' ? 6357 : y, 0));
+    fight.boss.moveTo(new Common.core.Location(x, kind === 'screech' ? Common.data.site.screechY : y, 0));
     fight.boss.performAnimation(new Common.core.Animation(Common.data.animations[kind]));
     fight.special = { kind, left: kind === 'souls' ? 20 : kind === 'seeds' ? 50 : 5 };
     if (kind === 'seeds') {
         const pattern = Common.random(0, 3);
-        fight.special.seeds = seedLayout(pattern).map(({ dx, dy, light }) => ({ x: x + 1 + dx, y: y + 1 + dy, light, active: true, object: null }));
+        fight.special.seeds = seedLayout(pattern).map(({ dx, dy, light }) => ({ x: x + 1 + dx, y: y + 1 + dy, light, active: true, materialX: x + 1 + dx + (fight.shadow ? Common.data.site.realmOffset : 0), object: null }));
         fight.special.clean = true;
     }
     else if (kind === 'screech') {
@@ -46,7 +46,7 @@ function start(fight, kind) {
             const npc = fight.session.spawn(Common.data.npcs.column, x + dx, y + dy);
             npc.setMaxHitpoints(60);
             npc.setHitpoints(hp);
-            return { x: x + dx, y: y + dy, hp, active: true, npc };
+            return { x: x + dx, materialX: x + dx + (fight.shadow ? Common.data.site.realmOffset : 0), y: y + dy, hp, active: true, npc };
         });
     }
     else {
@@ -60,11 +60,13 @@ function start(fight, kind) {
                 npc.setHitpoints(1);
                 npc.__whispererFight = fight;
                 npc.__whispererSoul = group;
-                fight.special.souls.push({ npc, group, dead: false });
+                fight.special.souls.push({ npc, group, materialX: npc.getLocation().getX() + (fight.shadow ? Common.data.site.realmOffset : 0), dead: false });
             }
         });
     }
-    fight.player.sendMessage('The blackstone fragment glows. Enter the Shadow Realm to reveal the Whisperer\'s attack.');
+    fight.player.sendMessage(Common.data.messages[kind]);
+    fight.player.sendMessage(Common.data.messages.pulse);
+    Common.sound(fight.player, Common.data.sounds.pulse);
     Common.fragment(fight, true);
     render(fight);
 }
@@ -76,8 +78,7 @@ function render(fight) {
         for (const seed of special.seeds) {
             if (seed.object)
                 fight.player.getPacketSender().sendObjectRemoval(seed.object);
-            const base = seed.x < 2500 ? 256 : 0, offset = fight.shadow ? 256 : 0;
-            seed.x = seed.x + base - offset;
+            seed.x = seed.materialX - (fight.shadow ? Common.data.site.realmOffset : 0);
             if (!seed.active)
                 continue;
             const id = fight.shadow ? (seed.light ? Common.data.objects.seedLight : Common.data.objects.seedDark) : Common.data.objects.seedReal;
@@ -88,7 +89,7 @@ function render(fight) {
         for (const column of special.columns) {
             if (!column.active)
                 continue;
-            const x = column.x + (column.x < 2500 ? 256 : 0) - (fight.shadow ? 256 : 0);
+            const x = column.materialX - (fight.shadow ? Common.data.site.realmOffset : 0);
             column.x = x;
             column.npc.moveTo(new Common.core.Location(x, column.y, 0));
             column.npc.setNpcTransformationId(fight.shadow ? Common.data.npcs.columnShadow : Common.data.npcs.column);
@@ -99,14 +100,16 @@ function render(fight) {
         for (const soul of special.souls) {
             if (soul.dead)
                 continue;
-            const p = soul.npc.getLocation(), x = p.getX() + (p.getX() < 2500 ? 256 : 0) - (fight.shadow ? 256 : 0);
+            const p = soul.npc.getLocation(), x = soul.materialX - (fight.shadow ? Common.data.site.realmOffset : 0);
             soul.npc.moveTo(new Common.core.Location(x, p.getY(), 0));
             soul.npc.setNpcTransformationId(fight.shadow ? Common.data.npcs.soulShadow : Common.data.npcs.soul);
             if (fight.shadow)
                 soul.npc.forceChat(Common.data.soulSets[soul.group].phrase);
         }
 }
-function finish(fight) {
+function finish(fight, result) {
+    fight.player.sendMessage(Common.data.messages.deplete);
+    if (result) fight.player.sendMessage(Common.data.messages[result]);
     clear(fight);
     fight.completed++;
     fight.nextAttack = fight.tick + 15;
@@ -135,13 +138,13 @@ function process(fight) {
             if (special.seeds.every(s => !s.light || !s.active)) {
                 if (special.clean)
                     fight.changeSanity(15);
-                finish(fight);
+                finish(fight, special.clean ? 'seedsPerfect' : 'seedsDone');
                 return;
             }
         }
         if (special.left <= 0) {
             Common.damage(fight, 75, 75);
-            finish(fight);
+            finish(fight, 'seedsFailed');
         }
     }
     else if (special.kind === 'screech' && special.left <= 0) {
@@ -175,7 +178,7 @@ function process(fight) {
                 Common.damage(fight, 50);
                 fight.boss.heal(100);
             }
-            finish(fight);
+            finish(fight, special.rewarded.size ? 'soulsPartial' : 'soulsFailed');
         }
     }
 }
@@ -202,7 +205,7 @@ function soulDied(fight, npc) {
         hurtBoss(fight, 50);
     if (special.souls.every(s => s.dead)) {
         hurtBoss(fight, 25);
-        finish(fight);
+        finish(fight, 'soulsFull');
     }
 }
 function hurtBoss(fight, amount) {
