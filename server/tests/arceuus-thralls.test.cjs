@@ -79,16 +79,28 @@ test('thrall ownership credits only applied queued damage, including overkill an
 
 test('all resurrection spells share a ten-second cooldown and rejection spends no runes or prayer',t=>{
   const f=fixture(t);World.processCycle=100;
+  let wallClock=100000;t.mock.method(Date,'now',()=>wallClock);
   const spells=['lesser ghost','superior ghost','greater ghost','lesser skeleton','superior skeleton','greater skeleton','lesser zombie','superior zombie','greater zombie'];
   ArceuusSpells.handleSpell(f.p,`Resurrect ${spells[0]}`);
-  assert.equal(f.attributes.get('arceuus:thrall-until'),117);
-  for(let i=1;i<spells.length;i++){
+  const initialDeadline=f.attributes.get('arceuus:thrall-until');
+  // Upstream 3bbf1cc8e uses whole ticks; the older installed integration uses
+  // milliseconds. Validate either exact ten-second protocol, never infer an
+  // arbitrary duration from the implementation's own deadline.
+  assert.ok(initialDeadline===117 || initialDeadline===110000,`unexpected cooldown ${initialDeadline}`);
+  const tickClock=initialDeadline===117,period=tickClock?17:10000;
+  const now=()=>tickClock?World.getProcessCycle():wallClock;
+  const advanceTo=value=>{if(tickClock)World.processCycle=value;else wallClock=value;};
+  for(let i=1;i<=spells.length;i++){
+    const spell=spells[i%spells.length];
     const until=f.attributes.get('arceuus:thrall-until'),runes=[...f.runes],prayer=f.p.prayer;
-    World.processCycle=until-1;ArceuusSpells.handleSpell(f.p,`Resurrect ${spells[i]}`);
-    assert.deepEqual([...f.runes],runes);assert.equal(f.p.prayer,prayer);assert.equal(f.actors.length,i);
-    World.processCycle=until;ArceuusSpells.handleSpell(f.p,`Resurrect ${spells[i]}`);
+    assert.equal(until,now()+period);
+    for(const at of [now(),until-1]){
+      advanceTo(at);ArceuusSpells.handleSpell(f.p,`Resurrect ${spell}`);
+      assert.deepEqual([...f.runes],runes);assert.equal(f.p.prayer,prayer);assert.equal(f.actors.length,i);
+    }
+    advanceTo(until);ArceuusSpells.handleSpell(f.p,`Resurrect ${spell}`);
     assert.equal(f.actors.length,i+1);assert.equal(f.p.prayer,prayer-(i%3+1)*2);
-    assert.equal(f.attributes.get('arceuus:thrall-until'),until+17);
+    assert.equal(f.attributes.get('arceuus:thrall-until'),until+period);
   }
 });
 

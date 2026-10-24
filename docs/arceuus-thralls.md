@@ -24,8 +24,16 @@ observer hunks from #882 in `HitDamage`/`HitQueue`, before reactive healing;
 integration with a branch already containing that foundation must retain one
 copy of the same contract.
 
-The nine resurrection spells keep their shared cooldown key, now ten seconds
-(17 whole 600-ms game cycles through the existing cast-clock conversion).
+The nine resurrection spells keep their shared cooldown key, now ten seconds.
+Upstream commit `3bbf1cc8e516c87ce03a9bdbfd771928d57d8f7d` converts the
+shared spell clock to whole game cycles (17 whole 600-ms cycles for ten seconds).
+The older installed integration retains its existing millisecond clock and an
+exact 10,000-ms deadline. This bounded feature does not port that wider clock
+refactor. Its cast regression fixes both clocks independently, accepts only
+those two exact deadline protocols, and advances only the active clock while
+checking rejection at cast time and immediately before expiry, then acceptance
+at expiry for every resurrection variant. A 30-second gate or arbitrary deadline
+still fails; the inactive clock stays frozen to expose mixed-unit behavior.
 Rejected attempts spend neither runes nor Prayer. Duration remains one tick
 per current Magic level at summon time, queried through `magic:thrall-duration`.
 The existing Combat Achievement reward plugin doubles this only when its saved
