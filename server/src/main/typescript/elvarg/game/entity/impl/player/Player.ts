@@ -877,10 +877,14 @@ export class Player extends Mobile {
     }
 
     public setInterfaceId(interfaceId: number): this {
+        const previousId = this.interfaceId;
         if (this.interfaceId >= 0 && interfaceId >= 0 && this.interfaceId !== interfaceId) {
             PluginManager.emitCustomEvent("interface:closed", { player: this, interfaceId: this.interfaceId });
         }
         this.interfaceId = interfaceId;
+        if (previousId !== interfaceId) {
+            PluginManager.emitCustomEvent("interface:changed", { player: this, previousId, interfaceId });
+        }
         return this;
     }
 
