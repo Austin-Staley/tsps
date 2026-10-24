@@ -7,6 +7,7 @@ import {
     isPauseButtonWidget as isPauseButtonWidgetUtil,
     sanitizeText,
 } from "../../../widgets/menu/utils";
+import { runWidgetJsOp } from "../../../widgets/custom/dynamicWidgets";
 import { ClientState } from "../../ClientState";
 import type { WidgetInteractionController } from "../WidgetInteractionController";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
@@ -18,7 +19,7 @@ import { isCombatSkillWidgetAction } from "../widgetActionPayload";
 function offersMenuOp(w: any, getWidgetFlags: (w: any) => number): boolean {
     if (!Array.isArray(w?.actions)) return false;
     const flags = getWidgetFlags(w) | 0;
-    const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp);
+    const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp || w.jsListeners?.onOp);
     return w.actions.some(
         (action: any, index: number) => !!sanitizeText(action) && shouldShowMenuOption(flags, index, hasOnOpHandler),
     );
@@ -74,7 +75,7 @@ export function processWidgetClickInput(
                 // slot - the Slayer Rewards Tasks tab's view_tasks (426:36), which lies over the
                 // Cancel/Block/Store buttons - mustn't take their clicks.
                 const opFlags = getWidgetFlags(w) | 0;
-                const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp);
+                const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp || w.jsListeners?.onOp);
                 const hasActionList = Array.isArray(w.actions) && w.actions.length > 0;
                 const hasActions =
                     hasActionList &&
@@ -302,6 +303,11 @@ export function processWidgetClickInput(
                     // Handlers can mutate widget ops (e.g., Mute -> Unmute), but the transmitted action
                     // should reflect what was clicked pre-mutation.
                     const primaryAction = getPrimaryWidgetAction(w);
+                    // A widget a plugin built (RuneLite's JavaScriptCallback op listener).
+                    if (runWidgetJsOp({ widget: w, ...primaryAction })) {
+                        widgetInteraction.clickedWidgetHandled = true;
+                        break;
+                    }
                     if (deps.handlePluginWidgetAction?.({
                         widget: w,
                         ...primaryAction,

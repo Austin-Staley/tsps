@@ -2,6 +2,7 @@
 
 // STASH units (Wiki "STASH"): an emote step's hidey-hole loc is built with Construction,
 // then stores that step's full outfit. The loc is a multiloc on its own cache varbit.
+const Catalogue = require("./Catalogue.TreasureTrails");
 const Runtime = require("./Runtime.TreasureTrails");
 const { TIERS } = require("./Tiers.TreasureTrails");
 const BUILT_ATTRIBUTE = "treasure-trails:stash-built";
@@ -74,7 +75,10 @@ function deposit(player, unit) {
   const inventory = player.getInventory();
   const taken = [];
   for (const requirement of unit.step.equipment) {
-    const slot = inventory.getItems().findIndex((item, index) => item && requirement.anyOf.includes(item.getId()) && !taken.some(entry => entry.slot === index));
+    if (requirement.emptySlot != null) continue;
+    const fits = id => requirement.anyOf ? requirement.anyOf.includes(id) :
+      core.CacheDefinitions.getItem(id)?.params?.get?.(Catalogue.TRAIL_ITEM_GROUP_PARAM) === requirement.group;
+    const slot = inventory.getItems().findIndex((item, index) => item && fits(item.getId()) && !taken.some(entry => entry.slot === index));
     if (slot < 0) {
       player.sendMessage("You need all the items for this STASH unit's emote clue to store them.");
       return;

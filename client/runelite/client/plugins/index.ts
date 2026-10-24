@@ -8,12 +8,14 @@ import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame
 import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
+import { GroundMarkerPlugin } from "../../../game/plugins/groundmarkers/GroundMarkerPlugin";
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight/InteractHighlightConfig";
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
 import { InventoryTagsPlugin } from "../../../game/plugins/inventorytags/InventoryTagsPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
+import { ObjectIndicatorsPlugin } from "../../../game/plugins/objectindicators/ObjectIndicatorsPlugin";
 import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
@@ -26,12 +28,15 @@ import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
 } from "../../../game/plugins/statustimer/StatusTimerPlugin";
-import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkersConfig";
+import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migrateTileMarkers";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
+import { TilePacksPlugin } from "../../../game/plugins/tilepacks/TilePacksPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
+import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
+import { migrateGroundItemsConfig } from "../../../game/plugins/grounditems/migrateGroundItems";
 import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
 
@@ -44,12 +49,15 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     GameFrame317Plugin,
     GroundItemsPlugin,
     InteractHighlightPlugin,
+    GroundMarkerPlugin,
     TileMarkersPlugin,
+    TilePacksPlugin,
     MenuSwapperPlugin,
     // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
     InventoryTagsPlugin,
     NotesPlugin,
     NpcIndicatorsPlugin,
+    ObjectIndicatorsPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -65,6 +73,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     GpuPlugin,
     CameraPlugin,
     XpTrackerPlugin,
+    XpGlobesPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */
@@ -73,7 +82,9 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
         name: "grounditems",
         legacyKey: "osrs.plugin.ground_items.v1",
         config: GroundItemsConfig,
+        fieldMap: { rightClickHidden: "deprioritizeHiddenItems", despawnTimerMode: "groundItemTimers" },
         enabledKey: "grounditemsplugin",
+        migrate: migrateGroundItemsConfig,
     },
     {
         name: "interacthighlight",
@@ -84,7 +95,8 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
     {
         name: "tilemarkers",
         legacyKey: "osrs.plugin.tile_markers.v1",
-        config: TileMarkersConfig,
+        // Into the old keys; migrateTileMarkersConfig then moves them to Tile Indicators'.
+        config: LegacyTileMarkersConfig,
         enabledKey: "tilemarkersplugin",
     },
     {

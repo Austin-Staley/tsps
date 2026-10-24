@@ -129,6 +129,10 @@ function finishSmelt(player, recipe, furnaceId) {
 
 function startSmelting(player, chosen, amount, furnaceId = -1) {
   if (!chosen || !Number.isInteger(amount) || amount <= 0) return false;
+  if (chosen.members && !Core.WorldDefinition.isMembersWorld()) {
+    player.sendMessage("You need to be on a members world to smelt that bar.");
+    return false;
+  }
   const recipe = resolveRecipe(player, chosen);
   if (recipe.quest && !Core.questComplete(player, recipe.quest)) {
     player.sendMessage(`You need to complete ${Data.questName(recipe.quest)} to smelt ${recipe.barPhrase}.`);
