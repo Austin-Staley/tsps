@@ -134,4 +134,3 @@ test('refresh sends changed inventory and worn item variants and marks appearanc
   assert.equal(packets.find(packet => packet.interfaceId === 1688)?.ids[5],27358);
   assert.equal(updates.flagged(core.Flag.APPEARANCE),true);
 });
-
