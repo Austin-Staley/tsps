@@ -55,7 +55,12 @@ This is **not a verified 1:1 implementation**. In particular:
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
-- The complete Zamorak equipment list for Bologa still needs parity work.
+- Bologa's unlock checks equipped items using the cache's Zamorak/Saradomin/Guthix
+  affiliation flags. Bandos/Armadyl/Zaros gear uses explicit Wiki-listed families
+  and their documented cosmetic/locked/charge forms, including Sanguine Torva
+  and quartz-upgraded ancient sceptres. New unlisted families require source
+  verification; god allegiance is not inferred from deity-name fragments or
+  Prayer bonuses. Mixed affiliations (including Staff of Light/Balance) are refused.
 - Belladonna hand protection uses the Wiki's published protective families, resolved to
   unnoted hands-slot cache variants (including recolours). Unlisted new families require
   source verification; protection is not inferred from item names or combat stats.
@@ -70,6 +75,7 @@ From `server/`:
 npx.cmd tsc --noEmit
 node --test tests/farming-model.test.cjs
 node --test tests/farming-redwood.test.cjs tests/woodcutting-guild.test.cjs
+node --test tests/bologa-blessing.test.cjs tests/belladonna-harvest.test.cjs
 ```
 
 The second command checks the state machine and mocked hooks without server startup
@@ -107,3 +113,27 @@ pages (OSRS Index's attributed wiki copies were used where direct access failed)
 RuneLite supplies timing/varbit interpretation; the local cache supplies object
 transforms and map locations. The BSD-2-Clause attribution for the RuneLite-derived
 data is kept in the JSON's `source` field.
+
+## Bologa unlock verification
+
+The unlock retains 50 Prayer and a one-time 75,000-coin payment. Equipment,
+distance, funds and current Farming state are validated at confirmation;
+successful payment requests persistence. Currency is cache item `COINS` (995),
+not the non-stackable quest item Coins (617) selected by a name-only lookup.
+Equipment affiliation parameters are 40 (Saradomin), 41 (Zamorak), 42 (Guthix).
+Only real positive-quantity equipment in its correct cache wear slot counts.
+
+Sources: [Bologa](https://oldschool.runescape.wiki/w/Bologa),
+[dialogue transcript](https://oldschool.runescape.wiki/w/Transcript:Bologa),
+[god-equipment table](https://oldschool.runescape.wiki/w/God_Wars_Dungeon#God-related_protection),
+[Torva variants](https://oldschool.runescape.wiki/w/Torva_armour#Sanguine_torva),
+[ancient sceptre upgrades](https://oldschool.runescape.wiki/w/Ancient_sceptre#Quartz_upgrades).
+The general blessing-item article additionally mentions 65 Cooking, while the
+NPC article and actual dialogue list no Cooking unlock gate; this equipment
+change preserves the dialogue's Prayer-only level gate and does not change
+grape use/yield rules or introduce a new Cooking requirement.
+
+Tests use real Player, inventory, equipment and cache definitions, driving the
+actual Tithe NPC/payment and reward callbacks. Menu rendering and persistence
+requests are mocked; live dialogue rendering and packet-capture verification
+are not claimed.
