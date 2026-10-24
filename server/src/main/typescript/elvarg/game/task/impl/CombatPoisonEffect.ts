@@ -27,11 +27,9 @@ export class CombatPoisonEffect extends Task {
       return;
     }
 
-    if (!this.entity.getCombat().getPoisonImmunityTimer().finished()) {
-      this.stop();
-      return;
-    }
-
+    // Immunity prevents new afflictions in CombatFactory.poisonEntity; it does
+    // not cure an existing one (for example when equipping a serpentine helm).
+    // Explicit cures clear the affliction fields, handled by isPoisoned above.
     if (this.entity.isPlayer() && this.entity.getAsPlayer().getInterfaceId() > 0) {
       // Poison pauses while interfaces are open and should hit immediately
       // after the interface closes if it was already due.
