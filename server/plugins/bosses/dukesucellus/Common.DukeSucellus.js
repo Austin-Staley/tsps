@@ -78,7 +78,9 @@ function hurt(fight, maximum, { min = 0, avoidable = true, evenZero = false } = 
   return hit;
 }
 function strike(fight, style, maximum, { accurate = true, avoidable = true, evenZero = false } = {}) {
-  const { CombatMethod, CombatType, PendingHit, CombatFactory, World } = api.core;
+  if (fight.over || fight.stopped || fight.session.ended || fight.session.fight !== fight || fight.player.getHitpoints() <= 0)
+    return;
+  const { CombatMethod, CombatType, PendingHit, World } = api.core;
   if (!combatMethods.has(style)) {
     combatMethods.set(style, new (class extends CombatMethod {
       type() {
@@ -90,17 +92,26 @@ function strike(fight, style, maximum, { accurate = true, avoidable = true, even
     })());
   }
   const hit = new PendingHit(fight.boss, fight.player, combatMethods.get(style), {
-    delay: 0, damage: 0, rollAccuracy: !accurate, experience: false, handleAfterHitEffects: false,
+    // Duke already chose the protected range; resolve its actual damage once so
+    // armour reactions cannot run for both a dummy zero and the real strike.
+    delay: 0, damage: random(maximum), bypassProtectionPrayer: true, rollAccuracy: !accurate, experience: false, handleAfterHitEffects: false,
   });
-  CombatFactory.applyStyleDamage(hit, maximum, { bypassProtectionPrayer: true });
-  for (const part of hit.getHits())
+  fight.pendingStrikes ??= new Set();
+  fight.pendingStrikes.add(hit);
+  for (const part of hit.getHits()) {
     track(fight, part, avoidable, evenZero);
+    part.onApplied(() => fight.pendingStrikes.delete(hit));
+  }
   fight.player.getCombat().getHitQueue().addPendingHit(hit, World.getProcessCycle());
   return hit;
 }
 function cancelPending(fight) {
   for (const hit of fight.pending)
     hit.setDamage(0);
+  // Retaliation reads the cached PendingHit total, not its displayed parts.
+  for (const hit of fight.pendingStrikes ?? [])
+    hit.updateTotalDamage();
+  fight.pendingStrikes?.clear();
   fight.pending.clear();
 }
 function drainPrayer(player, amount) {

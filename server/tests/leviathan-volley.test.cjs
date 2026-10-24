@@ -16,9 +16,46 @@ test('normal opening replays six three-tick shots, delayed roar and subsequent e
   assert.deepEqual(roars, [22,43,64]);
 });
 
-test('the documented one-tick volleys have twelve shots and tier-specific reaction time', () => {
-  assert.deepEqual([0,1,2,3,4].map(n => Model.volley(n).shots), [6,8,8,12,12]);
+test('ordinary one-tick volleys have twelve then ten shots and retain tier-specific reaction time', () => {
+  assert.deepEqual([0,1,2,3,4,5,6].map(n => Model.volley(n).shots), [6,8,8,12,10,10,10]);
   assert.deepEqual([0,1,2,3,4,5,6].map(n => Model.volley(n).flight), [5,5,4,3,3,2,1]);
+});
+
+test('normal natural progression replays the filmed late counts and seven-tick last-to-next gaps', t => {
+  const h = H.harness(t), launches = [];
+  h.move([2075, 6377]);
+  t.mock.method(h.fight, 'orb', () => launches.push([h.fight.tick, h.fight.tier]));
+  t.mock.method(h.fight, 'roar', () => {});
+  h.step(160);
+  const group = tier => launches.filter(([, n]) => n === tier).map(([tick]) => tick);
+  assert.deepEqual(group(3), Array.from({length:12}, (_, n) => 69+n));
+  assert.deepEqual(group(4), Array.from({length:10}, (_, n) => 87+n));
+  assert.deepEqual(group(5), Array.from({length:10}, (_, n) => 103+n));
+  assert.deepEqual(group(6), [119,135,151].flatMap(start => Array.from({length:10}, (_, n) => start+n)));
+});
+
+test('a normal late-recovery stun prevents the next volley', t => {
+  const h = H.harness(t), launches = [];
+  h.move([2075, 6377]);
+  h.fight.tier = 5;
+  t.mock.method(h.fight, 'orb', () => launches.push(h.fight.tick));
+  t.mock.method(h.fight, 'roar', () => {});
+  h.step(19);
+  assert.deepEqual(launches, Array.from({length:10}, (_, n) => 4+n));
+  h.fight.stun();
+  h.step(3);
+  assert.equal(h.fight.stunnedUntil > h.fight.tick, true);
+  assert.equal(launches.length,10);
+});
+
+test('inaccessible awakened mode retains its previous provisional late-volley schedule', t => {
+  const h = H.harness(t, true), launches = [];
+  h.move([2075, 6377]);
+  h.fight.tier = 5;
+  t.mock.method(h.fight, 'orb', () => launches.push(h.fight.tick));
+  t.mock.method(h.fight, 'roar', () => {});
+  h.step(32);
+  assert.deepEqual(launches, [4,21].flatMap(start => Array.from({length:12}, (_, n) => start+n)));
 });
 
 test('normal enrage delays pathfinder three ticks and the next volley five; falling debris repeats without interrupting orbs', t => {
