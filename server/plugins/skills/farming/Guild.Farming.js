@@ -3,6 +3,8 @@
 const core = require("./Core.Farming");
 const Data = require("./Data.Farming");
 const Patches = require("./Patches.Farming");
+// Native bank-side item op labelled by cache param 595, shared with StorageItems.
+const BANK_STORAGE_OP = 9;
 const CONTRACTS = [
     [[45, 1, "POTATO MARIGOLD ONION CABBAGE ROSEMARY TOMATO SWEETCORN NASTURTIUM WOAD LIMPWURT STRAWBERRY"],
         [45, 2, "REDBERRIES CADAVABERRIES DWELLBERRIES"], [48, 2, "JANGERBERRIES"], [55, 3, "CACTUS"],
@@ -125,6 +127,27 @@ function containerKind(item) {
     const name = core.CacheDefinitions.getItem(item.getId()).name.toLowerCase();
     return name === "seed box" || name === "open seed box" ? "seed" : name === "herb sack" || name === "open herb sack" ? "herb" : undefined;
 }
+function bankStorageOp(event) {
+    const { player } = event;
+    if (event.handled || event.op !== BANK_STORAGE_OP || !core.Bank.isOpen(player)) return;
+    const inventory = player.getInventory(), container = inventory.forSlot(event.slot);
+    if (container !== event.item || !containerKind(container)) return;
+    event.handled = true;
+    const stored = container.getMetaValue("farming:stored") ?? {};
+    for (const [key, count] of Object.entries(stored)) {
+        const id = Number(key);
+        if (!Number.isInteger(id) || id <= 0 || id >= core.CacheDefinitions.getCounts().items || !Number.isSafeInteger(count) || count <= 0) continue;
+        const bank = player.getBank(core.Bank.getTabForItem(player, id));
+        const item = new core.Item(id, count), amount = bank.getAddableAmount(item);
+        if (amount <= 0) continue;
+        bank.add(item.setAmount(amount), false);
+        stored[key] -= amount;
+        if (!stored[key]) delete stored[key];
+    }
+    container.setMetaValue("farming:stored", stored);
+    player.getBank(player.getCurrentBankTab()).refreshItems();
+    inventory.refreshItems();
+}
 function storeCrop(player, container, id, maximum) {
     const kind = containerKind(container);
     if (!kind) return 0;
@@ -200,4 +223,4 @@ function guildObject(event) {
     Patches.choose(player, entries);
 }
 
-Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, guildObject });
+Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject });
