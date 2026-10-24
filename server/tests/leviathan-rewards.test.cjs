@@ -45,3 +45,20 @@ test('fifth perfect kill in one instance completes task; imperfect kills do not 
   assert.ok(h.emitted.some(([name, e]) => name === 'combat-achievements:complete' && e.task === 'Perfect Leviathan'));
   assert.ok(h.emitted.some(([name, e]) => name === 'combat-achievements:complete' && e.task === 'Serpentine Solo'));
 });
+
+test('canonical conditional loot consumes actual fight grade without a copied drop table', t => {
+  const h = H.harness(t);
+  require('../plugins/bosses/leviathan/Rewards.Leviathan').attach(h.api);
+  const Drops = require('../plugins/npcs/NpcDrops.plugin');
+  Drops.register(h.api);
+  // Keep the real roller/context listener; exclude unrelated complete-table ground placement.
+  h.hooks.set('onNpcDeath', h.hooks.get('onNpcDeath').slice(0, 1));
+  const table = require('../data/definitions/npc-drops.json').tables.the_leviathan;
+  const row = table.entries.find(entry => entry.quantity_alternatives && entry.item_id !== undefined);
+  assert.ok(row);
+  t.mock.method(Math, 'random', () => 0);
+  const amount = () => Drops.__internals.rollTable({ entries: [{ ...row, always: true }] }, h.p, h.fight.boss)[0].amount;
+  const base = amount();
+  h.kill();
+  assert.equal(amount(), Math.floor(base * 1.5));
+});

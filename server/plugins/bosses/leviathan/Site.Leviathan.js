@@ -1,7 +1,7 @@
 const Common = require('./Common.Leviathan');
 const { Fight } = require('./Fight.Leviathan');
 // Revision241 cache locations, independently checked for Travel actions.
-const CAMP_BOAT = 49212, ISLAND_BOAT = 49213;
+const CAMP_BOAT = 49212, ISLAND_BOAT = 49213, SCAR_STONE = 49209;
 const sessions = new Map();
 let AreaClass;
 function areaClass() {
@@ -106,6 +106,16 @@ function guardian({ player }) {
   player.moveTo(Common.location(Common.data.site.guardianArrival));
   return true;
 }
+function cross({ player, objectId, location }) {
+  if (objectId !== SCAR_STONE || location?.y !== 6430 || location.z !== 0 ||
+      ![2031, 2033].includes(location.x) || !complete(player)) return false;
+  const at = player.getLocation();
+  if (at.getZ() !== 0 || Math.abs(at.getY() - 6430) > 2 || at.getX() < 2027 || at.getX() > 2037) return false;
+  // Finish on the verified shore, never on the blocked water between the two stones.
+  player.getMovementQueue().reset();
+  player.moveTo(new Common.core.Location(at.getX() <= 2032 ? 2035 : 2029, 6430, 0));
+  return true;
+}
 function recover({ player }) {
   if (!player.getAttribute(Common.INSIDE_ATTRIBUTE) || sessionOf(player)) return;
   player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
@@ -127,9 +137,10 @@ function attach(api) {
   api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
   api.onObjectInteraction('Rowboat', { Travel: travel });
   api.onObjectInteraction('Handholds', { Climb: climb });
+  api.onObjectInteraction('Stepping Stone', { Cross: cross });
   api.onNpcInteraction('Catalytic Guardian', { 'Talk-to': guardian });
   api.onPlayerLogin(recover);
   api.onPlayerDeath(death);
   api.onCustomEvent('gravestones:grave-location', grave);
 }
-module.exports = { attach, Session, sessionOf, travel, climb, leave };
+module.exports = { attach, Session, sessionOf, travel, climb, leave, cross };

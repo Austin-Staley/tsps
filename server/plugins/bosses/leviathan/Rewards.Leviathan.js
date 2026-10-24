@@ -20,15 +20,10 @@ function died({ npc, killer }) {
   fight.rewarded = true;
   const { player, session, awakened } = fight;
   const key = awakened ? Common.AWAKENED_KILLS_ATTRIBUTE : Common.KILLS_ATTRIBUTE;
-  let kills = Common.count(player, key) + 1;
+  const kills = Common.count(player, key) + 1;
   const announce = count => player.sendMessage(`Your ${awakened ? 'awakened ' : ''}Leviathan kill count is: <col=ff0000>${count}</col>.`);
-  if (!awakened) {
-    let announced = false;
-    const request = { player, monster: MONSTER, count: kills, announce: value => { announced = true; announce(value); } };
-    Common.api.emitCustomEvent('combat-achievements:kill', request);
-    if (Number.isInteger(request.total)) kills = Math.max(kills, request.total);
-    if (!announced) announce(kills);
-  } else announce(kills);
+  // The generic combat-achievement NPC-death hook owns kill-count achievements.
+  announce(kills);
   player.setAttribute(key, kills);
   player.getPacketSender().sendConfig(Common.ids.varps[awakened ? 'awakenedKills' : 'kills'], kills);
   const bestKey = awakened ? Common.AWAKENED_BEST_ATTRIBUTE : Common.BEST_ATTRIBUTE;

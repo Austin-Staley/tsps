@@ -2,7 +2,7 @@
   "source": "OSRS Wiki The Leviathan, Strategies, Perfect Leviathan; IDs resolved from revision241 gamevals. Timings under inferred are not capture-verified.",
   "quest": "desert_treasure_ii",
   "instance": { "sourceChunkX": 257, "sourceChunkY": 792, "width": 7, "height": 8, "planes": [0, 1] },
-  "site": { "campBoat": [2065, 6435, 0], "campReturn": [2064, 6435, 0], "islandBoat": [2065, 6371, 0], "islandArrival": [2070, 6371, 0], "handholds": [2070, 6368, 0], "arenaArrival": [2072, 6370, 0], "guardianArrival": [2021, 6433, 0] },
+  "site": { "campBoat": [2065, 6435, 0], "campReturn": [2063, 6435, 0], "islandBoat": [2065, 6371, 0], "islandArrival": [2070, 6371, 0], "handholds": [2070, 6368, 0], "arenaArrival": [2072, 6370, 0], "guardianArrival": [2021, 6433, 0] },
   "arena": { "west": 2071, "east": 2092, "south": 6363, "north": 6381, "boss": [2078, 6368, 0], "centre": [2081, 6371], "pathCorners": [[2074, 6379], [2089, 6379], [2089, 6365], [2074, 6365]], "loot": [2075, 6371, 0] },
   "normal": { "hitpoints": 900, "attack": 300, "strength": 360, "defence": 250, "ranged": 160, "magic": 160, "enrageInterval": 2, "auraRadius": 2, "stunTicks": 15, "smokeMax": 59 },
   "awakened": { "hitpoints": 2700, "attack": 525, "strength": 630, "defence": 287, "ranged": 280, "magic": 280, "enrageInterval": 1, "auraRadius": 3, "stunTicks": 8, "smokeMax": 79 },
