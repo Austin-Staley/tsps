@@ -3,7 +3,8 @@
  * - melee up to 22, or now and then a ranged one up to 22 (even beside the player), every 5
  *   ticks; every few attacks a special instead (Fight.ShellbaneGryphon.js);
  * - without a tortugan shield worn, its melee is devastating: Protect from Melee doesn't stop it
- *   ("You need some sort of protection!"); with one, the prayer works as usual.
+ *   ("You need some sort of protection!") - the hit's roll bypasses the prayer; with one, the
+ *   prayer works as usual.
  */
 const Common = require("./Common.ShellbaneGryphon");
 
@@ -40,22 +41,16 @@ function methods() {
       }
       this.style = "melee";
       npc.performAnimation(new Animation(ids.seqs.melee));
-      // No shield: the prayer doesn't help (Wiki); the hit is dealt as typeless damage.
       const shielded = Common.wearingShield(player);
       if (!shielded && !fight.warnedNoShield) {
         fight.warnedNoShield = true;
         player.sendMessage(Common.message("devastating"));
       }
-      this.plan = { delay: 0, typeless: !shielded };
+      this.plan = { delay: 0, unshielded: !shielded };
     }
 
     hits(character, target) {
       if (!this.plan) return [];
-      if (this.plan.typeless) {
-        const player = target.getAsPlayer();
-        Common.hurtPlayer(player, Common.randomInt(0, combat.maxHit));
-        return [];
-      }
       const hit = new PendingHit(character, target, this, this.plan.delay);
       hit.setTotalDamage(Math.min(combat.maxHit, hit.getTotalDamage()));
       return [hit];
@@ -77,9 +72,18 @@ function methods() {
   return { GryphonCombat };
 }
 
+/** "combat:hit-roll": its melee goes through Protect from Melee on a player without the shield. */
+function hitRoll(roll) {
+  const npc = roll.attacker?.isNpc?.() ? roll.attacker.getAsNpc() : null;
+  if (npc?.getId?.() !== Common.ids.npcs.boss || !roll.target?.isPlayer?.()) return;
+  if (roll.combatType !== Common.core.CombatType.MELEE) return;
+  if (!Common.wearingShield(roll.target.getAsPlayer())) roll.bypassProtectionPrayer = true;
+}
+
 function attach(api) {
+  api.onCombatHitRoll(hitRoll);
   const { GryphonCombat } = methods();
   api.registerNpcCombatMethodProvider([Common.ids.npcs.boss], GryphonCombat, { singleton: false });
 }
 
-module.exports = { attach, methods, hitDelay };
+module.exports = { attach, methods, hitDelay, hitRoll };

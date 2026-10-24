@@ -77,7 +77,7 @@ function fakeBoss(x = 3176, y = 8873) {
     getSize: () => 4,
     getHitpoints: () => 400,
     performAnimation: (a) => boss.anims.push(a.getId?.() ?? a),
-    getCombat: () => ({ setAttackDelay: (t) => { boss.attackDelay = t; } }),
+    getCombat: () => ({ setAttackDelay: (t) => { boss.attackDelay = t; }, extendAttackDelay: (t) => { boss.attackDelay += t; } }),
     getPrivateArea: () => null,
   };
   return boss;
@@ -116,12 +116,13 @@ test('every id resolves from the cache', () => {
   assert.deepEqual([locs.whirlwind1, locs.whirlwindActive1, locs.whirlwind5, locs.whirlwindActive5], [57917, 57918, 57925, 57926]);
 });
 
-test('the cave takes only a player with Troubled Tortugans, 51 Slayer and a gryphon task', () => {
+test("the cave takes only a player with 51 Slayer and a gryphon task; before the quest is done it is the quest's", () => {
   const player = fakePlayer(3176, 2476);
   const objectId = Common.ids.locs.entrance;
   questDone = false;
-  Cave.enter({ player, objectId });
-  assert.equal(player.messages.at(-1), Common.message('noQuest'));
+  assert.equal(Cave.enter({ player, objectId }), false, 'left to TroubledTortugans.Quest.js');
+  assert.equal(Cave.exit({ player, objectId: Common.ids.locs.exit }), false, "no boss cave: the quest's exit");
+  assert.deepEqual(player.messages, []);
   questDone = true;
   player.slayer = 50;
   Cave.enter({ player, objectId });
@@ -156,34 +157,45 @@ test('knockback: a light player is thrown back for up to 30; 40 kg worn stops it
   const heavy = fakePlayer(3175, 8873, HEAVY);
   assert.ok(Common.wornWeight(heavy) >= 40);
   const { fight: second } = newFight(heavy);
+  second.boss.attackDelay = 3;
   second.special(heavy, 'knockback');
   ticks(second, Common.data.knockback.warnTicks);
   assert.deepEqual(heavy.damage, []);
   assert.equal(heavy.messages.at(-1), Common.message('heavyEquipment'));
-  assert.equal(second.boss.attackDelay, Common.data.knockback.stunTicks);
+  assert.equal(second.boss.attackDelay, 3 + Common.data.knockback.stunTicks, 'the stun adds to its wait');
 });
 
-test('a player at 40 kg or more never gets the knockback chosen', () => {
+test('a heavy player gets the knockback less often; no new whirlwinds while some are up', () => {
   const heavy = fakePlayer(3175, 8873, HEAVY);
-  const fight = newFight(heavy, () => 0).fight;
-  for (const r of [0, 0.4, 0.9]) {
-    fight.random = () => r;
-    assert.notEqual(fight.chooseSpecial(heavy), 'knockback');
-  }
   const light = fakePlayer();
-  fight.random = () => 0;
-  assert.equal(fight.chooseSpecial(light), 'knockback');
+  const fight = newFight(heavy, () => 0).fight;
+  const share = (player) => {
+    let knock = 0;
+    for (let i = 0; i < 1000; i++) {
+      fight.random = () => (i + 0.5) / 1000;
+      if (fight.chooseSpecial(player) === 'knockback') knock += 1;
+    }
+    return knock / 1000;
+  };
+  assert.ok(share(heavy) < share(light) / 2);
+  fight.whirling = { placed: 1 };
+  const kinds = new Set();
+  for (let i = 0; i < 100; i++) {
+    fight.random = () => (i + 0.5) / 100;
+    kinds.add(fight.chooseSpecial(light));
+  }
+  assert.deepEqual([...kinds].sort(), ['knockback', 'spit'], 'a light player can still be knocked back during whirlwinds');
 });
 
-test('the spit lands where the player stood: still there, their armour corrodes 6 times over 32 ticks', () => {
+test('the spit lands where the player stood: still there, their armour corrodes - 6 hits of one value, 5 ticks apart', () => {
   const player = fakePlayer(3174, 8873, { 4: 1127 });
   const { fight } = newFight(player);
   fight.special(player, 'spit');
   ticks(fight, Common.data.spit.landTicks);
   assert.equal(player.messages.at(-1), Common.message('corroding'));
-  ticks(fight, Common.data.spit.totalTicks);
+  ticks(fight, Common.data.spit.hits * Common.data.spit.every);
   assert.equal(player.damage.length, 6);
-  assert.ok(player.damage.every((d) => d >= 3 && d <= 12));
+  assert.ok(player.damage.every((d) => d === player.damage[0] && d >= 3 && d <= 12));
   assert.equal(fight.corrosion, null);
 });
 
@@ -213,6 +225,8 @@ test('more ranged defence means smaller corrosion splats (+125 brings them to 3)
   player.rangedDefence = 0;
   const hits = Array.from({ length: 200 }, () => fight.corrosionHit(player));
   assert.ok(Math.max(...hits) > 3);
+  player.rangedDefence = -40;
+  for (let i = 0; i < 50; i++) assert.ok(fight.corrosionHit(player) <= 12, 'never more than 12');
 });
 
 test('whirlwinds form on the player every 3 ticks; one landing on another makes it stronger', () => {
@@ -256,19 +270,36 @@ test('without the tortugan shield its melee goes through Protect from Melee, wit
   const boss = fakeBoss();
   const { fight } = newFight(player, () => 0.9);
   boss.__sgCave = { fight };
-  fight.attacks = 0;
   const method = new GryphonCombat();
-  const npc = { ...boss, getAsNpc: () => boss };
+  const npc = { ...boss, getAsNpc: () => boss, isNpc: () => true };
   method.start(npc, player);
   assert.equal(player.messages.at(-1), Common.message('devastating'));
-  assert.equal(method.plan.typeless, true);
-  method.hits(npc, player);
-  assert.equal(player.damage.length, 1);
-  assert.ok(player.damage[0] <= 22);
+  assert.equal(method.plan.unshielded, true);
+  const roll = { attacker: npc, target: player, combatType: core.CombatType.MELEE, bypassProtectionPrayer: false };
+  Combat.hitRoll(roll);
+  assert.equal(roll.bypassProtectionPrayer, true, 'the prayer is bypassed, through a real PendingHit');
   const shielded = fakePlayer(3175, 8873, { 1: 31398 });
-  const second = new GryphonCombat();
-  second.start(npc, shielded);
-  assert.equal(second.plan.typeless, false, 'with the shield the prayer works as usual');
+  const second = { attacker: npc, target: shielded, combatType: core.CombatType.MELEE, bypassProtectionPrayer: false };
+  Combat.hitRoll(second);
+  assert.equal(second.bypassProtectionPrayer, false, 'with the shield the prayer works as usual');
+  const ranged = { attacker: npc, target: player, combatType: core.CombatType.RANGED, bypassProtectionPrayer: false };
+  Combat.hitRoll(ranged);
+  assert.equal(ranged.bypassProtectionPrayer, false);
+});
+
+test('once it is dying its specials stop: no whirlwind or corrosion damage after the kill', () => {
+  const player = fakePlayer(3174, 8873, { 4: 1127 });
+  const { fight, cave } = newFight(player);
+  fight.special(player, 'whirlwind');
+  ticks(fight, 4);
+  assert.ok(cave.placed.length > 0);
+  fight.boss.getHitpoints = () => 0;
+  fight.tick();
+  assert.equal(fight.stopped, true);
+  assert.equal(cave.placed.length, 0);
+  const before = player.damage.length;
+  ticks(fight, 40);
+  assert.equal(player.damage.length, before);
 });
 
 test('every fourth attack is a special', () => {

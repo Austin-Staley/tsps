@@ -64,12 +64,15 @@
     "weight": 40,
     "warnTicks": 2,
     "stunTicks": 2,
-    "push": 3
+    "push": 3,
+    "_heavyWeight": "a heavy player's knockback weight against 1 for each other special: the Wiki's 'prioritises' gives no figure",
+    "heavyWeight": 0.25
   },
   "spit": {
     "landTicks": 3,
     "hits": 6,
-    "totalTicks": 32,
+    "_every": "the Wiki's captures: one value every 5 ticks",
+    "every": 5,
     "min": 3,
     "max": 12,
     "_calibrated": "the Wiki's talk page: about +125 ranged defence brings every splat down to 3",
@@ -88,7 +91,6 @@
   "messages": {
     "_unverified": "noTask, devastating, spit/whirlwind/burst/corrosion stop, heavyEquipment and regains are the Wiki's; the rest have no capture",
     "noTask": "You can only fight the gryphon in this cave if you've been assigned to do so by a Slayer Master.",
-    "noQuest": "You need to have completed Troubled Tortugans to enter the cave.",
     "noLevel": "You need a Slayer level of 51 to fight the Shellbane gryphon.",
     "devastating": "<col=ff0000>The gryphon's attacks are devastating! You need some sort of protection!</col>",
     "heavyEquipment": "The gryphon tries to pick you up, but fails thanks to your heavy equipment.",

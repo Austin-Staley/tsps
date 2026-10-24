@@ -126,6 +126,11 @@ function defineArea() {
     canTeleport() {
       return null;
     }
+
+    /** Multicombat (Wiki). */
+    isMulti() {
+      return true;
+    }
   };
 }
 
@@ -152,13 +157,13 @@ function goIn(player) {
   return cave;
 }
 
-/** The cave entrance: Troubled Tortugans, 51 Slayer and the task (Elder Nama's rule). */
+/**
+ * The cave entrance: 51 Slayer and the task (Elder Nama's rule). Before Troubled Tortugans is
+ * done the cave is the quest's (TroubledTortugans.Quest.js), so it is left to it.
+ */
 function enter({ player, objectId }) {
   if (objectId !== Common.ids.locs.entrance) return false;
-  if (!Common.questComplete(player)) {
-    player.sendMessage(Common.message("noQuest"));
-    return true;
-  }
+  if (!Common.questComplete(player)) return false;
   if (player.getSkillManager().getCurrentLevel(Common.core.Skill.SLAYER) < Common.data.slayerLevel) {
     player.sendMessage(Common.message("noLevel"));
     return true;
@@ -172,7 +177,7 @@ function enter({ player, objectId }) {
 }
 
 function exit({ player, objectId }) {
-  if (objectId !== Common.ids.locs.exit) return false;
+  if (objectId !== Common.ids.locs.exit || !caveOf(player)) return false;
   player.moveTo(Common.toLocation(Common.data.cave.outside));
   leaveCave(player);
   return true;

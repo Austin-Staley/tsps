@@ -1,13 +1,13 @@
 /**
  * One Shellbane gryphon fight (Wiki: Shellbane_gryphon/Strategies, Whirlwind, Tortugan_shield):
  * - every few attacks a special instead of an auto: the knockback, the corrosive spit or the
- *   whirlwinds (the knockback only for a player under 40 kg worn - heavier, the gryphon goes for
- *   the others);
+ *   whirlwinds (a player at 40 kg worn or more gets the knockback less often - the gryphon
+ *   "prioritises" the others, Wiki);
  * - knockback: a player under 40 kg worn is thrown back for up to 30; one at 40 kg or more
  *   stops it, the gryphon left stunned for 2 ticks;
- * - corrosive spit at the player's tile: still standing there, their armour corrodes - 6 hits of
- *   3 to 12 over 32 ticks (less the more ranged defence they wear), ended by taking everything
- *   off; with nothing on it's just the one hit;
+ * - corrosive spit at the player's tile: still standing there, their armour corrodes - 6 hits
+ *   of one value from 3 to 12, 5 ticks apart (less the more ranged defence they wear, the Wiki's
+ *   captures), ended by taking everything off; with nothing on it's just the one hit;
  * - whirlwinds: one on the player every 3 ticks, up to 5 (one landing on another makes it
  *   stronger); 6 ticks after the last they hurt whoever stands in them each tick, and 15
  *   seconds later they burst, the stronger the wider.
@@ -37,12 +37,17 @@ class Fight {
 
   // --- Choosing
 
-  /** Which special: the knockback only for a light player (Wiki). */
+  /** Which special: the knockback weighted down for a heavy player; no new whirlwinds while some are up. */
   chooseSpecial(player) {
     const heavy = Common.wornWeight(player) >= Common.data.knockback.weight;
-    const options = heavy || this.whirling ? ["spit", "whirlwind"] : ["knockback", "spit", "whirlwind"];
-    const usable = this.whirling ? options.filter((kind) => kind !== "whirlwind") : options;
-    return usable[Math.floor(this.random() * usable.length)];
+    const weights = { knockback: heavy ? Common.data.knockback.heavyWeight : 1, spit: 1, whirlwind: this.whirling ? 0 : 1 };
+    const total = Object.values(weights).reduce((sum, w) => sum + w, 0);
+    let roll = this.random() * total;
+    for (const [kind, weight] of Object.entries(weights)) {
+      roll -= weight;
+      if (roll < 0) return kind;
+    }
+    return "spit";
   }
 
   special(player, kind = this.chooseSpecial(player)) {
@@ -65,25 +70,30 @@ class Fight {
     const { knockback } = Common.data;
     if (Common.wornWeight(player) >= knockback.weight) {
       player.sendMessage(Common.message("heavyEquipment"));
-      this.boss.getCombat?.().setAttackDelay?.(knockback.stunTicks);
+      this.boss.getCombat?.().extendAttackDelay?.(knockback.stunTicks);
       return;
     }
     Common.hurtPlayer(player, Common.randomInt(0, knockback.max));
     this.pushAway(player, knockback.push);
   }
 
+  /** Straight away from the gryphon, stopping at anything in the way; the player can fight on at once. */
   pushAway(player, tiles) {
-    const centre = this.boss.getLocation().transform(1, 1);
+    const base = this.boss.getLocation();
+    const half = (Math.max(1, this.boss.getSize?.() ?? 1) - 1) / 2;
     const at = player.getLocation();
-    const dx = Math.sign(at.getX() - centre.getX()) || 1;
-    const dy = Math.sign(at.getY() - centre.getY());
+    let dx = Math.sign(at.getX() - (base.getX() + half));
+    let dy = Math.sign(at.getY() - (base.getY() + half));
+    if (!dx && !dy) dx = -1;
     let to = at;
     for (let i = 0; i < tiles; i++) {
       const next = to.transform(dx, dy);
-      if (!this.cave.contains(next)) break;
+      if (!this.cave.contains(next) || !walkable(next)) break;
       to = next;
     }
-    if (to !== at) player.moveTo(to);
+    if (to === at) return;
+    player.moveTo(to);
+    player.getCombat?.().attack?.(this.boss);
   }
 
   // --- Corrosive spit
@@ -102,7 +112,7 @@ class Fight {
     const { spit } = Common.data;
     const { BonusManager } = Common.core;
     const defence = Number(player.getBonusManager?.()?.getDefenceBonus?.()?.[BonusManager?.DEFENCE_RANGE ?? 4]) || 0;
-    const share = Math.max(0, 1 - defence / spit.fullDefence);
+    const share = Math.min(1, Math.max(0, 1 - defence / spit.fullDefence));
     const max = spit.min + Math.round((spit.max - spit.min) * share);
     return Common.randomInt(spit.min, Math.max(spit.min, max));
   }
@@ -118,8 +128,7 @@ class Fight {
       return;
     }
     const { spit } = Common.data;
-    const every = Math.floor(spit.totalTicks / spit.hits);
-    this.corrosion = { left: spit.hits, next: this.tickCount + every, every };
+    this.corrosion = { left: spit.hits, next: this.tickCount + spit.every, every: spit.every, damage: this.corrosionHit(player) };
     player.sendMessage(Common.message("corroding"));
   }
 
@@ -132,7 +141,7 @@ class Fight {
       return;
     }
     if (this.tickCount < corrosion.next) return;
-    Common.hurtPlayer(player, this.corrosionHit(player));
+    Common.hurtPlayer(player, corrosion.damage);
     corrosion.left -= 1;
     corrosion.next = this.tickCount + corrosion.every;
     if (corrosion.left <= 0) this.corrosion = null;
@@ -217,6 +226,11 @@ class Fight {
     this.tickCount += 1;
     const player = this.player();
     if (!player) return;
+    // Dying (or about to be), its specials go with it.
+    if (this.boss.getHitpoints() <= 0 || this.boss.isDyingFunction?.() === true) {
+      this.stop();
+      return;
+    }
     // Immune to poison and venom (Wiki).
     if ((this.boss.getPoisonDamage?.() ?? 0) > 0) this.boss.setPoisonDamage(0);
     this.boss.setVenomed?.(false);
@@ -233,6 +247,13 @@ class Fight {
     this.corrosion = null;
     this.clearWhirlwinds();
   }
+}
+
+/** Nothing in the way on the map (walls, rocks and the like). */
+function walkable(tile) {
+  const { RegionManager } = Common.core;
+  if (!RegionManager?.getClipping) return true;
+  return (RegionManager.getClipping(tile.getX(), tile.getY(), tile.getZ(), null) & 0x200100) === 0;
 }
 
 function wearsAnything(player) {
