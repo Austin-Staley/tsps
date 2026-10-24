@@ -56,3 +56,10 @@ cover player equivalence, misses, zero damage, no stacking, unrelated levels, en
 immunity, restoration, fractional rounding, boosted players, actual impact-spell context,
 prior veto/ownership and unrelated legacy fallback. Tome of Water's additional effects
 remain the next independent implementation, not part of this claim.
+
+Native packet verification on the isolated game world confirmed all six effects on
+canonical lesser demons: Attack68→65/62, Strength70→67/63 and Defence71→68/64 for the
+5%/10% pairs. A real normal Duke encounter was opened and awakened using poison items;
+Confuse changed its Attack300→285 while Strength345 and Defence275 stayed unchanged.
+These are observed server levels after actual spell packets. QA left combat, saved and
+logged out, then the isolated world shut down cleanly.
