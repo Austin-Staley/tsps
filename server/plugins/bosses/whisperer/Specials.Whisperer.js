@@ -23,6 +23,8 @@ function seedLayout(pattern) {
 function start(fight, kind) {
     clear(fight);
     fight.special = {kind,age:0,active:false,switchAllowed:false};
+    if (fight.boss.getNpcTransformationId() === Common.data.npcs.melee)
+        fight.boss.setNpcTransformationId(Common.data.npcs.boss);
     fight.boss.performAnimation(new Common.core.Animation(Common.data.animations.teleport));
     Common.fragment(fight,false);
 }

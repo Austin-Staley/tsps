@@ -1,9 +1,10 @@
 {
-  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Normal level791 capture3285 corroborates seed grids/anchors and column coordinates against ordinary Wiki diagrams. Remaining evidence audit: docs/whisperer.md.",
+  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Independently normal level791 actors in Grid Master recording3285 corroborate seed grids/anchors and column coordinates against ordinary Wiki diagrams. Remaining evidence audit: docs/whisperer.md.",
   "quest": "desert_treasure_ii",
   "npcs": { "figure": 12203, "boss": 12204, "melee": 12205, "tentacle": 12208, "columnShadow": 12209, "column": 12210, "soul": 12211, "soulShadow": 12212 },
-  "animations": { "spawn": 10227, "melee": 10234, "ranged": 10237, "rangedAlt": 10238, "magic": 10243, "magicAlt": 10244, "teleport": 10247, "appear": 10248, "screech": 10250, "screechHold": 10251, "screechBlast": 10252, "seeds": 10254, "souls": 10256, "soulChant": 10257, "soulResolve": 10259, "death": 10260, "tentacleSpawn": 10263, "tentacleAttack": 10266 },
+  "animations": { "spawn": 10227, "melee": 10234, "ranged": 10237, "rangedAlt": 10238, "magic": 10243, "magicAlt": 10244, "teleport": 10247, "appear": 10248, "screech": 10250, "screechHold": 10251, "screechBlast": 10252, "seeds": 10254, "binding": 10254, "souls": 10256, "soulChant": 10257, "soulResolve": 10259, "death": 10260, "tentacleSpawn": 10263, "tentacleAttack": 10266 },
   "projectiles": { "ranged": 2444, "magic": 2445, "bind": 2467 },
+  "graphics": { "bindingImpact": 2466 },
   "volley": { "launchDelay": 30, "arrivalCycles": 90, "startHeight": 87.5, "endHeight": 25, "angle": 254, "progress": 128, "impactTicks": 3 },
   "binding": { "launchDelay": 80, "arrivalCycles": 170, "startHeight": 145, "endHeight": 0, "angle": 16, "progress": 150, "impactTicks": 6, "pursuitTicks": 5 },
   "objects": { "seedLight": 47573, "seedDark": 47574, "seedReal": 47575, "escape": 47584, "exit": 47586 },

@@ -852,3 +852,67 @@ test('an uncountered bind provisionally releases after eight ticks rather than o
     timers.process();
     assert.equal(timers.has(core.TimerKey.FREEZE), false);
 });
+
+test('binding visibly casts in the melee form and returns to the normal form after a counter or expiry', t => {
+    for (const countered of [false, true]) {
+        const f = fixture(), animations = [];
+        t.mock.method(f.boss, 'performAnimation', animation => animations.push(animation.getId()));
+        f.fight.bind();
+        assert.equal(f.boss.getNpcTransformationId(), 12205);
+        assert.deepEqual(animations, [10254]);
+        if (countered) {
+            f.boss.getTimers().registers(core.TimerKey.FREEZE, 20);
+            f.fight.process();
+        } else {
+            f.fight.nextAttack = 100;
+            while (f.fight.tick < 14) f.fight.process();
+        }
+        assert.equal(f.boss.getNpcTransformationId(), 12204);
+    }
+});
+
+test('special and enrage transitions leave the binding melee form', () => {
+    for (const transition of ['seeds', 'screech', 'souls', 'enrage']) {
+        const f = fixture();
+        f.fight.bind();
+        if (transition === 'enrage') beforeDeath({ npc: f.boss, preventDeath: false });
+        else Specials.start(f.fight, transition);
+        assert.equal(f.boss.getNpcTransformationId(), 12204, transition);
+    }
+});
+
+test('binding impact shows its target graphic once at the scheduled impact and a counter suppresses it', t => {
+    for (const countered of [false, true]) {
+        const f = fixture(), graphics = [];
+        t.mock.method(f.player, 'performGraphic', graphic => graphics.push([f.fight.tick, graphic.getId()]));
+        f.fight.bind();
+        for (let tick = 0; tick < 5; tick++) f.fight.process();
+        assert.deepEqual(graphics, []);
+        if (countered) {
+            f.boss.getTimers().registers(core.TimerKey.FREEZE, 20);
+            f.fight.pursueBound();
+        }
+        f.fight.process();
+        f.fight.process();
+        assert.deepEqual(graphics, countered ? [] : [[6, 2466]]);
+    }
+});
+
+test('a binding melee attack retains its form through both hits and restores before its following volley', () => {
+    const f = fixture();
+    f.player.moveTo(new core.Location(2655, 6372, 0));
+    f.fight.bind();
+    for (let tick = 0; tick < 5; tick++) f.fight.process();
+    f.apply();
+    const first = 99 - f.player.getHitpoints();
+    assert.ok(first > 0);
+    assert.equal(f.boss.getNpcTransformationId(), 12205);
+    f.fight.process();
+    f.apply();
+    assert.equal(99 - f.player.getHitpoints(), first * 2);
+    assert.equal(f.boss.getNpcTransformationId(), 12205);
+    f.player.moveTo(new core.Location(2655, 6378, 0));
+    const nextVolley = f.fight.nextAttack;
+    while (f.fight.tick < nextVolley) f.fight.process();
+    assert.equal(f.boss.getNpcTransformationId(), 12204);
+});

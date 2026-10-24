@@ -24,6 +24,7 @@ class Fight {
         this.rotation = Common.random(0, 1) ? ['screech', 'souls', 'seeds'] : ['seeds', 'screech', 'souls'];
         this.startCycle = Common.core.World.getProcessCycle();
         this.boundUntil = 0;
+        this.bindingFormUntil = 0;
         Rewards.begin(this);
     }
     wake() {
@@ -111,6 +112,8 @@ class Fight {
             this.pursueBound();
             return;
         }
+        if (this.boss.getNpcTransformationId() === Common.data.npcs.melee && this.tick >= this.bindingFormUntil)
+            this.boss.setNpcTransformationId(Common.data.npcs.boss);
         if (this.inMelee()) {
             if (this.tick >= this.nextAttack)
                 this.melee();
@@ -133,6 +136,8 @@ class Fight {
         return dx + dy <= 1;
     }
     volley() {
+        if (this.boss.getNpcTransformationId() === Common.data.npcs.melee)
+            this.boss.setNpcTransformationId(Common.data.npcs.boss);
         const base = Common.random(0, 1) ? 'magic' : 'ranged';
         const pattern = this.pattern(base);
         const hand = this.enraged ? this.attacks % 2 : 0;
@@ -202,19 +207,26 @@ class Fight {
     }
     bind() {
         this.boundUntil = this.tick + 14;
+        // A melee attack clears pursuit early; keep its visual form until a
+        // real phase change or the existing provisional phase deadline.
+        this.bindingFormUntil = this.boundUntil;
         const geometry = Common.data.binding;
         this.pursuitAt = this.tick + geometry.pursuitTicks;
         this.boss.getMovementQueue().reset();
+        this.boss.setNpcTransformationId(Common.data.npcs.melee);
+        this.boss.performAnimation(new Common.core.Animation(Common.data.animations.binding));
         // The observed 170-cycle baseline fits seven of nine impact ticks.
         // Two 200-cycle captures land one tick later; their selection is unresolved.
         this.player.getPacketSender().sendProjectile(Common.core.Projectile.centreOf(this.boss).clone(), this.player.getLocation().clone(), 0,
             geometry.arrivalCycles, Common.data.projectiles.bind, geometry.startHeight, geometry.endHeight,
             this.player, geometry.launchDelay, geometry.angle, geometry.progress);
         this.at(geometry.impactTicks, () => {
-            if (this.boundUntil > this.tick)
+            if (this.boundUntil > this.tick) {
+                this.player.performGraphic(new Common.core.Graphic(Common.data.graphics.bindingImpact));
                 // Ordinary footage rules out twelve ticks. Eight remains
                 // provisional: attacks/clicks obscure the precise expiry tick.
                 Common.core.CombatFactory.freezeTicks(this.player, 8);
+            }
         });
     }
     pursueBound() {
@@ -222,6 +234,7 @@ class Fight {
         if (this.boss.getTimers().has(TimerKey.FREEZE)) {
             this.player.getTimers().cancel(TimerKey.FREEZE);
             this.boundUntil = 0;
+            this.boss.setNpcTransformationId(Common.data.npcs.boss);
             return;
         }
         if (this.completed >= 3 && this.boss.getHitpoints() < 100) {
@@ -330,6 +343,8 @@ function beforeDeath(event) {
         fight.enraged = true;
         fight.events = fight.events.filter(event => event.launched);
         fight.boundUntil = 0;
+        if (fight.boss.getNpcTransformationId() === Common.data.npcs.melee)
+            fight.boss.setNpcTransformationId(Common.data.npcs.boss);
         fight.boss.getMovementQueue().reset();
         fight.clearTentacles();
         Specials.clear(fight);
