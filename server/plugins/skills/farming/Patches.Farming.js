@@ -10,6 +10,9 @@ const Redwood = require("./Redwood.Farming");
 
 const FARM_ATTRIBUTE = "farming:state";
 const TROLL_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 2826 && p.y === 3694 && p.z === 0);
+const FALADOR_FARM_PATCHES = new Set(Data.CACHE.patches.filter(p => p.z === 0
+    && ["ALLOTMENT", "FLOWER", "HERB"].includes(p.type)
+    && p.x >= 3050 && p.x <= 3058 && p.y >= 3303 && p.y <= 3311).map(Data.patchKey));
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
 // Player -> queued rake/harvest, stepped every tick by the farming task.
 const WORK = new Map();
@@ -58,14 +61,17 @@ function requireTool(player, name) {
     player.sendMessage(`You need a ${name.toLowerCase()} to do that.`);
     return false;
 }
-function award(player, xp) {
+function award(player, xp, patch) {
     // Keep the server's configured XP rate; the table contains unmultiplied OSRS XP.
     const worn = new Set(player.getEquipment().getItems().map(i => core.CacheDefinitions.getItem(i.getId()).name));
     const pieces = [[worn.has("Farmer's strawhat"), 0.004],
         [worn.has("Farmer's jacket") || worn.has("Farmer's shirt"), 0.008],
         [worn.has("Farmer's boro trousers"), 0.006], [worn.has("Farmer's boots"), 0.002]];
     const bonus = pieces.reduce((total, [equipped, boost]) => total + (equipped ? boost : 0), 0) + (pieces.every(([equipped]) => equipped) ? 0.005 : 0);
-    player.getSkillManager().addExperiences(core.Skill.FARMING, xp * (1 + bonus));
+    // https://oldschool.runescape.wiki/w/South_Falador_Farm: Medium Diary, all four patches.
+    const diary = { player, diary: "falador", tier: "medium", complete: false };
+    if (patch && FALADOR_FARM_PATCHES.has(Data.patchKey(patch))) core.PluginManager.emitCustomEvent("diary:is-complete", diary);
+    player.getSkillManager().addExperiences(core.Skill.FARMING, xp * (diary.complete === true ? 1.1 : 1) * (1 + bonus));
 }
 function give(player, id, count = 1) {
     const inventory = player.getInventory();
@@ -159,7 +165,7 @@ function rake(player, patch) {
     state.weeds--;
     state.nextAt = Model.nextGrowth(Date.now(), 5, farmFor(player).offset);
     animate(player, ANIM.RAKE);
-    award(player, 4);
+    award(player, 4, patch);
     return state.weeds > 0;
 }
 function plant(player, patch, id) {
@@ -213,7 +219,7 @@ function plant(player, patch, id) {
     Object.assign(state, { crop: crop.key, stage: 0, status: "growing", checked: false, protected: false, watered: false,
         lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset) });
     // Herbs award their planting XP only after the final herb is picked.
-    if (crop.type !== "HERB") award(player, crop.plant);
+    if (crop.type !== "HERB") award(player, crop.plant, patch);
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
 }
@@ -254,7 +260,7 @@ function fertilize(player, patch, tier, consume = true, xp = [0, 18, 26, 36][tie
     }
     state.compost = tier;
     if (state.status === "grown" && Data.COMPOSTABLE_YIELD.has(patch.type)) state.lives += tier;
-    award(player, xp);
+    award(player, xp, patch);
     animate(player, ANIM.COMPOST);
     syncPatch(player, patch);
     return true;
@@ -299,7 +305,7 @@ function healthCheck(player, patch) {
     const crop = Data.CROPS.get(state.crop);
     if (!crop || state.status !== "grown" || state.checked) return;
     state.checked = true;
-    award(player, crop.check);
+    award(player, crop.check, patch);
     Services.cropRewards(player, crop);
     player.sendMessage(`The ${crop.name.toLowerCase()} is healthy.`);
     core.PluginManager.emitCustomEvent("farming:check-health", { player, crop: crop.key, patch });
@@ -330,7 +336,7 @@ function harvest(player, patch) {
     if (!(sack && Guild.storeCrop(player, sack, produce, amount)) && !give(player, produce, amount)) return false;
     if (blessing) player.getInventory().deleteNumber(Data.itemId("Bologa's blessing"), 1);
     animate(player, ANIM.HARVEST);
-    award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount));
+    award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount), patch);
     const variable = Data.COMPOSTABLE_YIELD.has(crop.type) || ["BUSH", "CACTUS", "GRAPES", "CORAL"].includes(crop.type);
     // Wiki: a worn Farming cape (or max cape) saves herb lives more often.
     const capePerk = { player, skill: "FARMING", result: false };
@@ -344,7 +350,7 @@ function harvest(player, patch) {
     if (!variable || Math.random() >= chance) state.lives--;
     if (["FLOWER", "BELLADONNA", "CRYSTAL_TREE"].includes(crop.type)) state.lives = 0;
     if (state.lives === 0) {
-        if (crop.type === "HERB") award(player, crop.plant);
+        if (crop.type === "HERB") award(player, crop.plant, patch);
         if (!crop.check) Services.cropRewards(player, crop);
         core.PluginManager.emitCustomEvent("farming:harvest", { player, crop: crop.key, patch });
         if (crop.type === "GRAPES") state.status = "dead";
