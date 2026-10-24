@@ -284,11 +284,90 @@ test('the placeholder fragment is not accepted and a real fragment glows only du
     const f = fixture();
     assert.ok(core.CacheDefinitions.getItem(core.ItemIdentifiers.BLACKSTONE_FRAGMENT_3).placeholderTemplate >= 0);
     assert.deepEqual(Site.fragments(), [28356, 28357]);
-    f.player.getInventory().adds(28356, 1);
+    assert.equal(core.ItemDefinition.forId(28356).getExamine(), "It's vibrating with energy!");
+    assert.equal(core.ItemDefinition.forId(28357).getExamine(), 'A strange shard of dark stone with various modifications.');
+    f.player.getInventory().adds(28357, 1);
     Specials.start(f.fight, 'seeds');
-    assert.equal(f.player.getInventory().contains(28357), true);
-    Specials.clear(f.fight);
     assert.equal(f.player.getInventory().contains(28356), true);
+    Specials.clear(f.fight);
+    assert.equal(f.player.getInventory().contains(28357), true);
+});
+
+test('postquest Ketla replaces a lost fragment with the cache normal version', () => {
+    const f = fixture();
+    let reclaim;
+    const api = new Proxy({ core,
+        onNpcInteraction(name, actions) { if (name === 'Ketla') reclaim = actions['Talk-to']; },
+        emitCustomEvent(name, event) { if (name === 'quest:is-complete') event.complete = true; },
+    }, { get: (object, name) => object[name] ?? (() => {}) });
+    Common.init(api);
+    Site.attach(api);
+    assert.equal(reclaim({ player: f.player }), true);
+    assert.equal(f.player.getInventory().getAmount(28357), 1);
+    assert.equal(f.player.getInventory().getAmount(28356), 0);
+    assert.equal(reclaim({ player: f.player }), false);
+});
+
+test('both melee hits grade the damage-roll prayer snapshot and protected chip remains perfect', t => {
+    t.mock.method(Math, 'random', () => 0);
+    for (const protectedMelee of [false, true]) {
+        const f = fixture();
+        const prayer = f.player.getPrayerActive();
+        prayer[core.PrayerHandler.PROTECT_FROM_MELEE] = protectedMelee;
+        f.fight.melee();
+        prayer[core.PrayerHandler.PROTECT_FROM_MELEE] = !protectedMelee;
+        f.apply();
+        const first = 99 - f.player.getHitpoints();
+        assert.ok(first > 0, 'protected melee still deals chip');
+        assert.equal(f.fight.perfectKill, protectedMelee);
+        f.fight.events.shift().action();
+        f.apply();
+        assert.equal(99 - f.player.getHitpoints(), first * 2);
+        assert.equal(f.fight.perfectKill, protectedMelee);
+    }
+    const cancelled = fixture();
+    cancelled.fight.melee();
+    Common.cancelDamage(cancelled.fight);
+    cancelled.apply();
+    assert.equal(cancelled.player.getHitpoints(), 99);
+    assert.equal(cancelled.fight.perfectKill, true);
+});
+
+test('a threshold crossed mid-volley waits for the next attack and keeps launched impacts', t => {
+    const f = fixture();
+    f.player.moveTo(new core.Location(2656, 6378, 0));
+    let impacts = 0;
+    t.mock.method(f.fight, 'impact', () => impacts++);
+    t.mock.method(core.Projectile, 'arrivalTicks', () => 2);
+    f.fight.volley();
+    f.fight.process();
+    f.boss.setHitpoints(720);
+    f.fight.process();
+    assert.equal(f.fight.special === null, true);
+    for (let tick = 3; tick <= 9; tick++) f.fight.process();
+    assert.equal(impacts, 3);
+    assert.equal(f.fight.special === null, true);
+    f.fight.process();
+    assert.ok(f.fight.special);
+    assert.equal(f.fight.startedSpecials, 1);
+});
+
+test('only pursuit after the third special stops below 100 HP and leaves the remaining bind', t => {
+    for (const [completed, hp, cancelled] of [[2, 99, false], [3, 100, false], [3, 99, true]]) {
+        const f = fixture();
+        f.fight.completed = completed;
+        f.fight.boundUntil = 14;
+        f.boss.setHitpoints(hp);
+        f.player.getTimers().registers(core.TimerKey.FREEZE, 12);
+        let steps = 0, resets = 0;
+        t.mock.method(f.boss.getMovementQueue(), 'addStep', () => steps++);
+        t.mock.method(f.boss.getMovementQueue(), 'reset', () => resets++);
+        f.fight.pursueBound();
+        assert.equal(f.fight.boundUntil, cancelled ? 0 : 14);
+        assert.equal(steps, cancelled ? 0 : 1);
+        assert.equal(resets, cancelled ? 1 : 0);
+        assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), true);
+    }
 });
 test('normal source spawn suppression leaves quest and unrelated spawns untouched', () => {
     for (const [npcId, x, expected] of [[12204, 2655, false], [12206, 2399, null], [12204, 3000, null]]) {
@@ -309,6 +388,26 @@ test('ice and standard binding spells are guaranteed during pursuit and boss fre
     f.fight.pursueBound();
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), false);
     assert.equal(f.fight.boundUntil, 0);
+});
+
+test('existing marked Undead Grasp bind releases the player during Whisperer pursuit', t => {
+    t.mock.method(Math, 'random', () => .99);
+    for (const [marked, lowHealth] of [[false, false], [true, false], [true, true]]) {
+        const f = fixture();
+        f.fight.boundUntil = 14;
+        if (lowHealth) { f.fight.completed = 3; f.boss.setHitpoints(99); }
+        f.boss.setFlag('combat:freezable', true);
+        f.player.getTimers().registers(core.TimerKey.FREEZE, 12);
+        if (marked) f.player.setAttribute('arceuus:mark-until', core.World.getProcessCycle() + 100);
+        const spell = core.CombatSpells.UNDEAD_GRASP;
+        const hit = { isAccurate: () => true, getAttacker: () => f.player, getTarget: () => f.boss, getTotalDamage: () => 0 };
+        spell.onHitCalc(hit);
+        spell.finishCast(f.player, f.boss, true, 0);
+        assert.equal(f.boss.getTimers().has(core.TimerKey.FREEZE), marked);
+        f.fight.pursueBound();
+        assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), !marked);
+        assert.equal(f.fight.boundUntil, marked ? 0 : 14);
+    }
 });
 test('running across a seed consumes the intermediate tile as well as the destination', () => {
     const f=fixture();Specials.start(f.fight,'seeds');

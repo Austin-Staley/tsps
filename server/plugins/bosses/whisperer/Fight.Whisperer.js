@@ -86,8 +86,7 @@ class Fight {
             Specials.process(this);
             return;
         }
-        if (!this.enraged && this.startedSpecials < 3 && this.boss.getHitpoints() <= Common.data.thresholds[this.startedSpecials]) {
-            this.events = [];
+        if (!this.enraged && this.startedSpecials < 3 && this.tick >= this.nextAttack && this.boss.getHitpoints() <= Common.data.thresholds[this.startedSpecials]) {
             this.clearTentacles();
             Specials.start(this, this.rotation[this.startedSpecials++]);
             return;
@@ -172,9 +171,10 @@ class Fight {
         this.nextAttack = this.tick + 5;
         this.boss.performAnimation(new Common.core.Animation(Common.data.animations.melee));
         const damage = Common.random(28, 42);
-        const amount = Common.protectedFrom(this.player, 'melee') ? Math.floor(damage * .75) : damage;
-        Common.damage(this, amount);
-        this.at(1, () => Common.damage(this, amount));
+        const protectedMelee = Common.protectedFrom(this.player, 'melee');
+        const amount = protectedMelee ? Math.floor(damage * .75) : damage;
+        Common.damage(this, amount, 0, !protectedMelee);
+        this.at(1, () => Common.damage(this, amount, 0, !protectedMelee));
     }
     bind() {
         this.boundUntil = this.tick + 14;
@@ -189,6 +189,11 @@ class Fight {
         if (this.boss.getTimers().has(TimerKey.FREEZE)) {
             this.player.getTimers().cancel(TimerKey.FREEZE);
             this.boundUntil = 0;
+            return;
+        }
+        if (this.completed >= 3 && this.boss.getHitpoints() < 100) {
+            this.boundUntil = 0;
+            this.boss.getMovementQueue().reset();
             return;
         }
         if (this.inMelee()) {

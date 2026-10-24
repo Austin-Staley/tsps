@@ -18,7 +18,7 @@ function protectedFrom(player, style) {
     const { PrayerHandler } = api.core;
     return PrayerHandler.isActivated(player, PrayerHandler[style === 'magic' ? 'PROTECT_FROM_MAGIC' : style === 'ranged' ? 'PROTECT_FROM_MISSILES' : 'PROTECT_FROM_MELEE']);
 }
-function damage(fight, amount, sanity = 0) {
+function damage(fight, amount, sanity = 0, avoidable = true) {
     if (!fight.alive())
         return;
     const { HitDamage, HitMask } = api.core;
@@ -30,7 +30,8 @@ function damage(fight, amount, sanity = 0) {
         fight.pendingDamage.delete(hit);
         if (!fight.alive() || taken <= 0)
             return;
-        fight.perfectKill = false;
+        if (avoidable)
+            fight.perfectKill = false;
         if (sanity)
             fight.changeSanity(-sanity);
     });
@@ -57,7 +58,7 @@ function fragment(fight, glowing) {
     let changed = false;
     for (const item of fight.player.getInventory().getItems())
         if (item.getId() === I.BLACKSTONE_FRAGMENT || item.getId() === I.BLACKSTONE_FRAGMENT_2) {
-            const next = glowing ? I.BLACKSTONE_FRAGMENT_2 : I.BLACKSTONE_FRAGMENT;
+            const next = glowing ? I.BLACKSTONE_FRAGMENT : I.BLACKSTONE_FRAGMENT_2;
             if (item.getId() !== next) {
                 item.setId(next);
                 changed = true;

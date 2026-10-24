@@ -146,7 +146,7 @@ function reclaim({ player }) {
         player.sendMessage('You need an inventory space for the blackstone fragment.');
         return true;
     }
-    player.getInventory().adds(Common.core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 1);
+    player.getInventory().adds(Common.core.ItemIdentifiers.BLACKSTONE_FRAGMENT_2, 1);
     player.sendMessage('Ketla gives you another blackstone fragment.');
     return true;
 }
