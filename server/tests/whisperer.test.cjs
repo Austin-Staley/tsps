@@ -70,6 +70,36 @@ test('volley patterns progress by completed specials and enrage starts ranged in
     fight.enraged = true;
     assert.deepEqual([0, 1, 2, 3].map(n => { fight.attacks = n; return fight.pattern()[0]; }), ['ranged', 'ranged', 'magic', 'magic']);
 });
+
+test('normal volleys animate each handed shot with fixed three-tick flight and captured packet geometry', t => {
+    const f = fixture(), animations = [], impacts = [], packets = [], waves = [];
+    f.player.moveTo(new core.Location(2656,6378,0));
+    t.mock.method(Math, 'random', () => 0);
+    t.mock.method(f.boss, 'performAnimation', animation => animations.push([f.fight.tick,animation.getId()]));
+    t.mock.method(f.fight, 'impact', style => impacts.push([f.fight.tick,style]));
+    t.mock.method(f.fight, 'spawnTentacles', () => waves.push(f.fight.tick));
+    const sender = new Proxy({}, { get: (_,key) => key === 'sendProjectile' ? (...args) => packets.push(args) : () => sender });
+    f.player.getPacketSender = () => sender;
+    f.fight.volley();
+    for (let tick = 0; tick < 6; tick++) f.fight.process();
+    assert.deepEqual(animations, [[1,10237],[2,10238],[3,10237]]);
+    assert.deepEqual(impacts, [[4,'ranged'],[5,'ranged'],[6,'ranged']]);
+    assert.deepEqual(waves, [5]);
+    assert.equal(packets.length,3);
+    for (const packet of packets) assert.deepEqual([packet[3],packet[4],packet[5]*4,packet[6]*4,packet[8],packet[9],packet[10]], [90,2444,350,100,30,254,128]);
+});
+
+test('enrage pairs alternate handed animations and launch one tentacle with each shot', t => {
+    const f = fixture(), animations = [], waves = [];
+    f.player.moveTo(new core.Location(2656,6378,0)); f.fight.enraged = true;
+    t.mock.method(f.boss,'performAnimation',animation=>animations.push(animation.getId()));
+    t.mock.method(f.fight,'spawnTentacles',()=>waves.push(f.fight.tick));
+    t.mock.method(f.fight,'impact',()=>{});
+    f.fight.volley();
+    for (let tick = 0; tick < 7; tick++) f.fight.process();
+    assert.deepEqual(animations,[10237,10238,10243,10244]);
+    assert.deepEqual(waves,[1,3,5,7]);
+});
 test('actual applied damage spoils perfect context; immune and zero hits do not', () => {
     const f = fixture();
     Common.damage(f.fight, 0);
@@ -194,6 +224,21 @@ test('normal seed centre and all eight screech columns occupy the captured cathe
     assert.deepEqual(f.fight.special.columns.map(c => [c.x,c.y]), expected);
     f.fight.setShadow(true);
     assert.deepEqual(f.fight.special.columns.map(c => [c.x+256,c.y]), expected);
+});
+
+test('normal souls occupy twelve fixed cathedral tiles with independently shuffled chant roles', t => {
+    const expected = [[2650,6375],[2650,6373],[2648,6373],[2660,6375],[2662,6373],[2648,6366],[2650,6364],[2652,6362],[2662,6362],[2662,6364],[2664,6364],[2664,6371]];
+    const assignments = [];
+    for (const random of [0, .99]) {
+        const f = fixture(); t.mock.method(Math, 'random', () => random);
+        Specials.start(f.fight, 'souls');
+        assert.deepEqual(f.fight.special.souls.map(s => [s.npc.getLocation().getX(),s.npc.getLocation().getY()]), expected);
+        assert.deepEqual([0,1,2,3].map(group => f.fight.special.souls.filter(s => s.group === group).length), [2,3,3,4]);
+        assignments.push(f.fight.special.souls.map(s => s.group));
+        f.fight.setShadow(true);
+        assert.deepEqual(f.fight.special.souls.map(s => [s.npc.getLocation().getX()+256,s.npc.getLocation().getY()]), expected);
+    }
+    assert.notDeepEqual(assignments[0], assignments[1]);
 });
 test('soul sets remain attackable only in shadow and timeout with no full set damages and heals', () => {
     const f = fixture();

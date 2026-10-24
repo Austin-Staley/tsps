@@ -122,20 +122,26 @@ class Fight {
     volley() {
         const base = Common.random(0, 1) ? 'magic' : 'ranged';
         const pattern = this.pattern(base);
+        const hand = this.enraged ? this.attacks % 2 : 0;
         this.attacks++;
-        this.boss.performAnimation(new Common.core.Animation(Common.data.animations[pattern[0]]));
         pattern.forEach((style, index) => this.at(index + 1, () => {
             if (this.inMelee()) {
                 this.events = [];
                 this.melee();
                 return;
             }
-            const { Projectile } = Common.core;
-            const travel = Math.max(1, Projectile.arrivalTicks(this.boss, this.player, 51));
-            Projectile.createProjectile(this.boss, this.player, Common.data.projectiles[style], 51, 46 + this.boss.getLocation().getDistance(this.player.getLocation()) * 10, 43, 31).sendProjectile();
-            this.at(travel, () => this.impact(style));
+            const { Projectile, Animation } = Common.core, geometry = Common.data.volley;
+            this.boss.performAnimation(new Animation(Common.data.animations[style + ((hand + index) % 2 ? 'Alt' : '')]));
+            // This owner-only instance uses the captured fixed-lifetime tile projectile.
+            this.player.getPacketSender().sendProjectile(Projectile.centreOf(this.boss), this.player.getLocation(), 0,
+                geometry.arrivalCycles, Common.data.projectiles[style], geometry.startHeight, geometry.endHeight,
+                this.player, geometry.launchDelay, geometry.angle, geometry.progress);
+            this.at(geometry.impactTicks, () => this.impact(style));
+            if (this.enraged)
+                this.spawnTentacles();
         }));
-        this.at(pattern.length + 3, () => this.spawnTentacles());
+        if (!this.enraged)
+            this.at(5, () => this.spawnTentacles());
         this.nextAttack = this.tick + (this.enraged ? 2 : 10);
     }
     impact(style) {

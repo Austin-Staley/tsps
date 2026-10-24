@@ -52,16 +52,19 @@ function start(fight, kind) {
     else {
         fight.special.souls = [];
         fight.special.rewarded = new Set();
-        Common.data.soulSets.forEach((set, group) => {
-            const positions = [[-7, -5], [6, -5], [-7, 5], [6, 5]][group];
-            for (let member = 0; member < set.size; member++) {
-                const npc = fight.session.spawn(Common.data.npcs.soul, x + positions[0] + member % 2, y + positions[1] + Math.floor(member / 2));
-                npc.setMaxHitpoints(1);
-                npc.setHitpoints(1);
-                npc.__whispererFight = fight;
-                npc.__whispererSoul = group;
-                fight.special.souls.push({ npc, group, dead: false });
-            }
+        const groups = Common.data.soulSets.flatMap((set, group) => Array(set.size).fill(group));
+        for (let index = groups.length - 1; index > 0; index--) {
+            const other = Common.random(0, index);
+            [groups[index], groups[other]] = [groups[other], groups[index]];
+        }
+        Common.data.specials.souls.forEach(([soulX, soulY], index) => {
+            const group = groups[index];
+            const npc = fight.session.spawn(Common.data.npcs.soul, soulX - (fight.shadow ? Common.data.site.realmOffset : 0), soulY);
+            npc.setMaxHitpoints(1);
+            npc.setHitpoints(1);
+            npc.__whispererFight = fight;
+            npc.__whispererSoul = group;
+            fight.special.souls.push({ npc, group, dead: false });
         });
     }
     fight.player.sendMessage('The blackstone fragment glows. Enter the Shadow Realm to reveal the Whisperer\'s attack.');
