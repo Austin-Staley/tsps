@@ -1257,6 +1257,15 @@ function handlePotionDrink(player, itemId, slot) {
     return true;
   }
 
+  // Quest and content plugins can explain an item-specific unlock before a
+  // drink consumes a dose, starts a cooldown or applies any effect.
+  const permission = { player, itemId, allowed: true, message: null };
+  pluginApi.emitCustomEvent("potions:validate-drink", permission);
+  if (permission.allowed === false) {
+    if (permission.message) player.sendMessage(permission.message);
+    return true;
+  }
+
   const timers = player.getTimers();
   if (timers.has(TimerKey.STUN)) {
     player.sendMessage("You're currently stunned and cannot use potions.");

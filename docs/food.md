@@ -103,3 +103,26 @@ handled by another plugin (Poisoned cheese, White pearl, ToA's Honey locust, Cas
 use Heal); quest, event and minigame items with their own effects (rock cakes, poison karambwan,
 nightshade, Servery food); event sweets and candy; food only eaten in one
 area (Vampyrium); unobtainable items; and the whole watermelon, which is sliced first.
+
+## Guthix rest recipe permission
+
+The [Guthix rest Wiki page](https://oldschool.runescape.wiki/w/Guthix_rest) says
+Sanfew's recipe explanation during One Small Favour unlocks both making and
+drinking the tea. Making requires 18 Herblore; drinking has no Herblore gate.
+
+One Small Favour owns this permission. Its stage 11 starts before the explanation,
+so continuing past the imported Sanfew recipe line persists the false-default
+`one-small-favour:guthix-rest-learned` flag. Later quest stages already imply
+the lesson was completed, including existing saves without the new flag.
+Interrupting the conversation before completing that line does not unlock it.
+
+Potions emits `potions:validate-drink` with `{ player, itemId, allowed, message }`
+after its normal area/food checks and before dose consumption, effects or
+cooldowns. A content plugin can deny the drink and supply the reason. This keeps
+quest rules in their quest plugin and applies to each normal potion entry point.
+
+`tests/guthix-rest-unlock.test.cjs` covers all four doses, early/later stages,
+dialogue continuation, denied ingredient preservation and the making-only level
+gate. An unlearned player also cannot skip the lesson by handing purchased tea
+to Bleemadge and advancing the quest. This correction retains the existing simplified, single-step brewing
+recipe; it does not claim the staged live-game tea preparation is implemented.
