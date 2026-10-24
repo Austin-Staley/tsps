@@ -12,7 +12,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Guardians, Lobby, Enchanting, Alchemists, events, ironmanMode;
+let Common, Guardians, Lobby, Enchanting, Alchemists, Graveyard, events, ironmanMode;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -21,6 +21,7 @@ before(async () => {
   Lobby = require('../plugins/minigames/magetrainingarena/Lobby.MageTrainingArena');
   Enchanting = require('../plugins/minigames/magetrainingarena/Enchanting.MageTrainingArena');
   Alchemists = require('../plugins/minigames/magetrainingarena/Alchemists.MageTrainingArena');
+  Graveyard = require('../plugins/minigames/magetrainingarena/Graveyard.MageTrainingArena');
   ironmanMode = 'none';
   events = [];
   const api = new Proxy({
@@ -424,6 +425,118 @@ test('in the room an alchemy takes 5 ticks: a cast before then is refused', () =
   const later = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
   Alchemists.alchemyPolicy(later);
   assert.equal(later.allowed, true);
+});
+
+// --- The Creature Graveyard
+
+const graveyardTile = () => Common.data.graveyard.arrive;
+
+test('each bone pile type gives its own kind, then the next kind after every four taken', () => {
+  const [x, y, z] = graveyardTile();
+  const player = fakePlayer(x, y, z);
+  const { locs, items } = Common.ids;
+  for (let i = 0; i < 6; i++) Graveyard.grab({ player, objectId: locs.bonePile2 });
+  assert.equal(player.items.get(items.bones2), 4);
+  assert.equal(player.items.get(items.bones3), 2);
+  for (let i = 0; i < 6; i++) Graveyard.grab({ player, objectId: locs.bonePile4 });
+  assert.equal(player.items.get(items.bones4), 4);
+  assert.equal(player.items.get(items.bones1), 2, 'kind 4 turns back to kind 1');
+  assert.equal(Graveyard.grab({ player, objectId: 1 }), false);
+});
+
+test('Bones to Bananas turns every animals\' bone into its fruit, for one cast\'s runes and XP', () => {
+  const [x, y, z] = graveyardTile();
+  const player = fakePlayer(x, y, z);
+  const { items } = Common.ids;
+  player.items.set(items.bones1, 2);
+  player.items.set(items.bones4, 3);
+  player.setFree(10);
+  let casts = 0;
+  const event = { player, spellName: 'Bones to Bananas', handled: false };
+  const Spell = core.Spell.prototype;
+  const original = Spell.canCast;
+  Spell.canCast = function () { casts += 1; return true; };
+  try {
+    Graveyard.castBonesSpell(event);
+  } finally {
+    Spell.canCast = original;
+  }
+  assert.equal(event.handled, true);
+  assert.equal(casts, 1);
+  assert.equal(player.items.get(items.banana), 14);
+  assert.equal(player.items.get(items.bones1), 0);
+  assert.equal(player.items.get(items.bones4), 0);
+  assert.deepEqual(player.xp, [25]);
+});
+
+test('Bones to Peaches needs its unlock in the room; no bones, no cast', () => {
+  const [x, y, z] = graveyardTile();
+  const player = fakePlayer(x, y, z);
+  const locked = { player, spellName: 'Bones to Peaches', handled: false };
+  Graveyard.castBonesSpell(locked);
+  assert.equal(locked.handled, true);
+  assert.equal(player.messages.at(-1), Common.message('peachesLocked'));
+  const empty = { player, spellName: 'Bones to Bananas', handled: false };
+  Graveyard.castBonesSpell(empty);
+  assert.equal(player.messages.at(-1), Common.message('noBones'));
+  const outside = fakePlayer(3200, 3200, 0);
+  const elsewhere = { player: outside, spellName: 'Bones to Bananas', handled: false };
+  Graveyard.castBonesSpell(elsewhere);
+  assert.equal(elsewhere.handled, false, 'outside the room the spell is the ordinary one');
+});
+
+test('the chute: a point per 16 fruit (a peach is 2), at most 3 a deposit, 5 XP a banana and 10 a peach', () => {
+  const [x, y, z] = graveyardTile();
+  const player = fakePlayer(x, y, z);
+  const { items } = Common.ids;
+  player.items.set(items.banana, 20);
+  assert.deepEqual(Graveyard.depositFruit(player, () => 0.2), { fruit: 20, points: 2 }, '20 bananas: 1 point and a 25% chance of a second');
+  assert.deepEqual(player.xp, [100]);
+  player.xp.length = 0;
+  player.items.set(items.peach, 27);
+  const most = Graveyard.depositFruit(player, () => 0.9);
+  assert.deepEqual(most, { fruit: 54, points: 3 }, '27 peaches count as 24 (Wiki)');
+  assert.equal(player.items.get(items.peach), 0, 'all of them go in');
+  assert.deepEqual(player.xp, [270], 'and give XP');
+  assert.equal(Graveyard.depositFruit(fakePlayer(x, y, z)), null);
+});
+
+test('every Graveyard point earns a rune, given on leaving; logging out keeps the room\'s things', () => {
+  const Area = Graveyard.defineArea();
+  const area = new Area();
+  const [x, y, z] = graveyardTile();
+  const player = fakePlayer(x, y, z);
+  player.isPlayer = () => true;
+  player.getAsPlayer = () => player;
+  const { items } = Common.ids;
+  player.items.set(items.banana, 32);
+  Graveyard.depositFruit(player, () => 0.9);
+  player.items.set(items.bones2, 3);
+  area.postLeave(player, true);
+  assert.equal(player.items.get(items.bones2), 3);
+  assert.equal(player.getAttribute(Graveyard.RUNES_OWED_ATTRIBUTE), 2);
+  area.postLeave(player, false);
+  assert.equal(player.items.get(items.bones2), 0);
+  const runes = Common.data.graveyard.rewardRunes.reduce((sum, rune) => sum + (player.items.get(items[rune]) ?? 0), 0);
+  assert.equal(runes, 2);
+  assert.equal(player.getAttribute(Graveyard.RUNES_OWED_ATTRIBUTE), 0);
+});
+
+test('the Graveyard Teleport needs Magic 15, and no fruit or bones', () => {
+  const player = fakePlayer(3365, 3318, 0);
+  player.magic = 14;
+  Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
+  assert.equal(player.messages.at(-1), Common.message('level', { level: 15, room: 'Creature Graveyard' }));
+  player.magic = 15;
+  for (const key of ['peach', 'banana', 'bones']) {
+    player.items.set(Common.ids.items[key], 2);
+    Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
+    assert.equal(player.messages.at(-1), Common.message('noFruitIn'), key);
+    assert.equal(player.items.get(Common.ids.items[key]), 2, 'and nothing of theirs is taken');
+    player.items.set(Common.ids.items[key], 0);
+  }
+  Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], graveyardTile());
 });
 
 test('training-room deaths keep real gear and Hardcore status, clean room items and respawn in the hall', async (t) => {
