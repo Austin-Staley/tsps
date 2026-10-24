@@ -22,6 +22,9 @@ export class ItemOnGroundManager {
     // with a 300-tick total lifetime for revealable items.
     public static readonly PUBLIC_REVEAL_DELAY: number = 100
     public static readonly DESPAWN_DELAY: number = 300
+    // World cycle in which ground items last aged. Items registered earlier in a
+    // cycle (e.g. NPC deaths run as tasks) still age once more before it ends.
+    private static processedCycle = -1;
 
     public static onRegionChange(player: Player): void {
         player.getPacketSender().sendGroundItems(
@@ -30,6 +33,7 @@ export class ItemOnGroundManager {
     }
 
     public static process(): void {
+        this.processedCycle = World.getProcessCycle();
         for (let item of World.getItems()) {
             item.process();
             if (item.isPendingRemoval()) {
@@ -42,6 +46,19 @@ export class ItemOnGroundManager {
         }
     }
     
+
+    /** World cycles (the client's tick numbers) at which this stack was created,
+     * goes public (0 if never) and despawns (0 if never), per {@link ItemOnGround.process}. */
+    public static getTiming(item: ItemOnGround): { createdTick: number; privateUntilTick: number; expiresTick: number } {
+        const cycle = World.getProcessCycle();
+        const createdTick = cycle - item.getTick() - (this.processedCycle === cycle ? 0 : 1);
+        return {
+            createdTick,
+            privateUntilTick: item.getState() === State.SEEN_BY_PLAYER && item.getgoesGlobal()
+                ? createdTick + this.PUBLIC_REVEAL_DELAY : 0,
+            expiresTick: item.respawns() || item.isStaticSpawn() ? 0 : createdTick + this.DESPAWN_DELAY,
+        };
+    }
 
     public static perform(item: ItemOnGround, type: OperationType): void {
         switch (item.getState()) {

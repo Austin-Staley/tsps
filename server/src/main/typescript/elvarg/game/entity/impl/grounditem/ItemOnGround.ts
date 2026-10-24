@@ -82,6 +82,10 @@ export class ItemOnGround {
         }
     }
 
+    public getTiming() {
+        return ItemOnGroundManager.getTiming(this);
+    }
+
     public getPosition(): Location {
         return this.position;
     }
