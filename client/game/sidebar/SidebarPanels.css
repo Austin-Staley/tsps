@@ -266,7 +266,7 @@
     color: var(--rl-light-gray);
 }
 
-.rl-oqg-search {
+.rl-plugin-search.rl-oqg-search {
     flex: 0 0 auto;
     margin: 0 0 6px;
 }
