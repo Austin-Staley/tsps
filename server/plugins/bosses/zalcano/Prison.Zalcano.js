@@ -318,6 +318,7 @@ function attach(api) {
   api.onNpcBeforeDeath(beforeDeath);
   api.onNpcDeath(npcDied);
   api.onCustomEvent("npc-drops:claim", claimDrops);
+  api.onCustomEvent("ironman:shared-kill-keeps", Rewards.ironmanKeeps);
   api.onCanSpawnNpc(blockWorldSpawn);
   api.onPlayerLogin(onLogin);
 }

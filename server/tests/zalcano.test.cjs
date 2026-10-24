@@ -10,6 +10,8 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { NPC } = require('../dist/game/entity/impl/npc/NPC');
 const core = PluginManager.getCoreApi();
 
 let Common, Fight, Tephra, Rewards, Prison, tasks, events, questDone;
@@ -259,8 +261,8 @@ test('an orange symbol is safe for 3 ticks, then hurts more each tick; blue empo
   const player = fakePlayer(3024, 6039);
   const { fight, world } = newFight([player]);
   const object = world.placeObject(Common.ids.locs.symbolDamage, [3023, 6038]);
-  fight.symbols = [{ tile: loc(3023, 6038), empower: false, until: fight.tickCount + 20, object, standing: new Map() }];
-  for (let i = 0; i < 5; i++) fight.tickSymbols([player]);
+  fight.symbols = [{ tile: loc(3023, 6038), empower: false, spawnedAt: fight.tickCount, until: fight.tickCount + 20, object, standing: new Map() }];
+  for (let i = 0; i < 5; i++) { fight.tickCount = i; fight.tickSymbols([player]); }
   const { step } = Common.data.attacks.symbols;
   assert.deepEqual(player.damage, [step, step * 2]);
   assert.deepEqual(player.chat, [Common.message('agh')]);
@@ -274,6 +276,7 @@ test('symbols never cover her and fade after their time', () => {
   fight.drawSymbols();
   assert.ok(fight.symbols.length >= 1);
   for (const symbol of fight.symbols) {
+    assert.equal(symbol.spawnedAt, fight.tickCount);
     for (const [dx, dy] of [[0, 0], [2, 0], [0, 2], [2, 2]]) assert.ok(Common.distanceToNpc(symbol.tile.transform(dx, dy), fight.npc) > 0);
   }
   fight.tickCount = fight.symbols[0].until;
@@ -515,4 +518,117 @@ test('symbols are never drawn over a rock', () => {
       }
     }
   }
+});
+
+
+function realPlayer(t, name, mode = 'none') {
+  const player = new Player(null, loc(3024, 6039));
+  player.setUsername(name);
+  player.setRegistered(true);
+  player.setAttribute('ironman:mode', mode);
+  player.messages = [];
+  t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true }));
+  t.mock.method(player, 'sendMessage', message => player.messages.push(message));
+  t.after(() => { player.getCombat().getHitQueue().clear(); player.setRegistered(false); });
+  return player;
+}
+
+test('orange symbol grace expires from spawn; late entry and re-entry damage immediately and still escalate', t => {
+  const player = realPlayer(t, 'symbols');
+  const { fight, world } = newFight([player]);
+  const object = world.placeObject(Common.ids.locs.symbolDamage, [3023, 6038]);
+  fight.symbols = [{ tile: loc(3023, 6038), empower: false, spawnedAt: 0, until: 30, object, standing: new Map() }];
+  const queue = player.getCombat().getHitQueue();
+  for (let tick = 0; tick < 3; tick++) { fight.tickCount = tick; fight.tickSymbols([player]); }
+  assert.equal(queue.getQueuedDamage(), 0, 'the first three spawn ticks remain safe');
+  player.moveTo(loc(3028, 6039)); fight.tickCount = 3; fight.tickSymbols([player]);
+  player.moveTo(loc(3024, 6039)); fight.tickCount = 8; fight.tickSymbols([player]);
+  const { step, max } = Common.data.attacks.symbols;
+  assert.equal(queue.getQueuedDamage(), step, 'late entry has no new grace');
+  fight.tickCount = 9; fight.tickSymbols([player]);
+  assert.equal(queue.getQueuedDamage(), step * 3, 'continued exposure escalates');
+  player.moveTo(loc(3028, 6039)); fight.tickCount = 10; fight.tickSymbols([player]);
+  player.moveTo(loc(3024, 6039)); fight.tickCount = 11; fight.tickSymbols([player]);
+  assert.equal(queue.getQueuedDamage(), step * 4, 're-entry immediately starts damage again');
+  for (let tick = 12; tick < 20; tick++) {
+    const previous = queue.getQueuedDamage(); fight.tickCount = tick; fight.tickSymbols([player]);
+    assert.equal(queue.getQueuedDamage() - previous, Math.min(max, (tick - 10) * step));
+  }
+});
+
+test('Smolcano requires five armour damage and at least31 combined damage', t => {
+  for (const [shield, health, pet] of [[5, 0, false], [5, 25, false], [5, 26, true], [4, 100, false]]) {
+    const player = realPlayer(t, `pet${shield}${health}`);
+    const loot = Rewards.share(new Map([[player, { shield, health }]]), () => 0);
+    assert.equal(loot.get(player)?.some(drop => drop.itemId === Common.ids.items.pet) ?? false, pet, `${shield}+${health}`);
+  }
+});
+
+test('real Zalcano death order preserves Ironman shares and pet delivery, then clears fight ownership', t => {
+  const handlers = new Map(), placed = new Map();
+  let sharesWhileDead = 0;
+  const originalApi = Common.api;
+  const api = new Proxy({
+    core,
+    onCustomEvent(name, handler) { if (!handlers.has(name)) handlers.set(name, []); handlers.get(name).push(handler); },
+    emitCustomEvent(name, event) {
+      if (name === 'npc-drops:roll-table') event.drops.push({ itemId: 2353, amount: 100, noted: true });
+      if (name === 'ironman:shared-kill-keeps' && event.npc?.__zalFight) {
+        sharesWhileDead++;
+        assert.equal(event.npc.__zalFight.phase, 'dead');
+        assert.equal(event.npc.__zalFight.stopped, false, 'rewards precede fight.stop');
+      }
+      for (const handler of handlers.get(name) ?? []) handler(event);
+      if (name === 'npc-drops:place') placed.set(event.player, event.drops.map(drop => ({ ...drop })));
+    },
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+  const Iron = require('../plugins/modes/ironman/Common.Ironman');
+  Iron.init(api);
+  require('../plugins/modes/ironman/Loot.Ironman')(api);
+  require('../plugins/bosses/Zalcano.plugin').register(api);
+  require('../plugins/npcs/Pets.plugin').register(api);
+  const savedPrison = { ...Prison.prison };
+  try {
+    const accounts = ['ironman', 'ultimate', 'hardcore', 'none'].map(mode => realPlayer(t, mode, mode));
+    const contributions = new Map(accounts.map(player => [player, { shield: 100, health: 400 }]));
+    const world = fakeWorld();
+    world.spawnNpc = (id, tile) => new NPC(id, loc(tile[0], tile[1]));
+    const fight = new Fight(world, () => accounts, () => 0);
+    fight.start(); fight.contributions = contributions;
+    const npc = fight.npc;
+    npc.setNpcTransformationId(Common.ids.npcs.weakened);
+    for (const player of accounts) {
+      const follower = new NPC(1, player.getLocation()); follower.setRegistered(true);
+      player.setAttribute('pets:current', follower);
+    }
+    t.mock.method(Prison.prison.area, 'getPlayers', () => accounts);
+    t.mock.method(Math, 'random', () => 0);
+    Prison.prison.fight = fight;
+    Prison.zalcanoDied(fight);
+    const loot = placed;
+    assert.equal(loot.size, accounts.length);
+    assert.equal(sharesWhileDead, 3, 'all Ironman modes receive shares between died and stop');
+    assert.equal(npc.__zalFight, null, 'fight.stop clears ownership only after rewards');
+    assert.equal(fight.stopped, true);
+    assert.equal(Prison.prison.fight, null);
+    for (const player of accounts) {
+      assert.ok(loot.get(player).some(drop => drop.itemId === 2353), player.getUsername() + ' main roll');
+      assert.ok(loot.get(player).some(drop => drop.itemId === Common.ids.items.crystalShard), 'shards');
+      assert.equal(loot.get(player).some(drop => drop.itemId === Common.ids.items.pet), false, 'Pets consumes the ground entry');
+      assert.equal(player.getInventory().getAmount(Common.ids.items.pet), 1, 'actual Pets hook delivers Smolcano');
+      assert.ok(player.getAttribute('pets.owned').includes(Common.ids.items.pet), 'pet ownership recorded');
+      assert.equal(player.getAttribute(Common.KILLS_ATTRIBUTE), 1);
+      assert.ok(!player.messages.includes(Iron.message('sharedKill')), 'no false loot-loss warning');
+    }
+    assert.ok(loot.get(accounts[0]).some(drop => drop.itemId === Common.ids.items.toolSeed), 'MVP unique survives');
+    const tiny = realPlayer(t, 'tinyiron', 'ironman');
+    const empty = Rewards.share(new Map([[tiny, { shield: 4, health: 400 }], [accounts[3], { shield: 100, health: 400 }]]), () => 0.99, npc);
+    assert.equal(empty.has(tiny), false, 'contribution gate remains authoritative');
+    for (const [target, npcId] of [[npc, Common.ids.npcs.weakened], [null, 1]]) {
+      const player = target ? tiny : accounts[0];
+      const request = { player, npc: target, npcId, drops: [{ itemId: 995, amount: 1 }], damagers: [player, accounts[3]] };
+      api.emitCustomEvent('npc-drops:roll', request);
+      assert.deepEqual(request.drops, [], 'unearned or unrelated group loot remains filtered');
+    }
+  } finally { Object.assign(Prison.prison, savedPrison); Common.init(originalApi); }
 });

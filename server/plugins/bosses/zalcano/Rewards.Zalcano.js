@@ -8,7 +8,7 @@
  *   more and the infernal ashes;
  * - each kill has a 1 in 200 unique (39 in 40 a crystal tool seed, else an uncut onyx) for one
  *   player with 31 damage, by points; each of them also rolls the Zalcano shard (1/1500 rising to
- *   1/750 at 1,000 points); everyone eligible rolls Smolcano (1/2250);
+ *   1/750 at 1,000 points); those with 31 damage roll Smolcano (1/2250);
  * - the kill count goes up for everyone eligible.
  * Rolls go through NpcDrops (npc-drops:roll-table), loot goes down at each player's feet
  * (npc-drops:place), the pet through Pets (npc-drops:roll).
@@ -108,7 +108,7 @@ function share(contributions, random = Math.random, npc = null) {
     drops.push(...mainRoll(player, main, isMvp));
     if (uniqueEligible(entry) && random() < shardChance(tertiary)) drops.push({ itemId: items.shard, amount: 1 });
     // Pets.plugin.js takes the pet out of the drops on npc-drops:roll.
-    if (random() < 1 / rewards.petChance) drops.push({ itemId: items.pet, amount: 1 });
+    if (uniqueEligible(entry) && random() < 1 / rewards.petChance) drops.push({ itemId: items.pet, amount: 1 });
     loot.set(player, drops);
   }
   if (random() < 1 / rewards.uniqueChance) {
@@ -128,6 +128,13 @@ function share(contributions, random = Math.random, npc = null) {
   return loot;
 }
 
+/** Individual contribution rewards survive the Ironman shared-kill filter. */
+function ironmanKeeps(request) {
+  if (request.npcId !== Common.ids.npcs.weakened) return;
+  const entry = request.npc?.__zalFight?.contributions.get(request.player);
+  if (entry && eligible(entry)) request.keep.push(...request.drops.map(drop => drop.itemId));
+}
+
 function countKill(player) {
   const kills = (Number(player.getAttribute(Common.KILLS_ATTRIBUTE)) || 0) + 1;
   player.setAttribute(Common.KILLS_ATTRIBUTE, kills);
@@ -140,4 +147,4 @@ function sendKills(player) {
   player.getPacketSender().sendConfig?.(Common.ids.varps.kills, Number(player.getAttribute(Common.KILLS_ATTRIBUTE)) || 0);
 }
 
-module.exports = { points, eligible, uniqueEligible, mvpOf, scaledAmount, mainRoll, shardChance, uniqueOwner, share, countKill, sendKills };
+module.exports = { points, eligible, uniqueEligible, mvpOf, scaledAmount, mainRoll, shardChance, uniqueOwner, share, ironmanKeeps, countKill, sendKills };

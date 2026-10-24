@@ -309,7 +309,7 @@ class Fight {
       if ([0, 2].some((dx) => [0, 2].some((dy) => Common.distanceToNpc(tile.transform(dx, dy), this.npc) === 0))) continue;
       const empower = this.symbols.length < blue;
       const object = this.world.placeObject(empower ? ids.locs.symbolEmpower : ids.locs.symbolDamage, [x, y]);
-      this.symbols.push({ tile, empower, until, object, standing: new Map() });
+      this.symbols.push({ tile, empower, spawnedAt: this.tickCount, until, object, standing: new Map() });
     }
   }
 
@@ -336,11 +336,12 @@ class Fight {
       for (const player of players) {
         const on = this.symbolAt(player.getLocation()) === symbol;
         if (!on) { symbol.standing.delete(player); continue; }
-        const ticks = (symbol.standing.get(player) ?? 0) + 1;
+        if (!symbol.standing.has(player)) player.forceChat?.(Common.message("agh"));
+        const active = this.tickCount - symbol.spawnedAt >= symbols.graceTicks;
+        const ticks = active ? (symbol.standing.get(player) ?? 0) + 1 : 0;
         symbol.standing.set(player, ticks);
-        if (ticks === 1) player.forceChat?.(Common.message("agh"));
         player.setRunEnergy?.(Math.max(0, (player.getRunEnergy?.() ?? 0) - symbols.runDrain));
-        if (ticks > symbols.graceTicks) Common.hurtPlayer(player, Math.min(symbols.max, (ticks - symbols.graceTicks) * symbols.step));
+        if (active) Common.hurtPlayer(player, Math.min(symbols.max, ticks * symbols.step));
       }
     }
   }
