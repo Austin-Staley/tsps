@@ -245,8 +245,8 @@ class Fight {
     // Tentacular describes roughly one-third mitigation. Exact rounding and
     // the ordinary roll distribution remain unmeasured.
     const amount = protectedMelee ? Math.floor(damage * 2 / 3) : damage;
-    Common.damage(this, amount, 0, !protectedMelee);
-    this.at(1, () => Common.damage(this, amount, 0, !protectedMelee));
+    Common.meleeDamage(this, amount, !protectedMelee);
+    this.at(1, () => Common.meleeDamage(this, amount, !protectedMelee));
   }
   bind() {
     this.pursuitCancelled = false;
