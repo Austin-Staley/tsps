@@ -94,6 +94,7 @@ const rowWidget = { ...widget, uid: (30007 << 16) | 80, groupId: 30007, fileId: 
 const rowFrame = { ...frame, collectFromAllRoots: () => [rowWidget], getWidgetFlags: () => 1 << 1 };
 const rowManager = { ...widgetManager, getWidgetFlags: () => 1 << 1 };
 const selections: number[][] = [];
+const widgetOps: number[][] = [];
 const clickRow = (rowId: number | null | undefined) => {
     const payload: any = { widgetId: rowWidget.uid, opId: 1 };
     let built = false;
@@ -109,6 +110,7 @@ const clickRow = (rowId: number | null | undefined) => {
                 rowIdAt: (groupId: number, childId: number) =>
                     groupId === 30007 && childId === 80 ? rowId : undefined,
                 handleRowOp: (id: number, opId: number) => selections.push([id, opId]),
+                handleWidgetOp: (groupId: number, childId: number) => widgetOps.push([groupId, childId]),
             }),
         },
         state,
@@ -124,5 +126,6 @@ const clickRow = (rowId: number | null | undefined) => {
 assert.equal(clickRow(66).slot, 66, "a left-clicked row carries its id");
 assert.equal(clickRow(undefined).slot, undefined, "other widgets keep their own slot");
 assert.deepEqual(selections, [[66, 1]], "the row's op goes to the list at once, other widgets' do not");
+assert.deepEqual(widgetOps, [[30007, 80]], "other widgets' ops go to the runtime as plain widget ops");
 
 console.log("widget primary operation context test passed");

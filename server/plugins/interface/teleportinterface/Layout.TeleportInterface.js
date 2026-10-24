@@ -1,8 +1,8 @@
 /**
  * The ::teleports widget group: tabs across the top, a searchable list of destinations on
  * the left and the selected destination's details on the right. The list is the shared
- * custom-interface runtime's virtual list, so it scrolls and filters client-side and sends
- * each row's id back with its ops.
+ * custom-interface runtime's virtual list, so it scrolls, filters, switches tabs and fills
+ * the details panel client-side, and sends each row's id back with its ops.
  */
 const { FLAG_OP1, FLAG_OP2, FLAG_OP3, TYPE_GRAPHIC, TYPE_RECTANGLE, TYPE_TEXT, createWidgetGroup } = require("../widgetGroup");
 
@@ -11,7 +11,7 @@ const MAIN_MODAL_UID = (161 << 16) | 16;
 const COMPONENT = {
   ROOT: 0, FRAME: 1, SEARCH_BOX: 2, SEARCH_INPUT: 3, STATUS: 4, DATA: 5, LIST_VIEW: 6, LIST_SCROLLBAR: 7,
   PANEL: 8, PANEL_ICON: 9, PANEL_TITLE: 10, PANEL_SUBTITLE: 11, PANEL_WILDERNESS: 12, PANEL_KILLS: 13,
-  PANEL_DESCRIPTION: 14, TELEPORT_BUTTON: 15, TELEPORT_LABEL: 16, FAVOURITE_BUTTON: 17, FAVOURITE_LABEL: 18,
+  PANEL_DESCRIPTION: 14, TELEPORT_BUTTON: 15, TELEPORT_LABEL: 16, FAVOURITE_BUTTON: 17, FAVOURITE_LABEL: 18, LAYOUT: 19,
   TAB_START: 20, TAB_LABEL_START: 30, ROW_BACKGROUND_START: 40, ROW_ICON_START: 60, ROW_LABEL_START: 80,
 };
 const TAB_COUNT = 7;
@@ -48,6 +48,7 @@ function addList(add, root) {
   add(COMPONENT.SEARCH_INPUT, root, text(24, 56, 262, 20, { yTextAlignment: 1, actions: ["Search"], flags: FLAG_OP1 }));
   add(COMPONENT.STATUS, root, text(18, 78, 274, 16, { textColor: 0xffd27f, yTextAlignment: 1 }));
   add(COMPONENT.DATA, root, { type: TYPE_TEXT, hidden: true, isHidden: true });
+  add(COMPONENT.LAYOUT, root, { type: TYPE_TEXT, hidden: true, isHidden: true });
   const list = add(COMPONENT.LIST_VIEW, root, {
     rawX: LIST.x, rawY: LIST.y, rawWidth: LIST.width, rawHeight: LIST.height,
     width: LIST.width, height: LIST.height, scrollWidth: LIST.width, scrollHeight: LIST.height,
@@ -87,7 +88,8 @@ function addPanel(add, root) {
   add(COMPONENT.FAVOURITE_LABEL, root, text(x + 12 + buttonWidth, buttonY, buttonWidth, 24, { text: "Favourite", textColor: 0xffd27f, xTextAlignment: 1, yTextAlignment: 1 }));
 }
 
-function buildInterface() {
+/** `tabLabels` in tab order; the client draws them and switches between the tabs itself. */
+function buildInterface(tabLabels) {
   const { widgets, add } = createWidgetGroup(GROUP_ID);
   const root = add(COMPONENT.ROOT, -1, {
     rawWidth: 18, rawHeight: 18, widthMode: 1, heightMode: 1,
@@ -122,6 +124,13 @@ function buildInterface() {
       },
     },
     status: { component: COMPONENT.STATUS, matches: "Destinations: %total", empty: "No destinations." },
+    tabs: {
+      components: tabLabels.map((_, index) => COMPONENT.TAB_START + index),
+      labelComponents: tabLabels.map((_, index) => COMPONENT.TAB_LABEL_START + index),
+      labels: tabLabels,
+      activeTemplate: "<col=ffffff>%s</col>", inactiveTemplate: "<col=ffd27f>%s</col>",
+      layoutComponent: COMPONENT.LAYOUT, clearQuery: true,
+    },
   };
 }
 

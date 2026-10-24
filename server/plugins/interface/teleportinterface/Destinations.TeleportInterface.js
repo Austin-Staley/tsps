@@ -1,5 +1,6 @@
 /**
- * The ::teleports destinations from data/teleports.json, and the rows each tab shows.
+ * The ::teleports destinations from data/teleports.json: every destination's row, and which
+ * of them each tab lists.
  * A destination's row id is its position in the file, so ids only have to agree between a
  * player's open interface and the server; anything saved uses the destination's key.
  */
@@ -8,8 +9,6 @@ const DATA = require("../data/teleports.json");
 const TAB = Object.fromEntries(DATA.tabs.map(({ key }) => [key.toUpperCase(), key]));
 const TAB_ORDER = DATA.tabs.map(({ key }) => key);
 const TAB_LABELS = Object.fromEntries(DATA.tabs.map(({ key, label }) => [key, label]));
-// Header rows need ids the client accepts, clear of every destination's.
-const HEADER_ID_BASE = 10000;
 
 const DESTINATIONS = DATA.destinations.map((entry, index) => ({
   ...entry,
@@ -55,45 +54,54 @@ function row(entry, panelOf) {
   };
 }
 
-/** Rows under headers, in the order each header first appears, each section sorted by name. */
-function grouped(entries, headerOf, panelOf) {
+/** Every destination's row once; `panelOf(entry)` adds its details-panel text. */
+function catalog(panelOf = undefined) {
+  return DESTINATIONS.map((entry) => row(entry, panelOf));
+}
+
+/** Row ids under headers, in the order each header first appears, each section sorted by name. */
+function grouped(entries, headerOf) {
   const sections = new Map();
   for (const entry of entries) {
     const header = headerOf(entry);
     if (!sections.has(header)) sections.set(header, []);
     sections.get(header).push(entry);
   }
-  const rows = [];
+  const layout = [];
   for (const [header, members] of sections) {
-    rows.push({ id: HEADER_ID_BASE + rows.length, name: header, header: true });
-    for (const entry of [...members].sort((a, b) => a.name.localeCompare(b.name))) rows.push(row(entry, panelOf));
+    layout.push({ header });
+    for (const entry of [...members].sort((a, b) => a.name.localeCompare(b.name))) layout.push(entry.id);
   }
-  return rows;
+  return layout;
 }
 
 /** Favourites by name, then the most recent teleports, newest first. */
-function savedRows(favouriteKeys, recentKeys, panelOf) {
-  const rows = [];
-  const section = (name, entries) => {
+function savedLayout(favouriteKeys, recentKeys) {
+  const layout = [];
+  const section = (header, entries) => {
     if (entries.length === 0) return;
-    rows.push({ id: HEADER_ID_BASE + rows.length, name, header: true });
-    for (const entry of entries) rows.push(row(entry, panelOf));
+    layout.push({ header });
+    for (const entry of entries) layout.push(entry.id);
   };
   const known = (keys) => keys.map((key) => BY_KEY.get(key)).filter(Boolean);
   section("Favourites", known(favouriteKeys).sort((a, b) => a.name.localeCompare(b.name)));
   section("Recent", known(recentKeys));
-  return rows;
+  return layout;
 }
 
-/** A tab's rows; `panelOf(entry)` adds each row's details-panel text. */
-function rowsFor(tab, favouriteKeys = [], recentKeys = [], panelOf = undefined) {
-  if (tab === TAB.SAVED) return savedRows(favouriteKeys, recentKeys, panelOf);
-  if (tab === TAB.ALL) return grouped(DESTINATIONS, (entry) => TAB_LABELS[entry.tabs[0]], panelOf);
-  return grouped(DESTINATIONS.filter((entry) => entry.tabs.includes(tab)), (entry) => entry.group ?? TAB_LABELS[tab], panelOf);
+function tabLayout(tab, favouriteKeys = [], recentKeys = []) {
+  if (tab === TAB.SAVED) return savedLayout(favouriteKeys, recentKeys);
+  if (tab === TAB.ALL) return grouped(DESTINATIONS, (entry) => TAB_LABELS[entry.tabs[0]]);
+  return grouped(DESTINATIONS.filter((entry) => entry.tabs.includes(tab)), (entry) => entry.group ?? TAB_LABELS[tab]);
+}
+
+/** What each tab lists, in TAB_ORDER, as the list runtime's `tabs` layout expects. */
+function layouts(favouriteKeys = [], recentKeys = []) {
+  return TAB_ORDER.map((tab) => tabLayout(tab, favouriteKeys, recentKeys));
 }
 
 module.exports = {
-  TAB, TAB_ORDER, TAB_LABELS, DESTINATIONS, init, iconId, location, wildernessLevel, rowsFor,
+  TAB, TAB_ORDER, TAB_LABELS, DESTINATIONS, init, iconId, location, wildernessLevel, catalog, layouts,
   byId: (id) => BY_ID.get(id),
   byKey: (key) => BY_KEY.get(key),
 };

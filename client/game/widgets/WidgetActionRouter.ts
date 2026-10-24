@@ -348,6 +348,7 @@ export class WidgetActionRouter {
             }
 
             sendWidgetAction(payload);
+            this.deps.getCustomInterfaces().handleWidgetOp(groupId | 0, childId | 0);
         } catch (err) {
             console.warn("[OsrsClient] widget action dispatch failed", err);
         }

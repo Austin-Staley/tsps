@@ -511,6 +511,8 @@ export function processWidgetClickInput(
                             sendWidgetAction(payload);
                             if (customRowId !== undefined) {
                                 deps.getCustomInterfaces().handleRowOp(customRowId, opId);
+                            } else {
+                                deps.getCustomInterfaces().handleWidgetOp(groupId, childId);
                             }
                         }
                     } catch (err) {

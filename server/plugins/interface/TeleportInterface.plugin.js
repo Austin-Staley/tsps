@@ -19,7 +19,7 @@ const OP = { SELECT: 1, TELEPORT: 2, FAVOURITE: 3 };
 const SEARCH_MAX_LENGTH = 40;
 const TAB_UIDS = TAB_ORDER.map((_, index) => uid(COMPONENT.TAB_START + index));
 const ROW_UIDS = Array.from({ length: Layout.ROW_SLOTS }, (_, slot) => uid(COMPONENT.ROW_LABEL_START + slot));
-const INTERFACE_DEFINITION = Layout.buildInterface();
+const INTERFACE_DEFINITION = Layout.buildInterface(TAB_ORDER.map((tab) => TAB_LABELS[tab]));
 
 let core;
 let pluginApi;
@@ -33,16 +33,17 @@ function selectedTab(player) {
   return TAB_ORDER.includes(tab) ? tab : TAB.ALL;
 }
 
-function showTab(player, tab) {
-  player.setAttribute(TAB_ATTRIBUTE, tab);
-  const sender = player.getPacketSender();
-  TAB_ORDER.forEach((current, index) => {
-    const colour = current === tab ? "ffffff" : "ffd27f";
-    sender.sendString(`<col=${colour}>${TAB_LABELS[current]}</col>`, uid(COMPONENT.TAB_LABEL_START + index));
-  });
+/**
+ * Every destination's row (with its panel text) and each tab's layout. The client switches
+ * tabs from these itself; `active` is sent only on open, so a refresh never moves the tab.
+ */
+function sendRows(player, active = undefined) {
   const favouriteKeys = favourites(player);
-  const rows = Destinations.rowsFor(tab, favouriteKeys, recent(player), (entry) => panelText(player, entry, favouriteKeys));
-  sender.sendString(JSON.stringify(rows), uid(COMPONENT.DATA));
+  const sender = player.getPacketSender();
+  sender.sendString(JSON.stringify(Destinations.catalog((entry) => panelText(player, entry, favouriteKeys))), uid(COMPONENT.DATA));
+  const layout = { tabs: Destinations.layouts(favouriteKeys, recent(player)) };
+  if (active !== undefined) layout.active = TAB_ORDER.indexOf(active);
+  sender.sendString(JSON.stringify(layout), uid(COMPONENT.LAYOUT));
 }
 
 function killCountLine(player, entry) {
@@ -97,7 +98,9 @@ function open(player, query = "") {
     postScripts: [{ scriptId: 227, args: [uid(COMPONENT.FRAME), "Server Teleports"] }],
   });
   player.setAttribute(SELECTED_ATTRIBUTE, undefined);
-  showTab(player, query ? TAB.ALL : selectedTab(player));
+  const tab = query ? TAB.ALL : selectedTab(player);
+  player.setAttribute(TAB_ATTRIBUTE, tab);
+  sendRows(player, tab);
   player.getPacketSender().sendString(query.slice(0, SEARCH_MAX_LENGTH), uid(COMPONENT.SEARCH_INPUT));
   showEmptyPanel(player);
 }
@@ -140,8 +143,9 @@ function toggleFavourite(player, entry) {
   const keys = favourites(player);
   const kept = keys.filter((key) => key !== entry.key);
   player.setAttribute(FAVOURITES_ATTRIBUTE, kept.length === keys.length ? [...keys, entry.key] : kept);
-  // Fresh rows carry the new Favourite label; the client keeps its scroll and selection.
-  showTab(player, selectedTab(player));
+  // Fresh rows carry the new Favourite label and Saved tab; the client keeps its tab, scroll
+  // and selection.
+  sendRows(player);
 }
 
 /** The client has already drawn the panel; the panel's buttons act on this selection. */
@@ -160,13 +164,10 @@ function openTeleports({ player, parts }) {
   return true;
 }
 
+/** The client has already switched; this tab is where ::teleports reopens. */
 function clickTab({ player, buttonId }) {
   if (!isOpen(player)) return false;
-  showTab(player, TAB_ORDER[TAB_UIDS.indexOf(buttonId)]);
-  // A tab is a fresh list; searching every tab at once is what All is for. The query was typed
-  // client-side, so the server's copy of the box is stale and must not swallow the clear.
-  player.getFrameUpdater().clear(uid(COMPONENT.SEARCH_INPUT));
-  player.getPacketSender().sendString("", uid(COMPONENT.SEARCH_INPUT));
+  player.setAttribute(TAB_ATTRIBUTE, TAB_ORDER[TAB_UIDS.indexOf(buttonId)]);
   return true;
 }
 

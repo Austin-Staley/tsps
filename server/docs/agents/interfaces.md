@@ -38,6 +38,10 @@ Rules for both:
   reaches the server, which only needs to remember the selection. New data for the same
   list keeps its scroll and redraws the selected row's panel, so a server can refresh rows
   (a toggled favourite) without jolting the list; a new query scrolls back to the top.
+  A `tabs` declaration switches tabs client-side too: the data component holds every row
+  once, and `tabs.layoutComponent` gets `{ active?, tabs: [[rowId | { header }]] }`. A tab
+  click shows that tab's rows at once (still telling the server, which can remember it);
+  only send `active` when opening, so a later refresh doesn't pull the player back.
   `plugins/interface/TeleportInterface.plugin.js` uses all of these.
 - `sendString` skips text equal to the last it sent to that component. Text the client
   changes on its own (a typed search) is unknown to the server, so clear its copy with

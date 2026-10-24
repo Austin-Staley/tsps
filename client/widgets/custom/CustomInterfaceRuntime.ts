@@ -94,6 +94,24 @@ export type CustomInterfaceDeclaration = {
         truncated?: string;
     };
     hint?: { component: number; text: string };
+    /**
+     * Tabs switched client-side, with no wait for the server. The data component then holds a
+     * catalog of every row once, and `layoutComponent` receives
+     * `{ active?, tabs: [[rowId | { header }]] }`: each tab's rows in order, with section
+     * headers. A tab click (still sent to the server) shows that tab's rows, recolours the
+     * labels and, with `clearQuery`, empties the search. A layout without `active` keeps the
+     * player's current tab, so a refresh can't pull them back to an older one.
+     */
+    tabs?: {
+        components: number[];
+        labelComponents: number[];
+        labels: string[];
+        /** "%s" is replaced with the tab's label. */
+        activeTemplate?: string;
+        inactiveTemplate?: string;
+        layoutComponent: number;
+        clearQuery?: boolean;
+    };
 };
 
 export type CustomInterfaceRow = {
@@ -199,6 +217,9 @@ export class CustomInterfaceRuntime {
     private slotRows: (CustomInterfaceRow | undefined)[] = [];
     private labelActions = new Map<number, unknown>();
     private selectedRowId: number | undefined;
+    private catalog = new Map<number, CustomInterfaceRow>();
+    private tabLayouts: Array<Array<number | { header: string }>> = [];
+    private activeTab = 0;
     private scrollbarState = new Map<number, string>();
     private fetchTimer: ReturnType<typeof setTimeout> | undefined;
     private fetchSequence = 0;
@@ -221,6 +242,7 @@ export class CustomInterfaceRuntime {
         this.focused = !!declaration.search;
         this.syncInput();
         this.applyHint();
+        this.applyTabLabels();
         this.applyScrollRegions();
         this.renderRows(true);
         return true;
@@ -236,19 +258,45 @@ export class CustomInterfaceRuntime {
     handleSetText(uid: number, text: string): boolean {
         const search = this.declaration?.search;
         if (search?.dataComponent !== undefined && uid === this.uid(search.dataComponent)) {
+            let rows: CustomInterfaceRow[] = [];
             try {
-                const rows = JSON.parse(text);
-                this.sourceRows = Array.isArray(rows)
-                    ? rows
+                const parsed = JSON.parse(text);
+                rows = Array.isArray(parsed)
+                    ? parsed
                           .filter((row) => Number.isInteger(row?.id) && row.id > 0 && typeof row.name === "string")
                           .map(toRow)
                     : [];
             } catch {
-                this.sourceRows = [];
+                rows = [];
+            }
+            if (this.declaration?.tabs) {
+                this.catalog = new Map(rows.map((row) => [row.id, row]));
+                this.sourceRows = this.tabRows();
+            } else {
+                this.sourceRows = rows;
             }
             // New data for the same list (a favourite toggled) keeps the scroll; a new query
             // starts from the top.
             this.scheduleFetch(false);
+            if (this.selectedRowId !== undefined) this.applySelection(this.selectedRowId);
+            return true;
+        }
+        const tabs = this.declaration?.tabs;
+        if (tabs && uid === this.uid(tabs.layoutComponent)) {
+            let layout: any;
+            try {
+                layout = JSON.parse(text);
+            } catch {
+                layout = undefined;
+            }
+            this.tabLayouts = Array.isArray(layout?.tabs)
+                ? layout.tabs.map((tab: unknown) => (Array.isArray(tab) ? tab : []))
+                : [];
+            const opened = Number.isInteger(layout?.active);
+            if (opened) this.activeTab = layout.active;
+            this.applyTabLabels();
+            this.sourceRows = this.tabRows();
+            this.scheduleFetch(opened);
             if (this.selectedRowId !== undefined) this.applySelection(this.selectedRowId);
             return true;
         }
@@ -282,6 +330,52 @@ export class CustomInterfaceRuntime {
         return undefined;
     }
 
+    /** A widget op was sent: a declared tab switches its list now, not a tick later. */
+    handleWidgetOp(groupId: number, childId: number): void {
+        const declaration = this.declaration;
+        const tabs = declaration?.tabs;
+        if (!tabs || (groupId | 0) !== (declaration!.groupId | 0)) return;
+        const index = [tabs.components, tabs.labelComponents].reduce(
+            (found, components) => (found >= 0 ? found : components.indexOf(childId | 0)),
+            -1,
+        );
+        if (index < 0) return;
+        this.activeTab = index;
+        this.applyTabLabels();
+        this.sourceRows = this.tabRows();
+        if (tabs.clearQuery) {
+            this.query = "";
+            this.syncInput();
+        }
+        this.scheduleFetch(true);
+    }
+
+    /** The active tab's rows from the catalog, with its section headers. */
+    private tabRows(): CustomInterfaceRow[] {
+        const rows: CustomInterfaceRow[] = [];
+        (this.tabLayouts[this.activeTab] ?? []).forEach((entry, index) => {
+            if (typeof entry === "number") {
+                const row = this.catalog.get(entry);
+                if (row) rows.push(row);
+            } else if (entry && typeof entry.header === "string") {
+                // Header ids only have to differ from each other and from the catalog's.
+                rows.push({ id: -1 - index, name: entry.header, header: true });
+            }
+        });
+        return rows;
+    }
+
+    private applyTabLabels(): void {
+        const tabs = this.declaration?.tabs;
+        if (!tabs) return;
+        tabs.labelComponents.forEach((component, index) => {
+            const template = index === this.activeTab
+                ? tabs.activeTemplate ?? "%s"
+                : tabs.inactiveTemplate ?? "%s";
+            this.setText(component, template.replace("%s", tabs.labels[index] ?? ""));
+        });
+    }
+
     /** A clickable row was sent with this op: the select op shows the row's details now. */
     handleRowOp(rowId: number, opId: number): void {
         const select = this.declaration?.list?.select;
@@ -291,7 +385,8 @@ export class CustomInterfaceRuntime {
 
     private applySelection(rowId: number): void {
         const select = this.declaration?.list?.select;
-        const row = this.sourceRows.find((candidate) => candidate.id === rowId && !candidate.header);
+        const row = this.catalog.get(rowId)
+            ?? this.sourceRows.find((candidate) => candidate.id === rowId && !candidate.header);
         if (!select || !row) return;
         this.selectedRowId = rowId;
         for (const [field, component] of Object.entries(select.texts ?? {})) {
@@ -417,6 +512,9 @@ export class CustomInterfaceRuntime {
         this.visibleStartRow = -1;
         this.slotRows = [];
         this.selectedRowId = undefined;
+        this.catalog = new Map();
+        this.tabLayouts = [];
+        this.activeTab = 0;
         this.labelActions.clear();
         this.scrollbarState.clear();
     }

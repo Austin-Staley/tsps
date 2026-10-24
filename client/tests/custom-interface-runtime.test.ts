@@ -333,6 +333,60 @@ async function main(): Promise<void> {
     assert.equal(listView.scrollY, 0, "a new query starts from the top");
     runtime.onInterfaceClosed(LIST_GROUP);
 
+    // Tabs switch client-side over a catalog of rows and a per-tab layout.
+    const TAB_GROUP = 30010;
+    const tabUid = (component: number) => (TAB_GROUP << 16) | component;
+    setCustomInterface({
+        groupId: TAB_GROUP,
+        widgets: [{ uid: tabUid(0), parentUid: -1 }],
+        search: { inputComponent: 1, dataComponent: 2 },
+        list: {
+            viewComponent: 3, slotCount: 3, columns: 1, rowHeight: 20,
+            iconStart: 10, labelStart: 20, backgroundStart: 30, itemLabel: "%name", clickable: true,
+            select: { texts: { title: 40 } },
+        },
+        tabs: {
+            components: [50, 51], labelComponents: [60, 61], labels: ["Bosses", "Saved"],
+            activeTemplate: "<col=ffffff>%s</col>", inactiveTemplate: "<col=ffd27f>%s</col>",
+            layoutComponent: 4, clearQuery: true,
+        },
+    });
+    for (const component of [1, 2, 3, 4, 10, 11, 12, 20, 21, 22, 30, 31, 32, 40, 50, 51, 60, 61]) {
+        widgets.set(tabUid(component), { uid: tabUid(component), width: 200, height: 60, scrollY: 0 });
+    }
+    runtime.onInterfaceOpened(TAB_GROUP);
+    runtime.handleSetText(tabUid(2), JSON.stringify([
+        { id: 1, name: "Nex", panel: { title: "Nex" } },
+        { id: 2, name: "Zulrah", panel: { title: "Zulrah" } },
+        { id: 3, name: "Vorkath", panel: { title: "Vorkath" } },
+    ]));
+    runtime.handleSetText(tabUid(4), JSON.stringify({ active: 0, tabs: [[{ header: "Bosses" }, 1, 2, 3], [2]] }));
+    assert.equal(widgets.get(tabUid(60)).text, "<col=ffffff>Bosses</col>", "the active tab is highlighted");
+    assert.equal(widgets.get(tabUid(61)).text, "<col=ffd27f>Saved</col>");
+    assert.equal(widgets.get(tabUid(20)).text, "Bosses", "headers come from the layout");
+    assert.equal(widgets.get(tabUid(21)).text, "Nex", "rows come from the catalog");
+    assert.equal(runtime.rowIdAt(TAB_GROUP, 20), null, "a layout header is not clickable");
+    runtime.handleSetText(tabUid(1), "zul");
+    assert.equal(widgets.get(tabUid(21)).text, "Zulrah");
+    runtime.handleWidgetOp(TAB_GROUP, 51);
+    assert.equal(widgets.get(tabUid(61)).text, "<col=ffffff>Saved</col>", "a tab click switches at once");
+    assert.equal(widgets.get(tabUid(60)).text, "<col=ffd27f>Bosses</col>");
+    assert.equal(widgets.get(tabUid(1)).text, "", "and clears the search");
+    assert.equal(widgets.get(tabUid(20)).text, "Zulrah");
+    assert.equal(widgets.get(tabUid(21)).hidden, true, "only that tab's rows show");
+    runtime.handleRowOp(2, 1);
+    assert.equal(widgets.get(tabUid(40)).text, "Zulrah");
+    runtime.handleSetText(tabUid(4), JSON.stringify({ tabs: [[1, 2, 3], [2, 3]] }));
+    assert.equal(widgets.get(tabUid(61)).text, "<col=ffffff>Saved</col>", "a refresh without active keeps the tab");
+    assert.equal(widgets.get(tabUid(21)).text, "Vorkath", "and shows the refreshed rows");
+    runtime.handleWidgetOp(TAB_GROUP, 60);
+    assert.equal(widgets.get(tabUid(60)).text, "<col=ffffff>Bosses</col>", "a label click switches too");
+    runtime.handleWidgetOp(TAB_GROUP, 99);
+    assert.equal(widgets.get(tabUid(60)).text, "<col=ffffff>Bosses</col>", "other widgets leave the tab");
+    runtime.handleSetText(tabUid(2), JSON.stringify([{ id: 2, name: "Zulrah", panel: { title: "Zulrah (favourite)" } }]));
+    assert.equal(widgets.get(tabUid(40)).text, "Zulrah (favourite)", "the selection redraws from a new catalog");
+    runtime.onInterfaceClosed(TAB_GROUP);
+
     console.log("custom-interface-runtime.test.ts: all tests passed");
 }
 
