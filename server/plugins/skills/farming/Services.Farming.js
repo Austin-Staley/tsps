@@ -294,7 +294,7 @@ function farmingItemOnNpc(event) {
     const unnoted = definition.noteTemplate >= 0 ? definition.note : id;
     const name = core.CacheDefinitions.getItem(unnoted).name;
     if (storeTool(player, event.slot)) return;
-    const harvested = name === "Willow branch" || [...Data.CROPS.values()].some(c => c.sapling === id || (!Data.WOOD_TREES.has(c.type) && c.produce === id)
+    const harvested = ["Weeds", "Willow branch"].includes(name) || [...Data.CROPS.values()].some(c => c.sapling === id || (!Data.WOOD_TREES.has(c.type) && c.produce === id)
         || (c.type === "HERB" && core.CacheDefinitions.getItem(c.produce).name.replace(/^Grimy /, "").toLowerCase() === name.toLowerCase()));
     const loc = target.getLocation();
     if (name === "Cabbage" && loc.getX() > 3040 && loc.getX() < 3070 && loc.getY() > 3280 && loc.getY() < 3320) {
