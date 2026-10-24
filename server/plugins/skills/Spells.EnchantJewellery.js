@@ -24,6 +24,7 @@ function handleSpellOnItem(event) {
   inventory.deleteNumber(itemId, 1);
   inventory.addItem(new core.Item(resultId, 1));
   player.getSkillManager().addExperiences(core.Skill.MAGIC, spell.baseExperience());
+  pluginApi.emitCustomEvent("magic:enchanted", { player, spellName: spell.data.name, itemId, productId: resultId });
 }
 
 module.exports = function attach(api) {

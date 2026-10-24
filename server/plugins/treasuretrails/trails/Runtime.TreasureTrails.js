@@ -4,6 +4,8 @@ const { randomUUID } = require("node:crypto");
 const Catalogue = require("./Catalogue.TreasureTrails");
 const Dialogue = require("./Dialogue.TreasureTrails");
 const { TIERS } = require("./Tiers.TreasureTrails");
+const SKILL_CHALLENGES = require("./data/skill-challenges.json");
+const NPC_SPAWNS = require("../../../data/definitions/npc-spawns.json");
 const META_PREFIX = "treasure-trails:";
 // The clue helper names a target tile but no area. Emote steps accept the beginner
 // runtime's usual radius around it; music steps need the player near Cecilia's bridge.
@@ -26,8 +28,33 @@ const metaKey = tier => META_PREFIX + tier.name;
 const completedAttribute = tier => `${META_PREFIX}${tier.name}-completed`;
 
 function data(tier) {
-  if (!catalogues.has(tier.name)) catalogues.set(tier.name, Catalogue.load(core, tier));
+  if (!catalogues.has(tier.name)) catalogues.set(tier.name, loadCatalogue(tier));
   return catalogues.get(tier.name);
+}
+
+/** The tier's catalogue, with the steps and Sherlock tasks this server can finish. */
+function loadCatalogue(tier) {
+  const loaded = Catalogue.load(core, tier);
+  loaded.supportedTasks = [...loaded.tasks.values()].filter(task => SKILL_CHALLENGES[task.key]);
+  loaded.rollable = loaded.steps.filter(step => rollable(loaded, step));
+  return loaded;
+}
+
+let spawned = null;
+/** NPC ids with a world spawn (npc-spawns.json names them by id or by NpcIdentifiers key). */
+function worldSpawned() {
+  spawned ??= new Set(NPC_SPAWNS.map(entry => entry.id ?? core.NpcIdentifiers[entry.key]).filter(Number.isInteger));
+  return spawned;
+}
+
+/**
+ * Steps this server can finish: a kill step needs one of its NPCs in the world (no pyre-ship
+ * spirit or quest-only shellbane gryphon), and Sherlock needs a task the server can detect.
+ */
+function rollable(catalogue, step) {
+  if (step.target === "kill") return step.npcIds.some(id => worldSpawned().has(id));
+  if (step.skill) return step.skill.itemId != null && catalogue.supportedTasks.length > 0;
+  return true;
 }
 
 function tierOfItem(id) {
@@ -58,11 +85,11 @@ function stateOf(player, slot, random = Math.random) {
   const tier = item && tierOfItem(item.getId());
   if (!tier) return null;
   const current = item.getMetaValue(metaKey(tier));
-  if ([data(tier).byItem.get(item.getId()).challenge?.itemId, data(tier).byItem.get(item.getId()).puzzle?.itemId].includes(item.getId()))
+  if (isExtra(tier, item.getId()))
     return trails(player).find(trail => trail.state.token === current?.token && trail.state.revision === current?.revision) ?? null;
   if (validState(tier, item, current)) return { tier, item, slot, state: current, step: data(tier).byRow.get(current.row) };
   // A clue without a trail (a drop, box or vessel) starts one on a random step of its tier.
-  const step = pick(data(tier).steps, random);
+  const step = pick(data(tier).rollable, random);
   const state = { version: 1, token: randomUUID(), revision: 0, completed: 0, length: trailLength(tier, random), row: step.row };
   const replacement = stepItem(tier, step, state);
   inventory.setItem(slot, replacement);
@@ -87,6 +114,12 @@ function startedTrails(player) {
 
 function stillHeld(player, snapshot) {
   return trails(player).find(trail => trail.state.token === snapshot.state.token && trail.state.revision === snapshot.state.revision);
+}
+
+/** A challenge scroll, puzzle box or Sherlock's scroll: carried beside its clue, never a clue itself. */
+function isExtra(tier, id) {
+  const step = data(tier).byItem.get(id);
+  return [step.challenge?.itemId, step.puzzle?.itemId, step.skill?.itemId].includes(id);
 }
 
 function clicked(event) {
@@ -121,10 +154,14 @@ function read(event) {
   const item = event.player.getInventory().getItems()[event.slot];
   const tier = tierOfItem(item.getId());
   const step = data(tier).byItem.get(item.getId());
-  if (item.getId() === step.challenge?.itemId) {
+  if ([step.challenge?.itemId, step.skill?.itemId].includes(item.getId())) {
+    // A shared scroll (elite) stands for many rows: its own trail says which question or task.
+    const meta = item.getMetaValue(metaKey(tier));
+    const own = trails(event.player).find(trail => trail.state.token === meta?.token)?.step ?? step;
+    const text = item.getId() === own.skill?.itemId ? data(tier).tasks.get(meta?.task)?.text : own.challenge?.question;
     const group = data(tier).textInterface;
     sender.sendInterface(group);
-    sender.sendString(step.challenge.question, (group << 16) | 2);
+    sender.sendString(text ?? "", (group << 16) | 2);
     return true;
   }
   const trail = stateOf(event.player, event.slot);
@@ -151,6 +188,16 @@ function dismissUri(player) {
   uris.delete(player);
 }
 
+/** What a finished step leaves: the next step's clue, or the casket after the last. */
+function nextItem(trail, random = Math.random) {
+  const completed = trail.state.completed + 1;
+  if (completed >= trail.state.length) return { casket: true, item: new core.Item(data(trail.tier).casket, 1) };
+  // A step's own progress ends with it.
+  const { defeated, solved, image, ...carried } = trail.state;
+  const step = pick(data(trail.tier).rollable, random);
+  return { casket: false, item: stepItem(trail.tier, step, { ...carried, completed, revision: trail.state.revision + 1 }) };
+}
+
 /** `said` overrides the hand-over message, as the giving NPC's transcript words it: { clue, casket }. */
 function advance(player, snapshot, random = Math.random, said = {}, show = true, removeUri = true) {
   const trail = stillHeld(player, snapshot);
@@ -158,23 +205,13 @@ function advance(player, snapshot, random = Math.random, said = {}, show = true,
   if (removeUri) dismissUri(player);
   dismissEncounter(player);
   const inventory = player.getInventory();
-  for (const kind of ["challenge", "puzzle"]) {
+  for (const kind of ["challenge", "puzzle", "skill"]) {
     const slot = auxiliarySlot(player, trail, kind);
     if (slot >= 0) inventory.setItem(slot, new core.Item(-1, 0));
   }
-  const completed = trail.state.completed + 1;
-  let received, words;
-  // A step's own progress ends with it.
-  const { defeated, solved, image, ...carried } = trail.state;
-  if (completed >= trail.state.length) {
-    // The exact slot matters when scrolls of several tiers are carried.
-    received = new core.Item(data(trail.tier).casket, 1);
-    words = said.casket ?? "You've obtained a casket!";
-  } else {
-    const step = pick(data(trail.tier).steps, random);
-    received = stepItem(trail.tier, step, { ...carried, completed, revision: trail.state.revision + 1 });
-    words = said.clue ?? "You've found another clue!";
-  }
+  const { casket, item: received } = nextItem(trail, random);
+  const words = casket ? said.casket ?? "You've obtained a casket!" : said.clue ?? "You've found another clue!";
+  // The exact slot matters when scrolls of several tiers are carried.
   inventory.setItem(trail.slot, received);
   inventory.refreshItems();
   if (show) Dialogue.itemBox(player, received.getId(), words);
@@ -207,8 +244,9 @@ function talk(event) {
     meetUri(player, npc, npcId, trail);
     return;
   }
+  // Sherlock's skill challenges are Skills.TreasureTrails's.
   const trail = startedTrails(player).find(entry => ["anagram", "cryptic", "cipher", "music"].includes(entry.step.family) &&
-    entry.step.target === "npc" && entry.step.npcIds.includes(npcId));
+    entry.step.target === "npc" && !entry.step.skill && entry.step.npcIds.includes(npcId));
   if (!trail) return;
   event.handled = true;
   if (trail.step.family === "music") { hearSong(player, npcId, trail); return; }
@@ -367,6 +405,19 @@ function keyDrop({ player, npcId, drops }) {
   drops.push({ itemId: trail.step.keyItem, amount: 1 });
 }
 
+/**
+ * A kill step's NPC drops the next clue, or the casket, for its killer (Wiki cryptic clues:
+ * "pick up the clue or casket that it drops"). The clue in hand goes, so the drop is never a
+ * second clue of the tier; the drop keeps the trail's meta.
+ */
+function killDrop({ killer, npc, npcId }) {
+  const trail = killer && trails(killer).find(entry => entry.step.target === "kill" && entry.step.npcIds.includes(npcId));
+  if (!trail) return;
+  const next = nextItem(trail);
+  killer.getInventory().deleteAtSlot(trail.slot, 1);
+  core.ItemOnGroundManager.registerLocation(killer, next.item, npc.getLocation().clone());
+}
+
 function dig(event) {
   const I = core.ItemIdentifiers;
   if (event.allow === false || !/\bdig\b/i.test(String(event.option)) || ![I.SPADE, I.EASTFLOOR_SPADE].includes(event.itemId)) return;
@@ -507,7 +558,7 @@ module.exports = function attachTreasureTrails(pluginApi) {
   api = pluginApi;
   core = api.core;
   // Build before gameplay so the first object/NPC click cannot stall a game tick.
-  catalogues = new Map(TIERS.map(tier => [tier.name, Catalogue.load(core, tier)]));
+  catalogues = new Map(TIERS.map(tier => [tier.name, loadCatalogue(tier)]));
   for (const tier of TIERS) api.persistAttribute(completedAttribute(tier), 0);
   Dialogue.attach(api);
   for (const tier of TIERS) api.onItemAction(`Clue scroll (${tier.name})`, readActions());
@@ -524,7 +575,9 @@ module.exports = function attachTreasureTrails(pluginApi) {
   api.onPlayerDisconnect(leave);
   api.onPlayerDeath(leave);
   api.onNpcDeath(encounterDied);
+  api.onNpcDeath(killDrop);
 };
 
 Object.assign(module.exports, { META_PREFIX, EMOTE_RADIUS, MUSIC_RADIUS, data, tierOfItem, trailLength, stateOf, trails, read, checkSteps,
-  advance, puzzleSlot, talk, search, keyDrop, dig, emote, encounterDied, songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey });
+  advance, nextItem, puzzleSlot, auxiliarySlot, startedTrails, stillHeld, rollable, talk, search, keyDrop, killDrop, dig, emote, encounterDied,
+  songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey });

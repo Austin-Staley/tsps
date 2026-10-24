@@ -208,6 +208,8 @@ export class PrayerHandler {
             }
             PrayerHandler.startDrain(player);
             player.markPrayerActivatedThisTick();
+            // Loaded lazily, as in canUse: PluginManager imports Player.
+            require("../../plugins/PluginManager").PluginManager.emitCustomEvent("prayer:activated", { player, prayerId });
             if (pd.hint !== -1) {
                 const hintId = PrayerHandler.getHeadHint(character);
                 player.getAppearance().setHeadHint(hintId);

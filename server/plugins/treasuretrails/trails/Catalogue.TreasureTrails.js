@@ -9,7 +9,7 @@ const CLUE_ROW_PARAM = 623;
 const TRAIL_ITEM_GROUP_PARAM = 258;
 const WORN_SLOTS = { hat: "HEAD_SLOT", back: "CAPE_SLOT", front: "AMULET_SLOT", rhand: "WEAPON_SLOT", torso: "BODY_SLOT", lhand: "SHIELD_SLOT",
   legs: "LEG_SLOT", hands: "HANDS_SLOT", feet: "FEET_SLOT", ring: "RING_SLOT", quiver: "AMMUNITION_SLOT" };
-const STEP_TABLES = ["anagram", "cipher", "coordinate", "cryptic", "emote", "fairyring", "falobard", "hotcold", "map", "music", "skillchallenge"];
+const STEP_TABLES = ["anagram", "cipher", "coordinate", "cryptic", "emote", "fairyring", "falobard", "hotcold", "map", "music"];
 const MAP_INTERFACES = require("./data/map-interfaces.json");
 
 function coordinate(packed) {
@@ -58,6 +58,8 @@ function load(core, tier) {
     if (kind === "loc") return { ...base, locIds: [value(targetRow, "loc"), value(targetRow, "fallback_loc")].filter(id => id != null && id >= 0) };
     // Kill one of these NPCs for the step's key, then open the loc with it.
     if (kind === "key") return { ...base, locIds: values(targetRow, "loc"), npcIds: morphs(values(targetRow, "npcs")), keyItem: value(targetRow, "key") };
+    // Kill one of these NPCs and it drops the next clue (elite cryptic clues).
+    if (kind === "kill") return { ...base, npcIds: morphs(values(targetRow, "npcs")) };
     return base;
   }
   function outfit(row) {
@@ -98,6 +100,16 @@ function load(core, tier) {
       unlock: value(row, "unlock_text", "") };
   }
 
+  /** Sherlock's skill challenges for the tier: the task and its stat requirements. */
+  function skillTasks() {
+    const id = C.getDbTableId("cluehelper_clue_skillchallenge");
+    return C.getDbTableRows(id).filter(row => value(row, "difficulty") === tier.difficulty).map(row => ({
+      row: row.id, key: C.getDbRowName(row.id), text: value(row, "clue_text", ""),
+      requirements: values(row, "requirements").map(id => C.getDbRow(id)).filter(entry => tableName(entry) === "cluehelper_requirement_stat")
+        .map(entry => ({ stat: value(entry, "stat"), level: value(entry, "level") })),
+    }));
+  }
+
   const steps = [];
   for (const family of STEP_TABLES) {
     const id = C.getDbTableId(`cluehelper_clue_${family}`);
@@ -132,25 +144,34 @@ function load(core, tier) {
     if (definition.name === scrollName && !itemByRow.has(row)) itemByRow.set(row, id);
     if (definition.name === challengeName && !challengeByRow.has(row)) challengeByRow.set(row, id);
   }
-  // A puzzle box pairs with its clue by gameval name: "<clue gameval>_puzzlebox".
+  // Paired items go by gameval name: a puzzle box is "<clue gameval>_puzzlebox"; where a row has
+  // no challenge scroll of its own (elite), the tier shares "trail_<tier>_<family>_challenge", and
+  // Sherlock's clues ("trail_<tier>_skill_exp<n>") share "trail_<tier>_skill_challenge".
   const objIdByName = new Map([...C.getObjNames()].map(([id, objName]) => [objName, id]));
   const clueSteps = steps.filter(step => itemByRow.has(step.row)).map(step => {
     const itemId = itemByRow.get(step.row);
     const resolved = { ...step, itemId };
-    if (step.challenge) resolved.challenge = { ...step.challenge, itemId: challengeByRow.get(step.row) ?? null };
+    if (step.challenge) resolved.challenge = { ...step.challenge,
+      itemId: challengeByRow.get(step.row) ?? objIdByName.get(`trail_${tier.name}_${step.family}_challenge`) ?? null };
     if (step.puzzle) resolved.puzzle = { ...step.puzzle, itemId: objIdByName.get(`${C.getObjNames().get(itemId)}_puzzlebox`) ?? null };
+    if (C.getObjNames().get(itemId)?.startsWith(`trail_${tier.name}_skill_`)) resolved.skill = { itemId: objIdByName.get(`trail_${tier.name}_skill_challenge`) ?? null };
     return resolved;
   });
   const byRow = new Map(clueSteps.map(step => [step.row, step]));
-  const byItem = new Map(clueSteps.map(step => [step.itemId, step]));
-  for (const step of clueSteps) if (step.challenge?.itemId != null) byItem.set(step.challenge.itemId, step);
-  for (const step of clueSteps) if (step.puzzle?.itemId != null) byItem.set(step.puzzle.itemId, step);
+  // Every item a trail of this tier can be held as: its clues, challenge scrolls and boxes.
+  const byItem = new Map();
+  for (const step of clueSteps) for (const id of stepItems(step)) if (!byItem.has(id)) byItem.set(id, step);
   const items = core.ItemIdentifiers;
   const name = tier.name.toUpperCase();
-  return { tier, steps: clueSteps, byRow, byItem, scrollName, challengeName,
+  return { tier, steps: clueSteps, byRow, byItem, scrollName, challengeName, tasks: new Map(skillTasks().map(task => [task.row, task])),
     scroll: items[`CLUE_SCROLL_${name}_`], casket: items[`REWARD_CASKET_${name}_`],
     uri: C.getNpcId(`trail_${tier.name}_uri`), textInterface: C.getInterfaceId("trail_cluetext"),
     rewardInterface: C.getInterfaceId("trail_rewardscreen"), rewardInventory: 141 };
 }
 
-module.exports = { load, coordinate, coordinateText, CLUE_ROW_PARAM, TRAIL_ITEM_GROUP_PARAM, STEP_TABLES };
+/** The items a step's trail can be held as: the clue, then any challenge scroll, puzzle box or skill challenge. */
+function stepItems(step) {
+  return [step.itemId, step.challenge?.itemId, step.puzzle?.itemId, step.skill?.itemId].filter(id => id != null);
+}
+
+module.exports = { load, stepItems, coordinate, coordinateText, CLUE_ROW_PARAM, TRAIL_ITEM_GROUP_PARAM, STEP_TABLES };
