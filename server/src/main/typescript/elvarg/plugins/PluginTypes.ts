@@ -1381,6 +1381,7 @@ export interface PluginCoreApi {
   PlayerDeathTask: any;
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
+  CombatPoisonEffect: any;
   CacheDefinitions: any;
   CacheMaps: any;
   MapRegionReplacementManager: any;
