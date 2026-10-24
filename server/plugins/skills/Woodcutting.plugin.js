@@ -15,6 +15,7 @@ const CrystalAxe = require("./woodcutting/CrystalAxe.Woodcutting");
 const EntTrunk = require("./woodcutting/EntTrunk.Woodcutting");
 const ThickVines = require("./woodcutting/ThickVines.Woodcutting");
 const Shrine = require("./woodcutting/Shrine.Woodcutting");
+const FarmedRedwood = require("./farming/Redwood.Farming");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -581,6 +582,12 @@ const FARMED_HARDWOODS = ["camphor", "ironwood", "rosewood"].map((name) => ({
   ...TREES.find((tree) => tree.name === name),
   respawnTicks: 150,
 }));
+const FARMED_TREES = [...FARMED_HARDWOODS, {
+  ...TREES.find((tree) => tree.name === "redwood"),
+  despawnTicks: 0,
+  depleteChance: FarmedRedwood.DEPLETION_ROLL,
+  respawnTicks: FarmedRedwood.REGROW_TICKS,
+}];
 
 
 
@@ -1130,7 +1137,7 @@ function handleChop(event) {
 
 function requestedChop(event) {
   // Patch hardwoods share log ids with the wild trees but regrow on farming's own timer.
-  let tree = [...FARMED_HARDWOODS, ...TREES].find(tree => tree.logId === event.logId);
+  let tree = [...FARMED_TREES, ...TREES].find(tree => tree.logId === event.logId);
   if (tree && event.removeOnly) tree = { ...tree, logId: -1, xpReward: 0, multi: false };
   if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
 }

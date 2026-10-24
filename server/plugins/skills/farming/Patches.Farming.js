@@ -6,6 +6,7 @@ const Spells = require("./Spells.Farming");
 const Tithe = require("./Tithe.Farming");
 const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
+const Redwood = require("./Redwood.Farming");
 
 const FARM_ATTRIBUTE = "farming:state";
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
@@ -18,9 +19,11 @@ for (const patch of Data.CACHE.patches) {
     const rx = Math.floor((patch.x + patch.maxX) / 128), ry = Math.floor((patch.y + patch.maxY) / 128);
     for (let x = rx - 1; x <= rx + 1; x++) {
         for (let y = ry - 1; y <= ry + 1; y++) {
-            const key = `${x}:${y}:${patch.z}`;
-            if (!PATCHES_BY_REGION.has(key)) PATCHES_BY_REGION.set(key, []);
-            PATCHES_BY_REGION.get(key).push(patch);
+            for (const z of patch.type === "REDWOOD" ? [patch.z, patch.z + 1, patch.z + 2] : [patch.z]) {
+                const key = `${x}:${y}:${z}`;
+                if (!PATCHES_BY_REGION.has(key)) PATCHES_BY_REGION.set(key, []);
+                PATCHES_BY_REGION.get(key).push(patch);
+            }
         }
     }
 }
@@ -82,6 +85,7 @@ function choose(player, entries, page = 0) {
     }, ...shown.map(([text]) => text))));
 }
 function clearPatch(player, patch) {
+    if (patch.type === "REDWOOD") redwoodRegrowth.delete(player);
     const farm = farmFor(player);
     farm.patches[Data.patchKey(patch)] = Model.emptyPatch(Date.now(), farm);
     syncPatch(player, patch);
@@ -97,6 +101,7 @@ function syncPatch(player, patch) {
     // Every patch action ends here, so a changed patch reschedules its owner's next growth.
     if (tracked.has(player)) dirty.add(player);
     sender.sendVarbit(patch.varbit, value);
+    if (patch.type === "REDWOOD") Redwood.refresh(player, patch);
     // The client rebuilds loc geometry on object updates, not varbit updates.
     // Use the actual map locs so multi-tile patches retain every shape/rotation.
     for (let x = patch.x; x <= patch.maxX; x++) {
@@ -519,6 +524,11 @@ function validateTree(event) {
     if (!patch) return;
     const state = stateFor(event.player, patch);
     event.allow = state.status === "grown" && state.checked && !state.stump;
+    if (patch.type === "REDWOOD") {
+        Redwood.advance(state, Date.now());
+        const branch = Redwood.branchIndex(patch, event.object);
+        event.allow = state.status === "grown" && state.checked && branch >= 0 && !state.redwoodBranches?.[branch];
+    }
 }
 function depleteTree(event) {
     const pos = event.object.getLocation();
@@ -526,6 +536,17 @@ function depleteTree(event) {
     if (!patch) return;
     event.handled = true;
     const state = stateFor(event.player, patch);
+    if (patch.type === "REDWOOD") {
+        const branch = Redwood.branchIndex(patch, event.object);
+        if (branch < 0 || state.status !== "grown" || !state.checked) return;
+        Redwood.advance(state, Date.now());
+        state.redwoodBranches ??= [0, 0, 0, 0];
+        if (state.redwoodBranches[branch]) return;
+        state.redwoodBranches[branch] = Date.now() + Redwood.REGROW_TICKS * 600;
+        redwoodRegrowth.set(event.player, Redwood.nextDue(state));
+        syncPatch(event.player, patch);
+        return;
+    }
     state.stump = true;
     state.nextAt = Date.now() + event.respawnTicks * 600;
     syncPatch(event.player, patch);
@@ -540,6 +561,8 @@ const immediate = new Set();
 const dirty = new Set(); // players whose patches changed; rescheduled on the next tick
 const tracked = new WeakSet();
 const seedlingDue = new WeakMap();
+// Only owners of depleted redwood spots need sub-minute checks.
+const redwoodRegrowth = new Map();
 // Players standing in a map square with patches nearby -> their last tile, so nearby patches
 // follow them tile by tile without checking anyone who is nowhere near a patch.
 const nearPatches = new Map();
@@ -593,8 +616,13 @@ function refresh(player) {
     syncNearby(player);
     schedule(player);
     dirty.delete(player);
+    const redwood = Data.CACHE.patches.find(p => p.type === "REDWOOD");
+    const due = Redwood.nextDue(farmFor(player).patches[Data.patchKey(redwood)] ?? {});
+    if (due < Infinity) redwoodRegrowth.set(player, due);
+    else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);
     for (const player of dirty) schedule(player);
     dirty.clear();
@@ -635,6 +663,7 @@ function advanceTime(event) {
     for (const state of Object.values(farmFor(player).patches)) {
         if (Number.isFinite(state.nextAt)) state.nextAt -= ms;
         if (Number.isFinite(state.plantedAt)) state.plantedAt -= ms;
+        if (state.redwoodBranches) state.redwoodBranches = state.redwoodBranches.map(at => at > 0 ? at - ms : 0);
     }
     for (const container of [player.getInventory(), ...player.getBanks()]) {
         for (const item of container?.getItems() ?? []) {
@@ -661,6 +690,7 @@ function login(event) {
     refresh(player);
 }
 function logout({ player }) {
+    redwoodRegrowth.delete(player);
     WORK.delete(player); RENDERED.delete(player);
     unschedule(player); tracked.delete(player); dirty.delete(player); nearPatches.delete(player); seedlingDue.delete(player);
     Hespori.hesporiLogout({ player });
