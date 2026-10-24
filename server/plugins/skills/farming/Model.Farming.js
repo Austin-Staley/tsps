@@ -162,19 +162,22 @@ function advanceFarm(farm, now, random = Math.random) {
             }
             growth += kronos.get(key);
         }
-        state.stage = Math.min(crop.stages, state.stage + growth);
-        if (crop.type === "ANIMA") {
-            if (state.stage >= crop.stages) state.status = "dead";
-        } else if (state.stage >= crop.stages) {
-            state.status = "grown";
-            state.lives = startingLives(crop, state.compost);
-        } else if (Data.CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
-            && state.stage < crop.stages - (crop.type === "FRUIT_TREE" ? 1 : 0)
-            && !diseaseFree(farm, patch, state, at)
-            && random() < diseaseChance(crop, state.compost, state.watered, activeAnima(farm, at) === "IASOR")) {
-            state.status = "diseased";
+        // Kronos skips still visit every stage and stop at the first disease roll that succeeds.
+        for (let step = 0; step < growth && state.status === "growing"; step++) {
+            state.stage = Math.min(crop.stages, state.stage + 1);
+            if (crop.type === "ANIMA") {
+                if (state.stage >= crop.stages) state.status = "dead";
+            } else if (state.stage >= crop.stages) {
+                state.status = "grown";
+                state.lives = startingLives(crop, state.compost);
+            } else if (Data.CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
+                && state.stage < crop.stages - (crop.type === "FRUIT_TREE" ? 1 : 0)
+                && !diseaseFree(farm, patch, state, at)
+                && random() < diseaseChance(crop, state.compost, state.watered, activeAnima(farm, at) === "IASOR")) {
+                state.status = "diseased";
+            }
+            state.watered = false;
         }
-        state.watered = false;
         state.nextAt = nextGrowth(at, state.status === "diseased" ? crop.minutes * 2
             : state.status === "grown" && crop.regrow ? crop.regrow : crop.minutes, farm.offset);
     }
