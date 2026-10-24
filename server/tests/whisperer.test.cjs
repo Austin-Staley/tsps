@@ -260,6 +260,8 @@ test('postquest entry needs a fragment, owns both realms and cleans actors and U
     const session = Site.sessionOf(f.player);
     assert.ok(session);
     const fight = session.fight;
+    assert.equal(f.player.getInventory().contains(28357), true, 'entry normalizes a stale glowing fragment from the earlier implementation');
+    assert.equal(f.player.getInventory().contains(28356), false);
     assert.equal(session.area.canAttack(f.player, fight.boss), true);
     assert.equal(session.area.canAttack(new Player(null), fight.boss), false);
     Specials.start(fight, 'seeds');
@@ -363,7 +365,7 @@ test('only pursuit after the third special stops below 100 HP and leaves the rem
         t.mock.method(f.boss.getMovementQueue(), 'addStep', () => steps++);
         t.mock.method(f.boss.getMovementQueue(), 'reset', () => resets++);
         f.fight.pursueBound();
-        assert.equal(f.fight.boundUntil, cancelled ? 0 : 14);
+        assert.equal(f.fight.boundUntil, 14, 'the existing bind window still permits a later freeze counter');
         assert.equal(steps, cancelled ? 0 : 1);
         assert.equal(resets, cancelled ? 1 : 0);
         assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), true);
@@ -408,6 +410,23 @@ test('existing marked Undead Grasp bind releases the player during Whisperer pur
         assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), !marked);
         assert.equal(f.fight.boundUntil, marked ? 0 : 14);
     }
+});
+
+test('low-health pursuit cancellation preserves the launched bind and a later freeze counter', t => {
+    const f = fixture();
+    f.fight.completed = f.fight.startedSpecials = 3;
+    f.boss.setHitpoints(99);
+    f.fight.nextAttack = Infinity;
+    f.player.moveTo(new core.Location(2656, 6378, 0));
+    t.mock.method(f.boss.getMovementQueue(), 'addStep', () => assert.fail('pursuit must stop'));
+    f.fight.bind();
+    f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), false);
+    f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), true);
+    f.boss.getTimers().registers(core.TimerKey.FREEZE, 4);
+    f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), false);
 });
 test('running across a seed consumes the intermediate tile as well as the destination', () => {
     const f=fixture();Specials.start(f.fight,'seeds');

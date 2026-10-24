@@ -192,7 +192,6 @@ class Fight {
             return;
         }
         if (this.completed >= 3 && this.boss.getHitpoints() < 100) {
-            this.boundUntil = 0;
             this.boss.getMovementQueue().reset();
             return;
         }

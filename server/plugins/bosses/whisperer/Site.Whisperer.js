@@ -62,7 +62,7 @@ class Session {
         npc.__whispererFight = this.fight;
         npc.performAnimation(new Common.core.Animation(Common.data.animations.spawn));
         this.player.getPacketSender().sendSubInterface(Common.data.sanity.helper, Common.data.sanity.interface, 1);
-        Common.sync(this.fight);
+        Common.fragment(this.fight, false);
         Common.api.emitCustomEvent('boss-hud:show', { player: this.player, npcId: Common.data.npcs.boss, current: 900, maximum: 900 });
     }
     end() {
