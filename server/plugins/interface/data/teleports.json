@@ -623,9 +623,7 @@
       "icon": "garlic",
       "description": "The Count's crypt beneath Draynor Manor.",
       "terms": "vampyre",
-      "attributes": {
-        "count_draynor:pending_instance": true
-      }
+      "arrival": "count-draynor:arriving"
     },
     {
       "key": "dagannoth-kings",

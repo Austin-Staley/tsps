@@ -135,7 +135,8 @@ function rememberTeleport(player, entry) {
 function go(player, entry, tile) {
   const destination = Destinations.location(tile);
   if (!core.TeleportHandler.checkReqs(player, destination)) return;
-  for (const [key, value] of Object.entries(entry.attributes ?? {})) player.setAttribute(key, value);
+  // A destination's own plugin can prepare the arrival (Count Draynor's crypt instance).
+  if (entry.arrival) pluginApi.emitCustomEvent(entry.arrival, { player });
   rememberTeleport(player, entry);
   core.TeleportHandler.teleport(player, destination, core.TeleportType[entry.type], false);
 }

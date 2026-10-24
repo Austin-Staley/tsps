@@ -16,6 +16,7 @@ const TeleportInterface = require("../plugins/interface/TeleportInterface.plugin
 const { COMPONENT, TAB, TAB_UIDS, ROW_UIDS, OP, Destinations, uid } = TeleportInterface._test;
 const teleports = [];
 const liveTiles = new Map();
+const events = [];
 let dialogue;
 let commands;
 let buttons;
@@ -45,6 +46,7 @@ before(async () => {
     emitCustomEvent: (name, request) => {
       if (name === "combat-achievements:count") request.total = request.monster === "Zulrah" ? 12 : 0;
       if (liveTiles.has(name)) request.tile = liveTiles.get(name);
+      events.push(name);
     },
   });
 });
@@ -171,7 +173,7 @@ test("rows carry their panel text; selecting arms the panel and right-click both
   run(p);
   clickRow(p, "count-draynor", OP.TELEPORT);
   assert.equal(teleports.length, 2);
-  assert.equal(p.getAttribute("count_draynor:pending_instance"), true, "a destination's attributes are set");
+  assert.ok(events.includes("count-draynor:arriving"), "a destination's plugin hears of the arrival");
   assert.deepEqual(p.getAttribute(TeleportInterface._test.RECENT_ATTRIBUTE), ["count-draynor", "zulrah"]);
   const before = teleports.length;
   click(p, ROW_UIDS[0], { slot: Destinations.byKey("zulrah").id, opId: OP.TELEPORT });
@@ -270,4 +272,40 @@ test("the shooting star and Gemstone Crab plugins answer where they are", () => 
   assert.deepEqual(answer({ spot: 1, nextSpot: 2, crab: {}, burrow: null }), [...Crab.SPOTS[1].exit, 0], "the active crab's mine");
   assert.deepEqual(answer({ spot: 1, nextSpot: 2, crab: {}, burrow: {} }), [...Crab.SPOTS[2].exit, 0], "burrowing: the next mine");
   Object.assign(Crab.state, { spot: -1, nextSpot: -1, crab: null, burrow: null });
+});
+
+test("Count Draynor readies his crypt's instance for a teleport in", () => {
+  const { arriving, ATTR_PENDING_INSTANCE } = require("../plugins/bosses/CountDraynor.plugin")._test;
+  const p = player();
+  arriving({ player: p });
+  assert.equal(p.getAttribute(ATTR_PENDING_INSTANCE), true);
+  assert.equal(Destinations.byKey("count-draynor").arrival, "count-draynor:arriving");
+});
+
+test("ports and house portals follow the Sailing and skillcape data they come from", () => {
+  const PORTS = require("../plugins/skills/sailing/data/sailing-ports.json");
+  const { housePortals } = require("../plugins/items/data/skillcapes.json");
+  // The source tile, or (only where our collision map blocks it) a free tile beside it.
+  const follows = (entry, [x, y, z]) => {
+    const [tx, ty, tz] = entry.tile;
+    if (tx === x && ty === y && tz === z) return true;
+    return RegionManager.blocked(Destinations.location([x, y, z]), null) && tz === z && Math.max(Math.abs(tx - x), Math.abs(ty - y)) === 1;
+  };
+  const drifted = [];
+  for (const port of PORTS) {
+    const entry = Destinations.byKey(`port-${port.id.replace(/_/g, "-")}`);
+    const { x, y, z } = port.landing;
+    if (!entry) drifted.push(`${port.name}: no ::teleports row`);
+    else if (entry.name !== port.name || !follows(entry, [x, y, z])) drifted.push(`${port.name}: ${entry.name} ${entry.tile} vs ${x},${y},${z}`);
+  }
+  for (const [town, tile] of Object.entries(housePortals)) {
+    const entry = Destinations.byKey(`house-${town}`);
+    if (!entry) drifted.push(`${town} house portal: no ::teleports row`);
+    else if (!follows(entry, tile)) drifted.push(`${town} house portal: ${entry.tile} vs ${tile}`);
+  }
+  const ports = Destinations.DESTINATIONS.filter((entry) => entry.key.startsWith("port-")).length;
+  const portals = Destinations.DESTINATIONS.filter((entry) => entry.key.startsWith("house-")).length;
+  assert.deepEqual(drifted, [], "update data/teleports.json from the data these rows copy");
+  assert.equal(ports, PORTS.length, "no port rows the Sailing data has dropped");
+  assert.equal(portals, Object.keys(housePortals).length, "no house portal rows the skillcape data has dropped");
 });
