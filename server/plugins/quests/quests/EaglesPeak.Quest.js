@@ -19,8 +19,6 @@
  *   6 gave Nickolaus his disguise (he leaves the nest),
  *   7 caught the ferret with Nickolaus at the camp,
  *   8 gave the ferret to Charlie (complete).
- * Complete is sent as 40, the value the cache keys on (the far eyries' eagles are multinpcs
- * that show at 40); the stages before it are this plugin's own.
  * The OSRS side varbits in the same varp (3087-3113: unblocked eagles, winches,
  * net trap, tracking, metal birds/gates, eagle door) are tracked in persisted
  * "quest.eagles_peak.*" attributes instead; only the stage varbit is mirrored
@@ -199,8 +197,6 @@ module.exports = function registerEaglesPeakQuest(api) {
   const STAGE_RESCUED = 6;
   const STAGE_HAS_FERRET = 7;
   const STAGE_COMPLETE = 8;
-  /** eaglepeak_quest when complete, as the cache reads it. */
-  const VARBIT_COMPLETE_VALUE = 40;
 
   const HUNTER_REQUIREMENT = 27;
   const COSTUME_FEATHER_COST = 10;
@@ -1178,7 +1174,6 @@ module.exports = function registerEaglesPeakQuest(api) {
     name: "Eagles' Peak",
     varpId: VARP_EAGLES_PEAK,
     varbitId: VARBIT_EAGLES_PEAK_STAGE,
-    varbitValue: (stage) => (stage >= STAGE_COMPLETE ? VARBIT_COMPLETE_VALUE : stage),
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,

@@ -12,7 +12,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Flight, Eyries, QuestRuntime, tasks, cycle, questDone;
+let Common, Flight, Eyries, QuestRuntime, tasks, cycle, questDone, spawned, removed, clipped;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -25,8 +25,11 @@ before(async () => {
       ...core,
       TaskManager: { submit: (task) => tasks.push(task) },
       World: { ...core.World, getProcessCycle: () => cycle },
+      RegionManager: { ...core.RegionManager, BLOCKED_TILE: core.RegionManager.BLOCKED_TILE, addClipping: (x, y, z, flag) => clipped.push([x, y, z, flag]) },
     },
     persistAttribute: () => {},
+    spawnNpc: (def) => { const n = { ...def, getId: () => def.id, getLocation: () => loc(def.x, def.y, def.z) }; spawned.push(n); return n; },
+    removeNpc: (n) => removed.push(n),
   }, { get: (target, key) => target[key] ?? (() => {}) });
   Common.init(api);
   // The quest's completion, as QuestRuntime answers it.
@@ -38,6 +41,9 @@ beforeEach(() => {
   tasks = [];
   cycle = 1000;
   questDone = true;
+  spawned = [];
+  removed = [];
+  clipped = [];
 });
 
 function flush() {
@@ -64,6 +70,7 @@ function fakePlayer(x = 2022, y = 4960, z = 3, { rope = true, strength = 99 } = 
     performAnimation: (a) => player.anims.push(a.getId?.() ?? a),
     setPositionToFace: () => {},
     getSkillManager: () => ({ getCurrentLevel: () => strength }),
+    getHitpoints: () => (player.dead ? 0 : 99),
     getMovementQueue: () => ({ setBlockMovement: (b) => { player.blocked = b; }, reset: () => {} }),
     getDialogueManager: () => ({ startDialogues: (chain) => player.boxes.push(chain) }),
     getPacketSender: () => ({
@@ -92,12 +99,38 @@ test('every id resolves from the cache', () => {
   assert.equal(objs.rope, 954);
   assert.equal(varbits.quest, 2780);
   assert.equal(seqs.lasso, 2910);
-  // The far eyries' eagles show (as the Peak's three, with Quick-travel) at eaglepeak_quest 40 only.
+  // The far eyries' own eagles show only at eaglepeak_quest 40, which the quest plugin never sends.
   for (const id of [1491, 1492, 1493]) {
     const def = core.CacheDefinitions.getNpc(id);
     assert.equal(def.transformVarbit, 2780);
-    assert.equal(def.transforms.indexOf(def.transforms.find((t) => t !== -1)), Common.data.questCompleteVarbit);
+    assert.equal(def.transforms.findIndex((t) => t !== -1), 40);
   }
+});
+
+test("a player who has done the quest gets their own Quick-travel eagles in a far eyrie; they fly to the Peak", () => {
+  const player = fakePlayer(3425, 9569, 0);
+  Flight.showEagles(player, 'desert');
+  assert.equal(spawned.length, 2);
+  assert.ok(spawned.every((n) => n.id === 1487 && n.ownerOnly === true && n.owner === player));
+  assert.deepEqual(spawned.map((n) => [n.x, n.y]), [[3422, 9568], [3428, 9565]]);
+  assert.deepEqual(Flight.destination(spawned[0]), [2022, 4960, 3], 'back to the Peak, not out again');
+  Flight.removeEagles(player);
+  assert.equal(removed.length, 2);
+  questDone = false;
+  Flight.showEagles(player, 'desert');
+  assert.equal(spawned.length, 2, 'none before the quest is done');
+});
+
+test('a second click mid-flight does nothing; dying on the way is left to the death', () => {
+  const player = fakePlayer();
+  Flight.fly(player, npc(1488, 2023, 4961, 3));
+  Flight.fly(player, npc(1488, 2023, 4961, 3));
+  assert.equal(player.anims.length, 1, 'no second lasso');
+  assert.equal(player.messages.length, 1);
+  player.dead = true;
+  flush();
+  assert.deepEqual(at(player), [2022, 4960, 3], 'not moved');
+  assert.equal(player.blocked, true, 'the death keeps movement blocked');
 });
 
 test('the Peak eyrie\'s eagles fly out to their eyrie; the far ones only fly back to the Peak', () => {
@@ -176,6 +209,10 @@ test('the Feldip vine: a cane guides it, it grows in game ticks, and climbs only
   cycle += Common.data.vine.growingTicks;
   Eyries.tendVine({ player });
   assert.equal(player.varbits[3109], 2, 'growing');
+  // Banked as it goes: a save mid-session (a restart, with no logout) keeps nearly all of it.
+  cycle += 60;
+  Eyries.tendVine({ player });
+  assert.ok(player.attributes[Eyries.VINE_ATTRIBUTE].grown >= Common.data.vine.growingTicks + 50);
   // Half the time online, then a logout: the growth so far is kept, and counts on after login.
   cycle += 1000;
   Eyries.vineLogout({ player });
@@ -192,6 +229,12 @@ test('the Feldip vine: a cane guides it, it grows in game ticks, and climbs only
   Eyries.climbVine({ player, objectId: vine });
   flush();
   assert.deepEqual(at(player), [2525, 9324, 0], 'up into the jungle eyrie');
+});
+
+test('the Uzer boulder blocks its tiles (NPCs block nothing here), so a push is the way past', () => {
+  Eyries.clipBoulder();
+  assert.deepEqual(clipped.map(([x, y]) => [x, y]), Common.data.boulder.tiles);
+  assert.ok(clipped.every(([, , z, flag]) => z === 0 && flag === core.RegionManager.BLOCKED_TILE));
 });
 
 test('the Uzer boulder: 45 Strength pushes past it, either way', () => {
@@ -212,8 +255,8 @@ test('the Uzer boulder: 45 Strength pushes past it, either way', () => {
   assert.equal(Eyries.pushBoulder({ player, npc: { getId: () => 1 } }), false);
 });
 
-test("Eagles' Peak sends 40 for complete on eaglepeak_quest, its own stages before it", () => {
+test("Eagles' Peak's own stages are untouched: eaglepeak_quest is not driven to 40", () => {
   const source = require('node:fs').readFileSync(path.join(__dirname, '..', 'plugins', 'quests', 'quests', 'EaglesPeak.Quest.js'), 'utf8');
-  assert.match(source, /varbitValue: \(stage\) => \(stage >= STAGE_COMPLETE \? VARBIT_COMPLETE_VALUE : stage\)/);
-  assert.match(source, /const VARBIT_COMPLETE_VALUE = 40;/);
+  assert.doesNotMatch(source, /varbitValue/);
+  assert.match(source, /EagleTransport\.plugin\.js/);
 });

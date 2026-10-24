@@ -88,8 +88,9 @@ function travel(player, tile, ticks, onArrival = null) {
   fade(player, true);
   later(ticks, () => {
     player.__eagleTravelling = false;
+    // Dying on the way leaves the player to the death (it blocks movement itself).
+    if (player.isRegistered?.() === false || player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0) return;
     movement?.setBlockMovement?.(false);
-    if (player.isRegistered?.() === false) return;
     player.moveTo(toLocation(tile));
     fade(player, false);
     onArrival?.();

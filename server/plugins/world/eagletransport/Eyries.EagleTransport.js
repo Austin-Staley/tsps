@@ -4,9 +4,11 @@
  * - Feldip's entrance is up a vine: a garden cane, thatching spar or teasing stick stuck in by the
  *   young vine guides it, and after about 40 minutes it is tall enough to climb ("Those vines
  *   should be worth checking on now."). The cave's exit leads down by it whenever;
- * - Uzer's eagles are behind a boulder: 45 Strength (boosts count) pushes past it, either way;
+ * - Uzer's eagles are behind a boulder: 45 Strength (boosts count) pushes past it, either way.
+ *   NPCs don't block players here, so its tiles are clipped;
  * - Rellekka's cliff is an Agility shortcut (plugins/skills/data/agility-shortcuts.json).
- * The vine grows while the player is logged in, counted in game ticks.
+ * The vine grows while the player is logged in, counted in game ticks and banked every so often
+ * (and at logout), so a server restart loses little of it.
  */
 const Common = require("./Common.EagleTransport");
 
@@ -98,6 +100,10 @@ function climbVine({ player, objectId }) {
 function tendVine({ player }) {
   const state = vineState(player);
   if (!state || state.notified === true) return;
+  if (Number.isFinite(state.since) && cycle() - state.since >= Common.data.vine.bankEveryTicks) {
+    player.setAttribute(VINE_ATTRIBUTE, { ...state, grown: vineTicks(player), since: cycle() });
+    return tendVine({ player });
+  }
   const stage = vineStage(player);
   if (stage === state.sentStage) return;
   state.sentStage = stage;
@@ -141,7 +147,18 @@ function pushBoulder({ player, npc }) {
   return true;
 }
 
+/** The boulder's tiles block the passage, so Push is the way past (the Wiki's rule). */
+function clipBoulder() {
+  const { RegionManager } = Common.core;
+  for (const [x, y] of Common.data.boulder.tiles) RegionManager.addClipping(x, y, 0, RegionManager.BLOCKED_TILE, null);
+}
+
 function attach(api) {
+  api.onServerStartup(clipBoulder);
+  api.onRegionLoaded(({ regionId }) => {
+    const [x, y] = Common.data.boulder.tiles[0];
+    if (regionId === ((x >> 6) << 8 | (y >> 6))) clipBoulder();
+  });
   api.persistAttribute(VINE_ATTRIBUTE, null);
   api.persistAttribute(DESERT_ATTRIBUTE, false);
   api.onObjectInteraction("Cave", { Enter: enterCave, Exit: exitCave });
@@ -154,6 +171,6 @@ function attach(api) {
 }
 
 module.exports = {
-  attach, enterCave, exitCave, guideVine, climbVine, tendVine, vineStage, vineTicks, vineLogout, vineLogin, pushBoulder,
+  attach, clipBoulder, enterCave, exitCave, guideVine, climbVine, tendVine, vineStage, vineTicks, vineLogout, vineLogin, pushBoulder,
   VINE_ATTRIBUTE, DESERT_ATTRIBUTE,
 };
