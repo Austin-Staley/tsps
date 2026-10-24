@@ -172,6 +172,7 @@ test("feeding preserves supported powder use and shows the captured animation, s
   h.add(items.poison, 2);
   h.Prep.feed({ player: h.p, npc: session.boss });
   h.Prep.feed({ player: h.p, npc: session.boss });
+  h.step();
   assert.ok(h.messages.includes("<col=ef0083>Duke Sucellus awakens..."));
   assert.equal(session.boss.getHitpoints(), h.C.data.normal.hitpoints, "feeding never queues damage against the awakened boss");
 });
@@ -182,7 +183,7 @@ test("forty left-click powder feeds wake the normal Duke and further clicks cons
   const { items } = h.C.data;
   h.move([3039, 6451]);
   h.add(items.muscaPowder, 42);
-  for (let n = 0; n < 42; n++) h.Prep.feed({ player: h.p, npc: session.boss });
+  for (let n = 0; n < 42; n++) { h.Prep.feed({ player: h.p, npc: session.boss }); h.step(); }
   assert.equal(session.meter, 200);
   assert.equal(h.p.getInventory().getAmount(items.muscaPowder), 2);
   assert.equal(session.fight.active, true);

@@ -35,6 +35,7 @@ test('quest gate, real private area, owner-only combat and exit cleanup',t=>{
   h.add(h.C.data.items.awakenerOrb); h.add(h.C.data.items.poison,2);
   h.move([3039,6451]);
   h.Prep.feed({player:h.p,npc:s.boss});h.Prep.feed({player:h.p,npc:s.boss});
+  h.step();
   assert.equal(s.boss.getHitpoints(),485);assert.equal(s.area.canAttack(h.p,s.boss),true);
   assert.equal(s.area.canAttack({},s.boss),false);
   assert.equal(h.p.getInventory().getAmount(h.C.data.items.awakenerOrb),1);
@@ -54,7 +55,7 @@ test('one styled strike invokes positive damage equipment reactions only once',t
   t.mock.method(Math,'random',()=>.99);h.C.strike(h.fight,'magic',48);
   assert.equal(charges,1);
 });
-test('powder yield, partial vat fermentation and two doses wake exactly once',t=>{
+test('powder yield, atomic vat fermentation and two doses wake exactly once',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items;
   h.p.getSkillManager().setCurrentLevel(h.core.Skill.HERBLORE,80);
   h.add(i.pestle);h.add(i.arder);h.add(i.musca);
@@ -62,7 +63,7 @@ test('powder yield, partial vat fermentation and two doses wake exactly once',t=
   assert.equal(h.p.getInventory().getAmount(i.arderPowder),6);
   h.move([3034,6437]);assert.equal(h.Prep.fill(s,[3034,6438]),true);
   assert.equal(s.vats.size,1);
-  assert.equal(s.vats.values().next().value.readyAt,Infinity);
+  assert.equal(s.vats.values().next().value.readyAt,null);
   h.add(i.salt,6);h.Prep.fill(s,[3034,6438]);assert.equal(s.vats.size,1);
   assert.equal(h.p.getInventory().getAmount(i.arderPowder),0);
   h.step(5);assert.equal(s.vats.values().next().value.ready,false);
@@ -70,6 +71,7 @@ test('powder yield, partial vat fermentation and two doses wake exactly once',t=
   h.Prep.collect(s,[3034,6438]);assert.equal(h.p.getInventory().getAmount(i.poison),1);
   h.add(i.poison,2);h.move([3039,6451]);
   for(let n=0;n<3;n++)h.Prep.feed({player:h.p,npc:s.boss});
+  h.step();
   assert.equal(h.p.getInventory().getAmount(i.poison),1);assert.equal(s.meter,200);
   assert.equal(s.fight.active,true);
 });
@@ -104,10 +106,11 @@ test('eight-pick patches reset on awakening, supplies survive kills and vanish b
   assert.equal(h.p.getInventory().getAmount(i.arder),8);
   h.add(i.poison,3);h.move([3039,6451]);
   h.Prep.feed({player:h.p,npc:s.boss});h.Prep.feed({player:h.p,npc:s.boss});
+  h.step();
   assert.equal(s.picks.arder,0);
   const first=s.fight;first.fell();first.won(h.p);
   assert.equal(h.p.getAttribute(h.C.KILLS),1);assert.equal(s.perfectKills,1);
-  h.step(20);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
+  h.step(24);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
   assert.equal(h.p.getInventory().getAmount(i.poison),1);
   assert.equal(h.p.getInventory().getAmount(i.arder),8);
   h.Site.beforePlayerDeath({player:h.p});assert.equal(h.p.getInventory().getAmount(i.poison),0);
@@ -144,14 +147,14 @@ test('actual NPC death task records once and respawns an asleep encounter',t=>{
   const first=s.fight;s.boss.getCombat().addDamage(h.p,1);s.boss.setHitpoints(0);
   h.step(10);assert.equal(first.over,true);assert.equal(first.wonAlready,true);
   assert.equal(h.p.getAttribute(h.C.KILLS),1);
-  h.step(11);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
+  h.step(15);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
   assert.equal(s.boss.getContentId(h.p),12167);assert.equal(s.perfectKills,1);
 });
 test('source speed achievements use lethal time and are excluded on a Slayer task',t=>{
   const h=H.harness(t);const s=h.enter();s.fight.wake();s.fight.fell();s.fight.won(h.p);
   const Data=require('../plugins/achievements/combatachievements/Data.CombatAchievements');Data(h.api);
-  for(const name of ['Perfect Duke Sucellus','Duke Sucellus Speed-Trialist','Duke Sucellus Speed-Chaser','Duke Sucellus Speed-Runner']) assert.ok(Data.taskNamed(name),name);
-  const awards=()=>h.emitted.filter(([name])=>name==='combat-achievements:complete').map(([,e])=>e.task);
+  for(const name of ['Cold Feet','Mirror Image','Perfect Duke Sucellus','Duke Sucellus Speed-Trialist','Duke Sucellus Speed-Chaser','Duke Sucellus Speed-Runner']) assert.ok(Data.taskNamed(name),name);
+  const awards=()=>h.emitted.filter(([name])=>name==='combat-achievements:complete').map(([,e])=>e.task).filter(name=>name.startsWith('Duke Sucellus Speed-'));
   assert.ok(awards().includes('Duke Sucellus Speed-Runner'));
   const before=awards().length;s.reset();s.fight.wake();
   h.api.onCustomEvent('slayer:on-task',e=>{e.onTask=true;});s.fight.fell();s.fight.won(h.p);
