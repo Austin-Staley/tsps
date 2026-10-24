@@ -9,6 +9,7 @@
  * - phase 4, once Dawn is finished with a hammer: Dusk takes in her essence and fights alone,
  *   imprisoning the player in a cell of fire now and then - one gap out, up to 65 on whoever is
  *   still inside after 5 ticks, healing Dusk (who can't be hurt during the first one);
+ * - standing under Dusk while he fights alone (phases 2 and 4) gets the player trampled for 30-40;
  * - both are finished with a rock hammer at 9 hitpoints or below (Finishers.Slayer.js).
  * Combat.GrotesqueGuardians.js picks each attack; this runs the phases and the roof's hazards.
  */
@@ -30,6 +31,7 @@ class Fight {
     this.lightningUntil = 0;
     this.stopped = false;
     this.attacks = { dusk: 0, dawn: 0 };
+    this.lastTrample = -Infinity;
     dusk.__ggFight = this;
     dawn.__ggFight = this;
     this.lockHitpoints();
@@ -106,6 +108,7 @@ class Fight {
     if (this.phase === 2 && this.tickCount % Common.data.rockfall.every === 0 && players[0]) this.dropRocks(players[0]);
     if (this.phase === 3) this.tickLightning(players);
     this.tickRocks(players);
+    this.tickTrample(players);
     this.tickVortices(players);
     this.tickSpheres(players);
     this.tickPrison(players);
@@ -139,10 +142,32 @@ class Fight {
         const distance = Common.chebyshev(player.getLocation(), rock.tile);
         if (distance > 1) continue;
         Common.hurtPlayer(player, Common.randomInt(0, rockfall.max));
-        if (distance === 0) bind(player, rockfall.stunTicks);
+        if (distance === 0) {
+          bind(player, rockfall.stunTicks);
+          player.sendMessage(Common.message("knockedOut"));
+        }
       }
     }
     this.rocks = this.rocks.filter((rock) => rock.lands > this.tickCount);
+  }
+
+  // --- Dusk alone: the trample
+
+  /** Under Dusk's body while he fights alone: trampled (Wiki), now and then while it lasts. */
+  tickTrample(players) {
+    if (this.phase !== 2 && this.phase !== 4) return;
+    const { trample } = Common.data;
+    if (this.tickCount - this.lastTrample < trample.every || this.dusk.getHitpoints() <= 0) return;
+    const base = this.dusk.getLocation();
+    const size = Math.max(1, this.dusk.getSize?.() ?? 1);
+    for (const player of players) {
+      const at = player.getLocation();
+      const under = at.getX() >= base.getX() && at.getX() < base.getX() + size && at.getY() >= base.getY() && at.getY() < base.getY() + size;
+      if (!under) continue;
+      this.lastTrample = this.tickCount;
+      Common.hurtPlayer(player, Common.randomInt(trample.min, trample.max));
+      player.sendMessage(Common.message("trampled"));
+    }
   }
 
   // --- Phase 3: lightning, then the spheres
@@ -193,8 +218,10 @@ class Fight {
     if (this.spheres.length === 0) return;
     const left = [];
     for (const sphere of this.spheres) {
-      if (players.some((player) => Common.chebyshev(player.getLocation(), sphere.tile) === 0)) {
+      const taker = players.find((player) => Common.chebyshev(player.getLocation(), sphere.tile) === 0);
+      if (taker) {
         Common.tileGraphic(players, sphere.tile, Common.ids.spotanims.sphereImpact);
+        taker.sendMessage(Common.message("sphere"));
         continue;
       }
       if (this.tickCount >= sphere.arrives) {

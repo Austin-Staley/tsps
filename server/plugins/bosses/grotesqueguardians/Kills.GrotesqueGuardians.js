@@ -1,7 +1,8 @@
 /**
  * The Guardians' deaths (Wiki): Dawn finished with a hammer starts the last phase (Fight); Dusk
  * finished is the kill - "Your Grotesque Guardians kill count is: N." (Combat Achievements counts
- * it, as it times the fight for its speed tasks) and 1,350 Slayer experience on task; the roof's
+ * it, as it times the fight for its speed tasks), the fight's duration from the bell with the
+ * personal best (rsprox), and 1,350 Slayer experience on task; the roof's
  * statues go back on their plinths, ready for the bell. Dawn gives nothing of her own.
  */
 const Common = require("./Common.GrotesqueGuardians");
@@ -20,6 +21,7 @@ function guardianDeath({ npc, killer }) {
   }
   if (!Common.isDusk(npc)) return;
   const roof = npc.__ggRoof;
+  const startedAt = roof && fight && roof.fight === fight ? roof.startedAt : -1;
   fight?.stop();
   // Unless the bell has started another fight since.
   if (roof) Common.later(2, () => { if (roof.fight === fight) roof.clearGuardians(); });
@@ -27,7 +29,15 @@ function guardianDeath({ npc, killer }) {
   if (!player?.isRegistered?.()) return;
   const own = (Number(player.getAttribute(Common.KILLS_ATTRIBUTE)) || 0) + 1;
   player.setAttribute(Common.KILLS_ATTRIBUTE, own);
-  Common.later(1, () => player.sendMessage(Common.message("killCount", { kills: Math.max(own, countedKills(player) ?? 0) })));
+  const lines = [Common.message("killCount", { kills: Math.max(own, countedKills(player) ?? 0) })];
+  if (startedAt >= 0) {
+    const ticks = Common.core.World.getProcessCycle() - startedAt;
+    const previous = Number(player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
+    const best = previous > 0 ? Math.min(previous, ticks) : ticks;
+    player.setAttribute(Common.BEST_ATTRIBUTE, best);
+    lines.push(Common.message("duration", { time: Common.formatTicks(ticks), best: Common.formatTicks(best) }));
+  }
+  Common.later(1, () => lines.forEach((line) => player.sendMessage(line)));
 }
 
 /** "slayer:task-kill": Dusk's Slayer experience is the pair's (Wiki). */
@@ -46,6 +56,7 @@ function dawnKillEligible(query) {
 
 function attach(api) {
   api.persistAttribute(Common.KILLS_ATTRIBUTE, 0);
+  api.persistAttribute(Common.BEST_ATTRIBUTE, 0);
   api.onNpcDeath(guardianDeath);
   api.onCustomEvent("slayer:task-kill", slayerXp);
   api.onCustomEvent("slayer:target-eligible", dawnKillEligible);

@@ -90,6 +90,7 @@ function methods() {
             if (Common.chebyshev(player.getLocation(), tile) > 1) continue;
             Common.hurtPlayer(player, Common.randomInt(0, dawn.stoneBall.max));
             bind(player, dawn.stoneBall.freezeTicks);
+            player.sendMessage(Common.message("stoned"));
           }
         });
         return;

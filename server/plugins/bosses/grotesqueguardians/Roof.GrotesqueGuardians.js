@@ -1,13 +1,17 @@
 /**
  * The Slayer Tower roof (Wiki: Grotesque Guardians/Strategies), a private copy per player
- * (the engine's PrivateArea pattern, as Vorkath's crater):
- * - the Roof Entrance on the tower's top floor is locked until a brittle key (slayer_roof_key)
- *   opens it for good (varbit gargboss_unlocked_roof); then it takes the player up;
- * - ringing the Cloister Bell (Ring / Quick-start) wakes the statues: Dusk and Dawn come down from
- *   their plinths, for a player on a gargoyle or Guardians task; ringing again mid-fight:
+ * (the engine's PrivateArea pattern, as Vorkath's crater). The entrance, bell and exit follow
+ * rsprox recordings of the roof (the PR #976 review):
+ * - the Roof Entrance on the tower's top floor is locked until a brittle key (slayer_roof_key) is
+ *   used on it - absorbed by the gateway, which stays open for good (varbit gargboss_unlocked_roof);
+ * - going through needs a gargoyle or Guardians task; the passageway takes the player up with a
+ *   fade, arriving 5 ticks after the click;
+ * - ringing the Cloister Bell (Ring / Quick-start): the player strikes it, the bell swings with its
+ *   sound, and the statues come down about 4 ticks later; ringing again mid-fight:
  *   "Concentrate on your fight!";
- * - the Roof Exit (Escape / Quick-escape), a teleport, death or logging out ends the copy, and a
- *   player logging out on the roof comes back by the entrance;
+ * - the Roof Exit (Escape / Quick-escape) takes the player down with a fade, 3 ticks after the
+ *   click; a teleport, death or logging out ends the copy, and a player logging out on the roof
+ *   comes back by the entrance;
  * - weapons: Dusk only takes melee, Dawn only ranged, magic or a halberd's melee; neither can be
  *   hurt while the fight says so (Fight.GrotesqueGuardians.js).
  */
@@ -27,6 +31,9 @@ class Roof {
     this.fight = null;
     this.dusk = null;
     this.dawn = null;
+    /** The bell rung, the statues not down yet. */
+    this.waking = false;
+    this.startedAt = -1;
   }
 
   /** Whether a tile is on the walkable roof (where hazards can fall). */
@@ -64,6 +71,7 @@ class Roof {
     this.dusk.performAnimation(new Common.core.Animation(ids.seqs.duskSpawn));
     this.dawn.performAnimation(new Common.core.Animation(ids.seqs.dawnSpawn));
     this.fight = new Fight(this, this.dusk, this.dawn);
+    this.startedAt = Common.core.World.getProcessCycle();
   }
 
   fighting() {
@@ -166,6 +174,24 @@ function leaveRoof(player) {
   if (roof instanceof Roof) roof.destroy();
 }
 
+/**
+ * The travel up or down: a message box, the screen fading out, the move `ticks` after the click,
+ * and the fade back. The player can't walk off meanwhile.
+ */
+function travel(player, ticks, messageKey, move) {
+  const movement = player.getMovementQueue?.();
+  movement?.setBlockMovement?.(true)?.reset?.();
+  Common.box(player, Common.message(messageKey));
+  Common.later(Math.max(1, ticks - 2), () => Common.fade(player, true));
+  Common.later(ticks, () => {
+    movement?.setBlockMovement?.(false);
+    if (!player.isRegistered?.()) return;
+    move();
+    Common.fade(player, false);
+    Common.later(2, () => Common.closeFade(player));
+  });
+}
+
 function goUp(player) {
   leaveRoof(player);
   const roof = new Roof(player);
@@ -187,28 +213,41 @@ function sendUnlocked(player) {
   player.getPacketSender().sendVarbit(Common.ids.varbits.unlocked, unlocked(player) ? 1 : 0);
 }
 
-/** The Roof Entrance: Unlock with the brittle key, then Go-through. */
+/** The Roof Entrance: locked until the key is used on it; then up, for a player on task. */
 function entrance({ player, objectId }) {
   if (objectId !== Common.ids.locs.entrance) return false;
   if (!unlocked(player)) {
-    const key = Common.ids.items.key;
-    if (!player.getInventory().contains(key)) {
-      player.sendMessage(Common.message("locked"));
-      return true;
-    }
-    player.getInventory().deleteNumber(key, 1);
-    player.setAttribute(Common.UNLOCKED_ATTRIBUTE, true);
-    sendUnlocked(player);
-    player.sendMessage(Common.message("unlocked"));
+    player.sendMessage(Common.message("locked"));
     return true;
   }
-  goUp(player);
+  if (!Common.onTask(player)) {
+    Common.box(player, Common.message("noTask"));
+    return true;
+  }
+  travel(player, Common.data.travel.upTicks, "goUp", () => goUp(player));
   return true;
+}
+
+/** The brittle key used on the Roof Entrance: absorbed by the gateway, which opens for good. */
+function keyOnEntrance(event) {
+  const { player } = event;
+  const key = Common.ids.items.key;
+  if (event.objectId !== Common.ids.locs.entrance || event.itemId !== key) return;
+  event.handled = true;
+  if (unlocked(player)) return;
+  player.getInventory().deleteNumber(key, 1);
+  player.setAttribute(Common.UNLOCKED_ATTRIBUTE, true);
+  sendUnlocked(player);
+  Common.box(player, Common.message("unlocked"), key);
 }
 
 // --- The roof
 
-function ringBell({ player, objectId }) {
+/**
+ * The Cloister Bell: the player strikes it, the bell swings (a loc animation) with its sound, and
+ * the statues come down a few ticks later. Ring says so in a message box; Quick-start doesn't.
+ */
+function ringBell({ player, objectId, object, option }) {
   if (!Common.ids.locs.bell.includes(objectId)) return false;
   const roof = roofOf(player);
   if (!roof) return true;
@@ -216,21 +255,30 @@ function ringBell({ player, objectId }) {
     player.sendMessage(Common.message("concentrate"));
     return true;
   }
-  roof.start();
-  // The task is asked about the Guardian itself (its Slayer category is the gargoyles').
-  if (!Common.onTask(player, roof.dusk)) {
-    roof.clearGuardians();
-    player.sendMessage(Common.message("noTask"));
-    return true;
-  }
-  player.performAnimation?.(new Common.core.Animation(Common.ids.seqs.bell));
+  if (roof.waking) return true;
+  const { Animation } = Common.core;
+  const { ids, data } = Common;
+  const sender = player.getPacketSender();
+  player.performAnimation?.(new Animation(ids.seqs.ringBell));
+  if (object) sender.sendObjectAnimation(object, new Animation(ids.seqs.bell));
+  sender.sendSound(data.bell.sound, 1, data.bell.soundDelay);
+  if (option !== "Quick-start") Common.box(player, Common.message("ring"));
+  roof.waking = true;
+  Common.later(data.bell.wakeTicks, () => {
+    roof.waking = false;
+    if (roof.area.isDestroyed?.() === true || !roof.players().length || roof.fighting()) return;
+    roof.start();
+  });
   return true;
 }
 
 function escape({ player, objectId }) {
-  if (objectId !== Common.ids.locs.exit) return false;
-  player.moveTo(Common.toLocation(Common.data.roof.outside));
-  leaveRoof(player);
+  if (objectId !== Common.ids.locs.exit || !roofOf(player)) return false;
+  travel(player, Common.data.travel.downTicks, "goDown", () => {
+    if (!roofOf(player)) return;
+    player.moveTo(Common.toLocation(Common.data.roof.outside));
+    leaveRoof(player);
+  });
   return true;
 }
 
@@ -260,6 +308,10 @@ function guardianHit({ npc, hit }) {
   if (blocked) {
     for (const part of parts) part.setDamage(0);
     hit.updateTotalDamage?.();
+    if (attacker?.isPlayer?.() && dusk) {
+      // Ranged and magic: his armour; melee while he can't be hurt: his wing (rsprox lines).
+      attacker.getAsPlayer().sendMessage(Common.message(type !== CombatType.MELEE ? "immuneRanged" : "wing"));
+    }
     return;
   }
   // A hit stops at the phase's threshold: Dawn flies up, or Dusk turns defensive, at 225.
@@ -297,6 +349,7 @@ function attach(api) {
   defineAreaClass();
   api.persistAttribute(Common.UNLOCKED_ATTRIBUTE, false);
   api.onObjectInteraction("Roof Entrance", { Unlock: entrance, "Go-through": entrance });
+  api.onItemOnObject(keyOnEntrance);
   api.onObjectInteraction("The Cloister Bell", { Ring: ringBell, "Quick-start": ringBell });
   api.onObjectInteraction("Roof Exit", { Escape: escape, "Quick-escape": escape });
   api.onNpcHitModify(guardianHit);
@@ -306,4 +359,4 @@ function attach(api) {
   api.onPlayerDisconnect(leaveWorld);
 }
 
-module.exports = { attach, Roof, roofOf, goUp, leaveRoof, entrance, ringBell, escape, guardianHit, blockWorldSpawn, isHalberd, ROOF_ATTRIBUTE };
+module.exports = { attach, Roof, roofOf, goUp, leaveRoof, entrance, keyOnEntrance, ringBell, escape, guardianHit, blockWorldSpawn, isHalberd, ROOF_ATTRIBUTE };

@@ -39,6 +39,7 @@ before(async () => {
     },
   }, { get: (target, key) => target[key] ?? (() => {}) });
   Common.init(api);
+  Roof.attach(api);
 });
 
 /** Runs every queued one-shot task. */
@@ -82,7 +83,17 @@ function fakePlayer(x = 1695, y = 4575) {
     sendMessage: (m) => player.messages.push(m),
     getAttribute: (key) => player.attributes[key],
     setAttribute: (key, value) => { player.attributes[key] = value; },
-    getPacketSender: () => ({ sendGraphic: () => {}, sendVarbit: (id, value) => { player.varbits[id] = value; } }),
+    boxes: [], anims: [], sounds: [], locAnims: [], faded: [],
+    getPacketSender: () => ({
+      sendGraphic: () => {},
+      sendVarbit: (id, value) => { player.varbits[id] = value; },
+      sendObjectAnimation: (object, anim) => player.locAnims.push([object, anim.getId?.() ?? anim]),
+      sendSound: (id, volume, delay) => player.sounds.push([id, delay]),
+      sendSubInterface: () => player.faded.push('fade'),
+      closeSubInterface: () => player.faded.push('close'),
+    }),
+    getDialogueManager: () => ({ startDialogues: (chain) => player.boxes.push(chain) }),
+    performAnimation: (anim) => player.anims.push(anim.getId?.() ?? anim),
     getInventory: () => ({
       contains: (id) => (player.items.get(id) ?? 0) > 0,
       deleteNumber: (id, n) => player.items.set(id, (player.items.get(id) ?? 0) - n),
@@ -281,17 +292,96 @@ test('enraged Dusk opens on the style the player is not praying against, then mo
   prayers = new Set();
 });
 
-test('the Roof Entrance takes the brittle key once and stays open', () => {
+test('the brittle key used on the Roof Entrance is absorbed and opens it for good; a click does not use it', () => {
   const player = fakePlayer(3427, 3541);
   const { entrance } = Common.ids.locs;
+  const key = Common.ids.items.key;
+  player.items.set(key, 1);
   Roof.entrance({ player, objectId: entrance });
-  assert.equal(player.messages.at(-1), Common.message('locked'));
-  player.items.set(Common.ids.items.key, 1);
-  Roof.entrance({ player, objectId: entrance });
+  assert.equal(player.items.get(key), 1, 'clicking it does not take the key');
+  assert.equal(player.getAttribute(Common.UNLOCKED_ATTRIBUTE), undefined);
+  const use = { player, objectId: entrance, itemId: key, handled: false };
+  Roof.keyOnEntrance(use);
+  assert.equal(use.handled, true);
   assert.equal(player.getAttribute(Common.UNLOCKED_ATTRIBUTE), true);
   assert.equal(player.varbits[Common.ids.varbits.unlocked], 1);
-  assert.equal(player.items.get(Common.ids.items.key), 0);
+  assert.equal(player.items.get(key), 0);
+  assert.equal(player.boxes.length, 1, 'an objectbox with the key');
+  assert.equal(Common.message('unlocked'), 'You use the key and it is absorbed by the gateway as<br>it activates...');
   assert.equal(Roof.entrance({ player, objectId: 1 }), false);
+});
+
+test('going through needs the task at the entrance; then up 5 ticks later, with a fade, at (1697, 4567)', () => {
+  const player = fakePlayer(3427, 3541);
+  player.attributes[Common.UNLOCKED_ATTRIBUTE] = true;
+  player.getIndex = () => 1;
+  player.getArea = () => null;
+  player.setArea = () => {};
+  tasks = [];
+  onTaskAnswer = () => false;
+  Roof.entrance({ player, objectId: Common.ids.locs.entrance });
+  assert.equal(player.boxes.length, 1, 'refused in a mesbox');
+  assert.equal(Common.message('noTask'), 'You must have an assigned slayer task of Gargoyles or Grotesque Guardians to access the roof.');
+  assert.equal(tasks.length, 0, 'and not taken up');
+  onTaskAnswer = () => true;
+  Roof.entrance({ player, objectId: Common.ids.locs.entrance });
+  assert.equal(player.boxes.length, 2, '"You enter the passageway..."');
+  assert.equal(player.blocked, true);
+  const due = tasks.map((task) => task.getDelay?.() ?? task.delay);
+  assert.ok(due.includes(Common.data.travel.upTicks));
+  for (let i = 0; i < 3 && tasks.length; i++) flush();
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [1697, 4567]);
+  assert.ok(player.faded.includes('fade'));
+  assert.equal(player.blocked, false);
+  Roof.leaveRoof(player);
+  tasks = [];
+});
+
+test('the bell: the player strikes it, the bell loc swings with sound 3879, the statues come 4 ticks later; Ring says so, Quick-start does not', () => {
+  const player = fakePlayer();
+  const roof = new Roof.Roof(player);
+  let started = 0;
+  roof.players = () => [player];
+  roof.start = () => { started += 1; };
+  player.attributes[Roof.ROOF_ATTRIBUTE] = roof;
+  tasks = [];
+  const bell = { id: 31669 };
+  Roof.ringBell({ player, objectId: 31669, object: bell, option: 'Ring' });
+  assert.deepEqual(player.anims, [Common.ids.seqs.ringBell]);
+  assert.deepEqual(player.locAnims, [[bell, Common.ids.seqs.bell]], 'the swing is the bell loc\'s');
+  assert.deepEqual(player.sounds, [[3879, 20]]);
+  assert.equal(player.boxes.length, 1);
+  assert.equal(started, 0, 'not straight away');
+  Roof.ringBell({ player, objectId: 31669, object: bell, option: 'Ring' });
+  assert.equal(player.anims.length, 1, 'ringing again while they wake does nothing');
+  assert.equal(tasks[0].getDelay?.() ?? tasks[0].delay, Common.data.bell.wakeTicks);
+  flush();
+  assert.equal(started, 1);
+
+  const quick = fakePlayer();
+  const quickRoof = new Roof.Roof(quick);
+  quickRoof.players = () => [quick];
+  quickRoof.start = () => {};
+  quick.attributes[Roof.ROOF_ATTRIBUTE] = quickRoof;
+  Roof.ringBell({ player: quick, objectId: 31669, object: bell, option: 'Quick-start' });
+  assert.equal(quick.boxes.length, 0, 'Quick-start has no message');
+  tasks = [];
+});
+
+test('the Roof Exit: "You escape down..." and down to (3426, 3541, 2) 3 ticks later', () => {
+  const player = fakePlayer();
+  const roof = new Roof.Roof(player);
+  player.attributes[Roof.ROOF_ATTRIBUTE] = roof;
+  tasks = [];
+  assert.equal(Roof.escape({ player, objectId: Common.ids.locs.exit }), true);
+  assert.equal(player.boxes.length, 1);
+  assert.ok(tasks.some((task) => (task.getDelay?.() ?? task.delay) === Common.data.travel.downTicks));
+  for (let i = 0; i < 3 && tasks.length; i++) flush();
+  const at = player.getLocation();
+  assert.deepEqual([at.getX(), at.getY(), at.getZ()], [3426, 3541, 2]);
+  assert.equal(Roof.roofOf(player), null);
+  assert.equal(Roof.escape({ player, objectId: Common.ids.locs.exit }), false, 'only from the roof');
+  tasks = [];
 });
 
 test("the world's own Dusk on the roof is kept out; elsewhere spawns are untouched", () => {
@@ -337,10 +427,15 @@ test('both are finished with a rock hammer at 9 or below, like the gargoyles', (
   const list = Array.isArray(finishers) ? finishers : finishers.finishers;
   const entry = list.find((f) => f.names?.includes('Dusk'));
   const gargoyle = list.find((f) => f.names?.includes('Gargoyle'));
-  assert.ok(entry);
-  assert.deepEqual(entry.names, ['Dusk', 'Dawn']);
-  assert.equal(entry.threshold, Common.data.phases.finishThreshold);
-  assert.deepEqual(entry.items, gargoyle.items);
+  const dawn = list.find((f) => f.names?.includes('Dawn'));
+  assert.ok(entry && dawn);
+  for (const [finisher, name] of [[entry, 'Dusk'], [dawn, 'Dawn']]) {
+    assert.deepEqual(finisher.names, [name]);
+    assert.equal(finisher.threshold, Common.data.phases.finishThreshold);
+    assert.deepEqual(finisher.items, gargoyle.items);
+    assert.equal(finisher.finished, `${name} cracks apart.`, 'rsprox');
+  }
+  assert.equal(entry.tooStrong, "Dusk isn't weak enough to be harmed by the hammer.");
 });
 
 test('a stun ends after its ticks; a shorter one inside a longer one leaves the longer release', () => {
@@ -393,4 +488,68 @@ test('a bell rung straight after the kill keeps its new fight', () => {
   Kills.guardianDeath({ npc: dusk, killer: null });
   flush();
   assert.equal(cleared, 1);
+});
+
+test("the fight's own lines: knocked out by a rock, an energy sphere absorbed, trampled under Dusk", () => {
+  const { fight, dusk, dawn, player } = newFight(fakePlayer(1695, 4575));
+  dawn.hitpoints = 225;
+  fight.tick([player]);
+  assert.equal(fight.phase, 2);
+  fight.rocks = [{ tile: player.getLocation(), lands: fight.tickCount + 1 }];
+  fight.tick([player]);
+  assert.ok(player.messages.includes(Common.message('knockedOut')));
+  assert.equal(Common.message('knockedOut'), 'You have been knocked out!');
+
+  const under = fakePlayer(1690, 4574);
+  const alone = newFight(under);
+  alone.dawn.hitpoints = 225;
+  const before = under.damage.length;
+  alone.fight.tick([under]);
+  assert.equal(alone.fight.phase, 2, "Dusk alone");
+  alone.fight.tick([under]);
+  assert.equal(under.messages.at(-1), "You get trampled under Dusk's massive body.");
+  const trample = under.damage.slice(before);
+  assert.ok(trample.length === 1 && trample[0] >= 30 && trample[0] <= 40, 'Wiki: 30-40');
+  alone.fight.tick([under]);
+  assert.equal(under.damage.length, before + 1, 'not every tick');
+
+  const third = newFight(fakePlayer(1695, 4575));
+  third.fight.phase = 3;
+  third.fight.spheres = [{ tile: third.player.getLocation(), arrives: 999 }];
+  third.fight.tickSpheres([third.player]);
+  assert.equal(third.player.messages.at(-1), 'You absorb the energy sphere.');
+  tasks = [];
+});
+
+test("Dusk's blocked hits say why: his stone armour against ranged and magic, his wing against melee", () => {
+  const { fight, dusk, player } = newFight();
+  dusk.__ggFight = fight;
+  const ranged = fakeHit(player, core.CombatType.RANGED, [10]);
+  Roof.guardianHit({ npc: dusk, hit: ranged });
+  assert.equal(player.messages.at(-1), "Dusk's stone armour absorbs all magic and ranged based attacks.");
+  const melee = fakeHit(player, core.CombatType.MELEE, [10]);
+  Roof.guardianHit({ npc: dusk, hit: melee });
+  assert.equal(player.messages.at(-1), 'Dusk is defending himself with his wing! He absorbs the attack.');
+});
+
+test('the kill gives the fight duration from the bell and the personal best', () => {
+  const dusk = fakeGuardian(Common.ids.npcs.duskPhase4, 1689, 4573);
+  const fight = { stop: () => {} };
+  const roof = { fight, startedAt: 0, clearGuardians: () => {} };
+  dusk.__ggFight = fight;
+  dusk.__ggRoof = roof;
+  const player = fakePlayer();
+  const original = core.World.getProcessCycle;
+  core.World.getProcessCycle = () => 139;
+  try {
+    tasks = [];
+    Kills.guardianDeath({ npc: dusk, killer: player });
+    flush();
+  } finally {
+    core.World.getProcessCycle = original;
+  }
+  assert.equal(player.messages.at(-1), 'Fight duration: <col=ff0000>1:23.4</col>. Personal best: 1:23.4');
+  assert.equal(player.getAttribute(Common.BEST_ATTRIBUTE), 139);
+  assert.equal(Common.formatTicks(100), '1:00.0');
+  tasks = [];
 });
