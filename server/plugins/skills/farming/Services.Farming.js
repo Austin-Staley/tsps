@@ -279,6 +279,10 @@ function storeTool(player, slot) {
     const capacity = TOOL_CAPACITY[name] ?? (watering ? 1 : 0);
     if (!capacity) return false;
     const farm = Patches.farmFor(player), tools = farm.tools;
+    if (/secateurs/i.test(name) && Object.entries(tools).some(([key, count]) => count > 0
+        && +key !== id && /secateurs/i.test(core.CacheDefinitions.getItem(+key).name))) {
+        player.sendMessage("Withdraw your stored secateurs before storing a different kind."); return true;
+    }
     const used = Object.entries(tools).reduce((sum, [key, count]) => {
         const other = core.CacheDefinitions.getItem(+key).name;
         return sum + (watering ? /^Watering can|^Gricoller's can$/.test(other) ? count : 0
