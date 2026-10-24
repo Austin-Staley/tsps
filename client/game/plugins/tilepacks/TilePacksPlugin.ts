@@ -62,6 +62,7 @@ export class TilePacksPlugin extends Plugin {
     /** The tiles to draw, for the loaded regions (PointManager.points). */
     points: ColorTileMarker[] = [];
     private sceneKey = "";
+    private sceneTemplates: InstanceScene["templates"] = null;
     private loaded = false;
     private readonly listeners = new Set<() => void>();
     private version = 0;
@@ -119,6 +120,7 @@ export class TilePacksPlugin extends Plugin {
         this.points = [];
         this.activePointsByRegion = undefined;
         this.sceneKey = "";
+        this.sceneTemplates = null;
     }
 
     onConfigChanged(event: ConfigChanged): void {
@@ -134,11 +136,11 @@ export class TilePacksPlugin extends Plugin {
         this.commit();
     }
 
-    /** Stands in for WorldViewLoaded: reloads the points when the loaded regions change. */
+    /** Reload on region or instance-template replacement, as WorldViewLoaded would. */
     onGameTick(): void {
         if (!this.loaded) return;
         const key = this.currentSceneKey();
-        if (key !== this.sceneKey) this.loadPoints();
+        if (key !== this.sceneKey || this.instanceScene().templates !== this.sceneTemplates) this.loadPoints();
     }
 
     // ------------------------------------------------------------------ scene facts
@@ -194,9 +196,10 @@ export class TilePacksPlugin extends Plugin {
     loadPoints(): void {
         this.activePointsByRegion = undefined;
         this.sceneKey = this.currentSceneKey();
+        const scene = this.instanceScene();
+        this.sceneTemplates = scene.templates;
         const points: ColorTileMarker[] = [];
         if (this.sceneKey) {
-            const scene = this.instanceScene();
             for (const regionId of this.mapRegions()) {
                 for (const tile of this.activePoints(regionId)) {
                     const template = fromRegion(tile.regionId, tile.regionX, tile.regionY, tile.z);
