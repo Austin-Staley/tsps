@@ -301,9 +301,18 @@ function farmingItemOnNpc(event) {
         player.sendMessage("I won't note cabbages here!"); return;
     }
     if (!harvested || definition.noteTemplate >= 0 || definition.note < 0) { player.sendMessage("I can note harvested produce and store farming tools."); return; }
-    const amount = player.getInventory().getAmount(id);
-    player.getInventory().deleteNumber(id, amount);
-    player.getInventory().addItem(new core.Item(definition.note, amount));
+    const inventory = player.getInventory(), amount = inventory.getAmount(id);
+    // Reserve the complete output after freeing the produce slots, including stack limits.
+    const planned = new inventory.constructor(player);
+    planned.setItems(inventory.getCopiedItems());
+    for (let slot = 0; slot < planned.capacity(); slot++) {
+        const item = planned.forSlot(slot);
+        if (item.getId() === id) planned.deleteAtSlot(slot, item.getAmount(), false);
+    }
+    const noted = new core.Item(definition.note, amount);
+    if (planned.getAddableAmount(noted) < amount) { inventory.full(); return; }
+    inventory.deleteNumber(id, amount);
+    inventory.addItem(noted);
 }
 function farmingNpc(event) {
     const { player, npc, definition } = event;
