@@ -215,6 +215,7 @@ import { isDropTarget, isWidgetUseTarget } from "../widgets/WidgetFlags";
 import { markWidgetInteractionDirty } from "../widgets/WidgetInteraction";
 import { WidgetManager } from "../widgets/WidgetManager";
 import { WidgetSessionManager } from "../widgets/WidgetSessionManager";
+import { runWidgetJsOp } from "../widgets/custom/dynamicWidgets";
 import { applyQuestListWidgetGroups, questListPreferences } from "../widgets/custom/questList";
 import { cleanupInterfaceClickTargets, cleanupWidgetClickTarget } from "../widgets/gl/widgets-gl";
 import { layoutWidgets } from "../widgets/layout/WidgetLayout";
@@ -3962,6 +3963,7 @@ export class OsrsClient {
     }
 
     private handleNativeWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
+        if (runWidgetJsOp(event)) return;
         if (this.clientPlugins.handleWidgetAction(event)) return;
         const uid = event.widget?.uid | 0;
         // The logout tab's "World Switcher" button, and the same option on the logout tab's
