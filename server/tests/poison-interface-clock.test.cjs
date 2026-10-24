@@ -87,3 +87,48 @@ test('NPC poison does not enter a player-only interface gate', () => {
   try { for (let i = 0; i < 35; i++) task.tick(); assert.deepEqual(hits.map(hit => hit.getDamage()), [6]); }
   finally { task.stop(); }
 });
+
+function nativeModalFixture(t, venom) {
+  const h = fixture(t, venom);
+  t.mock.method(h.player, 'getSession', () => ({ sendClientPacket: () => true }));
+  h.setOpen(false);
+  return { ...h, sender: h.player.getPacketSender() };
+}
+
+test('native chatbox dialogue replacements hold one overdue poison/venom hit until closing', t => {
+  for (const venom of [false, true]) {
+    const h = nativeModalFixture(t, venom);
+    h.step(15);
+    h.sender.sendChatboxInterface(231); // captured NPC dialogue, not a main interface
+    assert.equal(h.player.getInterfaceId(), -1);
+    h.step(40);
+    h.sender.sendChatboxInterface(219); // replacing the same modal with options
+    h.step(40);
+    assert.equal(h.hits.length, 0);
+    assert.equal(h.player.getPoisonDamage(), venom ? 6 : 30);
+    h.sender.closeInterface(219);
+    h.step();
+    assert.deepEqual(h.hits.map(hit => hit.getDamage()), [6]);
+    h.step(29);
+    assert.equal(h.hits.length, 1, 'closing cannot release multiple accumulated hits');
+    h.step();
+    assert.equal(h.hits.length, 2);
+  }
+});
+
+test('a short chatbox preserves the deadline and sidebar overlays never hold damage', t => {
+  for (const venom of [false, true]) {
+    const h = nativeModalFixture(t, venom);
+    h.sender.sendSubInterface((161 << 16) | 82, 218, 1); // permanent spellbook overlay
+    h.step(10);
+    h.sender.sendChatboxInterface(231);
+    h.step(5);
+    h.sender.closeInterface(231);
+    h.step(14);
+    assert.equal(h.hits.length, 0);
+    h.step();
+    assert.deepEqual(h.hits.map(hit => hit.getDamage()), [6]);
+    h.step(30);
+    assert.equal(h.hits.length, 2, 'the remaining type-1 sidebar is not a modal');
+  }
+});
