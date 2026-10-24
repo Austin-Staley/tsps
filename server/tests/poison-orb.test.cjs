@@ -114,8 +114,11 @@ test("poison shows its severity, venom 1,000,000 plus its hits, immunity its 18-
   assert.equal(CombatPoisonEffect.orbValue(mobile({ immunitySeconds: 2 })), 0, "a serpentine helm's refresh is left out");
 });
 
-test("the orb's Cure says so when nothing in the pack can cure, and does nothing unpoisoned", () => {
+test("the orb's Cure says so when nothing in the pack can cure, and does nothing unpoisoned", async () => {
   const Potions = require("../plugins/items/Potions.plugin");
+  await require("../dist/game/cache/CachePipeline").CachePipeline.initialize(process.cwd());
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  Potions.register(PluginManager.createApi("PoisonOrbTest"));
   const messages = [];
   const player = (poisoned) => ({
     isPoisoned: () => poisoned,

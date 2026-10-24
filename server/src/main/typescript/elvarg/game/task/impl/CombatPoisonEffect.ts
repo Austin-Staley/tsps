@@ -79,10 +79,14 @@ export class CombatPoisonEffect extends Task {
       // OSRS venom: the stored value IS the damage dealt (no severity->damage
       // formula), escalates by 2 each hit up to a cap of 20, and does not
       // decay or expire on its own - only a cure ends it.
-      this.entity
-        .getCombat()
-        .getHitQueue()
-        .addPendingDamage([new HitDamage(currentValue, HitMask.GREEN)]);
+      const generation = this.entity.getVenomGeneration();
+      const hit = new HitDamage(currentValue, HitMask.GREEN).onApplied(damageTaken => {
+        if (damageTaken > 0 && this.entity.isRegistered() && this.entity.isVenomed() &&
+            this.entity.getVenomGeneration() === generation) {
+          this.entity.setLastVenomDamage(damageTaken);
+        }
+      });
+      this.entity.getCombat().getHitQueue().addPendingDamage([hit]);
       this.entity.setPoisonDamage(Math.min(20, currentValue + 2));
       this.ticksUntilHit = 30;
       return;

@@ -126,3 +126,30 @@ dialogue continuation, denied ingredient preservation and the making-only level
 gate. An unlearned player also cannot skip the lesson by handing purchased tea
 to Bleemadge and advancing the quest. This correction retains the existing simplified, single-step brewing
 recipe; it does not claim the staged live-game tea preparation is implemented.
+
+## Hitpoints orb potion selection
+
+The [Poison Wiki page](https://oldschool.runescape.wiki/w/Poison) describes
+preferring stronger remedies, then the least-dosed vessel of the remedy, with
+inventory order breaking dose ties. [Venom](https://oldschool.runescape.wiki/w/Venom)
+also lists Guthix rest as an applicable partial treatment and puts potions ahead
+of other remedies.
+
+The potion handler selects the strongest supported treatment family, then its
+least-dosed vessel, retaining the first slot for a dose tie. Selection uses the
+registered dose chains; consuming the selected vessel still goes through the
+normal drink restrictions, effects, messages, animation and cooldowns.
+Guthix rest is available as a partial treatment when no stronger supported
+potion is carried.
+
+Relative strength follows the Wiki's increasing poison protection tiers and
+explicit anti-venom upgrades. Antipoison/mix, superantipoison/Sanfew, and
+Antidote+/mix share their respective treatment strength. Different families at
+the same strength retain their existing inventory precedence: their exact live
+tie priority has not been established. Non-potion fallback selection and remedies
+not yet registered by Potions remain separate work; this does not establish
+complete health-orb or poison/venom parity.
+
+`tests/health-orb-potion-selection.test.cjs` checks all pairwise supported tier
+comparisons for both afflictions, dose ties, mixes, partial tea, noted items,
+unrelated potions and the existing drink cooldown.
