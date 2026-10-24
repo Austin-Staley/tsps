@@ -11,12 +11,12 @@ is open, saturating it at zero. Do not damage, decay ordinary poison, escalate
 venom, or accumulate multiple overdue hits during the interface. Closing after
 the deadline releases one hit and starts the next ordinary interval. Repeated
 short interface changes must not stop elapsed time. Preserve NPC behavior and
-the existing cure/immunity checks. The current interface suppression already
+explicit cure routes. The current interface suppression already
 applies to both afflictions; this change retains that eligibility.
 
 Three timing regression groups failed against upstream before correction. Real
 Task.tick tests cover ordinary poison and venom, early close/reopen, repeated
-toggles, one-hit debt, cure/immunity and NPC controls. Fresh build, 45 focused
+toggles, one-hit debt, explicit-cure and NPC controls. Fresh build, 45 focused
 checks and all 4,923 server tests pass, without failures or skips. Independent
 review cleared the delta and reran all five new tests successfully.
 
