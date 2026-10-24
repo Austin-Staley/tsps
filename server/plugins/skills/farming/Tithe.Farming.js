@@ -105,7 +105,10 @@ function titheObject(event) {
             }
             Patches.choose(player, [100, 1000, 10000].map(amount => [`Take ${amount}`, () => {
                 if (!player.getLocation().isWithinDistance(object.getLocation(), 4)) return;
-                if (CROPS.some(other => other !== c && player.getInventory().contains(Data.itemId(other.name + " seed")))) return;
+                if (player.getSkillManager().getCurrentLevel(core.Skill.FARMING) < c.level) { player.sendMessage(`You need level ${c.level} Farming.`); return; }
+                if (CROPS.some(other => other !== c && (player.getInventory().contains(Data.itemId(other.name + " seed")) || player.getInventory().contains(Data.itemId(other.name + " fruit"))))) {
+                    player.sendMessage("You can only use one type of seed at a time."); return;
+                }
                 const count = Math.min(amount, 10000 - player.getInventory().getAmount(Data.itemId(c.name + " seed")));
                 if (count > 0) Patches.give(player, Data.itemId(c.name + " seed"), count);
             }]));
