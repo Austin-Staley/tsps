@@ -17,7 +17,7 @@ const I = core.ItemIdentifiers;
 
 function fixture() {
   const actions = new Map(), events = new Map(), attributes = new Map(), sent = [], ground = [], spawned = [];
-  let position = new core.Location(3222, 3218, 0), chain;
+  let position = new core.Location(3222, 3218, 0), chain, placed = 0;
   const items = Array(28).fill(null), worn = [];
   const inventory = {
     getItems: () => items, refreshItems() {}, setItem(slot, item) { items[slot] = item; return inventory; },
@@ -46,14 +46,14 @@ function fixture() {
   api.onCustomEvent("treasure-trails:milestone-rewards", request => { request.handled = true; });
   function place(step, length = 2, slot = 0) {
     items[slot] = new core.Item(step.itemId, 1).setMetaValue(Runtime.metaKey(EASY),
-      { version: 1, token: `t${slot}`, revision: 0, completed: 0, length, row: step.row });
+      { version: 1, token: `t${slot}-${++placed}`, revision: 0, completed: 0, length, row: step.row });
     position = new core.Location(step.location.x, step.location.y, step.location.z);
     return Runtime.trails(player).find(trail => trail.slot === slot);
   }
   return { player, items, worn, skills, on: api.onCustomEvent, attributes, actions, sent, ground, spawned, place,
     event: (slot = 0) => ({ player, slot, item: items[slot], itemId: items[slot]?.getId() }),
     move: target => { position = new core.Location(target.x, target.y, target.z); },
-    finish: () => { for (const d of chain.getDialogues().values()) if (d instanceof core.ActionDialogue) d.send(player); },
+    finish: () => { const current = chain; chain = null; for (const d of current?.getDialogues().values() ?? []) if (d instanceof core.ActionDialogue) d.send(player); },
   };
 }
 
@@ -115,7 +115,7 @@ test("a solved step hands over another step item, and the last step a reward cas
   const trail = f.place(step, 2);
   assert.equal(Runtime.advance(f.player, trail, () => 0.5), true);
   const next = f.items[0].getMetaValue(Runtime.metaKey(EASY));
-  assert.deepEqual([next.completed, next.length, next.token], [1, 2, "t0"]);
+  assert.deepEqual([next.completed, next.length, next.token], [1, 2, "t0-1"]);
   assert.equal(Runtime.data(EASY).byRow.get(next.row).itemId, f.items[0].getId());
   assert.equal(Runtime.advance(f.player, trail), false, "a stale snapshot cannot advance twice");
   Runtime.advance(f.player, Runtime.trails(f.player)[0]);
