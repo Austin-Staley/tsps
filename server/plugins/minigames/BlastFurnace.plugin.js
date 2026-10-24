@@ -37,6 +37,7 @@ const FOREMAN_OK_LINE = "Okay, you can use the furnace for ten minutes.";
 
 /** The pot holds 28 ore that makes bars, 254 of coal and of tin, and 28 of each bar. */
 const PRIMARY_LIMIT = 28;
+const NICKEL_LIMIT = 14;
 const SECONDARY_LIMIT = 254;
 const BAR_LIMIT = 28;
 
@@ -356,9 +357,8 @@ function putOre(player, onlyItemId = null) {
     }
     const held = inventory.getAmount(ore.item);
     const room = ore.primary ? PRIMARY_LIMIT - primaryTotal(state) : SECONDARY_LIMIT - (state.ores[ore.item] ?? 0);
-    // Leave space for the two copper ores needed by each nickel ore.
     const limit = ore.item === core.ItemIdentifiers.NICKEL_ORE
-      ? Math.min(room, Math.max(0, Math.floor((PRIMARY_LIMIT - (state.ores[ore.item] ?? 0) * 3) / 3))) : room;
+      ? Math.min(room, NICKEL_LIMIT - (state.ores[ore.item] ?? 0)) : room;
     const count = Math.min(held, limit);
     if (count < held) overflow = true;
     if (count <= 0) continue;
@@ -387,6 +387,7 @@ function useOreOnBelt({ player, itemId }) {
 
 function checkPot({ player }) {
   const { ores } = stateOf(player);
+  // Prompt wording is ours; no live capture of this menu yet.
   pluginApi.sendMultiChatboxPrompt(player, "Melting pot",
     "Check contents.", () => listPages(player, ORES.map((ore) => `${itemName(ore.item)}: ${ores[ore.item] ?? 0}`)),
     "Empty the furnace.", () => pluginApi.sendMultiChatboxPrompt(player, "Destroy all ore in the furnace?",
@@ -414,6 +415,7 @@ function barXp(player, bar) {
 
 /** Turns the pot's ore into bars, up to 28 of each in the dispenser, and pours them. */
 function smelt(player) {
+  if (belt.some((ore) => ore.player === player)) return;
   if (!Machinery.canSmelt() || Machinery.automated() && stateOf(player).coffer === 0) return;
   const state = stateOf(player);
   let made = false;
@@ -498,18 +500,17 @@ function coolWithWater(event) {
   const { player, objectId, itemId } = event;
   if (objectId !== BAR_DISPENSER || itemId !== core.ItemIdentifiers.BUCKET_OF_WATER) return;
   event.handled = true;
-  if (dispenserState(player) !== DISPENSER_HOT) {
+  const recipients = [...new Set([player, ...inRoom])].filter((other) =>
+    dispenserState(other) === DISPENSER_HOT &&
+    other.getLocation().isWithinDistance(new core.Location(...BAR_DISPENSER_TILE, 0), 5));
+  if (!recipients.length) {
     player.sendMessage("Nothing interesting happens.");
     return;
   }
   player.performAnimation(new core.Animation(THROW_WATER_ANIMATION));
   player.getInventory().deleteNumber(core.ItemIdentifiers.BUCKET_OF_WATER, 1);
   player.getInventory().addItem(new core.Item(core.ItemIdentifiers.BUCKET, 1));
-  cool(player);
-  for (const other of inRoom) {
-    if (other !== player && dispenserState(other) === DISPENSER_HOT &&
-        other.getLocation().isWithinDistance(new core.Location(...BAR_DISPENSER_TILE, 0), 5)) cool(other);
-  }
+  for (const recipient of recipients) cool(recipient);
 }
 
 function fillBucket({ player }) {

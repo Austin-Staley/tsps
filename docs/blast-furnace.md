@@ -31,8 +31,10 @@ The dwarven furnace under Keldagrim (`server/plugins/minigames/BlastFurnace.plug
 
 ## Manual and dwarf-operated worlds
 
-The existing world-zone tag mechanism selects the mode: add `blast-furnace` to an unbounded
-zone's `tags` in `world.local.json` for dwarf operation. Untagged worlds operate manually.
+The existing world-zone tag mechanism selects the mode. The shipped global zone includes
+`blast-furnace`, preserving dwarf operation for existing default deployments. Untagged worlds
+operate manually. A `world.local.json` override that replaces `zones` must include the tag on
+an unbounded zone to keep dwarf operation; use an untagged global zone to test manual work.
 Only dwarf worlds require/deduct the coffer fee. Both retain the foreman's unboostable
 base-60 exemption and under-60 permit. The furnace Area blocks PvP, including on PvP worlds.
 
@@ -58,7 +60,7 @@ action, then put its inventory coal on the belt. Put-ore-on never automatically 
 bag. Coal exceeding the pot's capacity remains in the inventory. This path is regression-tested
 against the real shared storage transfer; no new container store or automatic unloading is added.
 Lead and cupronickel use shared Smithing recipes (two lead ore; two copper and one nickel).
-Nickel loading reserves room for copper. Checking the pot offers contents or confirmed
+Nickel is capped at 14, within the shared 28-primary-ore limit. Checking the pot offers contents or confirmed
 destruction of owned ore, including pending conveyor NPCs, without deleting another player's
 ore or any completed bars. Recipe definitions live in `plugins/skills/data/smithing.json`;
 the two members recipes are hidden/refused on F2P worlds.
@@ -75,7 +77,13 @@ Bar dispenser page's Mod Ash reference describes. The dispenser cap remains 28 p
   when a live fighter/operator capture establishes the timings. They are not verified parity.
 - Original belt/dispenser timings and room travel tiles labelled **RSPS** above remain
   unverified against a live capture.
-- Dumpy/Numpty's detailed idle/refuelling/repair choreography is not captured.
+- Dwarf-operated captures 3278 and 1757 show Dumpy's nine-tick cycle: shovel-up with a
+  15-client-cycle delay at tick 0, carried-coke form at tick 1, shovel-down with delay 15 at
+  tick 2, and shovel-finish plus empty form at tick 4. The plugin reproduces this cycle.
+  Captures also show Thumpy's `human_smithing` and Numpty's `emote_dance_headbang`, but their
+  variable repair triggers/cadence remain unknown; no invented continuous idle loop is used.
+- New manual refusals, empty-pot prompts and lead/cupronickel messages use unverified wording,
+  labelled in code/data until a matching capture establishes the text.
 
 ## Verification
 
@@ -83,3 +91,5 @@ Bar dispenser page's Mod Ash reference describes. The dispenser cap remains 28 p
 checks paid and manual operation, fuel/pedals/heat gating, manual XP/cancellation, shared
 contribution cooldown, overheating/repairs, room scoping, coal-bag capacity, lead/cupronickel,
 confirmed pot emptying, stale-menu cooling checks, nearby shared cooling and F2P recipe gates.
+Review regressions also cover pending conveyor ore through Take/re-entry, helper-only cooling,
+integer-valued pedal energy across restarts, nickel limits and the captured Dumpy cycle.

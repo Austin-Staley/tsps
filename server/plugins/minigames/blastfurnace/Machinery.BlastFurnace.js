@@ -29,9 +29,11 @@ const parts = [];
 const operators = new Map();
 const participants = new Map();
 const contributionAt = new WeakMap();
+const pendingPedalDrain = new WeakSet();
 let stove = null;
 let running = null;
 const machinery = [];
+let stoker = null, stokerCycle = 0;
 
 function automated() {
   return core.WorldDefinition.hasGlobalWorldTag("blast-furnace");
@@ -93,11 +95,12 @@ function ready(player, skill) {
   if (location.getX() < ROOM.minX || location.getX() > ROOM.maxX ||
       location.getY() < ROOM.minY || location.getY() > ROOM.maxY || location.getZ() !== 0) return false;
   if (automated()) {
+    // Manual-operation refusal wording is ours, pending a live capture.
     player.sendMessage("The dwarves operate the machinery on this world.");
     return false;
   }
   if (player.getSkillManager().getCurrentLevel(skill) < MIN_LEVEL) {
-    player.sendMessage(`You need level ${MIN_LEVEL} ${skill.getName().toLowerCase()} to do that.`);
+    player.sendMessage(`You need level ${MIN_LEVEL} ${skill.getName()} to do that.`);
     return false;
   }
   return true;
@@ -106,6 +109,7 @@ function ready(player, skill) {
 function operate(player, object, role, skill, animation) {
   if (!ready(player, skill)) return;
   if (player.getNpcTransformationId() !== -1) {
+    // Unverified wording; the transformation restriction is documented by the Wiki.
     player.sendMessage("You can't operate the machinery while transformed.");
     return;
   }
@@ -128,8 +132,12 @@ function operate(player, object, role, skill, animation) {
       }
       if (operation.ticks % 4 === 1) animate(player, animation);
       if (role === "pedal") {
-        player.setRunEnergy(player.getRunEnergy() - 0.5);
-        player.getPacketSender().sendRunEnergy();
+        // Energy is integer-valued; retain the half-point across action restarts.
+        if (pendingPedalDrain.has(player)) {
+          pendingPedalDrain.delete(player);
+          player.setRunEnergy(player.getRunEnergy() - 1);
+          player.getPacketSender().sendRunEnergy();
+        } else pendingPedalDrain.add(player);
         player.getSkillManager().addExperiences(skill, 1);
       } else if (fuel > 0) {
         player.getSkillManager().addExperiences(skill, 2);
@@ -212,7 +220,7 @@ function updateStove() {
 
 function tick() {
   updateMotion();
-  if (automated()) return;
+  if (automated()) { tickStoker(); return; }
   elapsed++;
   if (fuel > 0 && elapsed % FUEL_TICKS === 0) { fuel--; updateStove(); }
   const pumping = [...operators.values()].some((operation) => operation.role === "pump");
@@ -220,12 +228,28 @@ function tick() {
   if (heat >= OVERHEAT) {
     for (const part of parts) setBroken(part, true);
     for (const player of [...operators.keys()]) {
+      // The safe overheat effect is documented; this message is not captured.
       player.sendMessage("The blast furnace has overheated and the machinery has broken!");
       leave(player);
     }
     heat = 0;
   } else if (operators.size > 0 && parts.length && Math.random() < BREAK_CHANCE) {
     setBroken(parts[Math.floor(Math.random() * parts.length)], true);
+  }
+}
+
+/** RSProx 3278/1757: repeat every nine ticks, with the carried-coke form between 1 and 4. */
+function tickStoker() {
+  if (!stoker?.isRegistered()) return;
+  const phase = stokerCycle++ % 9;
+  if (phase === 0) {
+    stoker.setNpcTransformationId(core.NpcIdentifiers.DUMPY);
+    stoker.performAnimation(new core.Animation(id("getSeqId", "human_shovel_coke_up"), 15));
+  } else if (phase === 1) stoker.setNpcTransformationId(core.NpcIdentifiers.DUMPY_2);
+  else if (phase === 2) stoker.performAnimation(new core.Animation(id("getSeqId", "human_shovel_coke_down"), 15));
+  else if (phase === 4) {
+    stoker.setNpcTransformationId(core.NpcIdentifiers.DUMPY);
+    stoker.performAnimation(new core.Animation(id("getSeqId", "human_shovel_coke_fin")));
   }
 }
 
@@ -254,6 +278,8 @@ function shutdown() {
 }
 
 function startup() {
+  stoker = null;
+  stokerCycle = 0;
   const center = new core.Location(1945, 4965, 0);
   core.RegionManager.loadMapFiles(center.getX(), center.getY());
   const locs = [...core.MapObjects.mapObjects.values()].flat().filter((object) => object.getLocation().isWithinDistance(center, 20));
@@ -275,6 +301,7 @@ function startup() {
   for (const npc of core.World.getNpcs()) {
     if (!npc || !helpers.has(npc.getId()) || !npc.getLocation().isWithinDistance(center, 20)) continue;
     if (!automated()) api.removeNpc(npc);
+    else if ([core.NpcIdentifiers.DUMPY, core.NpcIdentifiers.DUMPY_2].includes(npc.getId())) stoker = npc;
     else if (npc.getId() === core.NpcIdentifiers.PUMPY) npc.setBaseAnimations({ idle: id("getSeqId", "blast_furnace_npc_air_pump") });
     else if (npc.getId() === core.NpcIdentifiers.STUMPY) npc.setBaseAnimations({ idle: id("getSeqId", "blast_furnace_npc_conveyer_cycle") });
   }
@@ -304,4 +331,4 @@ function attach(pluginApi) {
 
 module.exports = { ROOM, init, attach, automated, beltRunning, canSmelt, sync, tick, contribute, contribution, leave,
   _test: { startup, collectCoke, refuel, pedal, pump, repair, shutdown,
-    snapshot: () => ({ fuel, heat, parts, operators }), reset: () => { shutdown(); fuel = heat = elapsed = 0; parts.length = 0; machinery.length = 0; stove = null; running = null; } } };
+    snapshot: () => ({ fuel, heat, parts, operators }), reset: () => { shutdown(); fuel = heat = elapsed = 0; parts.length = 0; machinery.length = 0; stove = null; running = null; stoker = null; stokerCycle = 0; } } };

@@ -1,7 +1,7 @@
 {
   "$comment": "What the cache doesn't hold about Smithing. Anvil products (level, bars, amount) come from cache enums 844-846 and their slots from anvil-layout.json (yarn dump:smithing); this file has the furnace recipes and the experience. Item keys are ItemIdentifiers names.",
   "source": "https://oldschool.runescape.wiki/w/Smithing",
-  "$smelting": "Furnace recipes in Smelt-menu order (rsprox captures, rev 227-235 normal worlds: Bronze, Blurite, Iron, Silver, Steel, Gold, Mithril, Adamantite, Runite). Messages: rev 237 captures where docs/smithing.md says so, the same pattern otherwise.",
+  "$smelting": "Furnace recipes in Smelt-menu order (rsprox captures, rev 227-235 normal worlds: Bronze, Blurite, Iron, Silver, Steel, Gold, Mithril, Adamantite, Runite). Messages: rev 237 captures where docs/smithing.md says so, the same pattern otherwise. The newer lead/cupronickel smelt, retrieve and missing-ore messages are our unverified wording, pending live captures.",
   "smelting": [
     {
       "name": "Bronze bar",

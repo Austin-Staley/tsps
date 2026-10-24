@@ -13,6 +13,7 @@ const spawned = [];
 const BlastFurnace = require("../plugins/minigames/BlastFurnace.plugin");
 const Machinery = require("../plugins/minigames/blastfurnace/Machinery.BlastFurnace");
 const { Location } = require("../dist/game/model/Location");
+const { Player } = require("../dist/game/entity/impl/player/Player");
 let giantDwarfStarted = false;
 let dwarfOperated = true;
 let playerIndex = 0;
@@ -46,7 +47,7 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
   if (hands !== -1) equipment[Equipment.HANDS_SLOT] = { getId: () => hands };
   const p = {
     messages: [], xp: 0, varbits: new Map(), dialogues: 0, menu: null, inventory,
-    index: ++playerIndex, location: new Location(1940, 4960, 0), energy: 100, moving: false,
+    index: ++playerIndex, location: new Location(1940, 4960, 0), runEnergy: 100, moving: false,
     getIndex: () => p.index,
     getLocation: () => p.location,
     isRegistered: () => true,
@@ -55,8 +56,8 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
     getNpcTransformationId: () => -1,
     getMovementQueue: () => ({ size: () => p.moving ? 1 : 0 }),
     getForceMovement: () => null,
-    getRunEnergy: () => p.energy,
-    setRunEnergy: (energy) => { p.energy = energy; },
+    getRunEnergy: Player.prototype.getRunEnergy,
+    setRunEnergy: Player.prototype.setRunEnergy,
     setPositionToFace() {},
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
@@ -138,7 +139,7 @@ test("manual worlds require pedals and heat, not a coffer deposit", (t) => {
   Machinery._test.pedal(station(loader));
   manualTicks(4);
   assert.equal(stateOf(loader).bars[ItemIds.IRON_BAR], undefined, "cold furnace");
-  assert.equal(loader.energy, 98);
+  assert.equal(loader.getRunEnergy(), 98);
   Machinery.leave(loader);
   Machinery._test.collectCoke({ player: loader });
   Machinery._test.refuel({ player: loader });
@@ -163,12 +164,19 @@ test("lead and cupronickel use their shared recipes and nickel cannot fill the p
   stateOf(nickel).coffer = 1000;
   putOre(nickel);
   ticks(4);
-  assert.equal(stateOf(nickel).ores[ItemIds.NICKEL_ORE], 9, "space remains for copper");
-  nickel.inventory.set(ItemIds.COPPER_ORE, 18);
+  assert.equal(stateOf(nickel).ores[ItemIds.NICKEL_ORE], 14);
+  nickel.inventory.set(ItemIds.COPPER_ORE, 28);
   putOre(nickel);
   ticks(4);
-  assert.equal(stateOf(nickel).bars[ItemIds.CUPRONICKEL_BAR], 9);
-  assert.equal(nickel.xp, 9 * 42);
+  assert.equal(stateOf(nickel).bars[ItemIds.CUPRONICKEL_BAR], 7);
+  assert.equal(nickel.xp, 7 * 42);
+  assert.equal(stateOf(nickel).ores[ItemIds.NICKEL_ORE], 7);
+  assert.equal(nickel.inventory.get(ItemIds.COPPER_ORE), 14, "the shared primary-ore limit still applies");
+  const mixed = player({ items: { [ItemIds.NICKEL_ORE]: 28 } });
+  stateOf(mixed).coffer = 1000;
+  stateOf(mixed).ores[ItemIds.IRON_ORE] = 20;
+  putOre(mixed);
+  assert.equal(stateOf(mixed).ores[ItemIds.NICKEL_ORE], 8);
 });
 
 test("emptying requires confirmation, destroys only owned ore and clears its conveyor NPCs", () => {
@@ -208,13 +216,76 @@ test("manual machine actions stop for movement, exhaustion and logout", () => {
   manualTicks(1);
   assert.equal(Machinery._test.snapshot().operators.size, 0);
   p.moving = false;
-  p.energy = 0;
+  p.setRunEnergy(0);
   Machinery._test.pedal(station(p));
   manualTicks(1);
   assert.equal(Machinery._test.snapshot().operators.size, 0);
   Machinery._test.pump(station(p));
   BlastFurnace._test.logout({ player: p });
   assert.equal(Machinery._test.snapshot().operators.size, 0);
+});
+
+test("pedalling charges a whole energy point per two ticks, including across restarts", () => {
+  dwarfOperated = false;
+  const p = player();
+  Machinery._test.pedal(station(p));
+  manualTicks(1);
+  assert.equal(p.getRunEnergy(), 100);
+  Machinery.leave(p);
+  Machinery._test.pedal(station(p));
+  manualTicks(1);
+  assert.equal(p.getRunEnergy(), 99);
+  manualTicks(18);
+  assert.equal(p.getRunEnergy(), 90);
+  assert.equal(p.xp, 20);
+});
+
+test("Dumpy repeats the captured nine-tick coke and animation sequence", (t) => {
+  const core = PluginManager.getCoreApi();
+  const events = [];
+  let cycle = 0;
+  const stoker = {
+    getId: () => core.NpcIdentifiers.DUMPY,
+    getLocation: () => new Location(1955, 4967, 0),
+    isRegistered: () => true,
+    setNpcTransformationId: (id) => events.push([cycle, "form", id]),
+    performAnimation: (animation) => events.push([cycle, "animation", animation.getId(), animation.getDelay()]),
+  };
+  t.mock.method(core.World, "getNpcs", () => [stoker]);
+  Machinery._test.startup();
+  for (cycle = 0; cycle < 18; cycle++) tick();
+  const oneCycle = [
+    [0, "form", core.NpcIdentifiers.DUMPY],
+    [0, "animation", core.CacheDefinitions.getSeqId("human_shovel_coke_up"), 15],
+    [1, "form", core.NpcIdentifiers.DUMPY_2],
+    [2, "animation", core.CacheDefinitions.getSeqId("human_shovel_coke_down"), 15],
+    [4, "form", core.NpcIdentifiers.DUMPY],
+    [4, "animation", core.CacheDefinitions.getSeqId("human_shovel_coke_fin"), 0],
+  ];
+  assert.deepEqual(events, [...oneCycle, ...oneCycle.map(([at, ...rest]) => [at + 9, ...rest])]);
+});
+
+test("collecting old bars or reentering cannot smelt ore still on a stopped conveyor", (t) => {
+  dwarfOperated = false;
+  t.mock.method(Math, "random", () => 1);
+  const p = player({ items: { [ItemIds.GOLD_ORE]: 3 } });
+  const pumper = player({ items: { [ItemIds.SPADE]: 1 } });
+  Machinery._test.collectCoke({ player: pumper });
+  Machinery._test.refuel({ player: pumper });
+  Machinery._test.pump(station(pumper));
+  manualTicks(40);
+  stateOf(p).bars[ItemIds.IRON_BAR] = 1;
+  p.varbits.set(DISPENSER, 3);
+  putOre(p);
+  take(p, ItemIds.IRON_BAR, 1);
+  assert.equal(stateOf(p).bars[ItemIds.GOLD_BAR], undefined);
+  BlastFurnace._test.enterRoom({ player: p });
+  assert.equal(stateOf(p).bars[ItemIds.GOLD_BAR], undefined);
+  assert.equal(stateOf(p).ores[ItemIds.GOLD_ORE], 3);
+  Machinery._test.pedal(station(p));
+  manualTicks(4);
+  assert.equal(stateOf(p).bars[ItemIds.GOLD_BAR], 3);
+  BlastFurnace._test.leaveRoom({ player: p });
 });
 
 test("manual actions cannot be used outside the furnace", () => {
@@ -267,6 +338,24 @@ test("water cools other hot bars within five tiles", () => {
   assert.equal(nearby.varbits.get(DISPENSER), 3);
   assert.equal(distant.varbits.get(DISPENSER), 2);
   for (const actor of [p, nearby, distant]) BlastFurnace._test.leaveRoom({ player: actor });
+});
+
+test("helpers with no hot bars can cool another player's bars, using one bucket", () => {
+  for (const helperState of [0, 3]) {
+    const helper = player({ items: { [ItemIds.BUCKET_OF_WATER]: 1 } }), owner = player();
+    BlastFurnace._test.enterRoom({ player: owner });
+    stateOf(owner).bars[ItemIds.IRON_BAR] = 1;
+    owner.varbits.set(DISPENSER, 2);
+    helper.varbits.set(DISPENSER, helperState);
+    coolWithWater({ player: helper, objectId: 9092, itemId: ItemIds.BUCKET_OF_WATER });
+    assert.equal(owner.varbits.get(DISPENSER), 3);
+    assert.equal(helper.inventory.get(ItemIds.BUCKET_OF_WATER), 0);
+    assert.equal(helper.inventory.get(ItemIds.BUCKET), 1);
+    BlastFurnace._test.leaveRoom({ player: owner });
+  }
+  const nobody = player({ items: { [ItemIds.BUCKET_OF_WATER]: 1 } });
+  coolWithWater({ player: nobody, objectId: 9092, itemId: ItemIds.BUCKET_OF_WATER });
+  assert.equal(nobody.inventory.get(ItemIds.BUCKET_OF_WATER), 1);
 });
 
 test("overheating breaks parts without damage; hammer repairs award XP only once", (t) => {
