@@ -31,25 +31,25 @@
 
 ### 1. Shared actor pulse and persistence
 
-- [ ] Write failing real-player regressions: existing poison phase continues through anti-venom+, modal fixture updates only at captured close, repeated doses retain phase, protection expires after the last held pulse.
-- [ ] Implement `PoisonClock.ts`, Combat's player timer facade and CPE clock ownership; leave NPC seconds timers untouched.
-- [ ] Remove the obsolete fractional-pause plugin reconciliation; native PacketSender tracking is the modal authority.
-- [ ] Persist a validated optional snapshot through PlayerSave, including positive-affliction phase and short flags; migrate old numeric seconds without inventing historical precision.
-- [ ] Run focused positive/negative status, lifecycle and persistence checks; update obsolete pause assertions to the captured policy without weakening generic timer tests.
+- [x] Write failing real-player regressions: existing poison phase continues through anti-venom+, modal fixture updates only at captured close, repeated doses retain phase, protection expires after the last held pulse.
+- [x] Implement `PoisonClock.ts`, Combat's player timer facade and CPE clock ownership; leave NPC seconds timers untouched.
+- [x] Remove the obsolete fractional-pause plugin reconciliation; native PacketSender tracking is the modal authority.
+- [x] Persist a validated optional snapshot through PlayerSave, including positive-affliction phase and short flags; migrate old numeric seconds without inventing historical precision.
+- [x] Run focused positive/negative status, lifecycle and persistence checks; update obsolete pause assertions to the captured policy without weakening generic timer tests.
 
 ### 2. Treatment and protection policy
 
-- [ ] Add failing real consumable/CombatFactory tests for ordinary antipoison versus venom, -39/-38 boundary and full anti-venom cure.
-- [ ] Distinguish player venom protection from ordinary poison protection; keep NPC resistance behavior.
-- [ ] Implement ordinary venom downgrade versus full anti-venom, preserve stronger counters and use base anti-venom's published -41 tier.
-- [ ] Route charged serpentine equipment and strange fruit through explicit short poison/venom flags; verify they preserve stronger counters and affliction phase.
-- [ ] Audit/register canonical missing upgraded/mixed remedies as required; use cache chains, not invented item IDs.
+- [x] Add failing real consumable/CombatFactory tests for ordinary antipoison versus venom, -39/-38 boundary and full anti-venom cure.
+- [x] Distinguish player venom protection from ordinary poison protection; keep NPC resistance behavior.
+- [x] Implement ordinary venom downgrade versus full anti-venom, preserve stronger counters and use base anti-venom's published -41 tier.
+- [x] Route charged serpentine equipment and strange fruit through explicit short poison/venom flags; verify they preserve stronger counters and affliction phase.
+- [x] Audit/register canonical missing upgraded/mixed remedies as required; use cache chains, not invented item IDs.
 
 ### 3. Review, verify and deliver
 
-- [ ] Independent read-only review and source build/focused regressions.
-- [ ] Selectively integrate owned commits onto the latest installed local baseline, preserving all existing changes.
-- [ ] Actual doses, held NPC dialogue, boundary susceptibility, short flags and relog on the owned QA server; save/stop QA.
+- [x] Independent read-only review and source build/focused regressions.
+- [x] Selectively integrate owned commits onto the latest installed local baseline, preserving all existing changes.
+- [x] Actual doses, held NPC dialogue, boundary susceptibility, short flags and relog on the owned QA server; save/stop QA.
 - [ ] One complete combined server suite; fix concrete failures and repeat only where justified.
 - [ ] Push source and combined branches, open a ready PR with exact limits/dependencies, attach it, update relevant owned PR status truthfully.
 - [ ] Fresh coordination check, safe save/SQLite backup, fast-forward/server build/restart; verify all client hashes/account rows and release live operations.
