@@ -390,6 +390,8 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             });
         }
 
+        // RuneLite's getSelectedSceneTile: the scene tile under the mouse (kept while a menu is open).
+        if (!usingPinnedMenu) host.osrsClient.selectedSceneTile = undefined;
         if (!usingPinnedMenu && !mouseInUIRegion && !mouseOverWidget && anchorInSceneViewport) {
             // PERF: Reuse cached arrays/sets instead of allocating new ones each frame
             const locIds = host.cachedLocIds;
@@ -407,6 +409,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             const baseX = (ClientState.baseX | 0) as number;
             const baseY = (ClientState.baseY | 0) as number;
             const anchorTile = host.computeTileAt(anchorX, anchorY);
+            host.osrsClient.selectedSceneTile = anchorTile ?? undefined;
             let walkHereEntry: OsrsMenuEntry | undefined = undefined;
             if (ClientState.isItemSelected === 0 && !ClientState.isSpellSelected) {
                 const walkTile = anchorTile ?? host.osrsClient.menuTile ?? hoveredTile;

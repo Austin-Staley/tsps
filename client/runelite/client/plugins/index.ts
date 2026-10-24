@@ -27,7 +27,7 @@ import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
 } from "../../../game/plugins/statustimer/StatusTimerPlugin";
-import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkersConfig";
+import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migrateTileMarkers";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
@@ -88,7 +88,8 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
     {
         name: "tilemarkers",
         legacyKey: "osrs.plugin.tile_markers.v1",
-        config: TileMarkersConfig,
+        // Into the old keys; migrateTileMarkersConfig then moves them to Tile Indicators'.
+        config: LegacyTileMarkersConfig,
         enabledKey: "tilemarkersplugin",
     },
     {

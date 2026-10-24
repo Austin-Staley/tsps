@@ -26,7 +26,7 @@ import type { OverheadTextEntry } from "../../ui/devoverlay/Overlay";
 import type { GpuSettings } from "./gpu/GpuPlugin";
 import type { InteractHighlightPluginConfig } from "./interacthighlight/InteractHighlightConfig";
 import type { FixedStretch } from "./stretchedmode/StretchedModePlugin";
-import { DISABLED_TILE_MARKERS_CONFIG, type TileMarkersPluginConfig } from "./tilemarkers/TileMarkersConfig";
+import { DISABLED_TILE_MARKERS_CONFIG, type TileMarkersPluginConfig } from "./tilemarkers/types";
 
 /**
  * Draw/input context handed to a plugin that supplies a custom gameframe (the
