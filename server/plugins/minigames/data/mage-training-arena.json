@@ -57,6 +57,8 @@
       "bones4": "magictraining_bones4",
       "banana": "banana",
       "peach": "peach",
+      "bones": "bones",
+      "bigBones": "big_bones",
       "water": "waterrune",
       "earth": "earthrune",
       "nature": "naturerune"
@@ -157,6 +159,7 @@
     "fruitDeposited": "You deposit {fruit} fruit and earn {points} Graveyard Pizazz Point{s}.",
     "runesForFruit": "You receive {amount} {rune} for the fruit you deposited.",
     "noRunes": "You do not have enough runes to cast this spell.",
+    "noFruitIn": "You can't take fruit or bones into the Creature Graveyard.",
     "_graveyard": "noBones and peachesLocked are the Wiki's; the rest have no capture"
   },
   "alchemists": {

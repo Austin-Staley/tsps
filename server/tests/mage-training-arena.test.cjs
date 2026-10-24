@@ -492,10 +492,12 @@ test('the chute: a point per 16 fruit (a peach is 2), at most 3 a deposit, 5 XP 
   player.items.set(items.banana, 20);
   assert.deepEqual(Graveyard.depositFruit(player, () => 0.2), { fruit: 20, points: 2 }, '20 bananas: 1 point and a 25% chance of a second');
   assert.deepEqual(player.xp, [100]);
-  player.items.set(items.peach, 30);
+  player.xp.length = 0;
+  player.items.set(items.peach, 27);
   const most = Graveyard.depositFruit(player, () => 0.9);
-  assert.deepEqual(most, { fruit: 48, points: 3 });
-  assert.equal(player.items.get(items.peach), 6, '24 peaches at most');
+  assert.deepEqual(most, { fruit: 54, points: 3 }, '27 peaches count as 24 (Wiki)');
+  assert.equal(player.items.get(items.peach), 0, 'all of them go in');
+  assert.deepEqual(player.xp, [270], 'and give XP');
   assert.equal(Graveyard.depositFruit(fakePlayer(x, y, z)), null);
 });
 
@@ -520,12 +522,19 @@ test('every Graveyard point earns a rune, given on leaving; logging out keeps th
   assert.equal(player.getAttribute(Graveyard.RUNES_OWED_ATTRIBUTE), 0);
 });
 
-test('the Graveyard Teleport needs Magic 15', () => {
+test('the Graveyard Teleport needs Magic 15, and no fruit or bones', () => {
   const player = fakePlayer(3365, 3318, 0);
   player.magic = 14;
   Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
   assert.equal(player.messages.at(-1), Common.message('level', { level: 15, room: 'Creature Graveyard' }));
   player.magic = 15;
+  for (const key of ['peach', 'banana', 'bones']) {
+    player.items.set(Common.ids.items[key], 2);
+    Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
+    assert.equal(player.messages.at(-1), Common.message('noFruitIn'), key);
+    assert.equal(player.items.get(Common.ids.items[key]), 2, 'and nothing of theirs is taken');
+    player.items.set(Common.ids.items[key], 0);
+  }
   Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], graveyardTile());
 });

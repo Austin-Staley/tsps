@@ -6,9 +6,10 @@
  *   from it (kept per player), kinds 1 to 4 turning into that many fruit;
  * - Bones to Bananas turns every animals' bone carried into bananas, Bones to Peaches (once
  *   unlocked from the Rewards Guardian) into peaches, a cast's runes and XP at a time;
- * - the food chute takes the fruit: 1 Graveyard Pizazz Point per 16 (a peach counts as 2, the rest
- *   a chance of one more), at most 3 points a deposit, 5 Magic XP a banana and 10 a peach; every
- *   point earns a water, earth, nature, death or blood rune, given on leaving;
+ * - the food chute takes all the fruit: 1 Graveyard Pizazz Point per 16 (a peach counts as 2, the
+ *   rest a chance of one more), at most 3 points a deposit, 5 Magic XP a banana and 10 a peach for
+ *   all of it; every point earns a water, earth, nature, death or blood rune, given on leaving;
+ * - fruit and the bones the spells turn into fruit can't be taken in;
  * - the room's bones and fruit never leave it; logging out keeps them (since 8 May 2024).
  * Not here: the falling bones (the Wiki gives no frequency) and so the room's 10-point death cost.
  */
@@ -99,10 +100,11 @@ function castBonesSpell(event) {
   }
   const inventory = player.getInventory();
   const fruitId = Common.ids.items[spell.data.fruit];
-  // Room for the fruit: the bones' own slots, and as many more as the extra fruit needs.
+  if (!spell.canCast(player, true)) return;
+  // Room for the fruit (after the runes, which may free a slot): the bones' own slots and any
+  // free ones; what doesn't fit is lost, as in OSRS.
   const bones = BONES.reduce((sum, key) => sum + inventory.getAmount(Common.ids.items[key]), 0);
   const made = Math.min(fruit, bones + inventory.getFreeSlots());
-  if (!spell.canCast(player, true)) return;
   for (const key of BONES) {
     const id = Common.ids.items[key];
     const amount = inventory.getAmount(id);
@@ -117,20 +119,20 @@ function castBonesSpell(event) {
 
 // --- The food chute
 
-/** Up to 48 fruit a deposit (3 points): peaches first, as they're worth 2. */
+/** All the fruit goes in, for its XP; only 48 of it (3 points) counts for points (Wiki). */
 function depositFruit(player, random = Math.random) {
   const { graveyard: room } = Common.data;
   const { items } = Common.ids;
   const inventory = player.getInventory();
-  const cap = room.fruitPerPoint * room.maxPoints;
-  const peaches = Math.min(inventory.getAmount(items.peach), Math.floor(cap / 2));
-  const bananas = Math.min(inventory.getAmount(items.banana), cap - peaches * 2);
+  const peaches = inventory.getAmount(items.peach);
+  const bananas = inventory.getAmount(items.banana);
   const fruit = peaches * 2 + bananas;
   if (fruit <= 0) return null;
   if (peaches > 0) inventory.deleteNumber(items.peach, peaches);
   if (bananas > 0) inventory.deleteNumber(items.banana, bananas);
-  const whole = Math.floor(fruit / room.fruitPerPoint);
-  const points = Math.min(room.maxPoints, whole + (random() < (fruit % room.fruitPerPoint) / room.fruitPerPoint ? 1 : 0));
+  const counted = Math.min(fruit, room.fruitPerPoint * room.maxPoints);
+  const whole = Math.floor(counted / room.fruitPerPoint);
+  const points = Math.min(room.maxPoints, whole + (random() < (counted % room.fruitPerPoint) / room.fruitPerPoint ? 1 : 0));
   Common.addPoints(player, "graveyard", points);
   player.getSkillManager().addExperiences(Common.core.Skill.MAGIC, bananas * room.bananaXp + peaches * room.peachXp);
   player.setAttribute(RUNES_OWED_ATTRIBUTE, (Number(player.getAttribute(RUNES_OWED_ATTRIBUTE)) || 0) + points);
@@ -184,7 +186,10 @@ function updateOverlay(player) {
   player.getPacketSender().sendString(Common.points(player, "graveyard").toLocaleString("en-GB"), Common.ids.components.graveyardPoints);
 }
 
-/** The Graveyard Teleport: Bones to Bananas (Magic 15, boostable). Fruit can't be taken in (Wiki). */
+/**
+ * The Graveyard Teleport: Bones to Bananas (Magic 15, boostable). Bananas, peaches and the bones
+ * the spells turn into fruit can't be taken in (Wiki).
+ */
 function enter({ player, objectId }) {
   if (objectId !== Common.ids.locs.graveyardPortal) return false;
   const { level, arrive } = Common.data.graveyard;
@@ -192,7 +197,11 @@ function enter({ player, objectId }) {
     player.sendMessage(Common.message("level", { level, room: "Creature Graveyard" }));
     return true;
   }
-  removeRoomItems(player);
+  const { items } = Common.ids;
+  if ([items.banana, items.peach, items.bones, items.bigBones].some((id) => player.getInventory().contains(id))) {
+    player.sendMessage(Common.message("noFruitIn"));
+    return true;
+  }
   player.moveTo(Common.toLocation(arrive));
   return true;
 }
