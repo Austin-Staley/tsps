@@ -170,6 +170,9 @@ async function main(): Promise<void> {
     clearConfig();
     ClientState.inInstance = false;
     ClientState.instanceTemplateChunks = null;
+    // The 104-tile scene from (3168, 3168) holds regions 49-51 x 49-51.
+    ClientState.baseX = 3168;
+    ClientState.baseY = 3168;
     const toolbar = new FakeToolbar();
     const plugin = new TilePacksPlugin(client, config, toolbar as any, async () => packs);
     const unlisten = config.addListener((event) => plugin.onConfigChanged(event));
@@ -214,14 +217,14 @@ async function main(): Promise<void> {
     assert.deepEqual(mini[0][0][0], [[3222, -3218], [3222, -3219], [3223, -3219], [3223, -3218]]);
     assert.equal(mini[0][0][3], 1);
 
-    // Moving to another region reloads the points on the next tick.
-    player.x = 3160;
+    // A new scene reloads the points on the next tick.
+    ClientState.baseX = 3104;
     plugin.onGameTick();
-    assert.equal(plugin.points.length, 3, "region 12850 is still within the 104-tile scene");
-    player.x = 2900;
+    assert.equal(plugin.points.length, 3, "region 12850 is still within the scene (3104-3207)");
+    ClientState.baseX = 2800;
     plugin.onGameTick();
     assert.equal(plugin.points.length, 0, "out of the scene");
-    player.x = 3222;
+    ClientState.baseX = 3168;
     plugin.onGameTick();
     assert.equal(plugin.points.length, 3);
 
@@ -236,8 +239,8 @@ async function main(): Promise<void> {
     assert.deepEqual(plugin.points.map((p) => p.point), [{ x: 6400 + 16 + 6, y: 6400 + 24 + 2, plane: 0 }], "the copied tile");
     ClientState.inInstance = false;
     ClientState.instanceTemplateChunks = null;
-    ClientState.baseX = 0;
-    ClientState.baseY = 0;
+    ClientState.baseX = 3168;
+    ClientState.baseY = 3168;
     plugin.onGameTick();
 
     // Hide on toolbar.

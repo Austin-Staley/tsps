@@ -6,12 +6,11 @@ import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
 import { ClientToolbar } from "@runelite/client/ui/ClientToolbar";
 import type { NavigationButton } from "@runelite/client/ui/NavigationButton";
-import { unpackTemplateChunk } from "../../../common/instance/InstanceTypes";
 import { chatHistory } from "../../../rs/cs2/ChatHistory";
 import { toRuneLiteGameState } from "../../../runelite/impl/GameStateMapping";
 import { ClientState } from "../../ClientState";
 import type { OsrsClient } from "../../OsrsClient";
-import { fromRegion, regionIdOf, toLocalInstance, type InstanceScene, type WorldPoint } from "../../scene/worldPoint";
+import { fromRegion, sceneRegionIds, toLocalInstance, type InstanceScene, type WorldPoint } from "../../scene/worldPoint";
 import type { WidgetOverlay } from "../ClientPluginManager";
 import { indexByRegion, parseBundledPacks, type TilePack, type TilePackPoint } from "./tilePackData";
 import { TilePackStore } from "./TilePackStore";
@@ -35,9 +34,6 @@ function loadBundledPacks(): Promise<Map<number, TilePack>> {
     bundledPacks.catch(() => (bundledPacks = undefined));
     return bundledPacks;
 }
-
-/** RuneLite's scene is 104 tiles wide; its regions are the ones Tile Packs loads points for. */
-const SCENE_SIZE = 104;
 
 /**
  * The Plugin Hub's Tile Packs (TrevorMDev, BSD-2): ready-made sets of ground markers, turned on
@@ -183,25 +179,7 @@ export class TilePacksPlugin extends Plugin {
 
     /** WorldView.getMapRegions: an instance's template regions, else the regions the scene covers. */
     private mapRegions(): number[] {
-        const regions = new Set<number>();
-        const scene = this.instanceScene();
-        if (scene.templates) {
-            for (const plane of scene.templates) for (const column of plane ?? []) for (const packed of column ?? []) {
-                if (packed === -1 || packed === undefined) continue;
-                const t = unpackTemplateChunk(packed);
-                regions.add(regionIdOf(t.chunkX * 8, t.chunkY * 8));
-            }
-            return [...regions];
-        }
-        const player = this.playerTile();
-        if (!player) return [];
-        const half = SCENE_SIZE / 2;
-        for (let x = (player.x - half) >> 6; x <= (player.x + half) >> 6; x++) {
-            for (let y = (player.y - half) >> 6; y <= (player.y + half) >> 6; y++) {
-                if (x >= 0 && y >= 0) regions.add((x << 8) | y);
-            }
-        }
-        return [...regions];
+        return [...sceneRegionIds(this.instanceScene())];
     }
 
     private currentSceneKey(): string {
