@@ -26,7 +26,26 @@ Rev241 cache gamevals/configs were inspected directly: NPCs 12203–12212, seque
 
 This is not a verified 1:1 implementation. Absolute seed anchoring/orientation, eight-column placement and the distribution beyond published health constraints are inferred from diagrams/video. Special animation timings, seed duration and binding flight timing need a packet capture. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Realm switching is permitted during specials; the exact fragment deactivation window is not captured. No in-game client smoke run has been performed.
 
-Awakened geometry, timing, full five-projectile patterns, stat/slayer immunity integration, prayer/sanity changes, special rotations and final-phase mechanics are not implemented. No Awakened CA is awarded. Only kill-count/PB CA contracts are supplied; other CAs require full tracking before being enabled.
+Awakened geometry, timing, full five-projectile patterns, stat/slayer immunity integration, prayer/sanity changes, special rotations and final-phase mechanics are not implemented. No Awakened CA is awarded.
+
+All eight normal achievement paths are supplied: the generic CA handler owns Adept/Master kill counts; this plugin tracks speed tasks at the current rev241 limits (strictly under 3:00, 2:25 and 2:05, without a Slayer task), Tentacular, Dark Memories and Perfect Whisperer. Tentacular records Arceuus throughout the fight, including attacks between process ticks; Dark Memories counts fewer than ten pre-enrage Shadow Realm ticks. Perfect Whisperer counts five perfect kills in one session, allowing imperfect kills between them, as the individual Wiki task page explicitly states. Eligibility and time freeze before delayed death, so completing the last Slayer kill cannot accidentally grant a speed task. Leaving starts a fresh perfect-kill session.
+
+## Remaining normal evidence audit
+
+| Mechanic | Current evidence/status | Work still required |
+| --- | --- | --- |
+| Entry/wake | Cache Odd Figure/spawn sequence and clear entry tiles verified; Wiki describes knockback | Establish knockback destination and first-attack tick |
+| Normal volleys | Wiki patterns, impact prayer and ten-tick cycle verified | Ordered sequence variants, exact launch/impact timings |
+| Tentacles | Four-tile origin, X/plus progression, one hit per wave verified | Spawn/attack phase timing and complete traversed path |
+| Seeds | Four diagram patterns transcribed; light/dark reward and damage verified | Absolute anchors/orientation, activation/deadline timings (current 50 ticks provisional) |
+| Screech | Eight columns, health guarantees/cap, three blasts and exact cover rule verified | Absolute column positions, health distribution and phase timings (current five-tick spacing provisional) |
+| Souls | Twelve souls and 20-tick chant, group effects verified | Exact positions, phase animations and cast deadline relative to teleport |
+| Binding | Existing freeze counters and low-health pursuit cancellation verified | Flight/pursuit timing and optional-bind selection |
+| Fragment | Correct real/cache state identities and realm mirror verified | Screech deactivation/return window; unlimited toggling is still provisional |
+| Melee | Max 42, mirrored guaranteed hits and partial prayer verified | Exact roll distribution and protected amount; Tentacular page describes roughly 33% mitigation, conflicting with provisional 25% |
+| Enrage/death | Wiki 140 HP, stat restore, two-tick paired styles, cancelled damage and 30-tick respawn verified | Exact phase animation/transition offsets and tentacle phase timing |
+
+The local captured-animation aggregate confirms sequence families but lacks ordered ticks. New shared RSProx decoding is being checked against original OSRS video and official event modifiers before event-world observations are used. Modified stats and reward rates cannot establish ordinary-world values. This audit remains open; achievement coverage does not establish full encounter parity.
 
 Focused tests use real rev241 cache configs, Player/NPC instances, equipment/inventory, HitDamage/HitQueue, skill levels, private areas and source hooks. Rendering/scheduling and deterministic accuracy are doubled only where the unit under test requires it. Build with `node node_modules/typescript/bin/tsc --build` and run `node --test tests/whisperer.test.cjs` from `server/`.
 

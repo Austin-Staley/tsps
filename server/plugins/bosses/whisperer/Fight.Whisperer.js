@@ -1,5 +1,6 @@
 const Common = require('./Common.Whisperer');
 const Specials = require('./Specials.Whisperer');
+const Rewards = require('./Rewards.Whisperer');
 class Fight {
     constructor(session, boss) {
         this.session = session;
@@ -23,6 +24,7 @@ class Fight {
         this.rotation = Common.random(0, 1) ? ['screech', 'souls', 'seeds'] : ['seeds', 'screech', 'souls'];
         this.startCycle = Common.core.World.getProcessCycle();
         this.boundUntil = 0;
+        Rewards.begin(this);
     }
     alive() { return !this.over && !this.stopped && !this.session.ended && this.session.fight === this; }
     pattern(base = 'ranged') {
@@ -69,6 +71,7 @@ class Fight {
     process() {
         if (!this.alive() || this.player.getHitpoints() <= 0)
             return;
+        Rewards.process(this);
         this.tick++;
         this.sanityTick();
         const hp = this.boss.getHitpoints();
@@ -254,6 +257,7 @@ class Fight {
         this.tentacles = [];
     }
     finish() {
+        Rewards.observe(this);
         this.elapsedTicks = Common.core.World.getProcessCycle() - this.startCycle;
         this.over = true;
         this.events = [];
@@ -347,6 +351,7 @@ function onDeath({ npc }) {
     if (!best || ticks < best)
         player.setAttribute(Common.BEST_ATTRIBUTE, ticks);
     player.sendMessage(`Fight duration: ${Math.floor(ticks * .6 / 60)}:${String(Math.floor(ticks * .6) % 60).padStart(2, '0')}${!best || ticks < best ? ' (new personal best)' : ''}.`);
+    Rewards.complete(fight);
     Common.later(30, () => {
         if (!fight.session.ended && fight.session.fight === fight)
             require('./Site.Whisperer').respawn(fight.session);
@@ -365,6 +370,7 @@ function attach(api) {
     api.onNpcBeforeDeath(beforeDeath);
     api.onNpcDeath(onDeath);
     api.onNpcHitModify(modifyHit);
+    api.onCombatHitRoll(Rewards.attack);
     api.onCombatHitRoll(bindingCounter);
     api.onCustomEvent('npc-drops:context', dropContext);
 }

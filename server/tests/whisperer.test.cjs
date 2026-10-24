@@ -16,9 +16,10 @@ before(async () => {
     core.RegionManager.init();
     Common.init({ core, emitCustomEvent() { }, removeNpc() { } });
 });
-function fixture() {
+function fixture(spellbook) {
     const player = new Player(null);
     player.setUsername('whisperer-test');
+    if (spellbook) player.setSpellbook(spellbook);
     player.isRegistered = () => true;
     const sender = new Proxy({}, { get: () => () => sender });
     player.getPacketSender = () => sender;
@@ -513,4 +514,92 @@ test('postquest teleporter activations restore after quest login varbits are syn
     vars.set(15088,0); // Existing DT2 login hook runs later with its own saved discovery state.
     for(const task of tasks)task.execute();
     assert.equal(vars.get(15088),1);
+});
+
+function achievementFixture(t, { spellbook = core.MagicSpellbook.ARCEUUS, onTask = false } = {}) {
+    let cycle = 100;
+    t.mock.method(core.World, 'getProcessCycle', () => cycle);
+    const awards = [], deaths = [], attacks = [];
+    const api = new Proxy({ core,
+        emitCustomEvent(name, event) {
+            if (name === 'combat-achievements:complete') awards.push(event.task);
+            if (name === 'slayer:on-task') event.onTask = onTask;
+        },
+        onNpcDeath(handler) { deaths.push(handler); },
+        onCombatHitRoll(handler) { attacks.push(handler); },
+    }, { get: (object, key) => object[key] ?? (() => {}) });
+    Common.init(api);
+    const f = fixture(spellbook);
+    require('../plugins/bosses/whisperer/Fight.Whisperer').attach(api);
+    const death = () => { for (const handler of deaths) handler({ npc: f.boss, killer: f.player }); };
+    return Object.assign(f, { awards, death,
+        kill(ticks = 400, beforeDeath = () => {}) { cycle = f.fight.startCycle + ticks; f.boss.setHitpoints(0); f.fight.finish(); beforeDeath(); death(); },
+        setOnTask(value) { onTask = value; },
+        attack() { for (const handler of attacks) handler({ attacker: f.player, target: f.boss, forceAccurate: false }); },
+        nextFight() {
+            f.boss = f.session.spawn(Common.data.npcs.boss, 2655, 6369);
+            f.boss.setMaxHitpoints(900); f.boss.setHitpoints(900);
+            f.fight = f.session.fight = new Fight(f.session, f.boss);
+            f.boss.__whispererFight = f.fight;
+        },
+    });
+}
+
+test('normal speed achievements use current cache limits, strict lethal times and no Slayer task', t => {
+    const Data = require('../plugins/achievements/combatachievements/Data.CombatAchievements'); Data({ core });
+    for (const [rank, text, before, boundary] of [['Trialist', '3:00', 299, 300], ['Chaser', '2:25', 241, 242], ['Runner', '2:05', 208, 209]]) {
+        const name = `Whisperer Speed-${rank}`;
+        assert.ok(Data.taskNamed(name).description.includes(text));
+        for (const [ticks, onTask, expected] of [[before, false, true], [boundary, false, false], [before, true, false]]) {
+            const f = achievementFixture(t, { onTask }); f.kill(ticks);
+            assert.equal(f.awards.includes(name), expected, `${name}, ticks=${ticks}, onTask=${onTask}`);
+        }
+    }
+});
+
+test('Tentacular tracks Arceuus throughout the fight including a changed-away-and-back spellbook', t => {
+    const valid = achievementFixture(t); valid.kill(); assert.ok(valid.awards.includes('Tentacular'));
+    const switched = achievementFixture(t);
+    switched.fight.nextAttack = Infinity;
+    switched.player.setSpellbook(core.MagicSpellbook.NORMAL); switched.fight.process();
+    switched.player.setSpellbook(core.MagicSpellbook.ARCEUUS); switched.kill();
+    assert.equal(switched.awards.includes('Tentacular'), false);
+    const late = achievementFixture(t, { spellbook: core.MagicSpellbook.NORMAL });
+    late.player.setSpellbook(core.MagicSpellbook.ARCEUUS); late.kill();
+    assert.equal(late.awards.includes('Tentacular'), false);
+    const cast = achievementFixture(t);
+    cast.player.setSpellbook(core.MagicSpellbook.NORMAL); cast.attack();
+    cast.player.setSpellbook(core.MagicSpellbook.ARCEUUS); cast.kill();
+    assert.equal(cast.awards.includes('Tentacular'), false, 'an off-book cast between process ticks is tracked');
+});
+
+test('speed eligibility is frozen before a lethal Slayer kill can clear the task', t => {
+    const f = achievementFixture(t, { onTask: true });
+    f.kill(100, () => f.setOnTask(false));
+    assert.equal(f.awards.some(name => name.startsWith('Whisperer Speed-')), false);
+});
+
+test('Dark Memories counts fewer than ten pre-enrage Shadow Realm ticks and ignores enrage', t => {
+    for (const [ticks, expected] of [[9, true], [10, false]]) {
+        const f = achievementFixture(t);
+        f.fight.nextAttack = Infinity; f.fight.startedSpecials = 3;
+        f.fight.setShadow(true);
+        for (let tick = 0; tick < ticks; tick++) f.fight.process();
+        beforeDeath({ npc: f.boss, preventDeath: false });
+        f.fight.nextAttack = Infinity;
+        for (let tick = 0; tick < 20; tick++) f.fight.process();
+        f.kill(); assert.equal(f.awards.includes('Dark Memories'), expected);
+    }
+});
+
+test('five perfect kills can include an imperfect kill, count once and never carry into another session', t => {
+    const f = achievementFixture(t);
+    for (const [index, perfect] of [true, true, false, true, true, true].entries()) {
+        if (index) f.nextFight();
+        f.fight.perfectKill = perfect; f.kill();
+        assert.equal(f.awards.includes('Perfect Whisperer'), index === 5);
+    }
+    const before = f.awards.length; f.death(); assert.equal(f.awards.length, before);
+    const fresh = achievementFixture(t); fresh.kill();
+    assert.equal(fresh.awards.includes('Perfect Whisperer'), false);
 });
