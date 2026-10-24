@@ -506,7 +506,8 @@ function readActions() {
 module.exports = function attachTreasureTrails(pluginApi) {
   api = pluginApi;
   core = api.core;
-  catalogues = new Map();
+  // Build before gameplay so the first object/NPC click cannot stall a game tick.
+  catalogues = new Map(TIERS.map(tier => [tier.name, Catalogue.load(core, tier)]));
   for (const tier of TIERS) api.persistAttribute(completedAttribute(tier), 0);
   Dialogue.attach(api);
   for (const tier of TIERS) api.onItemAction(`Clue scroll (${tier.name})`, readActions());
