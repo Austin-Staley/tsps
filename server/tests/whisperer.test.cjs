@@ -13,6 +13,7 @@ let core;
 before(async () => {
     await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
     core = PluginManager.getCoreApi();
+    core.RegionManager.init();
     Common.init({ core, emitCustomEvent() { }, removeNpc() { } });
 });
 function fixture() {
@@ -268,7 +269,7 @@ test('postquest entry needs a fragment, owns both realms and cleans actors and U
     assert.equal(f.player.getLocation().getX(), 2400);
     const grave = { player: f.player };
     Site.grave(grave);
-    assert.deepEqual(grave.tile, { x: 2922, y: 5827, z: 0 });
+    assert.deepEqual(grave.tile, { x: 2922, y: 5826, z: 0 });
     assert.equal(grave.feeMultiplier, .25);
     Site.leave({ player: f.player });
     assert.equal(session.ended, true);
@@ -350,4 +351,47 @@ test('existing Combat Achievements counts a normal kill once and restores the ca
     f.player.setAttribute(Common.BEST_ATTRIBUTE,123);
     const pb={player:f.player,monster:'Whisperer, The'};api.emitCustomEvent('combat-achievements:personal-best',pb);
     assert.equal(pb.best,123);
+});
+test('ordinary postquest rope and activated teleporter reach the cathedral without a debug teleport', () => {
+    const f=fixture(),vars=new Map(),menus=[];let completed=false;
+    const sender=new Proxy({}, {get:(_,key)=>key==='getVarbit'?(id=>vars.get(id)||0):key==='sendVarbit'?((id,value)=>{vars.set(id,value);return sender;}):(()=>sender)});
+    f.player.getPacketSender=()=>sender;
+    Common.init({core,emitCustomEvent(name,event){if(name==='quest:is-complete')event.complete=completed;},
+        sendMultiChatboxPrompt(_player,_title,...choices){menus.push(choices);}});
+    const entrance={player:f.player,objectId:49477,option:'climb-rope',location:{x:2922,y:5827,z:0},handled:false};
+    assert.equal(Site.travel(entrance),false,'the quest retains its incomplete route');
+    completed=true;Site.travel(entrance);
+    assert.equal(entrance.handled,true);assert.equal(f.player.getLocation().getX(),2587);
+    assert.equal(f.player.getLocation().getY(),6435,'the cache rope tile is blocked; arrive beside it');
+    f.player.moveTo(new core.Location(2593,6423,0));
+    const portal={player:f.player,objectId:49479,option:'activate',location:{x:2593,y:6424,z:0},handled:false};
+    Site.travel(portal);assert.equal(vars.get(15088),1);
+    vars.set(15090,1);Site.travel({...portal,option:'use'});
+    const menu=menus.at(-1), index=menu.findIndex(choice=>choice==='Cathedral');
+    assert.ok(index>=0);menu[index+1]();
+    assert.equal(f.player.getLocation().getX(),2653);assert.equal(f.player.getLocation().getY(),6405,'the teleporter tile is blocked; arrive beside it');
+    const exit={player:f.player,objectId:48198,option:'climb-up',location:{x:2587,y:6436,z:0},handled:false};
+    Site.travel(exit);assert.equal(exit.handled,true);
+    assert.equal(f.player.getLocation().getX(),2922);assert.equal(f.player.getLocation().getY(),5826);
+});
+test('lethal damage freezes PB before the death animation and repeated death delivery cannot count twice', t => {
+    let cycle=100;t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    const f=fixture(),hooks=[];
+    const api=new Proxy({core,emitCustomEvent(){},onNpcDeath(handler){hooks.push(handler);}}, {get:(o,key)=>o[key]??(()=>{})});
+    Common.init(api);require('../plugins/bosses/whisperer/Fight.Whisperer').attach(api);
+    cycle=150;f.fight.finish();cycle=155;
+    for(const handler of hooks){handler({npc:f.boss,killer:f.player});handler({npc:f.boss,killer:f.player});}
+    assert.equal(f.player.getAttribute(Common.BEST_ATTRIBUTE),50);
+    assert.equal(f.player.getAttribute(Common.KILLS_ATTRIBUTE),1);
+});
+test('postquest teleporter activations restore after quest login varbits are synchronized', t => {
+    const Travel=require('../plugins/bosses/whisperer/Travel.Whisperer'),f=fixture(),vars=new Map(),tasks=[];
+    f.player.setAttribute(Travel.TELEPORTERS_ATTRIBUTE,[0]);
+    f.player.getPacketSender=()=>({sendVarbit:(id,value)=>vars.set(id,value)});
+    Common.init({core,emitCustomEvent(name,event){if(name==='quest:is-complete')event.complete=true;}});
+    t.mock.method(core.TaskManager,'submit',task=>tasks.push(task));
+    Travel.restore({player:f.player});
+    vars.set(15088,0); // Existing DT2 login hook runs later with its own saved discovery state.
+    for(const task of tasks)task.execute();
+    assert.equal(vars.get(15088),1);
 });

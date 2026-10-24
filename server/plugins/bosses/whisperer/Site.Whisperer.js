@@ -186,6 +186,7 @@ function best(request) {
         request.best = Number(request.player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
 }
 function attach(api) {
+    require('./Travel.Whisperer').attach(api);
     api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
     api.persistAttribute(Common.KILLS_ATTRIBUTE, 0);
     api.persistAttribute(Common.BEST_ATTRIBUTE, 0);
@@ -200,4 +201,4 @@ function attach(api) {
     api.onCustomEvent('combat-achievements:kill-count', counts);
     api.onCustomEvent('combat-achievements:personal-best', best);
 }
-module.exports = { attach, Session, sessionOf, disturb, leave, fragmentAction, fragments, respawn, grave, suppressSpawn };
+module.exports = { attach, Session, sessionOf, disturb, leave, fragmentAction, fragments, respawn, grave, suppressSpawn,travel:require('./Travel.Whisperer').travel };

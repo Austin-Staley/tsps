@@ -250,6 +250,7 @@ class Fight {
         this.tentacles = [];
     }
     finish() {
+        this.elapsedTicks = Common.core.World.getProcessCycle() - this.startCycle;
         this.over = true;
         this.events = [];
         Common.cancelDamage(this);
@@ -325,8 +326,9 @@ function onDeath({ npc }) {
         Specials.soulDied(fight, npc);
         return;
     }
-    if (!fight.over || fight.stopped || fight.session.ended)
+    if (!fight.over || fight.stopped || fight.session.ended || fight.wonAlready)
         return;
+    fight.wonAlready = true;
     const player = fight.player;
     // The existing CA death listener counts this normal NPC already. Query its
     // canonical count rather than emitting an additional kill event.
@@ -336,7 +338,7 @@ function onDeath({ npc }) {
     player.setAttribute(Common.KILLS_ATTRIBUTE, count);
     player.getPacketSender().sendConfig(3969, count);
     player.sendMessage(`Your Whisperer kill count is: <col=ff0000>${count}</col>.`);
-    const ticks = Common.core.World.getProcessCycle() - fight.startCycle;
+    const ticks = fight.elapsedTicks;
     const best = Number(player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
     if (!best || ticks < best)
         player.setAttribute(Common.BEST_ATTRIBUTE, ticks);

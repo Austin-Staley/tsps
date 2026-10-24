@@ -18,7 +18,8 @@ Sources: official OSRS Wiki `The_Whisperer`, `The_Whisperer/Strategies`, and rev
 - [x] Write focused failing real-core tests for prayer-at-impact damage/perfect eligibility; tentacle movement; sanity; special success/failure; enrage interception; quest gate/cleanup and cache IDs.
 - [x] Implement `Common.Whisperer.js`, `Fight.Whisperer.js`, `Specials.Whisperer.js`, `Site.Whisperer.js`, plugin entry and authored data.
 - [x] Run mechanic tests red then green; inspect real actor/queue integration, cancellation, running seed traversal, blocked tentacle origins and canonical CA count restoration.
-- [ ] Build server with `node node_modules/typescript/bin/tsc --build`; run focused and existing combat/DT2 checks; document failures and limits.
+- [x] Build server with `node node_modules/typescript/bin/tsc --build`; run focused and existing combat checks; document failures and limits. Full sandbox suite 4962/4970; all eight failures passed targeted unsandboxed checks (11 selected tests including matching SQLite cases).
+- [x] Own postquest public rope/teleporter actions in `Travel.Whisperer.js` because the existing quest transport is stage-only. Preserve quest state, land on verified clear adjacent tiles, persist only postquest discoveries, and restore them after the quest login sync. Freeze PB at lethal damage and guard repeat death delivery.
 - [ ] Request independent review, fix findings, then create separate PR with dependency and verification evidence.
 
 ## Review focus
