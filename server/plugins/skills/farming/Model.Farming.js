@@ -31,7 +31,7 @@ function emptyPatch(now, farm, weeds = 0) {
 }
 function startingLives(crop, compost) {
     if (Data.COMPOSTABLE_YIELD.has(crop.type)) return 3 + compost;
-    if (crop.type === "CORAL") return 4;
+    if (crop.type === "CORAL") return 6;
     if (crop.type === "GRAPES") return 5;
     return Math.max(1, crop.lives);
 }
@@ -50,9 +50,12 @@ const HERB_LOW = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUT
     CADANTINE: 60, LANTADYME: 64, DWARF_WEED: 67, TORSTOL: 71 };
 const CROP_LOW = { POTATO: 101, ONION: 105, CABBAGE: 107, TOMATO: 112, SWEETCORN: 88, STRAWBERRY: 103,
     BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 120, WILDBLOOD: 128 };
+// Post-August-2026 low/high parameters published by each frag's Wiki yield calculator.
+const CORAL_CTS = { ELKHORN_CORAL: [85, 182], PILLAR_CORAL: [25, 180], UMBRAL_CORAL: [-50, 178] };
 function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0, attas = false) {
     let low, high;
     if (crop.type === "HERB") { low = HERB_LOW[crop.key]; high = 80; }
+    else if (CORAL_CTS[crop.key]) { [low, high] = CORAL_CTS[crop.key]; }
     else if (crop.type === "SEAWEED") { low = 150; high = 210; }
     else if (crop.key === "CACTUS") { low = -76; high = 178; }
     else if (crop.key === "GRAPE") { low = -50; high = 180; }

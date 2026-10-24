@@ -61,11 +61,21 @@ This is **not a verified 1:1 implementation**. In particular:
 
 ## Verification
 
+Coral yields use the post-19-August-2026 six harvest lives and the published
+low/high calculator endpoints: Elkhorn 85/182, Pillar 25/180 and Umbral -50/178.
+Sources: [Elkhorn frag](https://oldschool.runescape.wiki/w/Elkhorn_frag),
+[Pillar frag](https://oldschool.runescape.wiki/w/Pillar_frag),
+[Umbral frag](https://oldschool.runescape.wiki/w/Umbral_frag).
+Existing mature saved patches retain their remaining lives; this does not refill
+partly harvested patches. The coral regression file covers species-specific
+chances, modifiers, final collection, offline/online equivalence and JSON state.
+
 From `server/`:
 
 ```powershell
 npx.cmd tsc --noEmit
 node --test tests/farming-model.test.cjs
+node --test tests/farming-coral-yields.test.cjs
 ```
 
 The second command checks the state machine and mocked hooks without server startup
