@@ -68,6 +68,49 @@ function startSpecial(fight,kind) {
     const preparation={seeds:6,screech:5,souls:4}[kind];
     for(let tick=0;tick<preparation;tick++) Specials.process(fight);
 }
+
+test('the three-tile Whisperer can follow the recorded diagonal pursuit steps with its whole footprint', t => {
+    const f = fixture();
+    assert.equal(f.boss.getSize(),3);
+    f.boss.setNpcTransformationId(Common.data.npcs.melee);
+    assert.equal(f.boss.getSize(),3);
+    f.boss.setNeedsPlacement(false);
+    f.boss.setScriptedMovement(true);
+    // RSProx3285, normal actor12205:23066→23067→23068. The player stays
+    // at2649,6369; the boss walks2655,6360→2654,6361→2653,6362.
+    f.boss.setLocation(new core.Location(2655,6360,0));
+    f.player.setLocation(new core.Location(2649,6369,0));
+    const queue=f.boss.getMovementQueue();
+    queue.reset();
+    queue.addStep(2649,6369);
+    let cycle=23066;
+    t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    for(const [x,y] of [[2654,6361],[2653,6362]]) {
+        cycle++;
+        queue.beginCycle();
+        queue.process();
+        assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()],[x,y]);
+    }
+});
+
+test('a blocked outer footprint corner makes the Whisperer square the diagonal instead of clipping through it', () => {
+    const f=fixture();
+    f.boss.setNeedsPlacement(false);
+    f.boss.setScriptedMovement(true);
+    f.boss.setLocation(new core.Location(2655,6360,0));
+    // This tile is inside the proposed3x3 northwest footprint, outside the
+    // starting footprint and outside the safe west-only fallback footprint.
+    const corner=new core.Location(2654,6363,0);
+    f.session.area.setClip(corner,core.RegionManager.BLOCKED_TILE);
+    assert.equal(core.RegionManager.blocked(corner,f.session.area),true);
+    const queue=f.boss.getMovementQueue();
+    queue.reset();
+    queue.addStep(2649,6369);
+    queue.beginCycle();
+    queue.process();
+    assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()],[2654,6360]);
+});
+
 test('cache identities distinguish spawn, boss, soul, effect and animation', () => {
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.boss).name, 'The Whisperer');
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.figure).name, 'Odd Figure');
