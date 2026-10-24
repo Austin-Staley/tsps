@@ -47,10 +47,12 @@ class Hazards {
   drop(tile, permanent = true, delay = Common.data.inferred.debrisFlightTicks) {
     if (!this.floor.has(Model.key(tile))) return;
     const target = [...tile];
-    this.graphic(target, "debris");
+    const smokeRock = permanent && !this.fight.awakened;
+    if (smokeRock) Common.smokeProjectile(this.fight, target, delay);
+    else this.graphic(target, "debris");
     this.fight.at(delay, () => {
       if (!this.fight.alive()) return;
-      this.graphic(target, "debrisImpact");
+      this.graphic(target, smokeRock ? 'smokeBoulderImpact' : 'debrisImpact');
       if (Model.key(this.playerTile()) === Model.key(target)) Common.damage(this.fight, Common.random(0, Common.data.damage.debris));
       if (permanent && this.place(target)) this.smokeCover.add(Model.key(target));
     });

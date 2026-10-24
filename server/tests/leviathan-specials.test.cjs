@@ -125,11 +125,13 @@ test('lightning strikes its marked tile later; moving avoids it and stationary c
 test('normal smoke preserves its filmed retaliation, throws, explosion charge and recovery', t => {
   const h = H.harness(t), throws = [], blasts = [];
   t.mock.method(Math, 'random', () => 0);
-  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => {
-    if (graphic.getId() === 2506) throws.push(h.fight.tick);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendProjectile' ? (...args) => {
+    if (args[4] === 2472) throws.push(h.fight.tick);
+  } : name === 'sendGraphic' ? graphic => {
     if (graphic.getId() === 2494) blasts.push(h.fight.tick);
   } : () => sender });
   h.p.getPacketSender = () => sender;
+  t.mock.method(h.core.World, 'forEachNetworkPlayer', callback => callback(h.p));
   h.fight.tier = 1;
   h.fight.nextSpecial = 'smoke'; h.fight.beginSpecial();
   assert.equal(h.fight.boss.getAnimation().getId(), 10282);
@@ -152,6 +154,37 @@ test('normal smoke preserves its filmed retaliation, throws, explosion charge an
   h.step();
   assert.equal(h.fight.tick, 21);
   assert.equal(h.fight.boss.getGraphic().getId(), 2486);
+});
+
+test('smoke sends a native rock to the snapshotted tile and its stay impact lands two ticks later', t => {
+  const h = H.harness(t), projectiles = [], graphics = [];
+  t.mock.method(Math, 'random', () => 0);
+  t.mock.method(h.core.World, 'forEachNetworkPlayer', callback => callback(h.p));
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendProjectile' ? (...args) => projectiles.push(args)
+    : name === 'sendGraphic' ? (graphic, at) => graphics.push([h.fight.tick, graphic.getId(), h.session.sourceTile(at).slice(0, 2)]) : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.move([2075, 6371]);
+  h.fight.nextSpecial = 'smoke'; h.fight.beginSpecial(); h.step(4);
+  assert.equal(projectiles.length, 1);
+  assert.deepEqual([projectiles[0][4], projectiles[0][3], projectiles[0][8], projectiles[0][7]], [2472, 60, 0, 0]);
+  assert.deepEqual(h.session.sourceTile(projectiles[0][1]), [2075,6371,0]);
+  h.move([2074, 6379]); h.step();
+  assert.equal(graphics.some(([, id]) => id === 2473), false);
+  h.step();
+  assert.ok(graphics.some(([tick, id, at]) => tick === 6 && id === 2473 && at.join(',') === '2075,6371'));
+  assert.ok(h.fight.hazards.blockers.has('2075,6371'));
+  assert.equal(graphics.some(([, id]) => id === 2506 || id === 2505), false, 'smoke rocks are neither cyan orbs nor orange smoke columns');
+});
+
+test('the provisional lightning side-orb route retains its cyan cache graphic when smoke is corrected', t => {
+  const h = H.harness(t), graphics = [];
+  t.mock.method(Math, 'random', () => 0);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => graphics.push(graphic.getId()) : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial(); h.step(5);
+  assert.ok(graphics.includes(2506));
+  assert.equal(graphics.includes(2472), false);
+  assert.equal(graphics.includes(2473), false);
 });
 
 test('normal lightning stages its native animations and thirty-five pulses across the filmed phase', t => {

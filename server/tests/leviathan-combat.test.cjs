@@ -30,6 +30,104 @@ test('orbs check protection on impact and actual avoidable HP loss spoils perfec
   assert.equal(h.fight.perfect, false);
 });
 
+for (const effect of ['recoil', 'vengeance']) test(`the real normal bite supports ${effect} retaliation`, t => {
+  const h = H.harness(t);
+  t.mock.method(Math, 'random', () => 0.999);
+  if (effect === 'recoil') h.p.getEquipment().set(h.core.Equipment.RING_SLOT, new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  else h.p.setHasVengeance(true);
+  h.move([2076, 6372]); h.fight.nextAttack = 1;
+  h.step(2);
+  assert.equal(h.p.getHitpoints(), 49);
+  assert.equal(h.fight.boss.getHitpoints(), effect === 'recoil' ? 894 : 863);
+  assert.equal(h.fight.perfect, false);
+  if (effect === 'recoil') assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 6);
+  else assert.equal(h.p.hasVengeanceReturn(), false);
+});
+
+test('a protected normal bite neither damages nor consumes recoil or Vengeance', t => {
+  const h = H.harness(t);
+  t.mock.method(Math, 'random', () => 0.999);
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT, new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  h.p.setHasVengeance(true); h.prayer('melee');
+  h.move([2076, 6372]); h.fight.nextAttack = 1; h.step(2);
+  assert.equal(h.p.getHitpoints(), 99);
+  assert.equal(h.fight.boss.getHitpoints(), 900);
+  assert.equal(h.p.hasVengeanceReturn(), true);
+  assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), undefined);
+  assert.equal(h.fight.perfect, true);
+});
+
+test('normal orbs damage the player without reflecting or consuming Vengeance', t => {
+  const h = H.harness(t);
+  t.mock.method(Math, 'random', () => 0.999);
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT, new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  h.p.setHasVengeance(true); h.fight.nextAttack = Infinity;
+  h.fight.orb('magic', 1); h.step(2);
+  assert.equal(h.p.getHitpoints(), 67);
+  assert.equal(h.fight.boss.getHitpoints(), 900);
+  assert.equal(h.p.hasVengeanceReturn(), true);
+  assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), undefined);
+});
+
+for (const terminal of ['lethal', 'departure']) test(`queued normal bite keeps its source and is cancelled on ${terminal}`, t => {
+  const h = H.harness(t);
+  h.fight.nextAttack = Infinity; h.step();
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT, new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  h.p.setHasVengeance(true);
+  h.Common.biteDamage(h.fight, 30);
+  assert.equal(h.p.getCombat().getHitQueue().getAccumulatedDamage(), 30);
+  assert.equal([...h.fight.pendingDamage][0].getSource(), h.fight.boss);
+  if (terminal === 'lethal') h.kill();
+  else h.fight.stop();
+  h.apply();
+  assert.equal(h.p.getHitpoints(), 99);
+  assert.equal(h.fight.perfect, true);
+  assert.equal(h.p.hasVengeanceReturn(), true);
+  assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), undefined);
+});
+
+test('a reflected bite can kill the boss and freezes the already-imperfect fight at that lethal boundary', t => {
+  const h = H.harness(t);
+  t.mock.method(Math, 'random', () => 0.999);
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT, new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  h.fight.boss.setHitpoints(6);
+  // Hold enrage entry to exercise the physical bite's lethal reflection itself.
+  h.fight.enraged = true; h.fight.nextEnrageDebris = Infinity;
+  h.move([2076, 6372]); h.fight.nextAttack = 1;
+  h.step();
+  assert.equal(h.p.getHitpoints(), 49);
+  assert.equal(h.fight.perfect, false);
+  h.step();
+  assert.equal(h.fight.boss.getHitpoints(), 0);
+  assert.equal(h.fight.over, true);
+  assert.equal(h.fight.finishedTicks, 2);
+  h.step(4);
+  assert.equal(h.p.getHitpoints(), 49);
+  assert.equal(h.fight.perfect, false);
+});
+
+test('a bite queued after the player turn applies HP before lethal reflection on the next NPC turn', t => {
+  const h = H.harness(t);
+  h.fight.nextAttack = Infinity; h.step();
+  h.p.getEquipment().set(h.core.Equipment.RING_SLOT, new h.core.Item(h.core.ItemIdentifiers.RING_OF_RECOIL));
+  h.fight.boss.setHitpoints(6);
+  h.fight.enraged = true; h.fight.nextEnrageDebris = Infinity;
+  // Player.process already drained its queue before Area.process schedules the
+  // bite. The next world turn processes the NPC before processing the player.
+  h.Common.biteDamage(h.fight, 50);
+  assert.equal(h.p.getHitpoints(), 99);
+  h.step();
+  assert.equal(h.p.getHitpoints(), 49);
+  assert.equal(h.fight.boss.getHitpoints(), 6);
+  assert.equal(h.fight.perfect, false);
+  assert.equal(h.fight.over, false);
+  h.step();
+  assert.equal(h.fight.boss.getHitpoints(), 0);
+  assert.equal(h.fight.over, true);
+  assert.equal(h.fight.finishedTicks, 3);
+  assert.equal(h.fight.perfect, false);
+});
+
 test('roar chip does not spoil perfection; debris can be dodged and blocks its tile', t => {
   const h = H.harness(t);
   h.fight.nextAttack = Infinity;

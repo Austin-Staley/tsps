@@ -9,7 +9,14 @@ const MITHRIL = ['MITHRIL_ARROW', 'MITHRIL_BOLTS', 'MITHRIL_DART', 'MITHRIL_KNIF
 const WOODEN_BLOWPIPES = ['ROSEWOOD', 'IRONWOOD', 'CAMPHOR'].flatMap(wood => [`${wood}_BLOWPIPE`, `${wood}_BLOWPIPE_2`]);
 function begin(fight) {
   fight.unconventional = { eligible: !fight.awakened && fight.player.getHitpoints() <= 25, fired: false };
+  fight.onSlayerTask = false;
   active.set(fight.player, fight);
+}
+function observe(fight) {
+  if (fight.awakened || fight.onSlayerTask) return;
+  const request = { player: fight.player, npc: fight.boss, onTask: false };
+  Common.api.emitCustomEvent('slayer:on-task', request);
+  if (request.onTask) fight.onSlayerTask = true;
 }
 function end(fight) { if (active.get(fight.player) === fight) active.delete(fight.player); }
 function health({ player, skill, current }) {
@@ -37,4 +44,4 @@ function attach(api) {
   api.onPlayerDealtDamage(launched);
   api.onCustomEvent('skills:current-level-changed', health);
 }
-module.exports = { begin, end, attach };
+module.exports = { begin, observe, end, attach };

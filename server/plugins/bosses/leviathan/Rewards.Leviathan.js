@@ -36,9 +36,7 @@ function died({ npc, killer }) {
     if (fight.unconventional.eligible && fight.unconventional.fired) complete('Unconventional');
     if (fight.perfect && ++session.perfectKills >= 5) complete('Perfect Leviathan');
     if (fight.stuns <= 1) complete('Serpentine Solo');
-    const task = { player, npc, onTask: false };
-    Common.api.emitCustomEvent('slayer:on-task', task);
-    if (!task.onTask) for (const [name, seconds] of [['Trialist', 110], ['Chaser', 85], ['Runner', 70]])
+    if (!fight.onSlayerTask) for (const [name, seconds] of [['Trialist', 110], ['Chaser', 85], ['Runner', 70]])
       if (ticks * 0.6 < seconds) complete(`Leviathan Speed-${name}`);
   }
   session.scheduleRespawn?.(fight);

@@ -2,6 +2,58 @@ const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
+
+function slayerState(h) {
+  const { PacketSender } = require('../dist/net/packet/PacketSender');
+  const Data = require('../plugins/skills/slayer/Data.Slayer');
+  const State = require('../plugins/skills/slayer/State.Slayer');
+  const Tasks = require('../plugins/skills/slayer/Tasks.Slayer');
+  h.p.getSession = () => ({ sendClientPacket: () => true, write() {} });
+  const sender = new PacketSender(h.p);
+  h.p.getPacketSender = () => sender;
+  for (const unit of [Data, State, Tasks]) unit.init(h.api);
+  const [bossId] = [...Data.get().bosses].find(([id]) => Data.isBossNpc(id, 'The Leviathan'));
+  return {
+    attach: () => Tasks.attach(h.api),
+    assign(count) {
+      State.update(h.p, { slayer_target_bossid: bossId, slayer_master: 5 },
+        { slayer_target: Data.BOSS_TASK_ID, slayer_count: count, slayer_count_original: count });
+    },
+    current: () => Tasks.current(h.p),
+    cancel: () => Tasks.clear(h.p),
+  };
+}
+
+for (const order of ['slayer-first', 'encounter-first']) test(`the final real Slayer assignment kill cannot award speed tasks (${order})`, t => {
+  const h = H.harness(t), slayer = slayerState(h);
+  const Rewards = require('../plugins/bosses/leviathan/Rewards.Leviathan');
+  if (order === 'slayer-first') { slayer.attach(); Rewards.attach(h.api); }
+  else { Rewards.attach(h.api); slayer.attach(); }
+  slayer.assign(1);
+  h.kill(); h.step(8);
+  assert.equal(slayer.current(), null, 'the actual Slayer death hook completed the last assignment');
+  assert.equal(h.emitted.filter(([name, event]) => name === 'combat-achievements:complete' && event.task.startsWith('Leviathan Speed-')).length, 0);
+});
+
+test('cancelling a Slayer assignment after combat starts cannot make that fight speed-eligible', t => {
+  const h = H.harness(t), slayer = slayerState(h);
+  slayer.attach();
+  require('../plugins/bosses/leviathan/Rewards.Leviathan').attach(h.api);
+  slayer.assign(2); h.step(); slayer.cancel();
+  h.kill(); h.step(8);
+  assert.equal(slayer.current(), null);
+  assert.equal(h.emitted.filter(([name, event]) => name === 'combat-achievements:complete' && event.task.startsWith('Leviathan Speed-')).length, 0);
+});
+
+test('a fast normal kill with no Slayer assignment still completes all three speed tasks', t => {
+  const h = H.harness(t), slayer = slayerState(h);
+  slayer.attach();
+  require('../plugins/bosses/leviathan/Rewards.Leviathan').attach(h.api);
+  h.kill(); h.step(8);
+  assert.deepEqual(h.emitted.filter(([name, event]) => name === 'combat-achievements:complete' && event.task.startsWith('Leviathan Speed-')).map(([, event]) => event.task).sort(),
+    ['Leviathan Speed-Chaser', 'Leviathan Speed-Runner', 'Leviathan Speed-Trialist']);
+});
+
 for (const order of ['generic-first', 'encounter-first']) test(`real generic CA count increments exactly once (${order})`, t => {
   const h = H.harness(t);
   const Data = require('../plugins/achievements/combatachievements/Data.CombatAchievements');

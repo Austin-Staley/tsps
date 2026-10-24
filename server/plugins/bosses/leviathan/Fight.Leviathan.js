@@ -30,6 +30,7 @@ class Fight {
     boss.setScriptedMovement(true); boss.getMovementQueue().setBlockMovement(true);
     boss.setPositionToFace(this.player.getLocation());
     Common.animate(boss, "spawn");
+    Achievements.observe(this);
     Common.api.emitCustomEvent("boss-hud:show", { player: this.player, npcId: Common.ids.npcs.boss, current: this.stats.hitpoints, maximum: this.stats.hitpoints });
   }
   process() {
@@ -39,6 +40,7 @@ class Fight {
     this.events = this.events.filter(e => e.at > this.tick);
     for (const event of due) if (!this.stopped) event.action();
     if (!this.alive()) return;
+    Achievements.observe(this);
     this.boss.getCombat().getLastAttack().reset();
     if (!this.enraged && this.boss.getHitpoints() <= this.stats.hitpoints * 0.2) this.enterEnrage();
     this.hazards.process();
@@ -58,7 +60,11 @@ class Fight {
     if (this.hazards.nearPool()) {
       Common.animate(this.boss, "bite");
       this.session.biteTails?.();
-      if (!Common.protectedFrom(this.player, "melee")) Common.damage(this, Common.random(0, Common.data.damage.melee));
+      if (!Common.protectedFrom(this.player, "melee")) {
+        const amount = Common.random(0, Common.data.damage.melee);
+        if (this.awakened) Common.damage(this, amount);
+        else Common.biteDamage(this, amount);
+      }
       this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval);
       return;
     }
@@ -149,6 +155,8 @@ class Fight {
   }
   fell() {
     if (this.over || this.stopped) return;
+    // Snapshot before Slayer's death hook can consume the last assignment.
+    Achievements.observe(this);
     this.over = true; this.finishedTicks = Math.max(1, Common.core.World.getProcessCycle() - this.startCycle);
     Achievements.end(this);
     this.events = []; this.cancelDamage(); this.hazards.clear();
