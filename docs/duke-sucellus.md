@@ -38,6 +38,56 @@ The normal fight implements aimed melee chip/slam, magic, pillar-hidden freezing
 
 ## Evidence and limits
 
+### Mining timeout and further ordinary footage, 24 October 2026
+
+The [salt-deposit page, revision 15202330](https://oldschool.runescape.wiki/w/Salt_Deposit?oldid=15202330)
+(29 April 2026 at 05:39:49 UTC) explicitly describes the five-minute mining
+limit and its tired-arms message. The plugin already stopped gathering at
+500 game ticks but did so silently. It now sends
+`Your arms get tired from all the mining.` exactly once when uninterrupted
+mining expires. Interruption, walking away or waking Duke remains a different
+stop condition. A regression failed on the missing message, then passed after
+the fix: no message at tick 499, one message and no active action at tick 500,
+no subsequent salt or duplicate message, and a new click resumes gathering.
+Fresh TypeScript build and all 76 focused Duke tests pass; independent read-only
+review cleared the boundary and action cleanup.
+
+Further source inspection used [Extile's original normal guide](https://www.youtube.com/watch?v=1QjdtcregEQ)
+(16 January 2024) and [Theoatrix's original guide](https://www.youtube.com/watch?v=M0GroGCHNlI)
+(29 August 2025). Extile's displayed normal 440 HP belongs to the historical
+postquest encounter. Frames at 00:38–00:48 show preparation movement and eye
+avoidance, but do not supply a controlled eye-damage check or protected gas
+sample. Theoatrix's 01:47–04:20 preparation segment is 1920×1080 at
+30000/1001 fps; it visibly switches loadouts/inventories during the salt
+discussion. Its edited presentation lacks a verified real-time clock for
+those mining intervals, so its screen-time salt changes are not used to infer
+a pickaxe algorithm. The 2025 normal combat footage displays 485 maximum HP.
+These additional original sources corroborate ordinary presentation without
+establishing the previously unmeasured numeric bounds or random formulas.
+
+The additional [TheEdB0ys ordinary session](https://www.youtube.com/watch?v=HozIDuwMShw)
+(8 March 2025) supplies an uninterrupted sample with an on-screen wall clock.
+The 03:00–05:00 excerpt starts at decoded PTS zero; the inventory and the
+introductory equipment tooltip identify a dragon pickaxe. Sampling the salt
+inventory every 0.1 seconds first shows six at 03:18.8 and twelve at 03:20.6,
+with a five-XP Mining update. Sampling has 0.1-second resolution; the
+1.8-second repeat is three game ticks.
+This establishes one ordinary dragon-pickaxe interval, not its complete
+distribution or whether shortened cycles occur. The displayed 440 HP and
+normal 200-point meter identify the historical normal encounter; later
+preparation updates still limit claims about current unobserved behavior.
+Excerpt SHA-256 is
+`ca55799a97d8df1acd51070e7feeb3f1d8dbc379fcf67c8a6d9c474305ec4792`.
+
+Timestamp calibration also corrected the earlier 10Boot salt notes below:
+the 03:20–03:40 downloaded excerpt retains a keyframe beginning at PTS -2.0
+seconds. The earlier contact sheet counted that preroll as time zero and
+therefore placed its absolute source timestamps two seconds late. Regenerating
+the sheet after `trim=start=0,setpts=PTS-STARTPTS` gives first five salt at
+03:22.4, then eight three-tick repeats through 03:36.8. The rune tooltip is
+around 03:25.2. This corrects the absolute timestamps; the measured 1.8-second
+intervals and existing rune implementation remain unchanged.
+
 ### Extremity footprint follow-up, 24 October 2026
 
 The current [Desert Treasure II walkthrough, Duking it Out](https://oldschool.runescape.wiki/w/Desert_Treasure_II_-_The_Fallen_Empire?oldid=15374592#Duking_it_Out)
@@ -116,9 +166,9 @@ or used to infer its random distribution.
 published 11 July 2025, provides a current ordinary postquest preparation
 sample (level 758 and the normal 200-point meter, without Leagues indicators).
 The 03:20–03:40 segment is 1920×1080 at 30 fps; the visible item tooltip
-identifies a rune pickaxe around 03:27.2. Inspecting the inventory every 0.2
+identifies a rune pickaxe around 03:25.2. Inspecting the inventory every 0.2
 seconds first shows salt quantities 5/10/15/20/25/30/35/40/45 at
-03:24.4/03:26.2/03:28.0/03:29.8/03:31.6/03:33.4/03:35.2/03:37.0/03:38.8.
+03:22.4/03:24.2/03:26.0/03:27.8/03:29.6/03:31.4/03:33.2/03:35.0/03:36.8.
 Eight successive 1.8-second intervals corroborate the existing rune-pickaxe
 three-tick repeat cadence. This closes that tier's repeat-cadence check;
 it does not establish every other pickaxe tier or the first click response.

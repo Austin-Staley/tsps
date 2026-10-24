@@ -208,7 +208,8 @@ function process(session) {
 }
 function mineStep(session,a) {
   const p=session.player, here=C.source(session,p.getLocation());
-  if(session.fight.active||session.fight.over||session.tick>=a.until || !M.near(here,a.start,0) || !nearSalt(session,a.at)) return false;
+  if(session.fight.active||session.fight.over || !M.near(here,a.start,0) || !nearSalt(session,a.at)) return false;
+  if(session.tick>=a.until){p.sendMessage('Your arms get tired from all the mining.');return false;}
   if(session.tick<a.next) return true;
   a.next=session.tick+a.interval;
   const amount=M.saltYield(p.getSkillManager().getCurrentLevel(C.core.Skill.MINING));

@@ -107,6 +107,21 @@ test('iron-pickaxe salt mining animates on response but first yields six ticks l
   h.step(7);assert.equal(h.p.getInventory().getAmount(i.salt),18);
 });
 
+test('five uninterrupted minutes of salt mining stop with the tired-arms message and a new click restarts it',t=>{
+  const h=H.harness(t),s=h.enter(),Hazards=require('../plugins/bosses/dukesucellus/Hazards.DukeSucellus');
+  h.move([3034,6447]);
+  t.mock.method(Hazards,'preparation',()=>{});
+  h.api.onCustomEvent('mining:best-pickaxe',e=>{e.pickaxe={attemptIntervalTicks:3,animation:new h.core.Animation(624)};});
+  h.Prep.mine(s,[3033,6448]);
+  const tired=()=>h.messages.filter(message=>message==='Your arms get tired from all the mining.');
+  h.step(499);assert.equal(tired().length,0);assert.ok(s.action);
+  h.step();assert.equal(tired().length,1);assert.equal(s.action,null);
+  const held=h.p.getInventory().getAmount(h.C.data.items.salt);
+  h.step(10);assert.equal(h.p.getInventory().getAmount(h.C.data.items.salt),held);assert.equal(tired().length,1);
+  h.Prep.mine(s,[3033,6448]);h.step(3);
+  assert.ok(h.p.getInventory().getAmount(h.C.data.items.salt)>held);
+});
+
 test('a new grinding click cancels the previous mushroom batch',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.add(i.pestle);h.add(i.arder,4);h.add(i.musca,4);
   h.Prep.grind({player:h.p,usedItemId:i.pestle,usedWithItemId:i.arder});
