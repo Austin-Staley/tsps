@@ -213,11 +213,12 @@ function plant(player, patch, id) {
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
 }
-function water(player, id) {
+function water(player, id, slot) {
     const inventory = player.getInventory();
-    const can = inventory.getItems().find(i => (!id || i.getId() === id) && (core.CacheDefinitions.getItem(i.getId()).name?.match(/^Watering can\([1-8]\)$/)
-        || i.getId() === Data.itemId("Magic watering can") || i.getId() === Data.itemId("Gricoller's can")));
-    if (!can) { player.sendMessage("You need a watering can containing water."); return false; }
+    const matches = i => i && (!id || i.getId() === id) && (core.CacheDefinitions.getItem(i.getId()).name?.match(/^Watering can\([1-8]\)$/)
+        || i.getId() === Data.itemId("Magic watering can") || i.getId() === Data.itemId("Gricoller's can"));
+    const can = slot === undefined ? inventory.getItems().find(matches) : inventory.forSlot(slot);
+    if (!matches(can)) { player.sendMessage("You need a watering can containing water."); return false; }
     const name = core.CacheDefinitions.getItem(can.getId()).name;
     if (name === "Gricoller's can") {
         const charges = Number(can.getMetaValue("farming:water") ?? 0);
@@ -230,11 +231,11 @@ function water(player, id) {
     animate(player, ANIM.WATER);
     return true;
 }
-function waterPatch(player, patch, id) {
+function waterPatch(player, patch, id, slot) {
     const state = stateFor(player, patch);
     if (!state.crop || state.status !== "growing" || !Data.WATERABLE.has(patch.type)) { player.sendMessage("This patch does not need watering."); return; }
     if (state.watered) { player.sendMessage("This crop is already watered."); return; }
-    if (water(player, id)) state.watered = true;
+    if (water(player, id, slot)) state.watered = true;
 }
 function fertilize(player, patch, tier, consume = true) {
     const state = stateFor(player, patch);
@@ -467,7 +468,7 @@ function itemOnObject(event) {
     else if (id === Data.itemId("Spade") && patch.type === "HESPORI" && state.status === "grown") Hespori.harvestHespori(player, patch);
     else if (id === Data.itemId("Spade")) dig(player, patch);
     else if (id === Data.itemId("Plant cure") || id === Data.itemId("Secateurs") || id === Data.itemId("Magic secateurs")) cure(player, patch, true, id);
-    else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id);
+    else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id, event.itemSlot);
     else if (core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket") Services.useBottomless(player, patch, id, event.itemSlot);
     else if (id === Data.itemId("Amulet of Nature")) {
         farmFor(player).boundPatch = Data.patchKey(patch);
