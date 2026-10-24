@@ -60,12 +60,12 @@ for (const venom of [false, true]) {
     assert.equal(effect.isRunning(), true);
   });
 
-  test(`an explicit cure still stops protected ${venom ? 'venom' : 'poison'}`, t => {
+  test(`an explicit cure stops damage but retains the protection clock for ${venom ? 'venom' : 'poison'}`, t => {
     const { player, effect, hits } = afflictedPlayer(t, venom);
     player.getCombat().getPoisonImmunityTimer().start(60);
     curePoisonAndVenom(player);
     for (let tick = 0; tick < 35; tick++) effect.tick();
-    assert.equal(effect.isRunning(), false);
+    assert.equal(effect.isRunning(), true);
     assert.equal(player.getPoisonDamage(), 0);
     assert.equal(player.isVenomed(), false);
     assert.equal(hits.length, 0);
@@ -80,22 +80,23 @@ for (const venom of [false, true]) {
     const submitted = [];
     t.mock.method(TaskManager, 'submit', task => submitted.push(task));
     t.mock.method(player, 'sendMessage', () => {});
-    player.getCombat().getPoisonImmunityTimer().start(60);
+    player.getCombat().getPoisonImmunityTimer().start(venom ? 900 : 90);
     CombatFactory.poisonEntity(player, venom ? 6 : 27, venom ? 2 : 1);
     assert.equal(player.getPoisonDamage(), 0);
     assert.equal(player.isVenomed(), false);
-    assert.equal(submitted.length, 0);
+    assert.equal(submitted.length, 1, 'the protection-only clock already owns one task');
     player.getCombat().getPoisonImmunityTimer().stop();
     CombatFactory.poisonEntity(player, venom ? 6 : 27, venom ? 2 : 1);
     assert.equal(player.getPoisonDamage(), venom ? 6 : 27);
     assert.equal(player.isVenomed(), venom);
-    assert.equal(submitted.length, 1);
-    assert.ok(submitted[0] instanceof CombatPoisonEffect);
+    assert.equal(submitted.length, 2);
+    assert.ok(submitted[1] instanceof CombatPoisonEffect);
   });
 }
 
 function mobile({ venomed = false, damage = 0, immunitySeconds = 0 } = {}) {
   return {
+    isPlayer: () => false,
     isVenomed: () => venomed && damage > 0,
     isPoisoned: () => damage > 0,
     getPoisonDamage: () => damage,

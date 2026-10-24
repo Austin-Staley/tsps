@@ -208,6 +208,7 @@ export class Player extends Mobile {
         this.setHasVengeance(false);
         this.getCombat().getFireImmunityTimer().stop();
         this.getCombat().getPoisonImmunityTimer().stop();
+        this.getCombat().getPoisonClock().resetPhase();
         this.getCombat().getTeleblockTimer().stop();
         this.getTimers().cancel(TimerKey.FREEZE);
         this.getTimers().cancel(TimerKey.FREEZE_IMMUNITY);

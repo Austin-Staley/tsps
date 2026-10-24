@@ -71,7 +71,7 @@ test('cancelling player activity tasks does not suspend or restart the poison cl
  assert.equal(hits,1);assert.equal(p.getPoisonDamage(),12);
 });
 
-test('explicit antidote cures and natural poison expiry still terminate their task',t=>{
+test('explicit cures and natural expiry end damage while an antidote retains its protection task',t=>{
  for(const reason of ['antidote','cure','expiry']){
   const p=player(t,reason!=='expiry');
   if(reason==='expiry')p.setPoisonDamage(1);
@@ -80,7 +80,7 @@ test('explicit antidote cures and natural poison expiry still terminate their ta
   if(reason==='cure')curePoisonAndVenom(p);
   const hits=[];t.mock.method(p.getCombat().getHitQueue(),'addPendingDamage',values=>hits.push(...values));
   for(let i=0;i<35;i++)effect.tick();
-  assert.equal(effect.isRunning(),false,reason);assert.equal(p.getPoisonDamage(),0,reason);assert.equal(p.isVenomed(),false,reason);
+  assert.equal(effect.isRunning(),reason==='antidote',reason);assert.equal(p.getPoisonDamage(),0,reason);assert.equal(p.isVenomed(),false,reason);
   assert.deepEqual(hits.map(hit=>hit.getDamage()),reason==='expiry'?[1]:[],reason);
  }
 });

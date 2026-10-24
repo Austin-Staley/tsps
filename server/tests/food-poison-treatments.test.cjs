@@ -22,7 +22,7 @@ function fixture(t, initialHp = 50) {
     getMaxLevel: () => 99,
   }));
   t.mock.method(player, 'setHitpoints', value => { hp = value; return player; });
-  t.mock.method(player, 'getPacketSender', () => ({ sendRunEnergy() {} }));
+  t.mock.method(player, 'getPacketSender', () => ({ sendRunEnergy() {}, hasInterruptibleInterface: () => false }));
   t.mock.method(core.TaskManager, 'submit', task => { task.setRunning(true); tasks.push(task); });
   t.after(() => tasks.forEach(task => task.stop()));
   return { player, tasks, get hp() { return hp; }, set hp(value) { hp = value; },
@@ -99,7 +99,9 @@ test('partial treatments preserve stronger existing protection', t => {
   f.player.setPoisonDamage(30); f.rest();
   assert.ok(f.player.getCombat().getPoisonImmunityTimer().secondsRemaining() >= 89);
   f.eat('COOKED_MOONLIGHT_ANTELOPE'); f.ticks(7);
-  assert.ok(f.player.getCombat().getPoisonImmunityTimer().secondsRemaining() >= 89);
+  assert.equal(f.player.getCombat().getPoisonClock().getCounter(), 5);
+  assert.equal(f.player.getCombat().getPoisonImmunityTimer().secondsRemaining(), 86,
+    'seven game ticks count toward the original deadline without shortening its dose counter');
 });
 
 test('fresh unpoisoned actors never acquire an invalid severity from a treatment', t => {
