@@ -12,7 +12,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Guardians, Lobby, Enchanting, Alchemists, Graveyard, events, ironmanMode;
+let Common, Guardians, Lobby, Enchanting, Alchemists, Graveyard, Rewards, events, ironmanMode;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -22,6 +22,7 @@ before(async () => {
   Enchanting = require('../plugins/minigames/magetrainingarena/Enchanting.MageTrainingArena');
   Alchemists = require('../plugins/minigames/magetrainingarena/Alchemists.MageTrainingArena');
   Graveyard = require('../plugins/minigames/magetrainingarena/Graveyard.MageTrainingArena');
+  Rewards = require('../plugins/minigames/magetrainingarena/Rewards.MageTrainingArena');
   ironmanMode = 'none';
   events = [];
   const api = new Proxy({
@@ -65,6 +66,11 @@ function fakePlayer(x = 3363, y = 9644, z = 0) {
       deleteNumber: (id, n) => items.set(id, (items.get(id) ?? 0) - n),
       adds: (id, n) => items.set(id, (items.get(id) ?? 0) + n),
       getFreeSlots: () => free,
+      getAddableAmount: (item) => {
+        if (!core.ItemDefinition.forId(item.getId()).isStackable()) return Math.min(item.getAmount(), free);
+        const held = items.get(item.getId()) ?? 0;
+        return held > 0 || free > 0 ? Math.min(item.getAmount(), 0x7fffffff - held) : 0;
+      },
       getItems: () => player.slots ?? [],
     }),
     getEquipment: () => ({ get: () => null }),
@@ -539,6 +545,113 @@ test('the Graveyard Teleport needs Magic 15, and no fruit or bones', () => {
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], graveyardTile());
 });
 
+// --- The Rewards Guardian's shop
+
+function shopPlayer() {
+  const player = fakePlayer(3362, 3318, 1);
+  player.getEquipment = () => ({ get: () => null, set() {}, refreshItems() {} });
+  player.varbitsSent = [];
+  player.getPacketSender = () => ({ sendConfig() {}, sendSubInterface() {}, sendInterfaceFlagsRange() {}, sendString() {}, sendInterfaceDisplayState() {},
+    sendVarbit: (id, value) => player.varbitsSent.push([id, value]), isSubInterfaceOpen: () => player.shopOpen !== false });
+  player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, true);
+  return player;
+}
+
+const slotOf = (itemId) => Rewards.stock().indexOf(itemId);
+
+test("the shop's stock and prices come from the cache, matching the Wiki's table", () => {
+  const stock = Rewards.stock();
+  assert.equal(stock.length, 25);
+  assert.deepEqual(stock.slice(0, 11), [6908, 6910, 6912, 6914, 6916, 6918, 6920, 6922, 6924, 6889, 6926]);
+  assert.deepEqual(Rewards.price(6918), { telekinetic: 350, graveyard: 350, enchantment: 3000, alchemist: 400 }, 'Infinity hat');
+  assert.deepEqual(Rewards.price(6889), { telekinetic: 500, graveyard: 500, enchantment: 6000, alchemist: 550 }, "Mage's book");
+  assert.deepEqual(Rewards.price(6926), { telekinetic: 200, graveyard: 200, enchantment: 2000, alchemist: 300 }, 'Bones to Peaches');
+  assert.deepEqual(Rewards.price(560), { telekinetic: 2, graveyard: 1, enchantment: 20, alchemist: 1 }, 'death rune');
+  assert.equal(Rewards.previousWand(6914), 6912, 'master needs teacher');
+  assert.equal(Rewards.previousWand(6908), null);
+});
+
+test('runes: as many as every type pays for, and the points go down by the price', () => {
+  const player = shopPlayer();
+  Common.addPoints(player, 'telekinetic', 20);
+  Common.addPoints(player, 'alchemist', 20);
+  Common.addPoints(player, 'enchantment', 100);
+  Common.addPoints(player, 'graveyard', 20);
+  assert.equal(Rewards.buy(player, slotOf(560), 10), 5, 'enchantment 20 each allows 5');
+  assert.equal(player.items.get(560), 5);
+  assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), [10, 15, 0, 15]);
+  assert.equal(Rewards.buy(player, slotOf(6918), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopTooPoor'));
+});
+
+test('wands are upgrades: each takes the tier before it', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  assert.equal(Rewards.buy(player, slotOf(6910), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopNeedWand', { wand: 'Beginner wand' }));
+  assert.equal(Rewards.buy(player, slotOf(6908), 1), 1);
+  assert.equal(Rewards.buy(player, slotOf(6910), 1), 1);
+  assert.equal(player.items.get(6908), 0, 'the beginner wand is handed in');
+  assert.equal(player.items.get(6910), 1);
+});
+
+test('Bones to Peaches is a one-time unlock needing Magic 60, read by the Graveyard', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  player.magic = 59;
+  assert.equal(Rewards.buy(player, slotOf(6926), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopPeachesLevel'));
+  player.magic = 60;
+  assert.equal(Rewards.buy(player, slotOf(6926), 5), 1);
+  assert.equal(player.getAttribute(Common.PEACHES_UNLOCKED_ATTRIBUTE), true);
+  assert.equal(player.items.get(6926) ?? 0, 0, 'no item, an unlock');
+  assert.equal(Rewards.buy(player, slotOf(6926), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopAlreadyUnlocked'));
+});
+
+test('the rune pouch only for a player without one', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  const pouch = Common.ids.items.runePouch;
+  assert.equal(Rewards.buy(player, slotOf(pouch), 3), 1);
+  assert.equal(Rewards.buy(player, slotOf(pouch), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopHavePouch'));
+});
+
+test('the guardian sends players without a hat to the Entrance Guardian', () => {
+  const player = shopPlayer();
+  const npcId = Common.ids.npcs.rewardsGuardian;
+  assert.equal(Rewards.variant({ player, npcId }), null);
+  player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, false);
+  assert.equal(Rewards.variant({ player, npcId }), Rewards.NO_HAT_VARIANT);
+  Rewards.tradeWith({ player, npc: { getId: () => npcId } });
+  assert.equal(player.messages.at(-1), Common.message('rewardsNoHat'));
+});
+
+test('Select, a quantity and Confirm buy through the interface', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  Rewards.open(player);
+  const selection = Common.ids.varbits.shopSelection;
+  assert.deepEqual(player.varbitsSent.at(-1), [selection, 63], 'nothing selected');
+  Rewards.rewardClicked({ player, slot: slotOf(565), opId: 1 });
+  assert.deepEqual(player.varbitsSent.at(-1), [selection, slotOf(565)]);
+  Rewards.quantity(10)({ player });
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(565), 10);
+  Rewards.quantity(10)({ player });
+  Rewards.rewardClicked({ player, slot: slotOf(564), opId: 1 });
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(564), 1, 'a new selection is x1, as the client shows');
+  Rewards.rewardClicked({ player, slot: slotOf(564), opId: 1 });
+  Rewards.quantity(Common.data.shop.mostAtOnce)({ player });
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(564), 29, 'the fourth button is 28');
+  player.shopOpen = false;
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(564), 29, 'nothing bought with the shop closed');
+});
+
 test('training-room deaths keep real gear and Hardcore status, clean room items and respawn in the hall', async (t) => {
   const { Player } = require('../dist/game/entity/impl/player/Player');
   const { PlayerDeathTask } = require('../dist/game/task/impl/PlayerDeath');
@@ -596,4 +709,52 @@ test('training-room deaths keep real gear and Hardcore status, clean room items 
   });
   const outside = new Player(null, loc(3200, 3200));
   assert.equal(PluginManager.emitShouldDropItemsOnDeath(outside, null), null, 'normal deaths keep their existing policy');
+});
+
+test('native reward purchases charge only what fits in real rune stacks and freed wand slots', async (t) => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  function shopper(t) {
+    const player = new Player(null, loc(3362, 3318, 1));
+    player.setUsername('mta_shop_limit');
+    player.setRegistered(true);
+    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+    t.mock.method(player, 'sendMessage', () => {});
+    t.after(() => player.setRegistered(false));
+    player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, true);
+    for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 1000);
+    return player;
+  }
+  const id = Common.ids.items.death;
+  for (const room of [0, 3]) await t.test(`rune stack with ${room} spaces left`, (t) => {
+    const player = shopper(t);
+    player.getInventory().adds(id, 0x7fffffff - room);
+    const before = Common.POINT_TYPES.map((type) => Common.points(player, type));
+    const cost = Rewards.price(id);
+    Rewards.open(player);
+    Rewards.select({ player, slot: slotOf(id) });
+    Rewards.quantity(10)({ player });
+    Rewards.confirm({ player });
+    assert.equal(player.getInventory().getAmount(id), 0x7fffffff);
+    const after = Common.POINT_TYPES.map((type, i) => before[i] - (cost[type] ?? 0) * room);
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), after);
+    Rewards.confirm({ player });
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), after, 'a full stack cannot charge again');
+  });
+  await t.test('wand upgrade uses the old wand slot in a full inventory', (t) => {
+    const player = shopper(t);
+    const beginner = core.ItemIdentifiers.BEGINNER_WAND;
+    const apprentice = core.ItemIdentifiers.APPRENTICE_WAND;
+    player.getInventory().adds(beginner, 1);
+    player.getInventory().adds(core.ItemIdentifiers.BRONZE_FULL_HELM, 27);
+    assert.equal(player.getInventory().getFreeSlots(), 0);
+    const before = Common.POINT_TYPES.map((type) => Common.points(player, type));
+    Rewards.open(player);
+    Rewards.select({ player, slot: slotOf(apprentice) });
+    Rewards.confirm({ player });
+    assert.equal(player.getInventory().getAmount(beginner), 0);
+    assert.equal(player.getInventory().getAmount(apprentice), 1);
+    assert.equal(player.getInventory().getFreeSlots(), 0);
+    const cost = Rewards.price(apprentice);
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), Common.POINT_TYPES.map((type, i) => before[i] - (cost[type] ?? 0)));
+  });
 });
