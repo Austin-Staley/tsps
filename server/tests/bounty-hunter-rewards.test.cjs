@@ -113,6 +113,25 @@ test("target kills pay 2 points plus the largest milestone bonus, halved when pe
   assert.equal(killer.varps.get("bh_2023_rogue_kill"), 1);
 });
 
+test("arena entry and exit report the current points balance to players, without messaging bots", () => {
+  const fighter = player();
+  Points.addPoints(fighter, 1234);
+  emit("bounty-hunter:entered-arena", { player: fighter });
+  assert.equal(fighter.messages.at(-1), "You currently have 1,234 Bounty Hunter points.");
+  Points.addPoints(fighter, -234);
+  emit("bounty-hunter:left-arena", { player: fighter });
+  assert.equal(fighter.messages.at(-1), "You currently have 1,000 Bounty Hunter points.");
+
+  const fresh = player();
+  emit("bounty-hunter:entered-arena", { player: fresh });
+  assert.equal(fresh.messages.at(-1), "You currently have 0 Bounty Hunter points.");
+  const bot = player();
+  bot.isPlayerBot = () => true;
+  emit("bounty-hunter:entered-arena", { player: bot });
+  emit("bounty-hunter:left-arena", { player: bot });
+  assert.deepEqual(bot.messages, []);
+});
+
 test("a kill gives an emblem to whoever owns none, unless ironman or penalised", () => {
   const killed = (killer, extra = {}) => emit("bounty-hunter:target-killed", { killer, victim: player(), killerSkulled: true, penalised: false, ...extra });
   const fresh = player();
