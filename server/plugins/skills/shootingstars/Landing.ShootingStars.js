@@ -20,6 +20,7 @@ const Mining = require("./Mining.ShootingStars");
 
 const { DATA, world } = Common;
 const DARKMEYER_SITE_INDEX = DATA.sites.findIndex((site) => site.name === "Daeyalt essence mine entrance");
+if (DARKMEYER_SITE_INDEX < 0) throw new Error("Shooting Stars: Darkmeyer landing site is missing.");
 
 function randomBetween(min, max, random = Math.random) {
   return min + random() * (max - min);

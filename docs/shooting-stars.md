@@ -13,7 +13,7 @@ Like OSRS, it is free-to-play, with half experience on free-to-play worlds, wher
 - **Where:** the data contains 83 landing sites, including Darkmeyer. Ordinary rolls exclude Darkmeyer; when a roll repeats the previous landing site, it redirects to Darkmeyer instead. No site can repeat consecutively, and Darkmeyer cannot be the first landing after startup.
   - Stars land in members areas on free-to-play worlds too, as in OSRS.
   - Darkmeyer is the existing `Daeyalt essence mine entrance` site at (3635, 3340, 0), in Morytania. Forecasts use the redirected site, so a repeat correctly forecasts Morytania.
-  - Source: [Shooting Stars, landing sites and footnote 2](https://oldschool.runescape.wiki/w/Shooting_Stars#Landing_sites), citing Mod Ash on 12 December 2021.
+  - Source: [Shooting Stars landing sites](https://oldschool.runescape.wiki/w/Shooting_Stars#Landing_sites), citing Mod Ash on 12 December 2021.
 - **The landing itself isn't captured.** The cache's `star_landing_star` loc (41019) carries the impact animation (`game_star_meteor_impact`), so it stands for 4 ticks before the crashed star replaces it.
 - **The crashed star** is one 2×2 loc per size, `star_size_<n>_star` (41020, 41021, 41223–41229).
   - An invisible `star_headbar_npc` (10629) stands on its south-west tile.
@@ -87,12 +87,3 @@ Clue geodes come from the Mining plugin (`server/plugins/skills/mining/ClueGeode
 - `::star` (owner):
   - On its own, it shows the current star: site, size, layer % and finder.
   - `::star spawn [size] [here | site number]` lands one now. `here` lands it next to you.
-
-## Validation
-
-- After `yarn --cwd server build`, run `node --test tests/shooting-stars.test.cjs tests/shops.test.cjs tests/shop-currencies.test.cjs` from `server/`.
-- Landing coverage checks every previous site against every ordinary roll, first-landing bounds, stable Darkmeyer forecasts and scheduled replacement of the previous star.
-- Shop coverage checks Dusuri's four displayed refunds, purchase charges, Value quotes and sale payments, other shops' unchanged defaults, and rejection of invalid refund prices from plugins.
-- Worktree MCP verified a size-9 star at Darkmeyer (site 60), prospecting, discovery bonus 300, mining for 2 stardust and 32 XP with the bonus reducing to 299, and removal when another star lands.
-- Worktree MCP also bought and sold each of Dusuri's four rewards, verifying the exact purchase charges and 1,600 / 2,400 / 240 / 120 refunds. Mined stardust survived logout and the development server restart.
-- The four-tick landing visual remains inferred from the cache; its exact OSRS timing has no packet capture here.

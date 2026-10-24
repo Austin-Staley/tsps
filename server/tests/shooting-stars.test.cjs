@@ -162,6 +162,21 @@ test("landing: regular rolls exclude Darkmeyer, repeated rolls redirect there", 
   assert.equal(Landing.rollSite(() => 1 - Number.EPSILON), regularSites.at(-1));
 });
 
+test("landing: renaming the Darkmeyer site fails when the module loads", () => {
+  const modulePath = require.resolve("../plugins/skills/shootingstars/Landing.ShootingStars");
+  const cached = require.cache[modulePath];
+  const site = DATA.sites[DARKMEYER];
+  const name = site.name;
+  try {
+    site.name = "Renamed landing site";
+    delete require.cache[modulePath];
+    assert.throws(() => require(modulePath), { message: "Shooting Stars: Darkmeyer landing site is missing." });
+  } finally {
+    site.name = name;
+    require.cache[modulePath] = cached;
+  }
+});
+
 test("landing: a Darkmeyer forecast stays stable and replaces the old star when due", (t) => {
   let scheduled;
   Landing({ ...fakeApi, getTaskManager: () => ({ submit: (task) => { scheduled = task; } }), registerCommand() {} });
