@@ -16,6 +16,7 @@ let api = null;
 let core = null;
 let data = null;
 let ids = null;
+const rooms = new Map();
 
 function resolve(names, lookup, kind) {
   const out = {};
@@ -32,6 +33,7 @@ function resolve(names, lookup, kind) {
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  rooms.clear();
   data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "mage-training-arena.json"), "utf8"));
   const cache = core.CacheDefinitions;
   ids = {
@@ -139,8 +141,38 @@ function closeOverlay(player) {
   player.getPacketSender().closeSubInterface?.(OVERLAY_HUD_UID);
 }
 
+function registerRoom(name, area) {
+  rooms.set(name, area);
+  api.registerArea(area);
+}
+
+function roomAt(player) {
+  for (const [name, area] of rooms) if (inBox(player.getLocation(), data[name].bounds)) return area;
+  return null;
+}
+
+/** The arena is a safe activity, including for Hardcore Ironmen (Wiki). */
+function keepItemsOnDeath(event) {
+  if (roomAt(event.player)) event.shouldDrop = false;
+}
+
+function respawnInHall(event) {
+  const area = roomAt(event.player);
+  if (!area) return;
+  event.handled = true;
+  // Clear room-only items and settle its rewards before the respawn is saved.
+  area.leave(event.player, false);
+  if (event.player.getArea() === area) event.player.setArea(null);
+  event.player.moveTo(toLocation(data.lobby.arrive));
+}
+
+function attach(api) {
+  api.onShouldDropItemsOnDeath(keepItemsOnDeath);
+  api.onPlayerDeath(respawnInHall);
+}
+
 module.exports = {
-  init, later, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
+  init, later, attach, registerRoom, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
   POINT_TYPES, POINTS_ATTRIBUTE, HAT_GIVEN_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },

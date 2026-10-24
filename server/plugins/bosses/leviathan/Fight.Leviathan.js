@@ -54,7 +54,7 @@ class Fight {
       if (this.tick < this.stunnedUntil) return;
       this.stunnedUntil = 0;
       if (!this.awakened) this.boss.performAnimation(Common.core.Animation.DEFAULT_RESET_ANIMATION);
-      this.nextAttack = this.tick + Model.volley(this.tier).interval;
+      this.nextAttack = this.tick + Model.volley(this.tier, this.awakened).interval;
     }
     if (this.special || this.tick < this.nextAttack) return;
     this.boss.setPositionToFace(this.player.getLocation());
@@ -72,10 +72,10 @@ class Fight {
         if (this.awakened) Common.damage(this, amount);
         else Common.biteDamage(this, amount);
       }
-      this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval);
+      this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier, this.awakened).interval);
       return;
     }
-    const pattern = this.enraged ? { interval: this.stats.enrageInterval, styles: ["magic", "ranged"], flight: 5 } : Model.volley(this.tier);
+    const pattern = this.enraged ? { interval: this.stats.enrageInterval, styles: ["magic", "ranged"], flight: 5 } : Model.volley(this.tier, this.awakened);
     this.orb(Common.pick(pattern.styles), pattern.flight);
     this.nextAttack = this.tick + pattern.interval;
     if (!this.enraged && ++this.shots >= pattern.shots) {
@@ -85,12 +85,12 @@ class Fight {
         if (!this.alive() || this.volleyEpoch !== epoch || this.enraged || this.stunnedUntil || this.special) return;
         this.roar(); this.tier = Math.min(6, this.tier + 1);
       });
-      this.nextAttack += 5;
+      this.nextAttack += pattern.recoveryTicks;
     }
   }
   orb(style, flight) {
     if (!this.alive()) return;
-    const interval = this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval;
+    const interval = this.enraged ? this.stats.enrageInterval : Model.volley(this.tier, this.awakened).interval;
     const startup = interval > 1 || !this.shots;
     Common.animate(this.boss, startup ? "orbStart" : "orbLoop");
     Common.projectile(this, style, flight, startup);
@@ -141,7 +141,7 @@ class Fight {
   }
   endSpecial() {
     this.special = null;
-    this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval);
+    this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier, this.awakened).interval);
   }
   enterEnrage() {
     this.enraged = true; this.stunnedUntil = 0; this.shots = 0;

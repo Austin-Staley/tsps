@@ -51,3 +51,33 @@ Still provisional: normal poison amount per dose, protected magic24/covered gas4
 The integration retains the ancestry of PR891 `16a1b9e6108d04d5912f69eaba1eee650ffa30ac` and PR895 `18c98d340476b762aa41dd381e7301624d60c5a1`. Named asylum hooks and the exact guarded unnamed Ghorrock fallback remain. Source-generated JSON is unchanged from main; the conditional-drop dependency is already merged.
 
 Tests use actual cache definitions, inventories, templated areas, NPC processing/death tasks and hit queues. They cover the later mechanics alongside partial vat refunds, messageboxes, cast-time impacts, gaze/freeze feedback, real idle regeneration and auxiliary cleanup. The own-worktree MCP smoke entered the asylum, fed two poisons, observed485HP wake, retained a lowered300HP boss, and verified exit cleanup. Client animation feel and current ordinary-world packet parity were not visually retested. Final build/suite totals are in the integration PR.
+
+## One strike calculation and terminal cancellation, 24 October 2026
+
+The former strike helper constructed a dummy zero PendingHit, then rolled the
+actual damage through applyStyleDamage. Real Elysian tests reproduced two effect
+invocations for one melee or magic strike. The [primary shield description](https://oldschool.runescape.wiki/w/Elysian_spirit_shield)
+ties its effect to the damage calculation and places recoil after its reduction.
+
+Each strike now constructs one actual pre-rolled PendingHit, preserving the
+existing inclusive range, accuracy settings, selected protected range, HP cap
+and queue reveal cycle. The optional protection-bypass flag reviewed in
+[PR #996](https://github.com/RSPSApp/tsps/pull/996) prevents ordinary full prayer
+blocking from being reapplied to Duke's already chosen protected range. The
+source branch includes that exact generic prerequisite separately so it remains
+buildable while #996 is open; it includes no Whisperer feature changes.
+
+Pending strikes are tracked alongside their parts. Terminal cancellation zeroes
+both the parts and cached totals used by retaliation, and applied hits release
+their references. Before correction, real Vengeance was consumed despite zero
+HP loss after stop/fell. A late strike invoked after stop could also deal damage;
+the helper now rejects inactive terminal/ended/replaced encounters and dead
+players. Ordinary hazard damage retains its separate path.
+
+Seven new regressions cover actual Elysian effects for both styles, cancellation
+of recoil/Vengeance, a late stopped strike, protected magic with post-shield
+retaliation, and non-reflecting hazard controls. Fresh prerequisite build and all
+106 Duke plus 7 HitQueue checks pass (113/113); independent review repeated them
+and found no important issue. Full/native/integration verification is recorded
+in the PR. This does not establish new damage bounds, RNG draw order, vent/ice
+selection or combat timing constants.
