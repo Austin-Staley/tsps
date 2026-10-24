@@ -59,11 +59,28 @@ export class ChatboxPanelManager {
     /** The VM the script listener is on (the client builds its VM after RuneLite starts). */
     private listeningVm?: ChatboxClient["cs2Vm"];
     private readonly onScript = (id: number) => this.onScriptPreFired(id);
+    private inputAttached = false;
+    /** Set while there is something to do each client tick (nothing is posted otherwise). */
+    private tickSubscription?: () => void;
 
-    constructor(private readonly client: ChatboxClient, fontLoader?: FontLoader) {
+    /**
+     * `subscribeTicks` runs a function every client tick until the returned function is called;
+     * without it, the owner calls onClientTick.
+     */
+    constructor(
+        private readonly client: ChatboxClient,
+        fontLoader?: FontLoader,
+        private readonly subscribeTicks?: (tick: () => void) => () => void,
+    ) {
         this.fontLoader = fontLoader ?? createSharedFontLoader(() => client.cacheSystem as any);
-        this.unsubscribe.push(client.inputManager.addKeyHandler({ onKeyDown: (event) => this.onKeyDown(event) }));
-        this.unsubscribe.push(client.inputManager.addMouseHandler({
+    }
+
+    /** KeyManager / MouseManager registration, on first use (the client builds its input later). */
+    private attachInput(): void {
+        if (this.inputAttached || !this.client.inputManager) return;
+        this.inputAttached = true;
+        this.unsubscribe.push(this.client.inputManager.addKeyHandler({ onKeyDown: (event) => this.onKeyDown(event) }));
+        this.unsubscribe.push(this.client.inputManager.addMouseHandler({
             onMouseDown: (event) => this.onMouseDown(event),
             onMouseMove: (event) => this.onMouseMove(event),
         }));
@@ -71,6 +88,9 @@ export class ChatboxPanelManager {
 
     dispose(): void {
         for (const off of this.unsubscribe.splice(0)) off();
+        this.tickSubscription?.();
+        this.tickSubscription = undefined;
+        this.inputAttached = false;
         this.listeningVm?.scriptPreListeners.delete(this.onScript);
         this.listeningVm = undefined;
     }
@@ -91,6 +111,7 @@ export class ChatboxPanelManager {
     /** ClientThread.invokeLater: runs on the next client tick. */
     invokeLater(fn: () => void): void {
         this.later.push(fn);
+        if (!this.tickSubscription && this.subscribeTicks) this.tickSubscription = this.subscribeTicks(() => this.onClientTick());
     }
 
     close(): void {
@@ -148,6 +169,10 @@ export class ChatboxPanelManager {
             }
         }
         (this.currentInput as { tick?: () => void } | undefined)?.tick?.();
+        if (!this.currentInput && this.later.length === 0 && this.tickSubscription) {
+            this.tickSubscription();
+            this.tickSubscription = undefined;
+        }
     }
 
     onGameStateChanged(event: GameStateChanged): void {
@@ -161,6 +186,7 @@ export class ChatboxPanelManager {
 
     private unsafeOpenInput(input: ChatboxInput): void {
         this.listenForScripts();
+        this.attachInput();
         this.client.runClientScriptWithInts(MESSAGE_LAYER_OPEN, [0]);
         if (this.currentInput) this.killCurrentPanel();
         this.currentInput = input;

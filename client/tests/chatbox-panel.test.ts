@@ -210,4 +210,28 @@ const children = (client: any) => (client.widgetManager.getWidgetByUid(CHATBOX_M
     assert.throws(() => manager.openTextInput(undefined as any).build(), /prompt must be non-null/);
 }
 
+// --- Client ticks are only taken while there is something to do ---------------------------------
+{
+    const client = fakeClient();
+    let ticks: (() => void) | undefined;
+    let subscriptions = 0;
+    const manager = new ChatboxPanelManager(client, () => font, (tick) => {
+        subscriptions++;
+        ticks = tick;
+        return () => { ticks = undefined; };
+    });
+    assert.equal(ticks, undefined, "idle: no tick subscription");
+    assert.equal(client.keyHandlers.length, 0, "input handlers wait for the first panel");
+    manager.openTextMenuInput("Hi").option("Ok", () => {}).build();
+    assert.ok(ticks, "subscribed once there is work");
+    ticks!();
+    assert.equal(client.keyHandlers.length, 1);
+    ticks!();
+    assert.ok(ticks, "kept while the panel is open (the cursor blinks)");
+    manager.close();
+    ticks!();
+    assert.equal(ticks, undefined, "released when closed");
+    assert.equal(subscriptions, 1);
+}
+
 console.log("chatbox-panel tests passed");

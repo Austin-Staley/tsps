@@ -52,7 +52,8 @@ export class RuneLite {
         this.pluginManager = new PluginManager(this.eventBus, this.configManager);
         this.clientToolbar = this.pluginManager.getInjector().get(ClientToolbar);
         this.overlayRenderer = new OverlayRenderer(client, this.configManager);
-        this.chatboxPanelManager = new ChatboxPanelManager(client);
+        this.chatboxPanelManager = new ChatboxPanelManager(client, undefined,
+            (tick) => this.eventBus.subscribe(ClientTick, tick));
     }
 
     static start(client: OsrsClient, loadPlugins = true): RuneLite {
@@ -90,7 +91,7 @@ export class RuneLite {
         injector.provide(CLIENT_TOKEN, this.client);
         injector.provide(ChatboxPanelManager, this.chatboxPanelManager);
         injector.provide(MenuManager, this.menuManager);
-        this.eventBus.register(this.chatboxPanelManager);
+        this.eventBus.subscribe(GameStateChanged, (event) => this.chatboxPanelManager.onGameStateChanged(event));
         setManagedMenus((entries, context) => this.menuManager.apply(entries, context));
 
         this.client.stateMachine.subscribe((transition) => {
