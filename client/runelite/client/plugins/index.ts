@@ -29,6 +29,7 @@ import {
 } from "../../../game/plugins/statustimer/StatusTimerPlugin";
 import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migrateTileMarkers";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
+import { TilePacksPlugin } from "../../../game/plugins/tilepacks/TilePacksPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
@@ -47,6 +48,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     GroundItemsPlugin,
     InteractHighlightPlugin,
     TileMarkersPlugin,
+    TilePacksPlugin,
     MenuSwapperPlugin,
     // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
     InventoryTagsPlugin,
