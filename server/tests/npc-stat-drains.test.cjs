@@ -19,7 +19,7 @@ function npc(levels = [100, 100, 100, 100, 100], demon = false) {
   value.isNpc = () => true;
   value.getAsNpc = () => value;
   value.performGraphic = () => {};
-  value.getCombat = () => ({ getSelectedSpell: () => null });
+  value.getCombat = () => ({ getSelectedSpell: () => null, getTarget: () => null });
   return value;
 }
 function method(name) {
