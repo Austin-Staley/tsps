@@ -1,7 +1,8 @@
 # Shared poison and venom protection clock audit
 
-This records evidence for replacing the current wall-clock protection policy.
-It is not a completed runtime correction or a claim that all antidotes match OSRS.
+This records the source evidence and implementation scope for replacing the
+wall-clock protection policy. Verification gates and remaining limits below
+must not be read as a claim that all antidotes match every OSRS presentation detail.
 
 ## Established counter contract
 
@@ -82,6 +83,54 @@ type-0/type-3 modals, while leaving type-1 sidebar overlays out. Regression
 tests use actual PacketSender mounting/closing methods and verify no burst,
 the original short-dialogue deadline and the next 30-tick hit. This bounded
 correction does **not** replace the negative protection countdown below.
+
+## Shared-counter follow-up
+
+The follow-up uses a player-owned `PoisonClock` and the existing single
+`CombatPoisonEffect` task. Positive affliction and negative dose protection
+share the same0–30 tick remainder. A protection-only player keeps that task;
+renewal changes the counter without resetting the phase. The negative counter
+is sent directly to varp102, including when its last pulse is overdue behind a
+modal. Its protective state does not depend on rounding displayed seconds.
+
+Player venom protection uses a counter greater than38, independently of ordinary
+poison protection. Ordinary antipoisons downgrade active venom without adding a
+simultaneous negative counter; another dose cures the resulting poison and
+protects. Anti-venom fully cures and sets its published41-step tier;
+anti-venom+ retains the captured50-step tier. Canonical extended anti-venom+
+and anti-poison supermix dose chains join the same potion and orb-selection path.
+
+Charged serpentine equipment and strange fruit use separate brief poison/venom
+flags. They do not overwrite a stronger dose or stop an existing affliction.
+The [Venom Wiki's Jagex citation](https://oldschool.runescape.wiki/w/Venom#cite_note-1)
+specifically describes strange fruit's approximately18-second flag preventing
+standard poison/venom reapplication; this is not treated as a low-tier dose.
+Brief poison and venom durations are saved independently, so one cannot extend
+the other accidentally.
+
+An optional `poisonClock` save snapshot holds the counter, remainder and active
+brief flags. Positive poison/venom also retains its phase. The old numeric
+`poisonImmunityTimer` field remains, and old saves without a valid snapshot use
+their stored whole seconds to approximate a remainder within one game tick.
+They cannot recover an exact historical phase or the source of old short
+protection. Unaffected saves omit the optional snapshot. Death synchronously
+resets phase before a new dose can arrive; logout retains it without retaining
+the open modal or releasing a burst.
+
+Focused regression coverage reproduces the captured protection counters,
+single-task renewal, the final held counter, actual JSON codec round-trips,
+positive-affliction resume, death-before-cleanup, malformed snapshot fallback,
+distinct short flags, dose chains and the venom cutoff. Generic `SecondsTimer`
+pause semantics and NPC immunity timers remain unchanged.
+
+The initial idle pulse remains30ticks. The recording establishes phase
+preservation when a pulse already exists; it does not establish a universal
+random initial phase. The Wiki prose/table disagree on anti-venom+ duration:
+the observed-50 tier, official-38 cutoff and table216-second upper window are
+used rather than adding a guessed independent180-second venom timer. Exact
+within-tick cure/reapplication ordering and visual/sound parity remain unproven.
+
+## Delivery gates
 
 Replace the independent protection stopwatch with a shared discrete poison
 pulse that survives ordinary poison, venom conversion and protection renewal.
