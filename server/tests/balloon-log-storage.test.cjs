@@ -85,6 +85,11 @@ function fakePlayer({ at = [2938, 3421], items = {} } = {}) {
       getVarbit: (varbit) => player.varbits[varbit] ?? 0,
       getVarp: () => 0,
       sendInterfaceRemoval() {}, sendInterface() {}, sendVarbit() {}, sendSubInterface() {}, closeSubInterface() {},
+      sendJingle: (id) => { (player.jingles ??= []).push(id); },
+      sendSong: (id) => { (player.songs ??= []).push(id); },
+      sendTypedMessage: (type, line) => player.messages.push(line),
+      sendInterfaceRawModel() {}, sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
+      sendInterfaceDisplayState() {},
     }),
   };
   return player;
@@ -169,7 +174,7 @@ test('the choice of logs checks the trip again: walked off, nothing flies', () =
   assert.equal(lastPrompt().title, 'Which logs would you like to use?');
   player.moveTo(loc(3200, 3200));
   choose('Use the logs in storage.');
-  tick(3);
+  tick(4);
   assert.equal(Storage.stored(player, 'logs'), 2, 'not paid');
   assert.notDeepEqual([player.getLocation().getX(), player.getLocation().getY()], station('entrana').land);
 });
@@ -192,10 +197,10 @@ test('a trip paid from storage: no log carried, the count told on landing', () =
   player.attributes[Storage.STORED_ATTRIBUTE] = { logs: 5 };
   assert.equal(Travel.travel(player, station('taverley'), station('entrana')), true);
   player.lastChain.getDialogues().get(1).action.execute();
-  tick(3);
+  tick(4);
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], station('entrana').land);
   assert.equal(Storage.stored(player, 'logs'), 4);
-  assert.ok(player.messages.includes('You have 4 logs left in storage.'));
+  assert.ok(player.messages.includes('You have 4 sets of Logs left in storage.'), 'recorded');
 });
 
 test('"ask" with logs in both offers the choice; preferring storage does not ask', () => {
@@ -219,7 +224,7 @@ test('a route opened from Entrana with stored logs; a trip that does not happen 
   const player = fakePlayer({ at: [2808, 3354] });
   player.attributes[Storage.STORED_ATTRIBUTE] = { willow: 12 };
   Travel.travel(player, station('entrana'), station('varrock'));
-  tick(3);
+  tick(4);
   assert.equal(Common.opened(player, station('varrock')), true);
   assert.equal(Storage.stored(player, 'willow'), 2);
 
@@ -229,6 +234,6 @@ test('a route opened from Entrana with stored logs; a trip that does not happen 
   Travel.fly(moved, station('craft'), 1, null, Storage.STORAGE);
   assert.equal(Storage.stored(moved, 'oak'), 2);
   moved.moveTo(loc(3200, 3200));
-  tick(3);
+  tick(4);
   assert.equal(Storage.stored(moved, 'oak'), 3, 'back in the crate');
 });

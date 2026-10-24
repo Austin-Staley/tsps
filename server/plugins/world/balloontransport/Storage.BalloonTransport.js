@@ -75,6 +75,12 @@ function takeCarried(player, key, amount) {
   inventory.refreshItems?.();
 }
 
+/** The recorded item box (objectbox) with the log, for "You put the [type] in the crate.". */
+function itemBox(player, key, line) {
+  const { DialogueChainBuilder, ItemStatementDialogue } = Common.core;
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, Common.ids.objs[key], line)));
+}
+
 function box(player, line) {
   const { DialogueChainBuilder, StatementDialogue } = Common.core;
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, line)));
@@ -96,7 +102,7 @@ function deposit(player, key, wanted) {
   if (amount <= 0) return;
   takeCarried(player, key, amount);
   setStored(player, key, stored(player, key) + amount);
-  box(player, fill(text("stored"), { type: settings().names[key], amount: stored(player, key) }));
+  itemBox(player, key, fill(text("stored"), { type: settings().names[key], amount: stored(player, key) }));
 }
 
 /** One log type chosen: the amount asked when more than one is carried. */
@@ -201,9 +207,18 @@ function refund(player, station, count, source) {
   inventory.refreshItems?.();
 }
 
-/** After a trip paid from storage: how many of that log are left. */
-function tellLeft(player, station) {
-  player.sendMessage(fill(text("left"), { amount: stored(player, station.log), type: settings().names[station.log].toLowerCase() }));
+/**
+ * As a trip's logs are taken (rsprox 3225, spam): from storage, how many sets are left ("one set"
+ * for the last but one); from either, the last one used.
+ */
+function tellPaid(player, station, source) {
+  const { messages } = Common.data;
+  const type = settings().names[station.log];
+  const left = source === STORAGE ? stored(player, station.log) : carriedForTrip(player, station.log);
+  const spam = (line) => player.getPacketSender().sendTypedMessage(Common.core.ChatType.SPAM, line);
+  if (left <= 0) return spam(fill(messages.usedLast, { type }));
+  if (source !== STORAGE) return;
+  spam(left === 1 ? fill(messages.storageOne, { type }) : fill(messages.storageLeft, { amount: left, type }));
 }
 
 function attach(api) {
@@ -214,6 +229,6 @@ function attach(api) {
 }
 
 module.exports = {
-  attach, store, storeType, useOnStorage, preferences, check, stored, carried, canPay, chooseSource, pay, refund, tellLeft,
+  attach, store, storeType, useOnStorage, preferences, check, stored, carried, canPay, chooseSource, pay, refund, tellPaid,
   STORED_ATTRIBUTE, PREFERENCE_ATTRIBUTE, STORAGE, INVENTORY,
 };

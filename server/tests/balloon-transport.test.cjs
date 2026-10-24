@@ -52,6 +52,7 @@ function fakePlayer({ at = [2808, 3354], firemaking = 99, items = {}, worn = {} 
     getLocation: () => tile,
     moveTo: (to) => { tile = to; },
     isRegistered: () => player.registered,
+    getInterfaceId: () => player.interface,
     isDyingReturn: () => player.dying === true,
     getHitpoints: () => 99,
     getAttribute: (k) => player.attributes[k],
@@ -81,8 +82,13 @@ function fakePlayer({ at = [2808, 3354], firemaking = 99, items = {}, worn = {} 
       sendInterfaceRemoval: () => { player.interface = -1; },
       sendInterface: (id) => { player.interface = id; },
       sendVarbit: (id, v) => { player.varbits[id] = v; },
-      sendSubInterface: (uid, id, type, { postScripts } = {}) => player.fades.push(postScripts?.[0]?.args?.[1] === 255 ? 'out' : 'in'),
+      sendSubInterface: (uid, id, type, { postScripts } = {}) => player.fades.push(`fade:${postScripts?.[0]?.args?.[3]}`),
       closeSubInterface: () => player.fades.push('closed'),
+      sendJingle: (id) => { (player.jingles ??= []).push(id); },
+      sendSong: (id) => { (player.songs ??= []).push(id); },
+      sendTypedMessage: (type, line) => player.messages.push(line),
+      sendInterfaceRawModel() {}, sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
+      sendInterfaceDisplayState() {},
     }),
   };
   return player;
@@ -144,27 +150,46 @@ test('the map opens after Enlightened Journey only: Fly, Use on a basket, and th
   assert.equal(other.handled, false, "the quest's own interfaces are the quest's");
 });
 
-test('Entrana to Taverley: one log, the fade, Taverley 3 ticks later', () => {
+// Recorded (rsprox 3225, rev 232): the jingle, the clear overlay and the map flying the route at
+// once; the teleport and the boarding line at 4; the map closed and the fade at 5; the overlay
+// gone at 6.
+test('Entrana to Taverley as recorded: one log, the map flying the route, Taverley 4 ticks later', () => {
   const player = fakePlayer({ items: { logs: 2 } });
   Travel.openMap(player, station('entrana'));
   pick(player, 'taverley');
-  assert.equal(player.interface, -1);
+  assert.equal(player.interface, 469, 'the map again, flying');
+  assert.equal(player.journey, core.CacheDefinitions.getSeqId('zep_balloon_journey_entrana_taverley'));
+  assert.deepEqual([player.jingles, player.songs], [[118], [147]]);
   assert.equal(player.inventory.get(1511), 1, 'one log');
-  assert.deepEqual(player.fades, ['out']);
+  assert.deepEqual(player.fades, ['fade:0']);
   assert.equal(player.blocked, true);
   tick(3);
-  assert.deepEqual(xy(player.getLocation()), [2938, 3421]);
-  assert.deepEqual(player.fades, ['out', 'in']);
+  assert.deepEqual(xy(player.getLocation()), [2808, 3354], 'not yet');
+  tick(1);
+  assert.deepEqual(xy(player.getLocation()), [2941, 3420]);
+  assert.deepEqual(player.messages, ['You board the balloon and fly to Taverley.']);
   assert.equal(player.blocked, false);
-  tick(2);
-  assert.deepEqual(player.fades, ['out', 'in', 'closed']);
+  tick(1);
+  assert.equal(player.interface, -1);
+  assert.deepEqual(player.fades, ['fade:0', 'fade:255']);
+  tick(1);
+  assert.deepEqual(player.fades, ['fade:0', 'fade:255', 'closed']);
 });
 
-test('a trip needs its log and its Firemaking level; the same station does nothing', () => {
+test("the last log used says so; the same station is 'You're already there!'", () => {
+  const player = fakePlayer({ items: { logs: 1 } });
+  Travel.travel(player, station('entrana'), station('taverley'));
+  assert.deepEqual(player.messages, ['You used the last of your Logs.']);
+  const there = fakePlayer({ items: { logs: 1 } });
+  assert.equal(Travel.travel(there, station('entrana'), station('entrana')), false);
+  assert.equal(lastLine(there), "You're already there!");
+});
+
+test("a trip needs its log and its Firemaking level; the same station refuses", () => {
   const player = fakePlayer({ at: [2938, 3421], items: { logs: 5 } });
   Common.openRoute(player, station('craft'));
   Travel.travel(player, station('taverley'), station('craft'));
-  assert.equal(lastLine(player), 'You need 1 Oak logs to make this trip.');
+  assert.equal(lastLine(player), 'You need 1 oak logs to make this trip.');
   assert.equal(Travel.flying(player), false);
   const low = fakePlayer({ at: [2938, 3421], firemaking: 29, items: { oak: 1 } });
   Common.openRoute(low, station('craft'));
@@ -187,7 +212,7 @@ test('to Entrana the player is searched: no weapons or armour worn', () => {
   Travel.travel(clean, station('taverley'), station('entrana'));
   continueChain(clean);
   assert.equal(Travel.flying(clean), true);
-  tick(3);
+  tick(4);
   assert.deepEqual(xy(clean.getLocation()), [2808, 3354]);
 });
 
@@ -195,28 +220,28 @@ test('opening a route from Entrana: its 10 logs (3 magic), 2,000 Firemaking XP, 
   const player = fakePlayer({ items: { oak: 12 } });
   Travel.travel(player, station('entrana'), station('craft'));
   assert.equal(player.inventory.get(1521), 2, '10 oak logs');
-  tick(3);
-  assert.deepEqual(xy(player.getLocation()), [2923, 3301]);
+  tick(4);
+  assert.deepEqual(xy(player.getLocation()), [2923, 3302]);
   assert.equal(Common.opened(player, station('craft')), true);
   assert.equal(player.xp, 2000);
   assert.equal(player.varbits[2871], 1, "the Crafting Guild's basket and Brock shown");
-  assert.deepEqual(player.messages, ['You open the balloon route to the Crafting Guild.']);
+  assert.deepEqual(player.messages, ['You board the balloon and fly to the Crafting Guild.', 'You open the balloon route to the Crafting Guild.']);
   // Opened: one log from then on, from anywhere opened.
   Travel.travel(player, station('craft'), station('entrana'));
   continueChain(player);
-  tick(3);
+  tick(4);
   Travel.travel(player, station('entrana'), station('craft'));
   assert.equal(player.inventory.get(1521), 1);
 
   const gnome = fakePlayer({ items: { magic: 3 } });
   Travel.travel(gnome, station('entrana'), station('gnome'));
   assert.equal(gnome.inventory.get(1513), 0, '3 magic logs');
-  tick(3);
+  tick(4);
   assert.deepEqual([gnome.varbits[2870], gnome.varbits[5032]], [1, 1], 'the Grand Tree basket and Le Smith');
 
   const short = fakePlayer({ items: { yew: 9 } });
   Travel.travel(short, station('entrana'), station('castle'));
-  assert.equal(lastLine(short), 'You need 10 Yew logs to open this route.');
+  assert.equal(lastLine(short), 'You need 10 yew logs to open this route.');
 });
 
 test('a route not yet opened is refused away from Entrana', () => {
@@ -248,14 +273,14 @@ test('login sends the opened routes; logging out mid-flight lands the player; dy
   const leaving = fakePlayer({ items: { logs: 1 } });
   Travel.travel(leaving, station('entrana'), station('taverley'));
   Travel.logout({ player: leaving });
-  assert.deepEqual(xy(leaving.getLocation()), [2938, 3421]);
+  assert.deepEqual(xy(leaving.getLocation()), [2941, 3420]);
   assert.equal(Travel.flying(leaving), false);
   assert.equal(leaving.blocked, false);
 
   const dying = fakePlayer({ items: { logs: 1 } });
   Travel.travel(dying, station('entrana'), station('taverley'));
   dying.dying = true;
-  tick(3);
+  tick(4);
   assert.deepEqual(xy(dying.getLocation()), [2808, 3354], 'where they were');
   assert.equal(dying.inventory.get(1511), 1, 'the log back');
   assert.equal(dying.fades.at(-1), 'closed');
@@ -284,14 +309,14 @@ test("the trip is checked again after the Entrana search; armour put on mid-flig
   continueChain(armed);
   assert.equal(Travel.flying(armed), true);
   armed.getEquipment().getItems()[core.Equipment.WEAPON_SLOT] = new core.Item(core.ItemIdentifiers.ABYSSAL_WHIP, 1);
-  tick(3);
+  tick(4);
   assert.deepEqual(xy(armed.getLocation()), [2938, 3421], 'not landed on Entrana armed');
   assert.equal(armed.inventory.get(1511), 1, 'the log back');
 
   const away = fakePlayer({ items: { logs: 1 } });
   Travel.travel(away, station('entrana'), station('taverley'));
   away.moveTo(loc(3222, 3218));
-  tick(3);
+  tick(4);
   assert.deepEqual(xy(away.getLocation()), [3222, 3218], 'a teleport on the way is not undone');
 });
 
