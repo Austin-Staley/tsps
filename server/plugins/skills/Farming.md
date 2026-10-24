@@ -66,7 +66,15 @@ From `server/`:
 ```powershell
 npx.cmd tsc --noEmit
 node --test tests/farming-model.test.cjs
+node --test tests/farming-falador-diary-xp.test.cjs
 ```
+
+The four South Falador allotment/flower/herb patches award 10% extra Farming XP
+after the Medium Falador Diary, queried through canonical diary progress. The
+bonus follows the acted-on patch; it does not apply to Falador Park trees,
+other planes/patches or unrelated Farming awards. Tests cover composting,
+planting, harvesting, deferred herb planting XP and incomplete/easy-only diaries.
+Source: [South Falador Farm](https://oldschool.runescape.wiki/w/South_Falador_Farm).
 
 The second command checks the state machine and mocked hooks without server startup
 or sockets. It covers offline/save equivalence,
