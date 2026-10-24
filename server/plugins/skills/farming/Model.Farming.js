@@ -48,6 +48,8 @@ function diseaseChance(crop, compost, watered, iasor) {
 const HERB_LOW = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUTWEED: 39,
     RANARR: 39, TOADFLAX: 43, IRIT: 46, AVANTOE: 50, KWUARM: 54, SNAPDRAGON: 57, HUASCA: 59,
     CADANTINE: 60, LANTADYME: 64, DWARF_WEED: 67, TORSTOL: 71 };
+// Low/high life-save parameters published by the corresponding seed Wiki calculators.
+const TEXTILE_HOP_CTS = { FLAX: [140, 194], HEMP: [120, 178], COTTON: [82, 142] };
 const CROP_LOW = { POTATO: 101, ONION: 105, CABBAGE: 107, TOMATO: 112, SWEETCORN: 88, STRAWBERRY: 103,
     BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 120, WILDBLOOD: 128 };
 function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0, attas = false) {
@@ -60,6 +62,7 @@ function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0,
     else if (crop.key === "WATERMELON") { low = 126; high = 180; }
     else if (crop.key === "YANILLIAN") { low = 116; high = 180; }
     else if (crop.key === "JUTE") { low = 113; high = 180; }
+    else if (TEXTILE_HOP_CTS[crop.key]) { [low, high] = TEXTILE_HOP_CTS[crop.key]; }
     else if (CROP_LOW[crop.key]) { low = CROP_LOW[crop.key]; high = 180; }
     else {
         // ponytail: unpublished CTS endpoints, estimated from wiki yields; not claimed as exact OSRS rates.
