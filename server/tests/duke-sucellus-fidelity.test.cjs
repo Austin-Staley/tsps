@@ -64,6 +64,43 @@ test('last Slayer assignment kill cannot award an off-task Duke speed achievemen
   assert.equal(h.emitted.some(([name,e])=>name==='combat-achievements:complete'&&e.task.startsWith('Duke Sucellus Speed-')),false);
 });
 
+function slayerState(h){
+  const {PacketSender}=require('../dist/net/packet/PacketSender');
+  const Data=require('../plugins/skills/slayer/Data.Slayer');
+  const State=require('../plugins/skills/slayer/State.Slayer');
+  const Tasks=require('../plugins/skills/slayer/Tasks.Slayer');
+  h.p.getSession=()=>({sendClientPacket:()=>true,write(){}});
+  const sender=new PacketSender(h.p);h.p.getPacketSender=()=>sender;
+  for(const unit of [Data,State,Tasks])unit.init(h.api);
+  Tasks.attach(h.api);
+  const [bossId]=[...Data.get().bosses].find(([id])=>Data.isBossNpc(id,'Duke Sucellus'));
+  return {assign(){State.update(h.p,{slayer_target_bossid:bossId,slayer_master:5},
+    {slayer_target:Data.BOSS_TASK_ID,slayer_count:2,slayer_count_original:2});
+    const request={player:h.p,npc:h.session.boss,onTask:false};h.api.emitCustomEvent('slayer:on-task',request);
+    assert.equal(request.onTask,true,'the real Slayer assignment matches this owned Duke');
+  },clear(){Tasks.clear(h.p);}};
+}
+const speedAwards=h=>h.emitted.filter(([name,event])=>name==='combat-achievements:complete'&&event.task.startsWith('Duke Sucellus Speed-'));
+
+for(const assignedAt of ['wake','combat'])
+test(`cancelling a real Slayer assignment after Duke ${assignedAt} cannot restore speed eligibility`,t=>{
+  const h=H.harness(t),s=h.enter(),slayer=slayerState(h);
+  if(assignedAt==='wake')slayer.assign();
+  h.fight.wake();h.fight.nextAttack=Infinity;
+  if(assignedAt==='combat'){slayer.assign();h.step();}
+  slayer.clear();h.fight.fell();h.fight.won(h.p);
+  assert.equal(speedAwards(h).length,0);
+  // The restriction belongs to one awake encounter, not the whole instance.
+  s.reset();h.fight.wake();h.fight.fell();h.fight.won(h.p);
+  assert.equal(speedAwards(h).length,3);
+});
+
+test('a Slayer assignment cancelled during preparation does not taint the later off-task speed attempt',t=>{
+  const h=H.harness(t);h.enter();const slayer=slayerState(h);
+  slayer.assign();slayer.clear();h.fight.wake();h.fight.fell();h.fight.won(h.p);
+  assert.equal(speedAwards(h).length,3);
+});
+
 test('Duke scoreboard opens its cache-native interface with persisted personal records',t=>{
   const h=H.harness(t),R=require('../plugins/bosses/dukesucellus/Records.DukeSucellus');
   R.resetWorld();R.attach(h.api);
@@ -73,6 +110,18 @@ test('Duke scoreboard opens its cache-native interface with persisted personal r
   assert.ok(h.packets.some(x=>x[0]==='sendInterface'&&x[1]===828));
   const text=id=>h.packets.find(x=>x[0]==='sendString'&&x[2]===((828<<16)|id))?.[1];
   assert.equal(text(9),'12');assert.equal(text(11),'3');assert.equal(text(13),'0:43.8');
+});
+
+test('the native Duke scoreboard parent Read click opens normal records before null-name dispatch',t=>{
+  const h=H.harness(t),R=require('../plugins/bosses/dukesucellus/Records.DukeSucellus');R.attach(h.api);
+  const event={player:h.p,objectId:46091,clickType:1,handled:false};
+  h.dispatch('onBeforeObjectInteraction',event);
+  assert.equal(event.handled,true);
+  assert.ok(h.packets.some(packet=>packet[0]==='sendInterface'&&packet[1]===828));
+  assert.equal(R.read({player:h.p,objectId:47562}),false,'inactive transform has no Read action');
+  assert.equal(R.read({player:h.p,objectId:47564}),false,'awakened records remain unavailable');
+  const other={player:h.p,objectId:46091,clickType:2,handled:false};
+  h.dispatch('onBeforeObjectInteraction',other);assert.equal(other.handled,false);
 });
 
 test('Duke records count a lethal result and an in-instance player death once each',t=>{

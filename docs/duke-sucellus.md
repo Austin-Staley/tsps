@@ -38,6 +38,38 @@ The normal fight implements aimed melee chip/slam, magic, pillar-hidden freezing
 
 ## Evidence and limits
 
+### Awake Slayer eligibility and native scoreboard Read, 24 October 2026
+
+The current [Duke Sucellus Speed-Runner page](https://oldschool.runescape.wiki/w/Duke_Sucellus_Speed-Runner?oldid=15307346)
+(19 August 2026 at 16:29:14 UTC) requires an off-task kill and explicitly starts
+timing when Duke wakes. The
+previous implementation queried Slayer only at lethal damage: cancelling an
+assignment after using it during the fight could restore all three speed
+awards. The encounter now retains a matching assignment observed at wake,
+while processing awake combat, or immediately before lethal completion. A
+later cancellation cannot restore eligibility. Preparation alone is outside
+that speed attempt, and a new kill gets fresh eligibility. Three regressions
+use the real Slayer assignment state, packet sender and matching query; both
+awake-cancellation cases failed before the fix, while the preparation-only
+control and the following off-task kill remain eligible. The existing final
+assignment/death-hook guard remains in place.
+
+The revision-241 cache's Duke scoreboard parent is `duke_sucellus_scoreboard`
+(46091), with a null parent name. Its transforms are inactive 47562, normal
+Read 47563 and awakened Read 47564. The existing named Scoreboard handler
+only accepted 47563, so a native parent-ID click could not reach it. An early
+object hook now accepts parent 46091's first/Read action and opens the same
+normal records interface 828. The explicit normal transform remains accepted;
+inactive, awakened and other parent action slots remain excluded. The raw
+parent-click regression failed before this correction. The shared
+`dt2_scoreboards` access varbit is supplied by a separate world-level change;
+this plugin does not duplicate that unlock or enable awakened mode.
+
+Fresh TypeScript build and all 80 focused Duke tests pass. These corrections
+come from the published restriction, actual cache definitions and reproduced
+native/state transitions; no additional protected-damage maximum, hazard
+window or random formula is inferred.
+
 ### Mining timeout and further ordinary footage, 24 October 2026
 
 The [salt-deposit page, revision 15202330](https://oldschool.runescape.wiki/w/Salt_Deposit?oldid=15202330)

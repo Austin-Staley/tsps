@@ -11,6 +11,7 @@ class Fight {
     this.events=[]; this.pending=new Set(); this.clock=new M.AttackClock(); this.nextAttack=Infinity;
     this.started=0; this.respawnAt=Infinity; this.wonAlready=false;
     this.baselineKills=C.kills(this.player);
+    this.completedOnSlayerTask=false;
     this.lastAttackCycle=-1; this.mirror=true; this.coldFeetEligible=false;
   }
   valid() { return !this.over && !this.stopped && !this.session.ended && this.session.fight===this && this.player.getHitpoints()>0; }
@@ -26,6 +27,7 @@ class Fight {
     this.boss.setDisplayedHealth(null);this.boss.removeHeadbar(C.data.meters.poison.id);
     this.boss.performAnimation(new C.core.Animation(C.data.animations.wake));
     this.boss.setAttribute(C.DEMONBANE,.7);
+    this.observeSlayerTask();
     this.nextAttack=this.session.tick+C.data.timing.wake;
     this.session.setExit(true);
     C.api.emitCustomEvent('boss-hud:show',{player:this.player,npcId:C.data.npcs.awake,current:C.data.normal.hitpoints,maximum:C.data.normal.hitpoints});
@@ -41,6 +43,7 @@ class Fight {
     for(const e of due) { if(!this.valid()) break; e.action(); }
     if(!this.valid()) return;
     if(!this.active) { this.preparationHazards(); return; }
+    this.observeSlayerTask();
     C.api.emitCustomEvent('boss-hud:update',{player:this.player,current:this.boss.getHitpoints()});
     if(this.session.tick<this.nextAttack) return;
     const action=this.clock.next(this.boss.getHitpoints());
@@ -111,11 +114,15 @@ class Fight {
   preparationHazards() {
     Hazards.preparation(this);
   }
+  observeSlayerTask() {
+    if(this.completedOnSlayerTask)return;
+    const task={player:this.player,npc:this.boss,onTask:false};C.api.emitCustomEvent('slayer:on-task',task);
+    if(task.onTask)this.completedOnSlayerTask=true;
+  }
   fell() {
     if(this.over || this.stopped || !this.active) return;
     // Slayer's death handler may complete the assignment before won() runs.
-    const task={player:this.player,npc:this.boss,onTask:false}; C.api.emitCustomEvent('slayer:on-task',task);
-    this.completedOnSlayerTask=task.onTask;
+    this.observeSlayerTask();
     this.over=true; this.events=[]; C.cancelPending(this);
     this.hideGaze();
     Hazards.clear(this);

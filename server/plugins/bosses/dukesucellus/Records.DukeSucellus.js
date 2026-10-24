@@ -22,14 +22,22 @@ function kill(ticks){const w=worldRecords();w.kills++;if(ticks>0&&(!w.best||tick
 function died(player){player.setAttribute(DEATHS,C.count(player,DEATHS)+1);worldRecords().deaths++;save();}
 function time(ticks){if(!(ticks>0))return '-';const tenths=Math.round(ticks*6);return `${Math.floor(tenths/600)}:${String(Math.floor(tenths/10)%60).padStart(2,'0')}.${tenths%10}`;}
 function read(event){
-  if(event.objectId!==C.data.objects.scoreboard)return false;
+  if(![C.data.objects.scoreboardParent,C.data.objects.scoreboard].includes(event.objectId??event.definition?.id))return false;
   const p=event.player,w=worldRecords(),sender=p.getPacketSender();
   sender.sendInterface(INTERFACE);
   for(const [component,value] of [[9,C.kills(p)],[11,C.count(p,DEATHS)],[13,time(C.count(p,C.BEST))],[15,w.kills],[17,w.deaths],[19,time(w.best)]])
     sender.sendString(String(value),(INTERFACE<<16)|component);
   return true;
 }
-function attach(api){api.persistAttribute(DEATHS,0);api.onObjectInteraction('Scoreboard',{Read:read});}
+function parentRead(event){
+  if((event.objectId??event.definition?.id)!==C.data.objects.scoreboardParent||event.clickType!==1)return;
+  if(read(event))event.handled=true;
+}
+function attach(api){
+  api.persistAttribute(DEATHS,0);
+  api.onBeforeObjectInteraction(parentRead);
+  api.onObjectInteraction('Scoreboard',{Read:read});
+}
 // Like the other boss record stores, tests use an isolated in-memory world.
 function resetWorld(){world={kills:0,deaths:0,best:0};persist=false;}
 module.exports={DEATHS,worldRecords,kill,died,read,attach,resetWorld};
