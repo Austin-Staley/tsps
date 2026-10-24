@@ -400,7 +400,8 @@ test('existing marked Undead Grasp bind releases the player during Whisperer pur
         if (lowHealth) { f.fight.completed = 3; f.boss.setHitpoints(99); }
         f.boss.setFlag('combat:freezable', true);
         f.player.getTimers().registers(core.TimerKey.FREEZE, 12);
-        if (marked) f.player.setAttribute('arceuus:mark-until', core.World.getProcessCycle() + 100);
+        if (marked) core.ArceuusSpells.placeMark(f.player);
+        assert.equal(core.ArceuusSpells.hasMark(f.player), marked);
         const spell = core.CombatSpells.UNDEAD_GRASP;
         const hit = { isAccurate: () => true, getAttacker: () => f.player, getTarget: () => f.boss, getTotalDamage: () => 0 };
         spell.onHitCalc(hit);
