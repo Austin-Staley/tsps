@@ -600,6 +600,7 @@ export class Player extends Mobile {
             username: this.getUsername(),
         });
         this.getRelations().updateLists(false);
+        CombatPoisonEffect.suspend(this);
         TaskManager.cancelTasks(this);
         this.setHasVengeance(false);
         this.getVengeanceTimer().stop();
@@ -643,6 +644,7 @@ export class Player extends Mobile {
         } else if (autocastSpell == null || this.getEquipment().hasStaffEquipped()) {
             Autocasting.setAutocast(this, autocastSpell);
         }
+        CombatPoisonEffect.resume(this);
         for (const [varpId, value] of Object.entries(this.audioSettings)) {
             this.getPacketSender().sendConfig(Number(varpId), value);
         }
