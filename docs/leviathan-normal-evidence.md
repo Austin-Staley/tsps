@@ -16,13 +16,13 @@ This ledger tracks unresolved mechanics explicitly. A passing test against a cho
 | Area | Current behavior / unresolved fact | Evidence or next verification |
 |---|---|---|
 | Normal stats and bonuses | First five stats overridden; remaining bonuses inherited | Compare all normal stats/bonuses with current Wiki and canonical cache-backed definition; never use special-world player damage to infer stats |
-| Volley counts | Uniform 8 is incorrect | Normal video establishes first five as 6/8/8/12/12; packet/video corroboration and late-tier counts required |
+| Volley counts | Opening five tiers implemented as6/8/8/12/12 | Normal video and opening packet schedule agree; final two12-shot counts remain extrapolated |
 | Volley speed/styles | Seven tiers, Wiki 3/2/2/1/1/1/1 | Retain source-backed tiers; verify transitions at packet boundaries |
-| Early projectile flight | 4/4/4/3/3 chosen without capture | Extract projectile start/end cycles and normal footage |
+| Early projectile flight | Implemented5/5/4/3/3ticks | Original mode-classified packets; normal footage corroborates opening cadence, not every flight offset |
 | Late projectile flight | Wiki explicitly 2 ticks then 1 tick | Verify client-cycle offsets and damage timing |
-| Enrage projectile flight | Hardcoded 2 ticks, not established | Packet/video measurement separately from attack interval |
-| First attack | Chosen 5 ticks | Spawn sequence, first projectile and normal-world timing |
-| Volley roar gap | Chosen 4 ticks plus attack interval | Last projectile/roar/next projectile packet offsets |
+| Enrage projectile flight | Implemented5ticks | Captures3285/1751 normal900HP actors; special-world mode limitation retained |
+| First attack | Implemented4ticks | Captures3285/1751 normal900HP actors |
+| Volley roar gap | Roar one attack interval after final shot; next shot5ticks after roar | Capture1751 opening offsets22/27,43/48,64/69 |
 | Roar damage | Maximum 7 source-backed; zero-inclusive roll unverified | Original damage observations and source formula evidence |
 | Roar debris flight | Reuses smoke's two-tick delay without proof | Projectile/graphic/loc timing |
 | First-special tell | Side gfx disappear; no lasting tell objects | Establish side positions, object/graphic identity, lifetime and first-roar behavior |
@@ -40,18 +40,18 @@ This ledger tracks unresolved mechanics explicitly. A passing test against a cho
 | Smoke blast delay | Chosen tick 13 | Last rock impact to blast packets |
 | Smoke damage | Strategy says 59; boss infobox says 60 | Resolve with original evidence; do not silently choose a value |
 | Smoke cover | All prior debris blocks via center ray | Verify eligible boulder set, origin and occlusion; quest guide distinguishes smoke boulders from regular boulders |
-| Enrage entry | 20%=180HP source-backed | Verify stun/special interruption, roar, spawn delay and incoming projectiles |
-| Pathfinder layout | Chosen centers and center-based blocked test | Actual NPC base/size/spawn corner coordinates; align aura with 3x3 NPC and 5x5 area |
-| Pathfinder movement | Chosen two-tick interval and rectangular corners | Extract actor movement and normal video; bounded detour fix is not proof of OSRS route tie-breaking |
-| Pathfinder activation/glow | Registration gate fixed; player glow absent | Capture NPC/player graphics and effect boundaries |
+| Enrage entry | 20%=180HP,3tick pathfinder spawn,5tick orb delay,2tick cadence; debris every8ticks without interrupting orbs | Original normal actors3285/1751; smoke already in progress finishes |
+| Pathfinder layout | Implemented size3 origins NW2074,6377; NE2086,6377; SE2086,6365; symmetric SW2074,6365 | Original actor packets; aura centre is actual NPC origin+1, not pending destination |
+| Pathfinder movement | Ordinary cardinal walk step each tick after3tick initial delay, through debris | Quest capture1703 ordinary world independently confirms east/south/first-west and rubble overlap; full normal lap still needed |
+| Pathfinder activation/glow | Registration gates effects; aura uses actual NPC position; spawn animation10296; player glow remains absent | Original spawn packets and real MovementQueue regressions |
 | Arena and tails | Map copied correctly; tail actors absent | All tail IDs/coordinates/orientation/lifecycle and collision from original NPC packets |
-| Attack animation cycle | Single-projectile seq used everywhere | Startup/loop/end/single sequencing from original packets |
+| Attack animation cycle | Startup/single/loop sequence now used for orbs | Capture sequence10278 then10281 one tick later; special loops still require review |
 | Normal respawn | Chosen 50 ticks after death event | Normal kill/death animation/loot/respawn footage; event respawn rules may differ |
 | Timer/PB start/end | Constructor-to-lethal timer | Original boss timer messages/varps relative to attack/spawn/loot packets |
 | Entry/exit presentation | Instant boat/handhold/stone travel | Actual movement/animation/fade/varp sequence, valid action/escape routes |
 | Guardian and scoreboard | Guardian route exists; scoreboard unimplemented | Cache interface/script and original interactions; public quest-complete source state |
 | Cannon/poison/thralls | Audit required | Wiki immunity and allowed thralls; inspect actual combat ownership/poison behavior |
-| Unconventional CA | Missing | Mithril ammo only, HP never above 25 throughout; thralls allowed; current wooden blowpipe exception; real health/ammo provenance |
+| Unconventional CA | Implemented and20focused checks pass | Real HP transitions and launch-time ammunition; see below; shadow/thralls permitted and wooden blowpipe exceptions enforced |
 | Other normal CAs | Generic counts/speed/perfect/stun hooks present | Verify exact boundaries, five perfect kills without leaving and timer/order semantics |
 | Normal loot exclusivity | Canonical current rows roll independently | ROOT OWNS shared DT2 loot correction; no duplicate engine/generated patches here |
 | Vestige progression | Missing shared three-roll state | ROOT OWNS: invisible 1/256 progression, first gold ring, second two rings, third vestige/reset |
@@ -77,6 +77,14 @@ Original normal guide `mhzvu8217oA` establishes opening counts6/8/8/12/12. Norma
 
 Enrage in both recordings has a3tick pathfinder delay,5tick first-orb delay,2tick orb cadence with5tick projectile travel, and falling debris every8ticks. Subsequent debris waves do not interrupt orbs or replay the entry roar animation/chip. The recorded source geometry selects the mouth2tiles toward whichever side of the7x7 body the player stands beyond. Packet fields30/150clientcycles,550/100height,30angle,124progress and no source actor are now preserved through the real Projectile sender.
 
-Pathfinder spawn bases are NW2074,6377; NE2086,6377; observed SE turn2086,6365. Authored centers are the3x3 NPC bases+1. First movement occurs3ticks after registration, then1tile/tick. Spawn selection checks the3x3 footprint. Movement deliberately ignores rubble: normal capture3285's second fight has a permanent rock2077,6378 before pathfinder spawn17491 atbase2074,6377; at17495 its base2076,6377 places its center directly on that rock. Therefore collision-detouring during movement, introduced in the earlier bounded fix, contradicted the newly acquired original evidence. The existing bounded collision helper remains available for the tornado; normal pathfinder movement follows its clockwise destinations. The SW corner is the symmetric route continuation and still needs a complete normal-lap recording.
+Pathfinder spawn bases are NW2074,6377; NE2086,6377; observed SE turn2086,6365. Authored centers are the3x3 NPC bases+1. First movement occurs3ticks after registration, then1tile/tick. Spawn selection checks the3x3 footprint. Movement deliberately ignores rubble: normal capture3285's second fight has a permanent rock2077,6378 before pathfinder spawn17491 atbase2074,6377; at17495 its base2076,6377 places its center directly on that rock. Therefore collision-detouring during movement, introduced in the earlier bounded fix, contradicted the newly acquired original evidence. The reconciled published branch sends ordinary cardinal walking updates through debris; its aura follows the registered NPC actual position. The disabled awakened tornado retains its original provisional greedy pursuit and separate spawn, avoiding an unrelated awakened change. The SW corner is the symmetric route continuation and still needs a complete normal-lap recording.
 
 Validation checkpoint:6new volley/projectile checks and2recorded pathfinder checks added; cache-backed encounter suite65/65 passes. Opening/pathfinder/projectile regressions were observed failing before correction. Remaining ledger items above are still open; this checkpoint is installable for testing but is not a claim of exact complete parity.
+
+### Published pathfinder reconciliation and independent verification
+
+Merged published pathfinder commit `6ce88e831` into the normal-fidelity branch, preserving its ordinary walk packets, actual-position aura and original disabled tornado behavior alongside the opening/enrage/projectile changes. Ordinary-world **quest** recording[1703](https://rsprox.net/download/1703) independently shows pathfinder spawn8572 at2074,6377, first east step8575,12east steps through8586,12south steps through8598 and a west step8599. Rubble47590 at2082,6379, added8394, remains present during footprint overlap8580–8582. This is geometry/cadence evidence, not an ordinary post-quest balance sample.
+
+Fresh immutable decoder outputs for1703 and3285 use helperSHA256 `7ca21602b38f3a2a8210cd7746c6e9671f5f10a166a618e08e7562e0481d2af7`; earlier measurements above retain their original helper provenance. Public archive[search](https://rsprox.net/database) was rechecked24October2026. Final verification is recorded below.
+
+Fresh final verification: TypeScript build passes;66Leviathan encounter checks plus3generic current-level checks pass (69/69); complete server suite5,019/5,019 passes with zero failures/skips under `node --test --test-concurrency=4 "tests/*.test.cjs"` outside the sandbox. `git diff --check` is clean. The sandbox run encountered unrelated filesystem/loopback restrictions and was stopped; both affected files separately pass133/133 outside the sandbox, and the unrestricted complete run supersedes that attempt.

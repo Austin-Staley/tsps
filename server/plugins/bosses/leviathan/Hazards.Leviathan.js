@@ -1,5 +1,6 @@
 const Common = require("./Common.Leviathan");
 const Model = require("./Model.Leviathan");
+const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
 const ADJACENT = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, -1], [-1, 1]];
 
 class Hazards {
@@ -109,39 +110,27 @@ class Hazards {
     this.pathfinder = this.session.spawn(Common.ids.npcs.pathfinder, [this.pathCentre[0] - 1, this.pathCentre[1] - 1]);
     this.pathfinder?.setScriptedMovement(true);
     this.pathfinder?.setFlag(Common.core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
-    this.pathNext = this.pathReady() ? this.fight.tick + Common.data.inferred.pathStartTicks : null;
+    this.pathNext = this.fight.tick + Common.data.pathfinder.spawnDelayTicks;
+    this.pathfinder?.setFlag(IGNORE_CLIPPING_FLAG, true);
     this.pathDestination = (this.pathIndex + 1) % corners.length;
     if (this.pathfinder) Common.animate(this.pathfinder, 'pathfinderSpawn');
   }
   pathReady() { return !!this.pathfinder?.isRegistered?.(); }
-  inAura() { return this.pathReady() && Model.inAura(this.pathCentre, this.playerTile(), this.fight.awakened); }
-  stepToward(from, to) {
-    if (Model.key(from) === Model.key(to) || !this.open(to)) return from;
-    const visited = new Set([Model.key(from)]), queue = [{ tile: from, first: null }];
-    // Every queued tile is in the finite arena floor (plus the starting tile),
-    // so a sealed route terminates without an arbitrary search limit.
-    for (let index = 0; index < queue.length; index++) {
-      const { tile, first } = queue[index];
-      const dx = Math.sign(to[0] - tile[0]), dy = Math.sign(to[1] - tile[1]);
-      for (const [x, y] of [[dx, dy], [dx, 0], [0, dy], ...ADJACENT]) {
-        if (!x && !y) continue;
-        const next = [tile[0] + x, tile[1] + y], key = Model.key(next);
-        if (visited.has(key) || !this.open(next)) continue;
-        if (x && y && (!this.open([tile[0] + x, tile[1]]) || !this.open([tile[0], tile[1] + y]))) continue;
-        const start = this.session.tile(tile), end = this.session.tile(next);
-        if (!Common.core.RegionManager.canMove(start.getX(), start.getY(), end.getX(), end.getY(),
-          start.getZ(), 1, 1, this.session.area)) continue;
-        const step = first ?? next;
-        if (key === Model.key(to)) return step;
-        visited.add(key);
-        queue.push({ tile: next, first: step });
-      }
-    }
-    return from;
+  pathfinderCentre() {
+    const origin = this.session.sourceTile(this.pathfinder.getLocation());
+    return [origin[0] + 1, origin[1] + 1];
+  }
+  inAura() { return this.pathReady() && Model.inAura(this.pathfinderCentre(), this.playerTile(), this.fight.awakened); }
+  // Awakened entry remains disabled: preserve its previous provisional pursuit.
+  stepTornadoToward(from, to) {
+    const dx = Math.sign(to[0] - from[0]), dy = Math.sign(to[1] - from[1]);
+    const candidates = [[dx, dy], [dx, 0], [0, dy], ...ADJACENT].filter(([x, y]) => x || y)
+      .map(([x, y]) => [from[0] + x, from[1] + y]);
+    return candidates.find(at => this.open(at) && Model.distance(at, to) < Model.distance(from, to)) ?? from;
   }
   spawnTornado() {
     if (this.tornado) return;
-    this.tornadoTile = [...Common.data.arena.pathCorners[2]];
+    this.tornadoTile = [...Common.data.arena.tornadoSpawn];
     this.tornado = this.session.spawn(Common.ids.npcs.tornado, this.tornadoTile);
     this.tornado?.setScriptedMovement(true);
     this.tornado?.performGraphic(Common.graphic("tornado"));
@@ -150,21 +139,25 @@ class Hazards {
   }
   process() {
     const fight = this.fight;
-    if (this.pathReady()) {
-      if (this.pathNext === null) this.pathNext = fight.tick + Common.data.inferred.pathStartTicks;
-      if (fight.tick >= this.pathNext) {
-        const target = Common.data.arena.pathCorners[this.pathDestination];
-        // The ethereal NPC crosses existing debris in original normal recordings.
-        // Collision is relevant to selecting its initial footprint, not its route.
-        this.pathCentre = this.pathCentre.map((value, index) => value + Math.sign(target[index] - value));
-        if (Model.key(this.pathCentre) === Model.key(target)) this.pathDestination = (this.pathDestination + 1) % 4;
-        this.pathfinder.exactMove(this.session.tile([this.pathCentre[0] - 1, this.pathCentre[1] - 1]));
-        this.pathNext = fight.tick + Common.data.inferred.pathStepTicks;
-      }
-    } else this.pathNext = null;
+    if (this.pathReady() && fight.tick >= this.pathNext) {
+      this.pathCentre = this.pathfinderCentre();
+      const corners = Common.data.arena.pathCorners;
+      if (Model.key(this.pathCentre) === Model.key(corners[this.pathDestination]))
+        this.pathDestination = (this.pathDestination + 1) % corners.length;
+      const target = corners[this.pathDestination];
+      // RSProx shows cardinal walk steps along this rectangle, including through
+      // debris. Keep the ordinary walk update instead of an exact-move mask.
+      const next = [this.pathCentre[0] + Math.sign(target[0] - this.pathCentre[0]),
+        this.pathCentre[1] + Math.sign(target[1] - this.pathCentre[1])];
+      const movement = this.pathfinder.getMovementQueue();
+      movement.reset();
+      movement.addSteps(this.session.tile([next[0] - 1, next[1] - 1]));
+      this.pathCentre = next;
+      this.pathNext = fight.tick + Common.data.pathfinder.stepTicks;
+    }
     if (fight.awakened && fight.boss.getHitpoints() <= fight.stats.hitpoints / 2) this.spawnTornado();
     if (this.tornado && fight.tick >= this.tornadoNext) {
-      this.tornadoTile = this.stepToward(this.tornadoTile, this.playerTile());
+      this.tornadoTile = this.stepTornadoToward(this.tornadoTile, this.playerTile());
       this.tornado.exactMove(this.session.tile(this.tornadoTile));
       this.tornadoNext = fight.tick + Common.data.inferred.tornadoStepTicks;
     }

@@ -1,13 +1,14 @@
 {
-  "source": "OSRS Wiki The Leviathan, Strategies, Perfect Leviathan; IDs resolved from revision241 gamevals. Timings under inferred are not capture-verified.",
+  "source": "OSRS Wiki The Leviathan, Strategies, Perfect Leviathan; IDs resolved from revision241 gamevals. Per-field capture evidence and provisional limits are recorded in docs/leviathan-normal-evidence.md.",
   "quest": "desert_treasure_ii",
   "instance": { "sourceChunkX": 257, "sourceChunkY": 792, "width": 7, "height": 8, "planes": [0, 1] },
   "site": { "campBoat": [2065, 6435, 0], "campReturn": [2063, 6435, 0], "islandBoat": [2065, 6371, 0], "islandArrival": [2070, 6371, 0], "handholds": [2070, 6368, 0], "arenaArrival": [2072, 6370, 0], "guardianArrival": [2021, 6433, 0] },
-  "arena": { "west": 2071, "east": 2092, "south": 6363, "north": 6381, "boss": [2078, 6369, 0], "centre": [2081, 6372], "pathCorners": [[2075, 6378], [2087, 6378], [2087, 6366], [2075, 6366]], "loot": [2075, 6371, 0] },
+  "arena": { "west": 2071, "east": 2092, "south": 6363, "north": 6381, "boss": [2078, 6369, 0], "centre": [2081, 6372], "pathCorners": [[2075, 6378], [2087, 6378], [2087, 6366], [2075, 6366]], "tornadoSpawn": [2089, 6365], "loot": [2075, 6371, 0] },
+  "pathfinder": { "spawnDelayTicks": 3, "stepTicks": 1 },
   "normal": { "hitpoints": 900, "attack": 300, "strength": 360, "defence": 250, "ranged": 160, "magic": 160, "enrageInterval": 2, "auraRadius": 2, "stunTicks": 15, "smokeMax": 59 },
   "awakened": { "hitpoints": 2700, "attack": 525, "strength": 630, "defence": 287, "ranged": 280, "magic": 280, "enrageInterval": 1, "auraRadius": 3, "stunTicks": 8, "smokeMax": 79 },
   "damage": { "magic": 32, "ranged": 24, "melee": 50, "debris": 25, "roar": 7, "lightning": 30, "tornado": 45 },
-  "inferred": { "volleyShots": 8, "initialFlightTicks": 4, "firstAttackTicks": 4, "roarGapTicks": 4, "respawnTicks": 50, "lightningDurationTicks": 20, "lightningDelayTicks": 2, "debrisFlightTicks": 2, "pathStepTicks": 1, "pathStartTicks": 3, "tornadoStepTicks": 2, "awakenedStunRounding": "15/2 rounded up to8", "awakenedSmokeAndTornadoMaxima": "conservative bounds from Wiki70+/40+, not measured exact maxima" },
+  "inferred": { "firstAttackTicks": 4, "respawnTicks": 50, "lightningDurationTicks": 20, "lightningDelayTicks": 2, "debrisFlightTicks": 2, "tornadoStepTicks": 2, "awakenedStunRounding": "15/2 rounded up to8", "awakenedSmokeAndTornadoMaxima": "conservative bounds from Wiki70+/40+, not measured exact maxima" },
   "cache": {
     "npcs": { "boss": "leviathan", "pathfinder": "leviathan_buff_npc", "tornado": "leviathan_tornado" },
     "locs": { "debris": "leviathan_rubble", "entry": "leviathan_wall_climb", "questEntry": "leviathan_wall_climb_quest" },

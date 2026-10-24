@@ -1,53 +1,80 @@
-const assert = require('node:assert/strict');
-const { test, before } = require('node:test');
-const H = require('./helpers/leviathan.cjs');
-const M = require('../plugins/bosses/leviathan/Model.Leviathan');
+const assert = require("node:assert/strict");
+const { test, before } = require("node:test");
+const H = require("./helpers/leviathan.cjs");
 before(H.initialize);
 
-test('pathfinder takes a deterministic cache-valid detour when its first step cannot get closer', t => {
-  const h = H.harness(t), hazards = h.fight.hazards;
-  for (let y = 6378; y <= 6380; y++) hazards.place([2075, y]);
-  let at = [2074, 6379], destination = [2089, 6379];
-  const first = hazards.stepToward(at, destination);
-  assert.notDeepEqual(first, at, 'an open route exists around the debris');
-  assert.deepEqual(hazards.stepToward(at, destination), first, 'tie-breaking is deterministic');
-  for (let count = 0; count < hazards.floor.size && M.key(at) !== M.key(destination); count++) {
-    const next = hazards.stepToward(at, destination);
-    assert.equal(M.distance(at, next), 1);
-    assert.ok(hazards.open(next));
-    const a = h.session.tile(at), b = h.session.tile(next);
-    assert.ok(h.core.RegionManager.canMove(a.getX(), a.getY(), b.getX(), b.getY(), 0, 1, 1, h.area));
-    at = next;
+function origin(h, npc) { return h.session.sourceTile(npc.getLocation()).slice(0, 2); }
+
+function walk(h, ticks = 1) {
+  for (let tick = 0; tick < ticks; tick++) {
+    h.step();
+    const npc = h.fight.hazards.pathfinder;
+    if (npc?.isRegistered()) npc.getMovementQueue().process();
   }
-  assert.deepEqual(at, destination);
+}
+
+test("pathfinder follows captured clockwise rectangle with ordinary walking packets", t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  hazards.spawnPathfinder();
+  const npc = hazards.pathfinder;
+  assert.equal(npc.getSize(), 3);
+  assert.deepEqual(origin(h, npc), [2074, 6377]);
+  assert.deepEqual(hazards.pathCentre, [2075, 6378]);
+  walk(h, 2);
+  assert.deepEqual(origin(h, npc), [2074, 6377]);
+  const corners = [[2086, 6377], [2086, 6365], [2074, 6365], [2074, 6377]];
+  let previous = origin(h, npc);
+  for (const corner of corners) {
+    for (let step = 0; step < 12; step++) {
+      walk(h);
+      const current = origin(h, npc);
+      assert.equal(Math.abs(current[0] - previous[0]) + Math.abs(current[1] - previous[1]), 1);
+      assert.equal(npc.getExactMove(), null, "walk direction, not exact-move mask");
+      const expectedDirection = current[0] > previous[0] ? 4 : current[0] < previous[0] ? 3 : current[1] < previous[1] ? 6 : 1;
+      assert.equal(npc.getWalkingDirection().getId(), expectedDirection);
+      assert.equal(npc.getRunningDirection().getId(), -1);
+      assert.deepEqual(hazards.pathCentre, [current[0] + 1, current[1] + 1]);
+      previous = current;
+    }
+    assert.deepEqual(origin(h, npc), corner);
+  }
 });
 
-test('a diagonal-only gap cannot cut between blocked orthogonal neighbors', t => {
+test("rubble on the track and destination never detours or stalls the pathfinder", t => {
   const h = H.harness(t), hazards = h.fight.hazards;
-  const from = [2073, 6378], destination = [2074, 6379];
-  assert.ok(hazards.open(from) && hazards.open(destination));
-  hazards.floor = new Set([M.key(from), M.key(destination)]);
-  assert.deepEqual(hazards.stepToward(from, destination), from);
+  h.fight.nextAttack = Infinity;
+  hazards.spawnPathfinder();
+  for (const tile of [[2076, 6378], [2082, 6379], [2087, 6378], [2087, 6366]]) hazards.place(tile);
+  walk(h, 14);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2086, 6377]);
+  walk(h, 12);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2086, 6365]);
+  walk(h);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2085, 6365]);
 });
 
-test('directional cache wall clipping is respected even when both floor tiles are open', t => {
+test("blocked spawn corners advance clockwise and all blocked corners fall back north-west", t => {
   const h = H.harness(t), hazards = h.fight.hazards;
-  const from = [2074, 6379], destination = [2075, 6379];
-  hazards.floor = new Set([M.key(from), M.key(destination)]);
-  const at = h.session.tile(destination);
-  h.area.setClip(at, h.area.getClip(at) | 0x80);
-  assert.deepEqual(hazards.stepToward(from, destination), from);
+  const corners = [[2075, 6378], [2087, 6378], [2087, 6366], [2075, 6366]];
+  hazards.place(corners[0]);
+  hazards.spawnPathfinder();
+  assert.deepEqual(hazards.pathCentre, corners[1]);
+  hazards.clear();
+  for (const corner of corners) hazards.place(corner);
+  hazards.spawnPathfinder();
+  assert.deepEqual(hazards.pathCentre, corners[0]);
+  walk(h, 3);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2075, 6377]);
 });
 
-test('sealed routes, blocked destinations and an already reached destination remain stationary', t => {
-  const h = H.harness(t), hazards = h.fight.hazards;
-  const from = [2074, 6379], destination = [2089, 6379];
-  assert.deepEqual(hazards.stepToward(from, from), from);
-  hazards.place(destination);
-  assert.deepEqual(hazards.stepToward(from, destination), from);
-  hazards.blockers.clear();
-  hazards.floor = new Set([M.key(from), M.key(destination)]);
-  assert.deepEqual(hazards.stepToward(from, destination), from);
+test("disabled awakened tornado retains its provisional greedy movement independently", t => {
+  const h = H.harness(t, true), hazards = h.fight.hazards;
+  const from = [2074, 6379], target = [2089, 6379];
+  for (let y = 6378; y <= 6380; y++) hazards.place([2075, y]);
+  assert.deepEqual(hazards.stepTornadoToward(from, target), from, "no new BFS detour without awakened evidence");
+  hazards.spawnTornado();
+  assert.deepEqual(origin(h, hazards.tornado), [2089, 6365], "pathfinder route correction must not relocate tornado");
 });
 
 test('aura and enrage prayer piercing start with registered spawn, with no extra activation delay', t => {
@@ -89,32 +116,36 @@ test('unregistered pathfinder grants no aura, preserves protection and does not 
   assert.equal(hazards.inAura(), true, 'registration activates the existing aura immediately');
   assert.equal(accurate(), true);
   h.step();
-  assert.deepEqual(hazards.pathCentre, initial);
-  h.step(h.Common.data.inferred.pathStartTicks);
   assert.notDeepEqual(hazards.pathCentre, initial);
 });
 
-test('registered movement retains clockwise corner order and authored step cadence', t => {
-  const h = H.harness(t), fight = h.fight, hazards = fight.hazards;
-  fight.nextAttack = Infinity;
+
+test("aura follows actual NPC position when queued movement has not executed", t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
   hazards.spawnPathfinder();
-  const corners = h.Common.data.arena.pathCorners;
-  const initial = [...hazards.pathCentre];
-  const interval = h.Common.data.inferred.pathStepTicks;
-  h.step();
-  assert.deepEqual(hazards.pathCentre, initial);
-  h.step(h.Common.data.inferred.pathStartTicks - 1);
-  assert.notDeepEqual(hazards.pathCentre, initial);
-  let previous = [...hazards.pathCentre], lastMove = fight.tick;
-  for (let count = 0; count < 45 && hazards.pathDestination === 1; count++) {
-    h.step();
-    if (M.key(previous) !== M.key(hazards.pathCentre)) {
-      assert.equal(fight.tick - lastMove, interval);
-      lastMove = fight.tick; previous = [...hazards.pathCentre];
-    }
-  }
-  assert.deepEqual(hazards.pathCentre, corners[1]);
-  assert.equal(hazards.pathDestination, 2, 'north-east advances clockwise toward south-east');
+  h.move([2073, 6378]);
+  assert.equal(hazards.inAura(), true);
+  h.step(3);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2074, 6377]);
+  assert.equal(hazards.inAura(), true, "queued east step must not move the west aura boundary early");
+  hazards.pathfinder.getMovementQueue().process();
+  assert.equal(hazards.inAura(), false);
+});
+
+test("deferred registration matches spawn-to-walk delay in world task order", t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  hazards.spawnPathfinder();
+  hazards.pathfinder.__testRemoved = true;
+  hazards.process();
+  assert.equal(hazards.pathfinder.getMovementQueue().size(), 0);
+  // World registers the queued NPC after tasks, before NPC movement and sync.
+  hazards.pathfinder.__testRemoved = false;
+  walk(h, 2);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2074, 6377]);
+  walk(h);
+  assert.deepEqual(origin(h, hazards.pathfinder), [2075, 6377]);
 });
 
 test('recorded pathfinder bases, footprint-blocked spawn and three-tick first step match normal mode', t => {
@@ -123,11 +154,11 @@ test('recorded pathfinder bases, footprint-blocked spawn and three-tick first st
   hazards.place([2076, 6378]);
   hazards.spawnPathfinder();
   assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6377, 0]);
-  h.step(2);
+  walk(h, 2);
   assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6377, 0]);
-  h.step();
+  walk(h);
   assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6376, 0]);
-  h.step();
+  walk(h);
   assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6375, 0]);
 });
 
@@ -137,6 +168,6 @@ test('recorded ethereal pathfinder crosses debris in its route without a collisi
   hazards.place([2077, 6378]);
   hazards.spawnPathfinder();
   assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2074, 6377, 0]);
-  h.step(4);
+  walk(h, 4);
   assert.deepEqual(hazards.pathCentre, [2077, 6378]);
 });
