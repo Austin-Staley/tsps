@@ -3,6 +3,9 @@ const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Patches = require("./Patches.Farming");
 const Guild = require("./Guild.Farming");
+const Bologa = require("./Bologa.Farming");
+
+const BOLOGA_UNLOCK_COST = 75000;
 
 const CROPS = [
     { name: "Golovanova", level: 34, xp: 6, object: core.ObjectIdentifiers.GOLOVANOVA_SEEDLING },
@@ -191,14 +194,15 @@ function titheNpc(event) {
         const { player } = event, score = scoreFor(player);
         if (score.bologa) { player.sendMessage("You may buy my blessings from Farmer Gricoller."); return; }
         Patches.choose(player, [["Unlock grape blessings (75,000 coins)", () => {
-            if (score.bologa || !player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
+            if (score !== scoreFor(player) || score.bologa || !player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
             if (player.getSkillManager().getCurrentLevel(core.Skill.PRAYER) < 50) { player.sendMessage("You need level 50 Prayer."); return; }
-            if (!player.getEquipment().getItems().some(i => /zamorak|unholy/i.test(core.CacheDefinitions.getItem(i.getId()).name))) {
-                player.sendMessage("Wear an item dedicated to Zamorak first."); return;
-            }
-            if (player.getInventory().getAmount(Data.itemId("Coins")) < 75000) { player.sendMessage("You need 75,000 coins."); return; }
-            player.getInventory().deleteNumber(Data.itemId("Coins"), 75000);
+            const outfitProblem = Bologa.outfitProblem(player);
+            if (outfitProblem) { player.sendMessage(outfitProblem); return; }
+            // Cache Coins 995 is currency; a different, non-stackable quest item is also named Coins.
+            if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < BOLOGA_UNLOCK_COST) { player.sendMessage("You need 75,000 coins."); return; }
+            player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, BOLOGA_UNLOCK_COST);
             score.bologa = true; player.sendMessage("You can now purchase grape blessings from Gricoller.");
+            core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "bologa-unlock" });
         }]]);
         return;
     }
