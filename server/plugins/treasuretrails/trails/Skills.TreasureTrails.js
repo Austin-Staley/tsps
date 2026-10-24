@@ -3,7 +3,8 @@
 // Sherlock's skill challenges (Wiki "Sherlock", Transcript:Sherlock). Showing him the clue hands over
 // the tier's challenge scroll, carried beside the clue like any challenge, with a task from the cache
 // (cluehelper_clue_skillchallenge) on it; the task counts only when done with that scroll in the
-// inventory, and talking to him then gives the next clue. data/skill-challenges.json says which event a task is: a task without an entry is
+// inventory, and talking to him then gives the next clue. Master has no challenge scroll: its clue
+// is the task (one of the tier's skill-challenge rows), done with the clue itself held. data/skill-challenges.json says which event a task is: a task without an entry is
 // content this server lacks, and Sherlock never sets it.
 const Runtime = require("./Runtime.TreasureTrails");
 const Dialogue = require("./Dialogue.TreasureTrails");
@@ -40,9 +41,14 @@ function chooseTask(player, tier, random = Math.random) {
   return pick(able.length ? able : supported, random);
 }
 
-/** The trail's Sherlock scroll, if carried: the task and whether it's done are on it. */
+/** What carries the task and whether it's done: elite's Sherlock scroll if carried, or master's clue. */
 function scrollOf(player, trail) {
+  if (trail.step.family === "skillchallenge") return trail.item;
   return player.getInventory().getItems()[Runtime.auxiliarySlot(player, trail, "skill")] ?? null;
+}
+
+function taskOf(trail, meta) {
+  return Runtime.data(trail.tier).tasks.get(trail.step.family === "skillchallenge" ? trail.step.row : meta?.task);
 }
 
 function talk(event) {
@@ -50,7 +56,8 @@ function talk(event) {
   const { player, npcId, npc } = event;
   const definition = event.definition ?? npc.getCurrentDefinition?.(player);
   if (definition?.getActions?.()[event.clickType - 1] !== "Talk-to") return;
-  const trail = Runtime.startedTrails(player).find(entry => entry.step.skill?.itemId != null && entry.step.npcIds.includes(npcId));
+  const trail = Runtime.startedTrails(player).find(entry => (entry.step.skill?.itemId != null || entry.step.family === "skillchallenge") &&
+    entry.step.npcIds.includes(npcId));
   if (!trail) return;
   event.handled = true;
   const steps = Dialogue.transcript(player, npc, npcId, VARIANT);
@@ -89,23 +96,37 @@ function ids(namespace, names) {
   return (Array.isArray(names) ? names : [names]).map(name => namespace[name]);
 }
 
-/** One payload field against its rule: a literal, ids by name ({ item }, { npc }, { prayer }) or { min }. */
+/** One payload field against its rule: a literal or a list of them, ids by name ({ item }, { npc }, { prayer }) or { min }. */
 function fieldMatches(value, rule) {
   if (rule && typeof rule === "object") {
     if (rule.item) return ids(core.ItemIdentifiers, rule.item).includes(value);
     if (rule.npc) return ids(core.NpcIdentifiers, rule.npc).includes(value);
     if (rule.prayer) return ids(core.PrayerHandler, rule.prayer).includes(value);
     if (rule.min != null) return Number(value) >= rule.min;
+    if (Array.isArray(rule)) return rule.includes(value);
     return false;
   }
   return value === rule;
 }
 
+/** One worn slot: one of the listed items, or any item whose name has `name` (graceful's many recolours). */
+function wears(player, { slot, item, name }) {
+  const worn = player.getEquipment().getItems()[core.Equipment[slot]];
+  if (!worn || worn.getId() <= 0) return false;
+  if (item) return ids(core.ItemIdentifiers, item).includes(worn.getId());
+  return core.ItemDefinition.forId(worn.getId())?.getName?.()?.toLowerCase().includes(name.toLowerCase()) ?? false;
+}
+
+/** Where it happened (the payload's tile, or the player's) is inside { x: [min, max], y: [min, max], z }. */
+function within(area, player, payload) {
+  const where = payload.location ?? player.getLocation();
+  const x = where.getX?.() ?? where.x, y = where.getY?.() ?? where.y, z = where.getZ?.() ?? where.z;
+  return x >= area.x[0] && x <= area.x[1] && y >= area.y[0] && y <= area.y[1] && (area.z == null || z === area.z);
+}
+
 function matches(challenge, player, payload) {
-  if (challenge.worn) {
-    const worn = player.getEquipment().getItems()[core.Equipment[challenge.worn.slot]];
-    if (!worn || !ids(core.ItemIdentifiers, challenge.worn.item).includes(worn.getId())) return false;
-  }
+  if (challenge.worn && ![].concat(challenge.worn).every(slot => wears(player, slot))) return false;
+  if (challenge.area && !within(challenge.area, player, payload)) return false;
   return Object.entries(challenge.match ?? {}).every(([field, rule]) => fieldMatches(payload[field], rule));
 }
 
@@ -116,10 +137,10 @@ function performed(event, player, payload) {
     const scroll = scrollOf(player, trail);
     const meta = scroll?.getMetaValue(Runtime.metaKey(trail.tier));
     if (!meta || meta.taskDone === true) continue;
-    const task = Runtime.data(trail.tier).tasks.get(meta.task);
+    const task = taskOf(trail, meta);
     const challenge = task && CHALLENGES[task.key];
     if (!challenge || challenge.event !== event || !matches(challenge, player, payload)) continue;
-    // The scroll keeps its trail's revision, which is what links it to the clue.
+    // The scroll keeps its trail's revision, which is what links it to the clue (and master's clue to its talk).
     scroll.setMetaValue(Runtime.metaKey(trail.tier), { ...meta, taskDone: true });
     player.getInventory().refreshItems();
     player.sendMessage(doneMessage ?? DONE);

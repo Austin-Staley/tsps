@@ -36,7 +36,7 @@ function fixture() {
     adds(id, amount) { this.forceAdd(null, new core.Item(id, amount)); },
     forceAdd(player, item) { const slot = items.findIndex(i => !i); if (slot < 0) ground.push(item); else items[slot] = item; },
   };
-  const sender = new Proxy({}, { get: (_, name) => (...args) => sent.push([name, ...args]) });
+  const sender = new Proxy({}, { get: (_, name) => (...args) => (sent.push([name, ...args]), sender) });
   const skills = { level: 1, xp: 0, getCurrentLevel() { return this.level; }, addExperiences(skill, xp) { this.xp += xp; } };
   const player = { getUsername: () => "Tester", getInventory: () => inventory, getSkillManager: () => skills, getEquipment: () => ({ getItems: () => worn }),
     getPacketSender: () => sender, getLocation: () => position, getPrivateArea: () => null, isPlayer: () => true,
@@ -44,7 +44,7 @@ function fixture() {
     sendMessage: message => sent.push(["message", message]), performAnimation: value => sent.push(["animation", value]),
     setEnteredAmountAction() {}, getDialogueManager: () => ({ startDialogues: value => { chain = value; } }) };
   const api = { core, persistAttribute() {}, onItemAction: (name, handlers) => actions.set(name, { ...actions.get(name), ...handlers }),
-    onBeforeNpcInteraction() {}, onBeforeObjectInteraction() {}, onCanUseItem() {}, onInterfaceActionButton() {},
+    onBeforeNpcInteraction() {}, onItemOnNpc() {}, onBeforeObjectInteraction() {}, onCanUseItem() {}, onInterfaceActionButton() {},
     onCustomEvent: (name, fn) => { if (!events.has(name)) events.set(name, []); events.get(name).push(fn); },
     emitCustomEvent: (name, request) => { for (const fn of events.get(name) ?? []) fn(request); },
     onPlayerLogout() {}, onPlayerDisconnect() {}, onPlayerLogin() {}, onPlayerDeath() {}, onNpcDeath() {},
@@ -125,7 +125,7 @@ test("steps this server can't finish are never rolled: three kill steps and four
     ["cluehelper_target_kill_barbarian", "cluehelper_target_kill_frost_nagua", "cluehelper_target_kill_gryphon_boss"]);
   assert.deepEqual([...data.tasks.values()].filter(task => !SKILL_CHALLENGES[task.key]).map(task => task.text).sort(),
     ["Fix a magical lamp in Dorgesh-Kaan.", "Mine some nickel.", "Score a goal in skullball.", "Steal from a chest in Ardougne Castle."].sort());
-  for (const key of Object.keys(SKILL_CHALLENGES)) assert.ok(data.tasks.has([...data.tasks.values()].find(task => task.key === key)?.row), key);
+  for (const key of Object.keys(SKILL_CHALLENGES).filter(key => key.includes("_elite_"))) assert.ok(data.tasks.has([...data.tasks.values()].find(task => task.key === key)?.row), key);
 });
 
 test("one shared elite challenge scroll holds each anagram's own question; a wrong answer is free", () => {
@@ -223,6 +223,7 @@ test("a kill step's NPC drops the next clue for its killer, carrying the trail; 
     f.place(step);
     const dropped = catchingDrops(() => Runtime.killDrop({ killer: f.player, npc, npcId: step.npcIds[0] }));
     assert.equal(f.items[0], null, `${step.key} the clue goes`);
+    assert.ok(f.sent.some(([name, text]) => name === "message" && text === "<col=ff0000>You spot a new clue falling to the floor.</col>"), step.key);
     assert.equal(dropped.length, 1, step.key);
     assert.equal(dropped[0].player, f.player);
     assert.equal(dropped[0].item.getMetaValue(Runtime.metaKey(ELITE)).completed, 2, step.key);

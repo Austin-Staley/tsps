@@ -3,7 +3,7 @@
 Beginner clues are in [beginner-treasure-trails.md](beginner-treasure-trails.md). This page covers
 the members tiers, built in `server/plugins/treasuretrails/TreasureTrails.plugin.js`
 (`members: true`) and its `trails/` units. Easy, medium, hard and elite are implemented. Master
-adds its step families to the same engine.
+trails are completable; its hot/cold steps and three-part torn cryptics come next.
 
 ## Where the content comes from
 
@@ -77,6 +77,26 @@ Elite has 124 steps:
 The cache gives elite no puzzle-box or light-box rows. Only master rows use the challenge-box rows,
 and the Wiki also lists light boxes as master-only. The legacy `Puzzle box (elite)` (12161) has no
 row and is not used.
+
+Master is different: it has one `Clue scroll (master)` (19835) for every step, with no row param.
+The catalogue gives every master row that one item, and the trail meta's row names the step, as the
+beginner runtime does. Master has 265 steps, plus Falo's 20 songs:
+
+| Family | Target | Steps | Extra |
+| --- | --- | --- | --- |
+| Anagram | NPC | 16 | every one hands over a puzzle box or a light box |
+| Coordinate | Dig | 28 | a Brassican Mage 7310 (19) or three Ancient Wizards 7307-7309 (9) |
+| Cryptic | NPC / loc / dig | 33 | Falo the Bard's, Jorral's and Watson's, and 30 parts of three-part steps |
+| Emote | Tile, outfit, Uri | 25 | a level 141 double agent 7312 on every one; all with STASH units |
+| Skill challenge | Sherlock | 27 | the master clue is the task; there is no master challenge scroll |
+| Hot/cold | Dig | 136 | Brassican Mage (117) or three Ancient Wizards (19) |
+
+Not rolled yet, by the same rule as content the server lacks:
+- **Hot/cold steps:** with Jorral's and Watson's starters.
+- **Three-part torn cryptics:** the Wiki says master gives "three cryptic clues in one step", each for
+  a torn part. That is every master cryptic but Falo's, including the equipment checks (Robin,
+  Ghommal, Cromperty …).
+- **Sherlock tasks** without a detector (below).
 
 The challenge answers are read from the cache. They agree with the Wiki's challenge-scroll guide
 (the osrsreboxed-db `clue-challenges.json` export) on 89 of 90 questions. The exception is the Old
@@ -223,6 +243,52 @@ assumption.
   - Data gap, outside clue code: melee hits flying monsters here. That includes the Armadylean
     guard (the Wiki allows only ranged, magic or a halberd) and the aviansies of a kill step ("fly
     high where a sword cannot help you"). This belongs to NPC combat definitions.
+- **Master boxes** (`Puzzle.TreasureTrails.js`, `Light.TreasureTrails.js`):
+  - **Which box:** each master anagram NPC hands over a puzzle box or a light box (the cache's
+    `puzzle_or_light`); the Wiki doesn't say how one is chosen, so it is even.
+  - **Puzzle box:** a master box is one of enum 1864's Zulrah, Cerberus, gnome child or Theatre of
+    Blood images, each its own item (`trail_master_*_puzzlebox`).
+  - **Light box** (`light_puzzle_box`, Wiki "Light box"): interface `light_puzzle` draws 25 lights
+    from varp `trail_lights`, a set bit unlit (cs2 1339), so 0 is solved. Switches A-H are buttons
+    1-8.
+    - Neither the cache nor the Wiki gives which lights a switch toggles. Live captures do: nine
+      boxes in three rsprox.net recordings (rev 227) each had their own masks, a switch averaging
+      8.7 of the 25 lights. So each box gets 8 random masks (35% of the lights each) and starts a
+      few presses from solved, which keeps it solvable.
+    - The box keeps its masks and lights; all lit marks it solved. Its NPC then gives the next clue,
+      as for a solved puzzle box.
+- **Box messages** (live captures, rsprox.net):
+  - **Master hand-over:** "Wingstone hands you a light puzzle box." or "Immenizz hands you a
+    puzzlebox!", shown with the box. These replace the transcripts' "[light box/puzzlebox]".
+  - **Opening a light box:** "You open the light box's control panel."
+  - **Solving:** "Well done, hand this back!"
+  - **Opening a solved box:** "You've already solved this challenge! Go hand it back."
+- **Three Ancient Wizards** (master digs, Wiki "Ancient Wizard": "a three-on-one fight"): the fight
+  code summons every NPC the cache's encounter lists. The dig gives the clue only once all of them
+  are dead, and leaving dismisses all three.
+- **Falo the Bard** (master, `Falo.TreasureTrails.js`, Wiki and Transcript:Falo the Bard):
+  - **The song:** "Falo the bard wants to see you." sends the player to him. He sings one of his
+    songs (`cluehelper_clue_falobard`), kept with the clue, so he sings the same one until it is
+    answered.
+  - **The answer:** using the object it names on him gives the next clue. The cache names it as an
+    item list or a clue item group. A noted item doesn't count, and he doesn't keep it (the Wiki
+    doesn't say he does).
+  - **Wrong object:** "Falo's eyes fail to light up."
+  - **Outlanders:** without The Fremennik Trials started, he says "Get away! I do not speak to
+    outlanders."
+- **Master Sherlock:**
+  - **The task:** the master clue reads the task. It counts when done with the clue held, and
+    Sherlock then gives the next clue.
+  - **Supported tasks:** 19 of the 27 are detected by the same JSON. The data gains several worn
+    slots (prospector, angler, lumberjack, graceful by name for its recolours) and areas (the Slayer
+    Tower demons, the Ardougne market).
+  - **New generic emits:**
+    - `spirit-trees:travelled { planted }`;
+    - `godwars:kill { godItems }`;
+    - `crafting:made` at a furnace;
+    - `thieving:success` with the stall or pickpocket target.
+  - **Not assigned:** the Barrows teleport tablet, ranging mix, fiyr remains, sacred eel, light orb,
+    reanimated abyssal, fiyr shade and the torn-scroll combine have no content or no check here.
 - **Music:** from Cecilia's Wiki transcript, the player selects the requested track, then speaks to
   her.
   - "Select the song I asked you to play, and speak to me again."
@@ -296,7 +362,8 @@ rules:
   - easy: Construction 27 (boostable) and 2 planks, for 150 Construction XP;
   - medium: Construction 42 and 2 oak planks, for 250 XP;
   - hard: Construction 55 and 2 teak planks, for 400 XP;
-  - elite: Construction 77 and 2 mahogany planks, for 600 XP.
+  - elite: Construction 77 and 2 mahogany planks, for 600 XP;
+  - master: Construction 88, 2 mahogany planks and a gold leaf, for 1,500 XP.
 
   Building sets the unit's varbit.
 - **Search a built unit:** it stores the step's complete outfit, or returns it if the inventory has
@@ -348,6 +415,14 @@ items.
 - **Then:** the item replaces the casket, the completion and its milestone rewards count, and the
   message is "The chest turned out to be the Mimic!". The Mimic's own chest later asks for the
   clue loot through `treasure-trails:roll-casket`, as before.
+
+**Messages** (live captures, rsprox.net):
+- Opening a casket says "Well done, you've completed the Treasure Trail!", then the count in red
+  ("<col=ef1020>You have completed 3 master Treasure Trails.</col>"), the collection log, and the
+  rewards' Grand Exchange worth in red ("Your treasure is worth around 424,731 coins!").
+- A clue step ends with "You've found a new clue!" in a message box, where the NPC's transcript gives
+  no words of its own.
+- An elite kill step's drop says "<col=ff0000>You spot a new clue falling to the floor.</col>".
 
 **The rewarded 1/50 master clue** obeys clue capacity (`treasure-trails:can-receive`). After X Marks
 the Spot it becomes a scroll box (`treasure-trails:clue-item`).
@@ -496,6 +571,17 @@ PR #890 review verification independently decoded RSProx recordings
   - the Mogre Camp map dug;
   - Sherlock's hand-over and his "bring it to me" line before the task, on several Sherlock steps.
 - The six elite maps were matched in captures against the Wiki's images.
+- `tests/treasure-trails-master.test.cjs` covers every master row. It checks:
+  - the one-item meta trail (6-8 steps) and exactly the rows not rolled yet;
+  - both box kinds, each master image's 24 pieces and its own box;
+  - light boxes over 200 seeded boards: always solvable, presses toggling their masks, varp
+    `trail_lights` sent, refused unsolved, the next clue once lit;
+  - the three wizards (no dig until all are dead) and the Brassican Mage;
+  - the double agent then Uri on every emote;
+  - Falo (the sung song, the same song again, a wrong and the right object, outlanders);
+  - every supported master Sherlock task;
+  - the master casket and its 10th-casket Mimic;
+  - master STASH units with the gold leaf.
 
 Sources:
 - [Clue scroll (easy)](https://oldschool.runescape.wiki/w/Clue_scroll_(easy))
@@ -520,6 +606,10 @@ Sources:
 - [Armadylean guard](https://oldschool.runescape.wiki/w/Armadylean_guard) and [Bandosian guard](https://oldschool.runescape.wiki/w/Bandosian_guard)
 - [Mimic](https://oldschool.runescape.wiki/w/Mimic)
 - [Elite maps](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Maps/Elite)
+- [Clue scroll (master)](https://oldschool.runescape.wiki/w/Clue_scroll_(master))
+- [Light box](https://oldschool.runescape.wiki/w/Light_box) and the [light box guide](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Light_boxes)
+- [Falo the Bard](https://oldschool.runescape.wiki/w/Falo_the_Bard) and [his transcript](https://oldschool.runescape.wiki/w/Transcript:Falo_the_Bard)
+- [Ancient Wizard](https://oldschool.runescape.wiki/w/Ancient_Wizard) and [Brassican Mage](https://oldschool.runescape.wiki/w/Brassican_Mage)
 - installed cache revision 241
 
 ## Inventory and repeat-step regressions

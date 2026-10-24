@@ -116,6 +116,16 @@ function milestoneDrops(player, tier, count) {
   return drops.length ? prepareDrops(clueRewards(player, drops), tier) : [];
 }
 
+// Live captures (rsprox.net): opening a casket says the trail is complete, then the count, the
+// collection log and the treasure's worth, the last two lines in red.
+const COMPLETED = "Well done, you've completed the Treasure Trail!";
+const completedCount = (count, tier) => `<col=ef1020>You have completed ${count} ${tier.name} Treasure Trail${count === 1 ? "" : "s"}.</col>`;
+
+/** The rewards' Grand Exchange worth, as the casket's last message gives it. */
+function worth(drops) {
+  return drops.reduce((sum, drop) => sum + drop.amount * (core.ItemDefinition.forId(drop.itemId)?.getGrandExchangeValue?.() ?? 0), 0);
+}
+
 function tierOfCasket(id) {
   return TIERS.find(tier => Runtime.data(tier).casket === id) ?? null;
 }
@@ -157,11 +167,13 @@ function open(event) {
       give(player, drops);
       Runtime.restore({ player });
       player.sendMessage("The chest turned out to be the Mimic!");
-      player.sendMessage(`You have completed ${count} ${tier.name} Treasure Trail${count === 1 ? "" : "s"}.`);
+      player.sendMessage(completedCount(count, tier));
       return true;
     }
     inventory.deleteAtSlot(slot, 1);
     player.setAttribute(Runtime.completedAttribute(tier), count);
+    player.sendMessage(COMPLETED);
+    player.sendMessage(completedCount(count, tier));
     const slots = give(player, drops);
     Runtime.restore({ player });
     const sender = player.getPacketSender();
@@ -170,7 +182,7 @@ function open(event) {
     sender.sendInterfaceScript(1065, [(group << 16) | 3], undefined, undefined, {
       [Runtime.data(tier).rewardInventory]: { capacity: Math.max(3, slots.length), slots },
     });
-    player.sendMessage(`You have completed ${count} ${tier.name} Treasure Trail${count === 1 ? "" : "s"}.`);
+    player.sendMessage(`<col=ef1020>Your treasure is worth around ${worth(drops).toLocaleString("en-US")} coins!</col>`);
   } finally {
     player.setAttribute(OPENING_ATTRIBUTE, false);
   }
