@@ -423,6 +423,45 @@ test('both melee hits grade the damage-roll prayer snapshot and protected chip r
     assert.equal(cancelled.fight.perfectKill, true);
 });
 
+test('crossing the next special threshold replaces the post-special bind', () => {
+    for (const [kind, started, threshold, next] of [['screech', 1, 495, 'souls'], ['souls', 2, 270, 'seeds']]) {
+      for (const [hp, skipsBind] of [[threshold, true], [threshold - 1, true], [threshold + 1, false]]) {
+        const f = fixture();
+        f.fight.startedSpecials = started;
+        f.fight.completed = started - 1;
+        f.fight.rotation = ['screech', 'souls', 'seeds'];
+        f.boss.setHitpoints(hp);
+        startSpecial(f.fight, kind);
+        if (kind === 'souls')
+            for (const soul of f.fight.special.souls.filter(soul => soul.group === 0)) Specials.soulDied(f.fight, soul.npc);
+        const projectiles = [];
+        const sender = f.player.getPacketSender();
+        f.player.getPacketSender = () => new Proxy(sender, { get: (target, key) => key === 'sendProjectile' ? (...args) => projectiles.push(args) : target[key] });
+        while (f.fight.special) f.fight.process();
+        assert.equal(projectiles.length, skipsBind ? 0 : 1, `HP ${hp}`);
+        if (skipsBind) {
+            assert.equal(f.fight.boundUntil, 0);
+            f.fight.process();
+            assert.equal(f.fight.special.kind, next);
+            assert.equal(f.fight.startedSpecials, started + 1);
+        }
+      }
+    }
+});
+
+test('melee protection mitigates roughly one third and mirrors the protected amount', t => {
+    t.mock.method(Math, 'random', () => 0.999999);
+    const f = fixture();
+    f.player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE] = true;
+    f.fight.melee();
+    f.apply();
+    assert.equal(f.player.getHitpoints(), 71, 'a max 42 melee hit is reduced to 28');
+    f.fight.events.shift().action();
+    f.apply();
+    assert.equal(f.player.getHitpoints(), 43);
+    assert.equal(f.fight.perfectKill, true);
+});
+
 test('a threshold crossed mid-volley waits for the next attack and keeps launched impacts', t => {
     const f = fixture();
     f.player.moveTo(new core.Location(2656, 6378, 0));
@@ -801,4 +840,15 @@ test('binding uses captured packet constants and a provisional six-tick impact w
     f.fight.process();
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
     assert.equal(f.fight.boundUntil,14,'existing provisional phase duration is retained');
+});
+
+test('an uncountered bind provisionally releases after eight ticks rather than outlasting pursuit', () => {
+    const f = fixture();
+    f.fight.bind();
+    for (let tick = 0; tick < 6; tick++) f.fight.process();
+    const timers = f.player.getTimers();
+    for (let tick = 0; tick < 7; tick++) timers.process();
+    assert.equal(timers.has(core.TimerKey.FREEZE), true);
+    timers.process();
+    assert.equal(timers.has(core.TimerKey.FREEZE), false);
 });

@@ -194,7 +194,9 @@ class Fight {
         this.boss.performAnimation(new Common.core.Animation(Common.data.animations.melee));
         const damage = Common.random(28, 42);
         const protectedMelee = Common.protectedFrom(this.player, 'melee');
-        const amount = protectedMelee ? Math.floor(damage * .75) : damage;
+        // Tentacular describes roughly one-third mitigation. Exact rounding and
+        // the ordinary roll distribution remain unmeasured.
+        const amount = protectedMelee ? Math.floor(damage * 2 / 3) : damage;
         Common.damage(this, amount, 0, !protectedMelee);
         this.at(1, () => Common.damage(this, amount, 0, !protectedMelee));
     }
@@ -210,7 +212,9 @@ class Fight {
             this.player, geometry.launchDelay, geometry.angle, geometry.progress);
         this.at(geometry.impactTicks, () => {
             if (this.boundUntil > this.tick)
-                Common.core.CombatFactory.freezeTicks(this.player, 12);
+                // Ordinary footage rules out twelve ticks. Eight remains
+                // provisional: attacks/clicks obscure the precise expiry tick.
+                Common.core.CombatFactory.freezeTicks(this.player, 8);
         });
     }
     pursueBound() {

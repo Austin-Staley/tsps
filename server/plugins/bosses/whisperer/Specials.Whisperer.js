@@ -117,6 +117,11 @@ function finish(fight) {
     fight.completed++;
     fight.nextAttack = fight.tick + 15;
     fight.setShadow(false);
+    // A crossed health threshold replaces the bind with the next special.
+    if (fight.startedSpecials < 3 && fight.boss.getHitpoints() <= Common.data.thresholds[fight.startedSpecials]) {
+        fight.nextAttack = fight.tick;
+        return;
+    }
     fight.bind();
 }
 function process(fight) {
