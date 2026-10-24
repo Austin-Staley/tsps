@@ -1,50 +1,97 @@
 "use strict";
-const data = require('../data/duke-sucellus.json');
-const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
-const powderYield = level => clamp(Math.floor((level - 20) / 10), 1, 6);
-const saltYield = level => level >= 80 ? 6 : level >= 75 ? 5 : level >= 70 ? 4 : 3;
-function feed(meter, amount, maximum) {
-  if (meter >= maximum) return { consumed:false, meter:maximum, awake:true };
-  const next = Math.min(maximum, meter + amount);
-  return { consumed:true, meter:next, awake:next >= maximum };
+
+const data = require("../data/duke-sucellus.json");
+const BOSS_SIZE = 7;
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
-const gasCount = hp => hp <= data.normal.hitpoints / 2 ? 2 : 1;
-const attackTicks = hp => hp <= data.normal.enrageHp ? data.normal.enrageTicks : data.normal.attackTicks;
+
+function powderYield(level) {
+  return clamp(Math.floor((level - 20) / 10), 1, 6);
+}
+
+function saltYield(level) {
+  return level >= 80 ? 6 : level >= 75 ? 5 : level >= 70 ? 4 : 3;
+}
+
+function feed(meter, amount, maximum) {
+  if (meter >= maximum) return { consumed: false, meter: maximum, awake: true };
+  const next = Math.min(maximum, meter + amount);
+  return { consumed: true, meter: next, awake: next >= maximum };
+}
+
+function gasCount(hitpoints) {
+  return hitpoints <= data.normal.hitpoints / 2 ? 2 : 1;
+}
+
+function attackTicks(hitpoints) {
+  return hitpoints <= data.normal.enrageHp ? data.normal.enrageTicks : data.normal.attackTicks;
+}
+
 class AttackClock {
-  constructor() { this.autos = 0; this.gasAutos = 0; this.seenGaze = false; this.justGazed = false; this.gasInterval = 3; }
-  next(hp) {
+  constructor() {
+    this.autos = 0;
+    this.gasAutos = 0;
+    this.seenGaze = false;
+    this.justGazed = false;
+    this.gasInterval = 3;
+  }
+
+  next(hitpoints) {
     if (this.autos === 5) {
       this.autos = 0;
       this.seenGaze = true;
       this.justGazed = true;
-      return 'gaze';
+      return "gaze";
     }
     if (this.seenGaze && this.gasAutos >= this.gasInterval && !this.justGazed) {
       this.gasAutos = 0;
-      this.gasInterval = hp > data.normal.hitpoints * .75 ? 5 : hp > data.normal.enrageHp ? 4 : 3;
-      return 'gas';
+      this.gasInterval = hitpoints > data.normal.hitpoints * 0.75 ? 5 :
+        hitpoints > data.normal.enrageHp ? 4 : 3;
+      return "gas";
     }
     this.autos++;
     if (this.seenGaze) this.gasAutos++;
     this.justGazed = false;
-    return 'auto';
+    return "auto";
   }
 }
-function rayCrossesBox(from, to, [x,y,w,h]) {
-  let low = 0, high = 1;
-  for (const [axis, min, max] of [[0,x,x+w],[1,y,y+h]]) {
-    const delta = to[axis]-from[axis];
-    if (delta === 0) { if(from[axis] < min || from[axis] > max) return false; continue; }
-    let a = (min-from[axis])/delta, b=(max-from[axis])/delta;
-    if(a>b) [a,b]=[b,a];
-    low=Math.max(low,a); high=Math.min(high,b);
-    if(low>high) return false;
+
+/** Segment/rectangle intersection for the source-room pillars. */
+function rayCrossesBox(from, to, [x, y, width, height]) {
+  let minimum = 0;
+  let maximum = 1;
+  for (const [axis, low, high] of [[0, x, x + width], [1, y, y + height]]) {
+    const delta = to[axis] - from[axis];
+    if (delta === 0) {
+      if (from[axis] < low || from[axis] > high) return false;
+      continue;
+    }
+    let entry = (low - from[axis]) / delta;
+    let exit = (high - from[axis]) / delta;
+    if (entry > exit) [entry, exit] = [exit, entry];
+    minimum = Math.max(minimum, entry);
+    maximum = Math.min(maximum, exit);
+    if (minimum > maximum) return false;
   }
-  return high > 0 && low < 1;
+  return maximum > 0 && minimum < 1;
 }
-function hidden([x,y]) {
-  return data.pillars.some(pillar => rayCrossesBox([3039.5,6455.5],[x+.5,y+.5],pillar));
+
+function hidden([x, y]) {
+  const [bossX, bossY] = data.site.boss;
+  const centre = [bossX + BOSS_SIZE / 2, bossY + BOSS_SIZE / 2];
+  return data.pillars.some(pillar => rayCrossesBox(centre, [x + 0.5, y + 0.5], pillar));
 }
-function melee([x,y]) { return x>=3035 && x<=3043 && y>=6451 && y<=6459; }
-function near([x,y],[tx,ty],distance=1) { return Math.abs(x-tx)<=distance && Math.abs(y-ty)<=distance; }
+
+function melee([x, y]) {
+  const [bossX, bossY] = data.site.boss;
+  return x >= bossX - 1 && x <= bossX + BOSS_SIZE &&
+    y >= bossY - 1 && y <= bossY + BOSS_SIZE;
+}
+
+function near([x, y], [targetX, targetY], distance = 1) {
+  return Math.abs(x - targetX) <= distance && Math.abs(y - targetY) <= distance;
+}
+
 module.exports = { powderYield, saltYield, feed, gasCount, attackTicks, AttackClock, hidden, melee, near };

@@ -14,6 +14,7 @@ function harness(t) {
   const Site=require('../../plugins/bosses/dukesucellus/Site.DukeSucellus');
   const Prep=require('../../plugins/bosses/dukesucellus/Preparation.DukeSucellus');
   const hooks=new Map(), custom=new Map(), tasks=[], spawned=[], packets=[], messages=[], emitted=[];
+  const namedObjects = new Map(), genericObjects = [];
   const p=new Player(null); p.setUsername('duke-regression');
   const sender=new Proxy({}, {get:(_,name)=>(...args)=>{packets.push([name,...args]); return sender;}});
   p.getPacketSender=()=>sender; p.sendMessage=text=>messages.push(text);
@@ -26,6 +27,10 @@ function harness(t) {
   const dispatch=(name,event)=>{for(const fn of hooks.get(name)||[])fn(event);};
   let cycle=0;
   const api=new Proxy({core,persistAttribute(){},registerNpcCombatMethodProvider(){},
+    onObjectInteraction(name, actions) {
+      if (typeof name === 'function') genericObjects.push(name);
+      else namedObjects.set(name, actions);
+    },
     spawnNpc(def){const npc=core.NPC.create(def.id,new core.Location(def.x,def.y,def.z));
       npc.isRegistered=()=>!npc.__removed; npc.setOwner(def.owner);spawned.push(npc);return npc;},
     removeNpc(npc){npc.__removed=true;},
@@ -41,10 +46,24 @@ function harness(t) {
   function move(tile){p.setLocation(C.sessionOf(p).tile(tile));}
   function step(n=1){for(let i=0;i<n;i++){cycle++;p.setNeedsPlacement(false);for(const task of [...tasks])if(task.isRunning())task.tick();p.getCombat().getHitQueue().process(cycle);}}
   function add(id,n=1){p.getInventory().add(new core.Item(id,n));}
+  function interact(event) {
+    const at = event.location;
+    event.object ??= new core.GameObject(event.objectId, new core.Location(at.x, at.y, at.z ?? 0), 10, 0);
+    event.definition ??= event.object.getDefinition();
+    event.clickType ??= 1;
+    event.option ??= event.definition?.getInteractions?.()?.[event.clickType - 1];
+    for (const handler of genericObjects) {
+      handler(event);
+      if (event.handled) return true;
+    }
+    const handler = namedObjects.get(event.definition?.getName?.())?.[event.option];
+    if (handler && handler(event) !== false) event.handled = true;
+    return event.handled === true;
+  }
   t.after(()=>{C.sessionOf(p)?.end();for(const task of tasks)task.stop();
     for(const queue of [core.World.getAddNPCQueue(),core.World.getRemoveNPCQueue()])
       for(let i=queue.length-1;i>=0;i--)if(spawned.includes(queue[i]))queue.splice(i,1);});
-  return {core,C,Site,Prep,api,p,enter,move,step,add,dispatch,packets,messages,emitted,
+  return {core,C,Site,Prep,api,p,enter,move,step,add,dispatch,interact,packets,messages,emitted,
     get session(){return C.sessionOf(p);},get fight(){return C.sessionOf(p)?.fight;}};
 }
 module.exports={initialize,harness,get core(){return core;}};
