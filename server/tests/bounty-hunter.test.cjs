@@ -27,6 +27,7 @@ test("rogues need to be within five levels; assigned targets use their matchmaki
     getPacketSender: () => ({ sendVarbit() {} }) });
   const attacker = actor(100);
   state.arena.add(attacker);
+  state.immuneUntil.set(attacker, 110);
   for (const [level, allowed] of [[94, false], [95, true], [105, true], [106, false], [115, false]]) {
     const target = actor(level);
     state.arena.add(target);
@@ -41,6 +42,48 @@ test("rogues need to be within five levels; assigned targets use their matchmaki
     assert.equal(areas[1].canAttack(attacker, target), false, 'rogue entry immunity still applies');
     state.arena.delete(target);
     assert.equal(areas[1].canAttack(attacker, target), false, 'cannot attack into the lobby');
+  }
+  assert.equal(state.immuneUntil.has(attacker), true, 'asking canAttack leaves the attacker immune');
+  require("../plugins/minigames/bountyhunter/Hud.BountyHunter")({ core: { CacheDefinitions: { getVarbitId: (name) => name } } }, state);
+  Area._test.endImmunity({ attacker, target: actor(100) });
+  assert.equal(state.immuneUntil.has(attacker), false, 'a hit on a player ends it');
+});
+
+test("an Exit gate takes a player from the arena into the lobby", (t) => {
+  const { AreaManager } = require("../dist/game/model/areas/AreaManager");
+  const { Area: CoreArea } = require("../dist/game/model/areas/Area");
+  const { Boundary } = require("../dist/game/model/Boundary");
+  const { Location } = require("../dist/game/model/Location");
+  const Area = require("../plugins/minigames/bountyhunter/Area.BountyHunter");
+  const bh = require("../plugins/minigames/bountyhunter/State.BountyHunter");
+  const state = { ...bh, lobby: new Set(), arena: new Set(), targets: new Map(), immuneUntil: new WeakMap(), lobbyTicks: new WeakMap() };
+  const areas = [];
+  Area(new Proxy({
+    core: { Area: CoreArea, Boundary, World: { getProcessCycle: () => 100 }, PrayerHandler: { PROTECTION_PRAYERS: [] },
+      TimerKey: {}, },
+    registerArea: (area) => areas.push(area),
+  }, { get: (object, key) => object[key] ?? (() => {}) }), state);
+  const previousAreas = AreaManager.areas;
+  AreaManager.areas = areas;
+  t.after(() => { AreaManager.areas = previousAreas; });
+
+  let at = new Location(3423, 4050, 0);
+  let area = null;
+  const player = {
+    isPlayer: () => true, isNpc: () => false, isPlayerBot: () => true, getIndex: () => 1,
+    getAsPlayer: () => player, getLocation: () => at, getArea: () => area, setArea: (next) => { area = next; },
+    getAttribute: () => undefined, sendMessage() {}, getMultiIcon: () => 0, setMultiIcon() {},
+    getTimers: () => ({ has: () => false }),
+  };
+  AreaManager.process(player);
+  assert.deepEqual([state.inArena(player), state.inLobby(player)], [true, false], "south of the fort is the arena");
+  for (const exit of bh.CRATER.exits) {
+    at = new Location(exit.to.x, exit.to.y, 0);
+    AreaManager.process(player);
+    assert.deepEqual([state.inArena(player), state.inLobby(player)], [false, true], `exit to ${exit.to.x},${exit.to.y}`);
+    at = new Location(exit.x, exit.y, 0);
+    AreaManager.process(player);
+    assert.deepEqual([state.inArena(player), state.inLobby(player)], [true, false], `back out at ${exit.x},${exit.y}`);
   }
 });
 

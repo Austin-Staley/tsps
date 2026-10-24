@@ -27,6 +27,7 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   t.after(() => { Entry.spawnTile = spawnTile; setActiveBotRuntime(null, null); });
 
   function spawnPvpBot(location, options) {
+    if (runtime.botStatesByName.has(options.username)) return null; // as the registry: name still taken
     const attributes = new Map();
     const level = [60, 88, 110, 126][spawned.length % 4];
     const bot = {
@@ -137,7 +138,7 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   bh.lobby.add(human);
   enter({ player: human });
   assert.equal(spawned.length, 70, 'the next visit rolls a fresh population, including the upper limit');
-  assert.equal(spawned.at(-1).getUsername(), 'BhBot50');
+  assert.equal(spawned.at(-1).getUsername(), 'BhBot70', 'fresh names: the last bots may still be online');
   for (const bot of spawned) hooks.get('logout')({ player: bot });
 });
 

@@ -21,7 +21,7 @@ const MIN_COMBAT_LEVEL = 32;
 const SPECIAL_EXIT_DELAY_TICKS = 5;
 const SPAWN_SEARCH_RADIUS = 2;
 const RULES_ATTRIBUTE = "bounty-hunter:rules-accepted";
-const VARBIT_ARENA_ENTER_WARNING = 14892;
+const VARBIT_ARENA_ENTER_WARNING = "bh_arena_enter_warning";
 
 const RULES = [
   "Excuse me! This area is different than the rest of the Wilderness, are you sure you understand the rules?",
@@ -49,7 +49,7 @@ function portalRefusal(player) {
 }
 
 function syncRules({ player }) {
-  if (player.getAttribute(RULES_ATTRIBUTE) === true) player.getPacketSender().sendVarbit(VARBIT_ARENA_ENTER_WARNING, 1);
+  if (player.getAttribute(RULES_ATTRIBUTE) === true) player.getPacketSender().sendVarbit(core.CacheDefinitions.getVarbitId(VARBIT_ARENA_ENTER_WARNING), 1);
 }
 
 function acceptRules(player) {
@@ -111,6 +111,11 @@ function arenaRefusal(player) {
   return request.allowed === false ? request.reason ?? "You can't enter the arena right now." : null;
 }
 
+/** For Teleport to Target from the lobby, which lands in the arena without the gates. */
+function answerArenaRefusal(request) {
+  request.reason ??= arenaRefusal(request.player);
+}
+
 /** A walkable tile on or beside a random sigil (the sigils' own tiles hold candles). */
 function spawnTile() {
   const { Misc, RegionManager } = core;
@@ -154,6 +159,7 @@ module.exports = function attachEntry(pluginApi, state) {
   api.onPlayerLogin(syncRules);
   api.onObjectInteraction("Bounty Hunter portal", { Enter: usePortal });
   api.onObjectInteraction("Arena", { Enter: enterArena, Exit: exitArena });
+  api.onCustomEvent("bounty-hunter:arena-refusal", answerArenaRefusal);
 };
 
 Object.assign(module.exports, { spawnTile, _test: { portalRefusal, arenaRefusal, spawnTile, RULES_ATTRIBUTE } });

@@ -19,10 +19,9 @@
  */
 
 const Hud = require("./Hud.BountyHunter");
+const { band: bandOf } = require("./EmblemTrader.BountyHunter");
 
 const LEVELS_BELOW = 15;
-const BANDS = [5, 10, 15];
-const VARBIT_COMBAT_BAND = 14891;
 // ponytail: pairing every 3 s; the Wiki gives no cadence.
 const MATCH_INTERVAL_TICKS = 5;
 const MINUTE_MS = 60_000;
@@ -107,11 +106,6 @@ function skipOutcome(history, now, skulledTarget) {
 
 function levelOf(player) {
   return player.getSkillManager().getCombatLevel();
-}
-
-function bandOf(player) {
-  const band = player.getPacketSender().getVarbit(VARBIT_COMBAT_BAND);
-  return BANDS.includes(band) ? band : BANDS[0];
 }
 
 function avoids(a, b) {
@@ -280,7 +274,6 @@ module.exports = function attachTargets(pluginApi, state) {
 };
 
 Object.assign(module.exports, {
-  bandOf,
   clearTarget,
   remindPenalty,
   _test: { inRange, canPair, matchPairs, recentSkips, skipOutcome, matchTick, defeated, skip, SKIP_WINDOW_MS, FREE_SKULLED_SKIPS },

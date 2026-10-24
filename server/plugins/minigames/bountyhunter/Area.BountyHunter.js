@@ -48,6 +48,20 @@ function boundary(box) {
   return new core.Boundary(box.minX, box.maxX, box.minY, box.maxY, 0);
 }
 
+/**
+ * The arena box less the lobby, as the strips south, north, west and east of it. An actor keeps
+ * its area while a boundary still holds it, so a lobby inside the arena's box would never be
+ * entered from the arena.
+ */
+function arenaBoundaries(arena, lobby) {
+  return [
+    { ...arena, maxY: lobby.minY - 1 },
+    { ...arena, minY: lobby.maxY + 1 },
+    { ...arena, maxX: lobby.minX - 1, minY: lobby.minY, maxY: lobby.maxY },
+    { ...arena, minX: lobby.maxX + 1, minY: lobby.minY, maxY: lobby.maxY },
+  ].map(boundary);
+}
+
 function refuseTeleport(player) {
   player.sendMessage("You can't teleport out of Bounty Hunter.");
   return false;
@@ -154,8 +168,12 @@ function canAttackInArena(attacker, target) {
   if (bh.targetOf(target) !== attacker && cycle() < (bh.immuneUntil.get(target) ?? 0)) {
     return refuse(attacker, "That player has only just entered the arena.");
   }
-  if (bh.immuneUntil.delete(attacker)) Hud.sendImmunity(attacker, 0);
   return true;
+}
+
+/** Attacking a player ends the attacker's rogue immunity; canAttack is only asked. */
+function endImmunity({ attacker, target }) {
+  if (isPlayer(target) && bh.inArena(attacker) && bh.immuneUntil.delete(attacker)) Hud.sendImmunity(attacker, 0);
 }
 
 function createAreas() {
@@ -203,8 +221,10 @@ function createAreas() {
     }
   }
 
-  // The lobby first: an actor holds the first area that matches, and the arena's box covers it.
-  return [new BountyHunterLobby([boundary(bh.CRATER.lobby)]), new BountyHunterArena([boundary(bh.CRATER.arena)])];
+  return [
+    new BountyHunterLobby([boundary(bh.CRATER.lobby)]),
+    new BountyHunterArena(arenaBoundaries(bh.CRATER.arena, bh.CRATER.lobby)),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +263,8 @@ module.exports = function attachArea(pluginApi, state) {
   api.onPrayerDisabled(disableProtectionPrayers);
   api.onCanGainExperience(noPvpCombatExperience);
   api.onAttackTiming(noteSpecialAttack);
+  api.onCombatHitResolved(endImmunity);
   api.onCustomEvent("bounty-hunter:weapon-area", allowWeapons);
 };
 
-Object.assign(module.exports, { _test: { canAttackInArena, lobbyTick, LOBBY_ALLOWANCE_TICKS } });
+Object.assign(module.exports, { _test: { canAttackInArena, endImmunity, arenaBoundaries, lobbyTick, LOBBY_ALLOWANCE_TICKS } });

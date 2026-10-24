@@ -8,7 +8,9 @@ const Fort = require(`${BH}/Fort.BountyHunter`);
 const SupplyCrates = require(`${BH}/SupplyCrates.BountyHunter`);
 const TargetTeleport = require(`${BH}/TargetTeleport.BountyHunter`);
 const RiskSkulls = require(`${BH}/RiskSkulls.BountyHunter`);
+const Entry = require(`${BH}/Entry.BountyHunter`);
 const Hud = require(`${BH}/Hud.BountyHunter`);
+const bh = require(`${BH}/State.BountyHunter`);
 
 const Items = {
   COINS: 995, LAW_RUNE: 563, DEATH_RUNE: 560, CHAOS_RUNE: 562, TARGET_TELEPORT_SCROLL: 12846,
@@ -38,7 +40,7 @@ test("target hints track distant tiles, switch to nearby players, and clear when
   let assigned = target;
   const locals = [];
   const viewer = { getLocation: () => location(3330, 3970), getLocalPlayers: () => locals, getPacketSender: () => sender };
-  Hud({}, { inCrater: () => true, inLobby: () => false, inArena: () => true, targetOf: () => assigned });
+  Hud({ core: { CacheDefinitions: { getVarbitId: (name) => name, getVarpId: (name) => name } } }, { inCrater: () => true, inLobby: () => false, inArena: () => true, targetOf: () => assigned });
   Hud.sync(viewer);
   Hud.sync(viewer);
   assert.deepEqual(hints, [[3510, 4140]], 'a target over 200 tiles away uses one positional hint');
@@ -79,7 +81,8 @@ const api = new Proxy({
 
 Fort(api);
 SupplyCrates(api);
-TargetTeleport(api);
+TargetTeleport(api, bh);
+Entry(api, bh);
 RiskSkulls(api);
 
 /** Unnoted, one item per slot unless stacked; 28 slots. */
@@ -185,6 +188,31 @@ test("Teleport to Target needs the spell, the crater, a target and 12 s out of c
   assert.equal(refusal(caster, target), null);
   noteCombat({ attacker: target, target: caster });
   assert.match(refusal(caster, target), /combat/);
+});
+
+test("Teleport to Target from the lobby into the arena needs what the Arena gates need", (t) => {
+  const { refusal, UNLOCKED_ATTRIBUTE } = TargetTeleport._test;
+  const unlocked = { [UNLOCKED_ATTRIBUTE]: true };
+  const target = player();
+  let balance = 0;
+  events["bounty-hunter:minimum-deposit"] = (request) => { request.amount = 100_000; };
+  events["bounty-hunter:coffer-balance"] = (request) => { request.balance = balance; };
+  t.after(() => {
+    bh.lobby.clear();
+    delete events["bounty-hunter:minimum-deposit"];
+    delete events["bounty-hunter:coffer-balance"];
+  });
+  const caster = player({ attributes: unlocked });
+  bh.lobby.add(caster);
+  assert.match(refusal(caster, target), /100,000 coins in your coffer/);
+  balance = 100_000;
+  assert.equal(refusal(caster, target), null);
+  const crates = player({ attributes: unlocked, items: { [Items.BOUNTY_SUPPLY_CRATE_MANTA_RAY_]: 3 } });
+  bh.lobby.add(crates);
+  assert.match(refusal(crates, target), /two supply crates/);
+  bh.lobby.add(target);
+  balance = 0;
+  assert.equal(refusal(caster, target), null, "a target in the lobby too: the cast stays in the lobby");
 });
 
 test("reading the target teleport scroll unlocks the spell after the confirmation", () => {

@@ -46,6 +46,7 @@ const core = {
   DialogueChainBuilder: class { add() { return this; } },
   ItemStatementDialogue: class {},
   NpcDialogue: class {},
+  CacheDefinitions: { getVarbitId: (name) => name, getVarpId: (name) => name },
 };
 
 const handlers = new Map();
@@ -106,10 +107,10 @@ test("target kills pay 2 points plus the largest milestone bonus, halved when pe
   for (let kill = 0; kill < 10; kill++) emit("bounty-hunter:target-killed", { killer, victim: player(), penalised: false, killerSkulled: true });
   assert.equal(Points.targetKills(killer), 10);
   assert.equal(Points.getPoints(killer), 9 * 2 + 5);
-  assert.equal(killer.varps.get(3814), 23);
-  assert.equal(killer.varps.get(3815), 10);
+  assert.equal(killer.varps.get("bh_2023_points"), 23);
+  assert.equal(killer.varps.get("bh_2023_target_kill"), 10);
   emit("bounty-hunter:rogue-killed", { killer, victim: player() });
-  assert.equal(killer.varps.get(3816), 1);
+  assert.equal(killer.varps.get("bh_2023_rogue_kill"), 1);
 });
 
 test("a kill gives an emblem to whoever owns none, unless ironman or penalised", () => {

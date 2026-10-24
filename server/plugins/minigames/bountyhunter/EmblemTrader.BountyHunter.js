@@ -15,7 +15,7 @@ const Points = require("./Points.BountyHunter");
 const Emblems = require("./Emblems.BountyHunter");
 
 const BAND_ATTRIBUTE = "bounty-hunter:combat-band";
-const VARBIT_COMBAT_BAND = 14891; // bh_combat_band: 5, 10 or 15 levels
+const VARBIT_COMBAT_BAND = "bh_combat_band"; // 5, 10 or 15 levels
 const BANDS = [5, 10, 15];
 
 const CRATER_VARIANT = "standard-dialogue-within-daimon-s-crater";
@@ -39,7 +39,7 @@ function band(player) {
 }
 
 function syncBand({ player }) {
-  player.getPacketSender().sendVarbit(VARBIT_COMBAT_BAND, band(player));
+  player.getPacketSender().sendVarbit(core.CacheDefinitions.getVarbitId(VARBIT_COMBAT_BAND), band(player));
 }
 
 function fullSkullTicks() {

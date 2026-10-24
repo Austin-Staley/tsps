@@ -7,7 +7,8 @@
  * included, with a target, not within 12 seconds of combat (Bounty Hunter changes, 2023), at most
  * five times per target, and lands within 12 squares of the target - here on a tile walkable
  * from the target's, so never across lava or a fort wall. The crater blocks every other teleport,
- * so the usual teleport checks are made here rather than through the crater's canTeleport.
+ * so the usual teleport checks are made here rather than through the crater's canTeleport, and a
+ * cast from the lobby into the arena needs what the Arena gates need (coffer, supply crates).
  *
  * Refusal messages have no Wiki source and are our wording.
  */
@@ -26,6 +27,7 @@ const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 let core;
 let pluginApi;
+let bh;
 const lastCombatAt = new WeakMap();
 const usesByPlayer = new WeakMap();
 
@@ -121,7 +123,15 @@ function refusal(player, target) {
   if (Date.now() - (lastCombatAt.get(player) ?? 0) < COMBAT_COOLDOWN_MS) return "You can't cast this spell so soon after combat.";
   if (usesOf(player, target) >= USES_PER_TARGET) return "You have already teleported to this target five times.";
   if (!player.getCombat().getTeleblockTimer().finished()) return "A magical spell is blocking you from teleporting.";
+  if (bh.inLobby(player) && !bh.inLobby(target)) return arenaRefusal(player);
   return null;
+}
+
+/** Entry.BountyHunter.js answers with the Arena gates' refusal, if any. */
+function arenaRefusal(player) {
+  const request = { player, reason: null };
+  pluginApi.emitCustomEvent("bounty-hunter:arena-refusal", request);
+  return request.reason;
 }
 
 function spellFor(player) {
@@ -158,9 +168,10 @@ function cast(event) {
   player.getSkillManager().addExperiences(core.Skill.MAGIC, EXPERIENCE);
 }
 
-module.exports = function attachTargetTeleport(api) {
+module.exports = function attachTargetTeleport(api, state) {
   core = api.core;
   pluginApi = api;
+  bh = state;
   api.persistAttribute(UNLOCKED_ATTRIBUTE, false);
   api.onPlayerLogin(syncUnlocked);
   api.onItemAction("Target teleport scroll", { Read: readScroll });

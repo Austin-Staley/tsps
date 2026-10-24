@@ -38,6 +38,8 @@ let bh;
 
 /** The live bot players. */
 const bots = new Set();
+/** Numbers each spawn: bots despawned a moment ago may still be online under their names. */
+let spawnedBots = 0;
 const nextDecisionAt = new WeakMap();
 
 function isBot(player) {
@@ -61,9 +63,9 @@ function prepareBot(player) {
   }
 }
 
-function spawnBot(runtime, behaviorMode, index) {
+function spawnBot(runtime, behaviorMode) {
   const spawn = Entry.spawnTile();
-  const bot = runtime.spawnPvpBot(spawn, { username: `BhBot${index + 1}`, mode: behaviorMode.PVP });
+  const bot = runtime.spawnPvpBot(spawn, { username: `BhBot${++spawnedBots}`, mode: behaviorMode.PVP });
   const state = bot && stateOf(bot);
   if (!state?.pvp) return;
   bot.setAttribute(BOT_ATTRIBUTE, true);
@@ -80,7 +82,7 @@ function populate({ player }) {
     return;
   }
   const count = core.Misc.random(MIN_BOTS, MAX_BOTS);
-  for (let index = 0; index < count; index++) spawnBot(runtime, behaviorMode, index);
+  for (let index = 0; index < count; index++) spawnBot(runtime, behaviorMode);
 }
 
 function despawnAll() {

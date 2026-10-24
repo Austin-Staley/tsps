@@ -14,9 +14,9 @@ const POINTS_ATTRIBUTE = "bounty-hunter:points";
 const TARGET_KILLS_ATTRIBUTE = "bounty-hunter:target-kills";
 const ROGUE_KILLS_ATTRIBUTE = "bounty-hunter:rogue-kills";
 
-const VARP_POINTS = 3814; // bh_2023_points
-const VARP_TARGET_KILLS = 3815; // bh_2023_target_kill
-const VARP_ROGUE_KILLS = 3816; // bh_2023_rogue_kill
+const VARP_POINTS = "bh_2023_points";
+const VARP_TARGET_KILLS = "bh_2023_target_kill";
+const VARP_ROGUE_KILLS = "bh_2023_rogue_kill";
 
 /** shops.json "Bounty Hunter Store" currency. */
 const STORE_CURRENCY = "BOUNTY HUNTER POINTS";
@@ -25,14 +25,20 @@ const POINTS_PER_TARGET = 2;
 /** Highest milestone first: a 500th kill pays the 500th bonus, not every bonus it divides. */
 const MILESTONES = [[500, 25], [100, 10], [50, 5], [10, 3]];
 
+let core;
+
+function varp(name) {
+  return core.CacheDefinitions.getVarpId(name);
+}
+
 function count(player, key) {
   const value = Number(player.getAttribute(key));
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
-function store(player, key, varp, value) {
+function store(player, key, name, value) {
   player.setAttribute(key, value);
-  player.getPacketSender().sendConfig(varp, value);
+  player.getPacketSender().sendConfig(varp(name), value);
 }
 
 function getPoints(player) {
@@ -73,9 +79,9 @@ function rogueKilled({ killer }) {
 
 function syncVarps({ player }) {
   player.getPacketSender()
-    .sendConfig(VARP_POINTS, getPoints(player))
-    .sendConfig(VARP_TARGET_KILLS, targetKills(player))
-    .sendConfig(VARP_ROGUE_KILLS, count(player, ROGUE_KILLS_ATTRIBUTE));
+    .sendConfig(varp(VARP_POINTS), getPoints(player))
+    .sendConfig(varp(VARP_TARGET_KILLS), targetKills(player))
+    .sendConfig(varp(VARP_ROGUE_KILLS), count(player, ROGUE_KILLS_ATTRIBUTE));
 }
 
 const storeCurrency = {
@@ -86,6 +92,7 @@ const storeCurrency = {
 };
 
 module.exports = function attachBountyHunterPoints(api) {
+  core = api.core;
   api.persistAttribute(POINTS_ATTRIBUTE, 0);
   api.persistAttribute(TARGET_KILLS_ATTRIBUTE, 0);
   api.persistAttribute(ROGUE_KILLS_ATTRIBUTE, 0);
