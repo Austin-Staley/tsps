@@ -313,20 +313,34 @@ function npcName(npc) {
 
 /** Whether a kill of this NPC (where it died) counts for the player's task. */
 function countsFor(task, npc) {
+  return countsForTarget(task, { id: npc.getId(), name: npcName(npc), location: npc.getLocation() });
+}
+
+/** The same check from an NPC's id, name and where it is. */
+function countsForTarget(task, { id, name, location }) {
   if (!task) return false;
-  const name = npcName(npc);
   const matches = task.taskId === Data.BOSS_TASK_ID
     ? Data.isBossNpc(task.bossId, name)
-    : Data.npcCountsFor(task.taskId, npc.getId(), name);
+    : Data.npcCountsFor(task.taskId, id, name);
   if (!matches) return false;
-  if (task.masterId === KRYSTILIA && !core.Wilderness.isInLocation(npc.getLocation())) return false;
-  if (task.area && !Data.inArea(task.area, npc.getLocation())) return false;
+  if (task.masterId === KRYSTILIA && !core.Wilderness.isInLocation(location)) return false;
+  if (task.area && !Data.inArea(task.area, location)) return false;
   return true;
 }
 
-/** "slayer:on-task": is this NPC the player's current assignment? */
+/**
+ * "slayer:on-task": is this NPC the player's current assignment? Either { npc } (a live NPC) or
+ * { npcId, location } for an NPC by id, such as a form it isn't in yet.
+ */
 function onTaskEvent(request) {
-  request.onTask = countsFor(current(request.player), request.npc);
+  const task = current(request.player);
+  if (Number.isInteger(request.npcId)) {
+    const name = core.NpcDefinition.forId(request.npcId)?.getName?.() ?? "";
+    const location = request.location ?? request.npc?.getLocation?.();
+    request.onTask = countsForTarget(task, { id: request.npcId, name, location });
+    return;
+  }
+  request.onTask = countsFor(task, request.npc);
 }
 
 function npcKilled({ killer, npc }) {

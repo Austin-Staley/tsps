@@ -5,14 +5,18 @@
  *   400 hitpoints every 7th summons souls, below 200 every 5th spews lava, in that priority;
  *   a due special has a 10% chance to be an ordinary attack instead;
  * - souls: one ranged, one magic and one melee soul in a random order along the row behind her,
- *   each attacking once, west to east; an unprotected hit is 30, a protected one drains 30
- *   prayer instead (spirit shields through the prayer-drain modifiers);
+ *   each attacking once, west to east; an unprotected hit is 30 (22 when the Elysian spirit
+ *   shield's effect fires), a protected one drains 30 prayer instead, 20 with Ward of Arceuus,
+ *   halved again by a spectral spirit shield (15 or 10);
  * - lava: three single-tile pools, one under the target and two near them; 10 on whoever stands
- *   on one as it lands, then 15 every 2 ticks while they stay on it;
+ *   on one as it lands, then 15 every 2 ticks while they stay on it - 12 with an anti-dragon
+ *   shield (or an antifire potion with Protect from Magic), 11 with a super antifire; the
+ *   landing hit isn't reduced (Wiki: Cerberus/Strategies, lava pools);
  * - a wipe, logout or kill clears the souls and pools.
  * Combat.Cerberus.js decides each attack; this keeps the count and runs the specials.
  */
 const Common = require("./Common.Cerberus");
+const { getDragonfireProtectionTier, DragonfireProtectionTier } = require("../../combat/DragonfireProtection");
 
 class Fight {
   constructor(arena, npc) {
@@ -99,7 +103,7 @@ class Fight {
       const age = now - pool.landAt;
       if (age % lava.tickEvery === 0) Common.tileGraphic(this.arena.players(), pool.tile, Common.ids.spotanims.lavaPool);
       if (age === 0) for (const player of on) Common.hurtPlayer(player, lava.landDamage);
-      else if (age % lava.tickEvery === 0) for (const player of on) Common.hurtPlayer(player, lava.tickDamage);
+      else if (age % lava.tickEvery === 0) for (const player of on) Common.hurtPlayer(player, lavaTickDamage(player));
     }
     this.pools = this.pools.filter((pool) => now < pool.until);
   }
@@ -172,6 +176,18 @@ function shuffle(list) {
   return out;
 }
 
+/** Standing in a pool, by fire protection (Wiki: Cerberus/Strategies, lava pools). */
+function lavaTickDamage(player) {
+  const { lava } = Common.data.combat;
+  const tier = getDragonfireProtectionTier(player);
+  if (tier >= DragonfireProtectionTier.SUPER_ANTIFIRE) return lava.tickDamageSuperAntifire;
+  const shield = Common.core.CombatEquipment.hasDragonProtectionGear(player);
+  const prayers = Common.api.getPrayerHandler();
+  const magic = prayers.isActivated(player, prayers.PROTECT_FROM_MAGIC);
+  if (shield || (tier >= DragonfireProtectionTier.ANTIFIRE && magic)) return lava.tickDamageShielded;
+  return lava.tickDamage;
+}
+
 const SOUL_PRAYER = { ranged: "PROTECT_FROM_MISSILES", magic: "PROTECT_FROM_MAGIC", melee: "PROTECT_FROM_MELEE" };
 
 function soulAttack(soul) {
@@ -193,12 +209,13 @@ function soulHit(soul) {
   if (!player?.isRegistered?.() || player.getHitpoints?.() <= 0) return;
   const { souls } = Common.data.combat;
   if (soul.prayed) {
-    const { Skill, applyPrayerDrainModifiers } = Common.core;
-    const drain = applyPrayerDrainModifiers ? applyPrayerDrainModifiers(player, souls.drain, { attacker: soul.npc }) : souls.drain;
+    const { Skill, applyPrayerDrainModifiers, ArceuusSpells } = Common.core;
+    const base = ArceuusSpells?.hasWard?.(player) ? souls.drainWard : souls.drain;
+    const drain = applyPrayerDrainModifiers ? applyPrayerDrainModifiers(player, base, { attacker: soul.npc }) : base;
     if (drain > 0) player.getSkillManager().decreaseCurrentLevel(Skill.PRAYER, drain, 0);
     return;
   }
-  Common.hurtPlayer(player, souls.damage);
+  Common.hurtPlayer(player, Common.elysianCut(player, souls.damage));
 }
 
 /** Her fight, attached to the NPC for its combat method. */
@@ -208,4 +225,4 @@ function begin(arena, npc) {
   return fight;
 }
 
-module.exports = { Fight, begin, soulHit, SOUL_PRAYER };
+module.exports = { Fight, begin, soulHit, lavaTickDamage, SOUL_PRAYER };

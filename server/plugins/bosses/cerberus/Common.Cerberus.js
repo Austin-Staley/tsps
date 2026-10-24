@@ -7,6 +7,8 @@ const fs = require("fs");
 const path = require("path");
 
 const KILLS_ATTRIBUTE = "cerberus:kills";
+/** The Elysian spirit shield's effect graphic, as core combat plays it. */
+const ELYSIAN_GRAPHIC = 321;
 
 let api = null;
 let core = null;
@@ -87,6 +89,15 @@ function tileGraphic(players, location, id, delay = 0) {
   for (const player of players) player.getPacketSender().sendGraphic(new Graphic(id, delay), location);
 }
 
+/** The Elysian spirit shield's 25% cut, 70% of the time (CombatConstants, as for any hit). */
+function elysianCut(player, damage) {
+  const { CombatConstants, ItemIdentifiers, Graphic } = core;
+  if (!player.getEquipment?.()?.contains?.(ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD)) return damage;
+  if (Math.random() >= CombatConstants.ELYSIAN_ACTIVATION_CHANCE) return damage;
+  player.performGraphic?.(new Graphic(ELYSIAN_GRAPHIC, 40));
+  return Math.floor(damage * CombatConstants.ELYSIAN_DAMAGE_REDUCTION);
+}
+
 /** Typeless damage on the player now (a blue splat for none). */
 function hurtPlayer(player, amount) {
   const { HitDamage, HitMask } = core;
@@ -105,20 +116,13 @@ function message(key, values = {}) {
  * as that form wherever she is sitting.
  */
 function onTask(player, npc) {
-  const attacking = ids.npcs.attacking;
-  const asFought = {
-    getId: () => attacking,
-    getCurrentDefinition: () => core.NpcDefinition.forId(attacking),
-    getDefinition: () => core.NpcDefinition.forId(attacking),
-    getLocation: () => npc.getLocation(),
-  };
-  const request = { player, npc: asFought, onTask: false };
+  const request = { player, npcId: ids.npcs.attacking, location: npc.getLocation(), onTask: false };
   api.emitCustomEvent("slayer:on-task", request);
   return request.onTask === true;
 }
 
 module.exports = {
-  init, later, toLocation, randomInt, isCerberus, isSoul, distanceToFootprint, tileGraphic, hurtPlayer, message, onTask,
+  init, later, toLocation, randomInt, isCerberus, isSoul, distanceToFootprint, tileGraphic, hurtPlayer, elysianCut, message, onTask,
   KILLS_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },

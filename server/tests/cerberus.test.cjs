@@ -32,7 +32,7 @@ before(async () => {
     removeNpc: (npc) => { npc.removed = true; },
     onCustomEvent: (name, fn) => (events[name] ??= []).push(fn),
     emitCustomEvent(name, event) {
-      if (name === 'slayer:on-task') { event.onTask = onTaskAnswer(event.npc); return; }
+      if (name === 'slayer:on-task') { event.onTask = onTaskAnswer(event); return; }
       for (const fn of events[name] ?? []) fn(event);
     },
   }, { get: (target, key) => target[key] ?? (() => {}) });
@@ -72,7 +72,7 @@ function fakeNpc(id, x, y, hitpoints = 600) {
 function fakePlayer(x, y) {
   let tile = location(x, y);
   const player = {
-    messages: [], damage: [], prayers: new Set(), prayerDrained: 0, spectral: false, hp: 99,
+    messages: [], damage: [], prayers: new Set(), prayerDrained: 0, spectral: false, hp: 99, worn: [],
     getLocation: () => tile,
     moveTo: (to) => { tile = to; },
     sendMessage: (text) => { player.messages.push(text); messagesSent?.push(text); },
@@ -85,6 +85,8 @@ function fakePlayer(x, y) {
     getPacketSender: () => ({ sendGraphic: () => {}, sendConfig: () => {} }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => player.damage.push(...hits.map((h) => h.getDamage())) }) }),
     getSkillManager: () => ({ decreaseCurrentLevel: (skill, amount) => { player.prayerDrained += amount; } }),
+    getEquipment: () => ({ contains: (id) => player.worn.includes(id), getItems: () => [], get: () => ({ getId: () => -1 }) }),
+    performGraphic: () => {},
   };
   return player;
 }
@@ -230,7 +232,7 @@ test('the winch lets in only a player on task, and Peek counts who is inside', (
   assert.equal(Lair.turnWinch({ player, location: { x: 1291, y: 1254, z: 0 } }), true);
   assert.equal(player.messages.at(-1), 'You need a hellhound or Cerberus Slayer task to fight Cerberus.');
   assert.equal(player.getLocation().getY(), 1254);
-  onTaskAnswer = (npc) => npc.getId() === Common.ids.npcs.attacking;
+  onTaskAnswer = (request) => request.npcId === Common.ids.npcs.attacking;
   Lair.turnWinch({ player, location: { x: 1291, y: 1254, z: 0 } });
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [1240, 1226]);
   arena.testPlayers = [player];
@@ -241,7 +243,7 @@ test('the winch lets in only a player on task, and Peek counts who is inside', (
 
 test('the task is asked about as her attacking form, which carries the hellhound task', () => {
   const asked = [];
-  onTaskAnswer = (npc) => { asked.push(npc.getId()); return true; };
+  onTaskAnswer = (request) => { asked.push(request.npcId); return true; };
   assert.equal(Common.onTask(fakePlayer(0, 0), fakeNpc(Common.ids.npcs.sitting, 1238, 1250)), true);
   assert.deepEqual(asked, [Common.ids.npcs.attacking]);
 });
@@ -282,4 +284,44 @@ test('her death clears the fight and counts the kill; a task kill is worth 690 S
   const kill = { npc, xp: 600 };
   Kills.slayerXp(kill);
   assert.equal(kill.xp, 690);
+});
+
+test('Ward of Arceuus cuts a prayed soul to 20 drain, 10 with a spectral; an Elysian hit is 22', () => {
+  const { ArceuusSpells, ItemIdentifiers } = Common.core;
+  const hasWard = ArceuusSpells.hasWard;
+  const random = Math.random;
+  try {
+    ArceuusSpells.hasWard = () => true;
+    const warded = fakePlayer(1240, 1244);
+    Fight.soulHit({ kind: 'magic', target: warded, npc: fakeNpc(5868, 1240, 1256), prayed: true });
+    assert.equal(warded.prayerDrained, 20);
+    warded.spectral = true;
+    Fight.soulHit({ kind: 'magic', target: warded, npc: fakeNpc(5868, 1240, 1256), prayed: true });
+    assert.equal(warded.prayerDrained, 30);
+    ArceuusSpells.hasWard = () => false;
+    const elysian = fakePlayer(1240, 1244);
+    elysian.worn.push(ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD);
+    Math.random = () => 0;
+    Fight.soulHit({ kind: 'melee', target: elysian, npc: fakeNpc(5869, 1240, 1256), prayed: false });
+    Math.random = () => 0.99;
+    Fight.soulHit({ kind: 'melee', target: elysian, npc: fakeNpc(5869, 1240, 1256), prayed: false });
+    assert.deepEqual(elysian.damage, [22, 30], 'the 25% cut fires 70% of the time');
+  } finally {
+    ArceuusSpells.hasWard = hasWard;
+    Math.random = random;
+  }
+});
+
+test('standing in lava: 15 a tick, 12 with an anti-dragon shield', () => {
+  const { CombatEquipment } = Common.core;
+  const shield = CombatEquipment.hasDragonProtectionGear;
+  try {
+    const player = fakePlayer(1240, 1244);
+    CombatEquipment.hasDragonProtectionGear = () => false;
+    assert.equal(Fight.lavaTickDamage(player), 15);
+    CombatEquipment.hasDragonProtectionGear = () => true;
+    assert.equal(Fight.lavaTickDamage(player), 12);
+  } finally {
+    CombatEquipment.hasDragonProtectionGear = shield;
+  }
 });
