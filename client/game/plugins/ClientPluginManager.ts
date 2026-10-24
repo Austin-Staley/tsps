@@ -91,6 +91,14 @@ export type WidgetOverlayDrawContext = {
 /** A right-click entry on an overlay: "<option> <target>". */
 export type OverlayMenuEntry = { option: string; target: string; onClick(): void };
 
+/** A loc model outline a plugin asks for: colour 0xRRGGBB, alpha 0-1, width in pixels. */
+export type LocOutline = {
+    loc: import("../scene/SceneGeometry").SceneLoc;
+    color: number;
+    alpha: number;
+    width: number;
+};
+
 /** An NPC model outline a plugin asks for: colour 0xRRGGBB, alpha 0-1, width in pixels. */
 export type NpcOutline = { ecsId: number; serverId: number; color: number; alpha: number; width: number };
 
@@ -258,6 +266,8 @@ export interface ClientPlugin {
     interactHighlightConfig?(): InteractHighlightPluginConfig | undefined;
     /** NPC model outlines to draw every frame (RuneLite's ModelOutlineRenderer.drawOutline). */
     npcOutlines?(): NpcOutline[];
+    /** Loc model outlines to draw every frame (RuneLite's ModelOutlineRenderer for objects). */
+    locOutlines?(): LocOutline[];
     /** Ground item labels around a tile (first answer wins). */
     groundItemOverlayEntries?(
         tileX: number,
@@ -518,6 +528,12 @@ export class ClientPluginManager {
             if (config) return config;
         }
         return DISABLED_TILE_MARKERS_CONFIG;
+    }
+
+    locOutlines(): LocOutline[] {
+        const outlines: LocOutline[] = [];
+        for (const plugin of this.implementing("locOutlines")) outlines.push(...plugin.locOutlines!());
+        return outlines;
     }
 
     npcOutlines(): NpcOutline[] {
