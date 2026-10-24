@@ -38,6 +38,60 @@ The normal fight implements aimed melee chip/slam, magic, pillar-hidden freezing
 
 ## Evidence and limits
 
+### Remaining-gap measurement, 24 October 2026
+
+The follow-up inspects immutable decoder helper `7ca21602b38f` outputs using the
+official source/runtime pinned above. Ordinary quest recording 1703 contains
+1,077 ice warnings on 232 distinct warning ticks (10469–10933), covering 94
+distinct tiles. Normal 758 recording 1827 independently contains 2,289 warnings
+on 502 distinct ticks, also covering those 94 tiles. Both include four southern
+entrance corners omitted by the original six-column implementation:
+`3033,6435`, `3033,6436`, `3045,6435`, `3045,6436`. Counts in that order are
+2/1/5/7 in 1703 and 12/13/7/10 in 1827. Representative ordinary ticks are
+10674/10673/10549/10723. The warning coverage now includes these corners without
+extending either narrow corridor, crossing the y6438 stair gap, or reaching
+y6451 and above. The [ordinary strategies description](https://oldschool.runescape.wiki/w/Duke_Sucellus/Strategies)
+independently places icefalls before the second stairs. A regression failed on
+the omitted first corner before the fix and passes with all four included.
+
+The 1703 warning-tick gaps are 153 one-tick, one two-tick, 76 four-tick and one
+five-tick gap, consistent with a three-on/three-off opportunity clock with empty
+random selections. These observations establish coverage and cadence; they do
+not identify the random sample count, independent per-tile probability, weighting,
+or seed. In particular, the sparse corner counts do not justify treating the
+current uniform per-tile roll as recovered OSRS RNG.
+
+Combat vents also cannot be assigned a recovered lifetime distribution. In 1751,
+the normal two-spit sequence at 11037/11040 creates actors at 11039/11042 and
+ends them at 11053/11054 (14/12 ticks). Several shorter observed lifetimes end
+together when the boss dies and are censored, not random lifetime samples.
+Ordinary **quest** 1703 instead has 13 matched spawn/end pairs: six 16-tick,
+five 14-tick and two 12-tick lifetimes. Quest timings must not silently replace
+the current postquest implementation. Nearest-vent selection remains supported
+by the ordinary Wiki; equidistant tie ordering is unidentifiable here.
+
+Complete extremity coverage remains unresolved. Ordinary quest 1703 starts a
+north cone at 10486; the player reaches `3047,6451` at 10489, receives freeze
+graphic 369 at 10490 and a 56-damage hit at 10491. No ice warning targets that
+row. This observation warrants checking the existing centre-line approximation,
+but one route does not establish the full cone footprint, damage-check cycle or
+whether quest and current postquest coverage differ. The documented safe
+run-through route alone is insufficient to certify every off-centre tile.
+
+Ordinary 1703's iron-pickaxe sequence 626 starts at 10673/10679/10686/10693
+while stationary at `3034,6447`: three restart gaps of 6/7/7 ticks. Sequence
+restarts alone do not prove successful salt-yield cadence or the first-action
+delay. The existing seven-tick iron-pickaxe interval remains an approximation
+until salt inventory deltas or Mining XP updates distinguish attempts from
+yields. Protected magic maximum 24 and covered gas maximum 4 likewise remain
+unconfirmed: these captures do not supply a controlled ordinary postquest sample
+with verified equipment, prayer and damage modifiers. No Leagues damage value is
+used to set either bound, and no awakened value is imported.
+
+This coverage correction passes a fresh TypeScript build and all 67 focused Duke
+tests. The additional measurement narrows the evidence gaps; it does not close
+the unidentified algorithms or the unresolved cone coverage.
+
 Primary behavior sources:
 
 - [Duke Sucellus](https://oldschool.runescape.wiki/w/Duke_Sucellus)

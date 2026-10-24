@@ -61,8 +61,10 @@ function preparation(fight) {
     for(let row=0;row<3;row++)gas(fight,[3036+3*((2-row+phase)%3),6442+4*row],true);
   }
   if(tick>=4&&[0,4,5].includes(tick%6)){
-    for(const x of [3030,3031,3032,3046,3047,3048])for(let y=6435;y<=6450;y++){
+    for(const x of [3030,3031,3032,3033,3045,3046,3047,3048])for(let y=6435;y<=6450;y++){
       if(y===6438)continue;
+      // The corridor widens by one tile at its southern entrance (1703/1827).
+      if((x===3033||x===3045)&&y>6436)continue;
       // Empirical density, not a claim to recover Jagex's unpublished RNG.
       if(C.random(19)===0)ice(fight,[x,y]);
     }

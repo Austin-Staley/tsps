@@ -189,6 +189,15 @@ test('the documented run-through tiles skip the extremities dangerous centre lin
   assert.equal(M.extremityHit(d.extremities[2],[3032,6450]),true);
 });
 
+test('icefall covers the four corridor entrance corner tiles recorded in ordinary preparation',t=>{
+  const h=H.harness(t),s=h.enter();h.move([3039,6434]);
+  t.mock.method(Math,'random',()=>0);h.step(4);
+  const warned=h.packets.filter(x=>x[0]==='sendGraphic'&&x[1].getId()===1447).map(x=>h.C.source(s,x[2]));
+  for(const tile of [[3033,6435],[3033,6436],[3045,6435],[3045,6436]])
+    assert.ok(warned.some(at=>at[0]===tile[0]&&at[1]===tile[1]),`missing warning at ${tile}`);
+  assert.equal(warned.some(([x,y])=>y===6438||y>=6451||([3033,3045].includes(x)&&y>=6437)),false);
+});
+
 test('combat gas spawns a delayed native vent, persists beyond four ticks and cleans up on exit',t=>{
   const h=H.harness(t),s=h.enter();h.move([3035,6451]);h.fight.wake();h.fight.nextAttack=Infinity;
   t.mock.method(Math,'random',()=>.5);h.fight.ignite([3042,6450]);h.step(2);
