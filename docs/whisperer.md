@@ -47,3 +47,113 @@ This is functional normal content, not complete1:1 parity. The28–42 melee dist
 The branch retains PR893 `a92357d8add71092ec5618f710e1f5b6744cca1c` and PR896 `ca5a794d7fda0bcf39491d1e32b6cc94566708ad`. Named transport/fragment hooks, generated Ketla dialogue integration, messages, visited varbit and colored duration/PB output coexist with the later phase/achievement/record work. Only unnamed scoreboard parents need a guarded generic fallback. Source-generated JSON is unchanged from main.
 
 Tests use real cache definitions, players, NPC processing, inventories, private areas and hit queues. Added integration regressions preserve launched volleys during melee recovery and cancel them on stop; existing real-NPC clocks verify boss/column/soul HP. The own-worktree MCP smoke verified north6371→6374 wake,900HP boss, a threshold screech with all eight columns, and exit reset of realm/HUD with no visible encounter actors. Client animation feel was not visually retested. Final build/suite totals are in the integration PR.
+
+
+### Whole-footprint diagonal pursuit regression (24 October 2026)
+
+The local release d583823ab still restricted diagonal movement to size-one actors,
+while upstream065d29b68 already permits all sizes when their entire footprint can
+travel. This is an observable normal Whisperer movement gap, separate from choosing
+an unmeasured binding duration. Two real MovementQueue regressions now cover it.
+
+Original [RSProx recording3285](https://rsprox.net/download/3285) has normal actor12205
+walk from2655,6360 at23066 to2654,6361 at23067 and2653,6362 at23068. The player remains
+at2649,6369. The recording belongs to an altered world; these NPC coordinates establish
+geometry only, not an ordinary freeze timer, damage roll or probability. Capture
+SHA2568cfd915cc9172769c3b871b17640f5b6141468f8e3796abf75d3ff461dace3da;
+filtered derived stream SHA256fb8225e522011e3311443d6a80e86581ea74d81300eaf2343f19549733110864.
+No player names, chat, saves or raw video are included in the regression.
+
+The first test asserts the NPC's size remains3 through transformation and follows
+both recorded steps using actual cache clipping. A second overlays an obstruction
+at2654,6363 in its private area: this blocks the diagonal's outer3x3 corner while
+leaving the cardinal west fallback open. It must square that corner, not pass
+through it. The old size-one guard was temporarily restored and rebuilt: the first
+regression failed at2654,6360 instead of2654,6361; restoring upstream and rebuilding
+passes both. The upstream change is regression-only; the local integration selects
+just the already-merged generic guard correction and excludes unrelated movement,
+raid, client and generated-data changes.
+
+This audit also reacquired two original ordinary videos: ManaCharge's [full kill](https://www.youtube.com/watch?v=gqwJCArI818)
+(uploaded15August2023) explicitly uses freeze counters; ImperatorBTW's [three tips](https://www.youtube.com/watch?v=5_WV8Wbhv4s)
+(uploaded6August2023) is an edited guide. Neither establishes a controlled natural
+expiry. Extile's previously incomplete [guide](https://www.youtube.com/watch?v=KsA9ENMEQII)
+is now recovered completely; its normal wake is consistent with known N/S faces,
+but its countered/edited binding sequence does not resolve8versus9ticks. The earlier
+incomplete-download note is historical, not the current source availability.
+
+A ten-tile centre-distance probe was rejected as an oracle: the Wiki does not define
+that distance convention for every direction and illustrates specific N/S lanes.
+Review also caught stale compiled movement code after switching branches, so all
+subsequent guard comparisons rebuild first. No binding/pursuit constant is changed
+from those exploratory failures. Wake directions, optional-bind selection, natural
+expiry, melee distribution/recovery and other listed numerical gaps remain open.
+
+### Bind pursuit movement-pass alignment (24 October 2026)
+
+The intended five-tick first step was one tick late in the encounter. World processes
+NPC mechanics before player mechanics; the cathedral advances the fight from the
+owner's player-area pass. Queueing a route on cast+5 therefore cannot move the NPC
+until cast+6. The route is now prepared on+4 so the registered NPC first steps on+5.
+The authored pursuitTicks5 is retained, and an already-adjacent target is still not
+meleed before+5. No freeze, phase deadline, flight, damage or selection value changes.
+
+This audit selects actual binding projectiles2467, then checks each actor's current
+combat-level update. Across original [3281](https://rsprox.net/download/3281),
+[3285](https://rsprox.net/download/3285) and[3299](https://rsprox.net/download/3299),
+there are22normal791casts. Seventeen have a subsequent recorded walk, all first on
++5; five have no walk in the inspected14-tick window. The apparent+3cases instead
+belong to fiveAwakened1146casts and are excluded. Animation masks can be replayed
+when the player changes realm, so they are not treated as independent cast packets.
+These are altered-world normal actors; the result supports this already-intended
+first-step schedule, not all ordinary movement/counter timing or RNG.
+
+Examples:3281cast2710 firstwalk2715;3285cast21929 firstwalk21934;3285cast22106
+firstwalk22111;3299cast15300 firstwalk15305. The17movingcast ticks are
+3281:2710/2844/2897/3057/3811/4482/5577/5812;
+3285:21405/21484/21929/22106/22553/22603/22776/23058;
+3299:15300. Excluded1146examples include3285:23306/23403 and3299:15652/15801/15943.
+No sample-derived optional-bind probability is introduced.
+
+Regressions run real NPC queues before player timers and fight processing, matching
+World order. The first-step test failed on the old implementation (still stationary
+at+5), then passed after correction. Adjacent melee remains+5. A real
+CombatFactory.freezeTicks counter after route preparation cancels the queue, keeps
+the NPC stationary and suppresses the in-flight player bind. Existing impact/phase
+assertions remain; the old mock-route test now distinguishes queue preparation+4
+from actual movement+5. Natural player expiry8versus9, optional binding selection,
+post-melee recovery and the remaining ordinary numerical gaps remain unresolved.
+
+## Paired melee retaliation, 24 October 2026
+
+The current [Whisperer Speed-Runner strategy](https://oldschool.runescape.wiki/w/Whisperer_Speed-Runner)
+explicitly recommends double Vengeance on the two equal melee hits. The prior
+raw HitDamage path bypassed Vengeance and recoil entirely: real-player regressions
+left Vengeance active and the boss at 900 HP despite damage to the player.
+
+Both physical strikes now use the normal PendingHit/CombatFactory queue. Their
+single original damage roll, partial-prayer snapshot and one-tick separation are
+retained. A generic optional `PendingHitConfig.bypassProtectionPrayer` flag
+(default false) prevents ordinary full prayer blocking from being reapplied to
+the already mitigated amount. Armour effects occur once per impact; an actual
+Elysian regression rejected a dummy zero-hit workaround that produced two effects.
+The explicit flag also reaches multi-hit and first-success special roll paths;
+callers that omit it retain existing behavior.
+
+Real recoil and Vengeance regressions cover both strikes, rearmed Vengeance
+between them, protected chip and ordinary hazard controls. Player HP and its
+perfect-kill callback resolve before reflected damage reaches the next NPC pass.
+A lethal reflected hit freezes the already-imperfect result and cancels the
+second strike. Finish/departure zero both the pending parts and their cached
+PendingHit total; otherwise a cancelled zero hit could still consume retaliation.
+Applied hits release their tracked references.
+
+Test fixtures now use the actual World clock when processing scheduled hits and
+complete the binding test's setup teleport before accepting combat. Fresh build
+and 85 Whisperer plus 7 HitQueue checks pass (92/92). Independent code review
+found no important issue and independently repeated those 92 checks. Full-suite,
+native staging and local integration results are reported with the PR.
+
+This fixes the published retaliation behavior, not the unresolved melee damage
+distribution, rounding, recovery, freeze duration or optional-bind RNG. No client,
+Claude content or generated data is changed.

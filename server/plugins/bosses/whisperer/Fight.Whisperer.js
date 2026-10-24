@@ -245,8 +245,8 @@ class Fight {
     // Tentacular describes roughly one-third mitigation. Exact rounding and
     // the ordinary roll distribution remain unmeasured.
     const amount = protectedMelee ? Math.floor(damage * 2 / 3) : damage;
-    Common.damage(this, amount, 0, !protectedMelee);
-    this.at(1, () => Common.damage(this, amount, 0, !protectedMelee));
+    Common.meleeDamage(this, amount, !protectedMelee);
+    this.at(1, () => Common.meleeDamage(this, amount, !protectedMelee));
   }
   bind() {
     this.pursuitCancelled = false;
@@ -295,9 +295,13 @@ class Fight {
       this.nextAttack = this.tick + 1;
       return;
     }
-    if (this.tick < this.pursuitAt)
+    // NPCs move before the owner's player-area pass. Prepare a distant
+    // route one pass before the recorded first step, without advancing melee.
+    if (this.tick + 1 < this.pursuitAt)
       return;
     if (this.inMelee()) {
+      if (this.tick < this.pursuitAt)
+        return;
       this.boundUntil = 0;
       this.melee();
       return;
