@@ -73,3 +73,30 @@ handled by another plugin (Poisoned cheese, White pearl, ToA's Honey locust, Cas
 use Heal); quest, event and minigame items with their own effects (rock cakes, poison karambwan,
 nightshade, Servery food); event sweets and candy; food only eaten in one
 area (Vampyrium); unobtainable items; and the whole watermelon, which is sliced first.
+
+## Hitpoints orb potion selection
+
+The [Poison Wiki page](https://oldschool.runescape.wiki/w/Poison) describes
+preferring stronger remedies, then the least-dosed vessel of the remedy, with
+inventory order breaking dose ties. [Venom](https://oldschool.runescape.wiki/w/Venom)
+also lists Guthix rest as an applicable partial treatment and puts potions ahead
+of other remedies.
+
+The potion handler selects the strongest supported treatment family, then its
+least-dosed vessel, retaining the first slot for a dose tie. Selection uses the
+registered dose chains; consuming the selected vessel still goes through the
+normal drink restrictions, effects, messages, animation and cooldowns.
+Guthix rest is available as a partial treatment when no stronger supported
+potion is carried.
+
+Relative strength follows the Wiki's increasing poison protection tiers and
+explicit anti-venom upgrades. Antipoison/mix, superantipoison/Sanfew, and
+Antidote+/mix share their respective treatment strength. Different families at
+the same strength retain their existing inventory precedence: their exact live
+tie priority has not been established. Non-potion fallback selection and remedies
+not yet registered by Potions remain separate work; this does not establish
+complete health-orb or poison/venom parity.
+
+`tests/health-orb-potion-selection.test.cjs` checks all pairwise supported tier
+comparisons for both afflictions, dose ties, mixes, partial tea, noted items,
+unrelated potions and the existing drink cooldown.
