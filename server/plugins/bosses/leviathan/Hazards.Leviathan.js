@@ -13,7 +13,7 @@ class Hazards {
     this.pathfinder = null;
     this.tornado = null;
     this.pathCentre = null;
-    this.pathReadyAt = Infinity;
+    this.pathNext = null;
     const { west, east, south, north } = Common.data.arena;
     for (let x = west; x <= east; x++) for (let y = south; y <= north; y++) {
       if ((this.session.area.getClip(this.session.tile([x, y])) & 0x200100) === 0) this.floor.add(Model.key([x, y]));
@@ -105,18 +105,35 @@ class Hazards {
     this.pathfinder = this.session.spawn(Common.ids.npcs.pathfinder, [this.pathCentre[0] - 1, this.pathCentre[1] - 1]);
     this.pathfinder?.setScriptedMovement(true);
     this.pathfinder?.setFlag(Common.core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
-    this.pathReadyAt = this.fight.tick + 2;
-    this.pathNext = this.pathReadyAt + Common.data.inferred.pathStepTicks;
+    this.pathNext = null;
     this.pathDestination = (this.pathIndex + 1) % corners.length;
     this.pathfinder?.performGraphic(Common.graphic("aura"));
   }
-  pathReady() { return !!this.pathfinder?.isRegistered?.() && this.fight.tick >= this.pathReadyAt; }
+  pathReady() { return !!this.pathfinder?.isRegistered?.(); }
   inAura() { return this.pathReady() && Model.inAura(this.pathCentre, this.playerTile(), this.fight.awakened); }
   stepToward(from, to) {
-    const dx = Math.sign(to[0] - from[0]), dy = Math.sign(to[1] - from[1]);
-    const candidates = [[dx, dy], [dx, 0], [0, dy], ...ADJACENT].filter(([x, y]) => x || y)
-      .map(([x, y]) => [from[0] + x, from[1] + y]);
-    return candidates.find(at => this.open(at) && Model.distance(at, to) < Model.distance(from, to)) ?? from;
+    if (Model.key(from) === Model.key(to) || !this.open(to)) return from;
+    const visited = new Set([Model.key(from)]), queue = [{ tile: from, first: null }];
+    // Every queued tile is in the finite arena floor (plus the starting tile),
+    // so a sealed route terminates without an arbitrary search limit.
+    for (let index = 0; index < queue.length; index++) {
+      const { tile, first } = queue[index];
+      const dx = Math.sign(to[0] - tile[0]), dy = Math.sign(to[1] - tile[1]);
+      for (const [x, y] of [[dx, dy], [dx, 0], [0, dy], ...ADJACENT]) {
+        if (!x && !y) continue;
+        const next = [tile[0] + x, tile[1] + y], key = Model.key(next);
+        if (visited.has(key) || !this.open(next)) continue;
+        if (x && y && (!this.open([tile[0] + x, tile[1]]) || !this.open([tile[0], tile[1] + y]))) continue;
+        const start = this.session.tile(tile), end = this.session.tile(next);
+        if (!Common.core.RegionManager.canMove(start.getX(), start.getY(), end.getX(), end.getY(),
+          start.getZ(), 1, 1, this.session.area)) continue;
+        const step = first ?? next;
+        if (key === Model.key(to)) return step;
+        visited.add(key);
+        queue.push({ tile: next, first: step });
+      }
+    }
+    return from;
   }
   spawnTornado() {
     if (this.tornado) return;
@@ -129,12 +146,15 @@ class Hazards {
   }
   process() {
     const fight = this.fight;
-    if (this.pathfinder && fight.tick >= this.pathNext) {
-      const target = Common.data.arena.pathCorners[this.pathDestination];
-      this.pathCentre = this.stepToward(this.pathCentre, target);
-      if (Model.key(this.pathCentre) === Model.key(target)) this.pathDestination = (this.pathDestination + 1) % 4;
-      this.pathfinder.exactMove(this.session.tile([this.pathCentre[0] - 1, this.pathCentre[1] - 1]));
-      this.pathNext = fight.tick + Common.data.inferred.pathStepTicks;
+    if (this.pathReady()) {
+      if (this.pathNext === null) this.pathNext = fight.tick + Common.data.inferred.pathStepTicks;
+      if (fight.tick >= this.pathNext) {
+        const target = Common.data.arena.pathCorners[this.pathDestination];
+        this.pathCentre = this.stepToward(this.pathCentre, target);
+        if (Model.key(this.pathCentre) === Model.key(target)) this.pathDestination = (this.pathDestination + 1) % 4;
+        this.pathfinder.exactMove(this.session.tile([this.pathCentre[0] - 1, this.pathCentre[1] - 1]));
+        this.pathNext = fight.tick + Common.data.inferred.pathStepTicks;
+      }
     }
     if (fight.awakened && fight.boss.getHitpoints() <= fight.stats.hitpoints / 2) this.spawnTornado();
     if (this.tornado && fight.tick >= this.tornadoNext) {
@@ -158,6 +178,7 @@ class Hazards {
       Common.api.removeNpc(npc);
     }
     this.pathfinder = null; this.pathCentre = null; this.tornado = null;
+    this.pathNext = null;
   }
 }
 module.exports = { Hazards };
