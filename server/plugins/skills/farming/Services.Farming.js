@@ -23,7 +23,7 @@ function cropRewards(player, crop) {
     core.PluginManager.emitCustomEvent("farming:success", { player, skill: core.Skill.FARMING,
         petChance: (base - 25 * level) / (player.getSkillManager().getExperience(core.Skill.FARMING) >= 200000000 ? 15 : 1) });
     if (crop.type === "HESPORI" || Patches.farmFor(player).disableHesporiSeeds) return;
-    const denominator = ["BARLEY", "HAMMERSTONE"].includes(crop.key) ? 244 : crop.key === "LIMPWURT" ? 449 : Math.floor(base / 500);
+    const denominator = ["BARLEY", "HAMMERSTONE"].includes(crop.key) ? 244 : Math.floor(base / 500);
     if (Math.random() < 1 / denominator) {
         if (player.getInventory().getFreeSlots() || player.getInventory().contains(Data.itemId("Hespori seed"))) Patches.give(player, Data.itemId("Hespori seed"));
         else core.ItemOnGroundManager.registers(player, new core.Item(Data.itemId("Hespori seed")));
