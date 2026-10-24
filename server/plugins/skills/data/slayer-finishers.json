@@ -8,6 +8,13 @@
       "tooStrong": "The gargoyle isn't weak enough to be affected by the rock hammer."
     },
     {
+      "names": ["Dusk", "Dawn"], "threshold": 9, "unlockBit": 0,
+      "items": [4162, 21742], "consumed": [21754], "animation": 401,
+      "_messages": "unverified: no capture of the Guardians' finishing blow",
+      "finished": "You smash the Guardian with your hammer.",
+      "tooStrong": "The Guardian isn't weak enough to be affected by the hammer."
+    },
+    {
       "names": ["Rockslug", "Giant rockslug"], "threshold": 5, "unlockBit": 1,
       "consumed": [4161], "weapons": [11037],
       "finished": "The rockslug shrivels up and dies.",
