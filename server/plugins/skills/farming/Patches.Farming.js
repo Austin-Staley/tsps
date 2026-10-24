@@ -456,14 +456,14 @@ function itemOnObject(event) {
     if (!gate(player) || !player.getInventory().contains(id)) return;
     Model.advanceFarm(farmFor(player), Date.now());
     const state = stateFor(player, patch);
-    if (patch.type.includes("COMPOST")) { Services.binAction(player, patch, "", id); syncPatch(player, patch); return; }
+    if (patch.type.includes("COMPOST")) { Services.binAction(player, patch, "", id, event.itemSlot); syncPatch(player, patch); return; }
     if (Data.SEEDS.has(id)) plant(player, patch, id);
     else if (id === Data.itemId("Rake")) startWork(player, patch, "rake");
     else if (id === Data.itemId("Spade") && patch.type === "HESPORI" && state.status === "grown") Hespori.harvestHespori(player, patch);
     else if (id === Data.itemId("Spade")) dig(player, patch);
     else if (id === Data.itemId("Plant cure") || id === Data.itemId("Secateurs") || id === Data.itemId("Magic secateurs")) cure(player, patch, true, id);
     else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id);
-    else if (core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket") Services.useBottomless(player, patch, id);
+    else if (core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket") Services.useBottomless(player, patch, id, event.itemSlot);
     else if (id === Data.itemId("Amulet of Nature")) {
         farmFor(player).boundPatch = Data.patchKey(patch);
         farmFor(player).boundStatus = state.crop ? state.status : "empty";
