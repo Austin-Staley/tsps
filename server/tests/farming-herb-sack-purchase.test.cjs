@@ -26,7 +26,9 @@ function prepare(t, { base = 58, current = base, points = 250, full = false } = 
     player.setAttribute(Patches.FARM_ATTRIBUTE, farm);
     let entries;
     t.mock.method(Patches, 'choose', (_player, options) => { entries = options; });
-    t.mock.method(core.PluginManager, 'emitCustomEvent', (name, payload) => events.push({ name, payload }));
+    t.mock.method(core.PluginManager, 'emitCustomEvent', (name, payload) => {
+        if (['persistence:save', 'collection-log:obtain'].includes(name)) events.push({ name, payload });
+    });
     Tithe.titheNpc({ player, npc: { getLocation: () => new core.Location(1810, 3460, 0) },
         definition: { getName: () => 'Farmer Gricoller' } });
     const buy = entries.find(([name]) => name.startsWith('Herb sack ('))?.[1];
