@@ -2,26 +2,23 @@
 
 24 October 2026 audit of the progress tracker's Status effects task 4.
 
-The authoritative logout calls `TaskManager.cancelTasks(player)` before taking
-the save snapshot. `CombatPoisonEffect.stop()` currently clears the affliction,
-so logout saves a cured player. Loading an existing poisoned save restores the
-fields but `Player.onLogin()` does not restart their damage task. The task also
-does not reject a registered actor already at zero HP.
+Previously, logout cancelled player tasks before taking the save snapshot, and
+the poison task's stop method cured the affliction. Loading an afflicted save
+restored its fields without resuming damage. Registered actors at zero HP could
+also receive another poison hit.
 
-Plan: first reproduce these paths through real Player logout, PlayerSave loading,
-and the poison task. Separate stopping a scheduled callback from curing the
-affliction, give each actor one current poison-task owner, and resume that owner
-after login. Explicit cure, immunity, death and natural expiry must still clear
-the affliction; stale/replaced or unregistered tasks must not damage or erase it.
-Keep save schema and existing poison/venom progression unchanged. Do not import
-the separately published NPC-immunity or cadence changes into this PR.
+Callback cancellation is now separate from curing. Each actor has one current
+poison-task owner, resumed after login and explicitly suspended before logout
+saving. Explicit cures, death and natural expiry terminate the affliction;
+stale/replaced or unregistered callbacks cannot damage or erase a newer effect.
+Protection alone is not an explicit cure; that separate application/effect
+contract is outside this lifecycle correction. Save schema and existing damage
+progression remain unchanged, with NPC immunity/cadence corrections in #930.
 
 Independent review also found `State.PlayerBots.resetMovementState` cancelling
-all player-keyed tasks while the player remains registered. The status task must
-therefore own a distinct key and be explicitly suspended at logout; otherwise
-separating cancellation from cure would leave a poisoned bot without damage.
-Reproduce this cancellation before changing task ownership. Ordinary activity
-cancellation must retain both affliction and its existing countdown.
+all player-keyed tasks while the player remains registered. Status tasks now
+have distinct keys and explicit logout suspension. Ordinary activity cancellation
+retains both affliction and its existing countdown.
 
 Primary rules: [Poison](https://oldschool.runescape.wiki/w/Poison) and
 [Venom](https://oldschool.runescape.wiki/w/Venom), retrieved 24 October 2026.
