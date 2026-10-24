@@ -123,3 +123,37 @@ the NPC stationary and suppresses the in-flight player bind. Existing impact/pha
 assertions remain; the old mock-route test now distinguishes queue preparation+4
 from actual movement+5. Natural player expiry8versus9, optional binding selection,
 post-melee recovery and the remaining ordinary numerical gaps remain unresolved.
+
+## Paired melee retaliation, 24 October 2026
+
+The current [Whisperer Speed-Runner strategy](https://oldschool.runescape.wiki/w/Whisperer_Speed-Runner)
+explicitly recommends double Vengeance on the two equal melee hits. The prior
+raw HitDamage path bypassed Vengeance and recoil entirely: real-player regressions
+left Vengeance active and the boss at 900 HP despite damage to the player.
+
+Both physical strikes now use the normal PendingHit/CombatFactory queue. Their
+single original damage roll, partial-prayer snapshot and one-tick separation are
+retained. A generic optional `PendingHitConfig.bypassProtectionPrayer` flag
+(default false) prevents ordinary full prayer blocking from being reapplied to
+the already mitigated amount. Armour effects occur once per impact; an actual
+Elysian regression rejected a dummy zero-hit workaround that produced two effects.
+The explicit flag also reaches multi-hit and first-success special roll paths;
+callers that omit it retain existing behavior.
+
+Real recoil and Vengeance regressions cover both strikes, rearmed Vengeance
+between them, protected chip and ordinary hazard controls. Player HP and its
+perfect-kill callback resolve before reflected damage reaches the next NPC pass.
+A lethal reflected hit freezes the already-imperfect result and cancels the
+second strike. Finish/departure zero both the pending parts and their cached
+PendingHit total; otherwise a cancelled zero hit could still consume retaliation.
+Applied hits release their tracked references.
+
+Test fixtures now use the actual World clock when processing scheduled hits and
+complete the binding test's setup teleport before accepting combat. Fresh build
+and 85 Whisperer plus 7 HitQueue checks pass (92/92). Independent code review
+found no important issue and independently repeated those 92 checks. Full-suite,
+native staging and local integration results are reported with the PR.
+
+This fixes the published retaliation behavior, not the unresolved melee damage
+distribution, rounding, recovery, freeze duration or optional-bind RNG. No client,
+Claude content or generated data is changed.

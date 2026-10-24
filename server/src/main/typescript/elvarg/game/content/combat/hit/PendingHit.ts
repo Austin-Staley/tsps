@@ -24,6 +24,8 @@ type PendingHitConfig = {
     experience?: boolean;
     /** A pre-rolled damage value, still passing through damage hooks and the HP cap. */
     damage?: number;
+    /** Already-mitigated scripted damage may bypass ordinary protection prayers. */
+    bypassProtectionPrayer?: boolean;
     /** Shared across one attack's hits on the same victim; applied after queue-time modifiers. */
     damageBudget?: { remaining: number };
 };
@@ -82,7 +84,9 @@ export class PendingHit {
             }
         }
 
-        this.hits = this.prepareHits(resolvedHitAmount, resolvedRollAccuracy, typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined);
+        this.hits = this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
+            typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
+            typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true);
         this.delay = Math.max(0, resolvedDelay);
         this.handleAfterHitEffects = resolvedHandleAfterHitEffects;
     }
@@ -165,7 +169,7 @@ export class PendingHit {
         return this.hitDelays;
     }
 
-    private prepareHits(hitAmount: number, rollAccuracy: boolean, fixedDamage?: number): HitDamage[] {
+    private prepareHits(hitAmount: number, rollAccuracy: boolean, fixedDamage?: number, bypassProtectionPrayer = false): HitDamage[] {
         // Check the hit amounts.
         if (hitAmount > 4) {
             throw new Error(
@@ -213,7 +217,7 @@ export class PendingHit {
         };
 
         if (hitAmount === 1) {
-            const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
+            const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer };
             PluginManager.emitCombatHitRoll(roll);
             if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
             const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
@@ -240,7 +244,7 @@ export class PendingHit {
         }
 
         if (traits?.firstSuccessfulAccuracyDamageRanges?.length) {
-            const resolvedBranch = this.resolveFirstSuccessfulRanges(traits, capToRemaining);
+            const resolvedBranch = this.resolveFirstSuccessfulRanges(traits, capToRemaining, bypassProtectionPrayer);
             if (resolvedBranch) {
                 return resolvedBranch;
             }
@@ -250,7 +254,7 @@ export class PendingHit {
         let firstAccurate: boolean | undefined;
         let firstBounds: SpecialDamageBounds | undefined;
         for (let i = 0; i < hits.length; i++) {
-            const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
+            const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer };
             PluginManager.emitCombatHitRoll(roll);
             if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
             let resolved: { accurate: boolean; bounds?: SpecialDamageBounds };
@@ -369,7 +373,8 @@ export class PendingHit {
      */
     private resolveFirstSuccessfulRanges(
         traits: WeaponSpecialTraits,
-        capToRemaining: (damage: HitDamage) => HitDamage
+        capToRemaining: (damage: HitDamage) => HitDamage,
+        bypassProtectionPrayer = false
     ): HitDamage[] | null {
         const ranges = traits.firstSuccessfulAccuracyDamageRanges ?? [];
         if (ranges.length === 0) {
@@ -393,7 +398,8 @@ export class PendingHit {
                 maximumMultiplier: range.maximumDamageMultiplier,
                 reduction: range.maximumDamageReduction ?? 0,
             };
-            const base = CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, false, bounds).getDamage();
+            const base = CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, bypassProtectionPrayer, bounds).getDamage();
+            if (bypassProtectionPrayer) this.protectionBypassed = true;
             const distributed = range.distributeDamage?.(base, hitCount);
             const hits: HitDamage[] = [];
             let total = 0;
