@@ -85,6 +85,21 @@ test('paid snapshots are visible only inside actual hit calculations, not later 
   core.DamageFormulas.getMagicMaxhit(f.p);assert.equal(f.p.getAttribute('cast-context-test:calculation'),null);
 });
 
+test('paid hit calculations retain their context while preserving explicit protection-prayer bypass',t=>{
+  const f=fixture(t);f.p.setAttribute('cast-context-test:bounds',true);
+  assert.equal(f.spell.canCast(f.p,true),true);
+  const context=core.Spell.getCastContext(f.p,f.spell),target=new Player(null);
+  target.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MAGIC]=true;
+  t.mock.method(core.Misc,'randomInclusive',(_minimum,maximum)=>maximum);
+  for(const bypassProtectionPrayer of [false,true]){
+    const hit=new core.PendingHit(f.p,target,new core.MagicCombatMethod(),{rollAccuracy:false,bypassProtectionPrayer},true,context);
+    assert.equal(hit.getSpellContext(),context);
+    assert.equal(f.p.getAttribute('cast-context-test:calculation'),context);
+    assert.equal(hit.getTotalDamage(),bypassProtectionPrayer?9:5);
+    assert.equal(core.Spell.getCalculationContext(f.p,f.spell),null);
+  }
+});
+
 test('nested and throwing roll scopes restore their previous context',t=>{
   const f=fixture(t);f.spell.canCast(f.p,true);const context=core.Spell.getCastContext(f.p,f.spell);
   core.Spell.withCastContext(f.p,context,()=>{

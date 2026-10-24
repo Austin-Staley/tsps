@@ -59,7 +59,9 @@ function fixture(spellbook) {
     boss.setHitpoints(900);
     const fight = session.fight = new Fight(session, boss);
     boss.__whispererFight = fight;
-    let cycle = 100;
+    // Real PendingHits use the absolute World cycle; do not process them on an
+    // unrelated test clock after achievement fixtures advance that cycle.
+    let cycle = Math.max(100, core.World.getProcessCycle());
     const apply = () => player.getCombat().getHitQueue().process(++cycle);
     return { player, session, boss, fight, apply };
 }
@@ -68,6 +70,225 @@ function startSpecial(fight,kind) {
     const preparation={seeds:6,screech:5,souls:4}[kind];
     for(let tick=0;tick<preparation;tick++) Specials.process(fight);
 }
+
+test('the three-tile Whisperer can follow the recorded diagonal pursuit steps with its whole footprint', t => {
+    const f = fixture();
+    assert.equal(f.boss.getSize(),3);
+    f.boss.setNpcTransformationId(Common.data.npcs.melee);
+    assert.equal(f.boss.getSize(),3);
+    f.boss.setNeedsPlacement(false);
+    f.boss.setScriptedMovement(true);
+    // RSProx3285, normal actor12205:23066→23067→23068. The player stays
+    // at2649,6369; the boss walks2655,6360→2654,6361→2653,6362.
+    f.boss.setLocation(new core.Location(2655,6360,0));
+    f.player.setLocation(new core.Location(2649,6369,0));
+    const queue=f.boss.getMovementQueue();
+    queue.reset();
+    queue.addStep(2649,6369);
+    let cycle=23066;
+    t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    for(const [x,y] of [[2654,6361],[2653,6362]]) {
+        cycle++;
+        queue.beginCycle();
+        queue.process();
+        assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()],[x,y]);
+    }
+});
+
+test('a blocked outer footprint corner makes the Whisperer square the diagonal instead of clipping through it', () => {
+    const f=fixture();
+    f.boss.setNeedsPlacement(false);
+    f.boss.setScriptedMovement(true);
+    f.boss.setLocation(new core.Location(2655,6360,0));
+    // This tile is inside the proposed3x3 northwest footprint, outside the
+    // starting footprint and outside the safe west-only fallback footprint.
+    const corner=new core.Location(2654,6363,0);
+    f.session.area.setClip(corner,core.RegionManager.BLOCKED_TILE);
+    assert.equal(core.RegionManager.blocked(corner,f.session.area),true);
+    const queue=f.boss.getMovementQueue();
+    queue.reset();
+    queue.addStep(2649,6369);
+    queue.beginCycle();
+    queue.process();
+    assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()],[2654,6360]);
+});
+
+
+function pursuitWorldPasses(t,f) {
+    let cycle=0;
+    t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    f.player.setNeedsPlacement(false);
+    f.boss.setNeedsPlacement(false);
+    f.boss.setScriptedMovement(true);
+    return () => {
+        cycle++;
+        // World.process runs NPC mechanics before player timers and area.
+        f.boss.getTimers().process();
+        f.boss.getMovementQueue().beginCycle();
+        f.boss.getMovementQueue().process();
+        f.player.getTimers().process();
+        f.fight.process();
+    };
+}
+
+test('normal binding takes its first actual pursuit step at cast plus five, not one movement pass later',t=>{
+    const f=fixture(),step=pursuitWorldPasses(t,f);
+    const origin=f.boss.getLocation().clone();
+    f.fight.bind();
+    for(let n=0;n<4;n++)step();
+    assert.ok(f.boss.getLocation().equals(origin),'no first step through cast+4');
+    step();
+    assert.equal(f.fight.tick,5);
+    assert.equal(f.boss.getLocation().equals(origin),false,'recorded NPC firstWALK+5 must reach the movement queue in time');
+});
+
+test('preparing pursuit a movement pass earlier does not advance already-adjacent melee',t=>{
+    const f=fixture(),step=pursuitWorldPasses(t,f),melee=[];
+    f.player.setLocation(new core.Location(2656,6372,0));
+    const original=f.fight.melee.bind(f.fight);
+    t.mock.method(f.fight,'melee',()=>{melee.push(f.fight.tick);original();});
+    f.fight.bind();
+    for(let n=0;n<4;n++)step();
+    assert.deepEqual(melee,[]);
+    step();
+    assert.deepEqual(melee,[5]);
+});
+
+test('a real counter between pursuit route preparation and the NPC pass prevents the first step',t=>{
+    const f=fixture(),step=pursuitWorldPasses(t,f);
+    f.boss.setFlag('combat:freezable',true);
+    const origin=f.boss.getLocation().clone();
+    f.fight.bind();
+    for(let n=0;n<4;n++)step();
+    assert.ok(f.boss.getMovementQueue().hasPendingWork(),'next NPC pass has a prepared pursuit route');
+    core.CombatFactory.freezeTicks(f.boss,20);
+    step();
+    step();
+    assert.ok(f.boss.getLocation().equals(origin),'the counter cancels prepared movement');
+    assert.equal(f.fight.boundUntil,0);
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false,'the counter also suppresses the in-flight player bind');
+});
+
+test('generic pre-rolled hits retain ordinary prayer blocking unless explicit mitigation bypass is requested', () => {
+    for(const bypassProtectionPrayer of [false,true]) {
+        const f=fixture();
+        f.player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE]=true;
+        const method=new(class extends core.CombatMethod {type(){return core.CombatType.MELEE;}hits(){return[];}})();
+        const hit=new core.PendingHit(f.boss,f.player,method,{damage:28,rollAccuracy:false,bypassProtectionPrayer});
+        assert.equal(hit.getTotalDamage(),bypassProtectionPrayer?28:0);
+    }
+});
+
+for (const protectedMelee of [false, true]) test(`paired melee supports rearmed real Vengeance with protected=${protectedMelee}`, t => {
+    const f = fixture();
+    t.mock.method(Math, 'random', () => 0.999);
+    f.player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE] = protectedMelee;
+    const damage = protectedMelee ? 28 : 42, returned = Math.floor(damage * .75);
+    f.player.setHasVengeance(true);
+    f.fight.melee();
+    f.apply();
+    assert.equal(f.player.getHitpoints(), 99 - damage);
+    assert.equal(f.player.hasVengeanceReturn(), false, 'first impact consumes Vengeance');
+    f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.boss.getHitpoints(), 900 - returned);
+    // A second successful cast between impacts must trigger on the second hit.
+    f.player.setHasVengeance(true);
+    f.fight.process();
+    f.apply();
+    f.boss.getCombat().getHitQueue().process(102);
+    assert.equal(f.player.getHitpoints(), 99 - damage * 2);
+    assert.equal(f.player.hasVengeanceReturn(), false);
+    assert.equal(f.boss.getHitpoints(), 900 - returned * 2);
+    assert.equal(f.fight.perfectKill, protectedMelee);
+});
+
+test('both real melee impacts expend recoil according to the applied paired damage', t => {
+    const f = fixture();
+    t.mock.method(Math, 'random', () => 0.999);
+    f.player.getEquipment().set(core.Equipment.RING_SLOT, new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    f.fight.melee();
+    f.apply();
+    f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.boss.getHitpoints(), 895);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 5);
+    f.fight.process();
+    f.apply();
+    f.boss.getCombat().getHitQueue().process(102);
+    assert.equal(f.boss.getHitpoints(), 890);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 10);
+});
+
+test('physical melee applies the actual Elysian reaction only once per impact', t => {
+    const f=fixture(),graphics=[];
+    f.player.getEquipment().set(core.Equipment.SHIELD_SLOT,new core.Item(core.ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
+    t.mock.method(Math,'random',()=>0);
+    t.mock.method(f.player,'performGraphic',graphic=>graphics.push(graphic.getId()));
+    f.fight.melee();f.apply();
+    assert.equal(f.player.getHitpoints(),78,'28 reduced by one 25-percent shield reaction');
+    assert.deepEqual(graphics,[321]);
+    f.fight.process();f.apply();
+    assert.equal(f.player.getHitpoints(),57);
+    assert.deepEqual(graphics,[321,321]);
+});
+
+test('lethal melee reflection follows player HP and cancels the second strike in real NPC-before-player order', t => {
+    let cycle=100;
+    t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    const f=fixture();
+    t.mock.method(Math,'random',()=>.999);
+    t.mock.method(PluginManager,'emitNpcBeforeDeath',event=>{beforeDeath(event);return event.preventDeath;});
+    f.player.getEquipment().set(core.Equipment.RING_SLOT,new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    f.fight.enraged=true;f.fight.nextAttack=Infinity;f.fight.startedSpecials=3;
+    f.boss.setHitpoints(5);
+    // The player's HP pass has already run when its area queues this melee.
+    f.player.getCombat().getHitQueue().process(cycle);
+    f.fight.melee();
+    assert.equal(f.player.getHitpoints(),99);
+    cycle++;
+    f.boss.getCombat().getHitQueue().process(cycle);
+    f.player.getCombat().getHitQueue().process(cycle);
+    f.fight.process(); // Queue the second strike after the HP pass.
+    assert.equal(f.player.getHitpoints(),57);
+    assert.equal(f.boss.getHitpoints(),5,'reflection waits for the next NPC pass');
+    assert.equal(f.fight.perfectKill,false);
+    assert.equal(f.fight.over,false);
+    cycle++;
+    f.boss.getCombat().getHitQueue().process(cycle);
+    assert.equal(f.boss.getHitpoints(),0);
+    assert.equal(f.fight.over,true);
+    assert.equal(f.fight.perfectKill,false,'lethal grade includes the actual preceding damage');
+    assert.equal(f.fight.elapsedTicks,2);
+    f.player.getCombat().getHitQueue().process(cycle);
+    assert.equal(f.player.getHitpoints(),57,'the queued second strike cannot land after victory');
+});
+
+for(const terminal of ['finish','stop']) test(`queued physical melee does not consume retaliation after ${terminal}`, t=>{
+    const f=fixture();
+    f.player.setHasVengeance(true);
+    f.player.getEquipment().set(core.Equipment.RING_SLOT,new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    f.fight.melee();
+    assert.equal([...f.fight.pendingDamage][0].getSource(),f.boss);
+    f.fight[terminal]();
+    f.apply();f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.player.getHitpoints(),99);
+    assert.equal(f.boss.getHitpoints(),900);
+    assert.equal(f.player.hasVengeanceReturn(),true);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),undefined);
+    assert.equal(f.fight.perfectKill,true);
+});
+
+test('ordinary hazard damage retains its non-reflecting path', () => {
+    const f=fixture();
+    f.player.setHasVengeance(true);
+    f.player.getEquipment().set(core.Equipment.RING_SLOT,new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    Common.damage(f.fight,20,20);
+    f.apply();f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.player.getHitpoints(),79);
+    assert.equal(f.boss.getHitpoints(),900);
+    assert.equal(f.player.hasVengeanceReturn(),true);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),undefined);
+    assert.equal(f.fight.sanity,80);
+});
 test('cache identities distinguish spawn, boss, soul, effect and animation', () => {
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.boss).name, 'The Whisperer');
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.figure).name, 'Odd Figure');
@@ -819,7 +1040,7 @@ test('wake holds the Odd Figure for four ticks and launches the first shot at wa
 });
 
 
-test('binding uses captured packet constants and a provisional six-tick impact with pursuit beginning at five', t => {
+test('binding retains captured packet constants and prepares its route before the fifth-tick NPC movement pass', t => {
     const f=fixture(), packets=[], steps=[];
     const sender=new Proxy({}, {get:(_,key)=>key==='sendProjectile'?((...args)=>packets.push(args)):(()=>sender)});
     f.player.getPacketSender=()=>sender;
@@ -832,11 +1053,13 @@ test('binding uses captured packet constants and a provisional six-tick impact w
     assert.deepEqual([packet[0].getX(),packet[0].getY(),packet[1].getX(),packet[1].getY()],[2656,6370,2659,6378]);
     f.player.moveTo(new core.Location(2660,6379,0));
     assert.equal(packet[1].getX(),2659,'flight endpoint is the cast-time snapshot');
-    for(let i=0;i<4;i++)f.fight.process();
+    for(let i=0;i<3;i++)f.fight.process();
     assert.deepEqual(steps,[]);
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
     f.fight.process();
-    assert.deepEqual(steps,[5]);
+    assert.deepEqual(steps,[4]);
+    f.fight.process();
+    assert.deepEqual(steps,[4,5]);
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
     f.fight.process();
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
@@ -902,6 +1125,8 @@ test('binding impact shows its target graphic once at the scheduled impact and a
 test('a binding melee attack retains its form through both hits and restores before its following volley', () => {
     const f = fixture();
     f.player.moveTo(new core.Location(2655, 6372, 0));
+    // Complete the setup teleport before the real combat resolver accepts hits.
+    f.player.setNeedsPlacement(false);
     f.fight.bind();
     for (let tick = 0; tick < 5; tick++) f.fight.process();
     f.apply();

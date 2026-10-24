@@ -22,7 +22,8 @@ The existing player rounding is retained, not presented as independently capture
 rounding at every level boundary.
 
 The six spells explicitly declare zero direct damage. Generic magic maximum calculation
-now recognizes explicit zero instead of replacing it with the old fallback of one.
+now recognizes explicit zero instead of replacing it with the old fallback of one,
+and keeps it at zero before any flat damage additions, including Count Draynor's garlic bonus.
 CombatEffectSpell accepts optional maximum metadata while retaining the existing negative
 sentinel for unspecified spells. Binding-spell damage is a separate audit: the current
 Snare page's infobox and the original Wiki calculator/general spell table disagree.
