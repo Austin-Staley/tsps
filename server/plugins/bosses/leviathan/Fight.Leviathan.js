@@ -1,6 +1,7 @@
 const Common = require("./Common.Leviathan");
 const Model = require("./Model.Leviathan");
 const { Hazards } = require("./Hazards.Leviathan");
+const Achievements = require('./Achievements.Leviathan');
 
 class Fight {
   constructor(session) {
@@ -13,6 +14,7 @@ class Fight {
     this.rewarded = false; this.nextAttack = Common.data.inferred.firstAttackTicks;
     this.startCycle = Common.core.World.getProcessCycle();
     this.hazards = new Hazards(this);
+    Achievements.begin(this);
   }
   at(ticks, action) { this.events.push({ at: this.tick + Math.max(1, ticks), action }); }
   alive() { return !this.over && !this.stopped && !this.session.ended && this.session.fight === this && this.boss?.isRegistered() && this.boss.getHitpoints() > 0 && this.player.getHitpoints() > 0; }
@@ -121,12 +123,14 @@ class Fight {
   fell() {
     if (this.over || this.stopped) return;
     this.over = true; this.finishedTicks = Math.max(1, Common.core.World.getProcessCycle() - this.startCycle);
+    Achievements.end(this);
     this.events = []; this.cancelDamage(); this.hazards.clear();
     Common.api.emitCustomEvent("boss-hud:hide", { player: this.player, fade: false, afterTicks: 0 });
   }
   stop() {
     if (this.stopped) return;
     this.stopped = true; this.events = []; this.cancelDamage(); this.hazards.clear();
+    Achievements.end(this);
     if (this.boss?.isRegistered()) {
       if (this.boss.getPrivateArea() === this.session.area) this.session.area.remove(this.boss);
       Common.api.removeNpc(this.boss);
@@ -140,8 +144,7 @@ class Fight {
 }
 const own = npc => npc?.__leviathanFight ?? null;
 function shadowSpell(spell) {
-  const spells = Common.core.CombatSpells;
-  return ["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"].some(name => spells[name].getSpell().spellId() === spell?.spellId?.());
+  return Common.shadowSpell(spell);
 }
 function magicHit({ attacker, target, spell }) {
   const fight = own(target);
@@ -195,6 +198,7 @@ function combatClass() {
   };
 }
 function attach(api) {
+  Achievements.attach(api);
   api.registerNpcCombatMethodProvider(Common.ids.npcs.boss, combatClass());
   api.onCombatHitRoll(hitRoll);
   api.onNpcHitModify(modifyHit);

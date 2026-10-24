@@ -33,6 +33,7 @@ function died({ npc, killer }) {
   const complete = task => Common.api.emitCustomEvent('combat-achievements:complete', { player, task });
   if (awakened) complete('Leviathan Sleeper');
   else {
+    if (fight.unconventional.eligible && fight.unconventional.fired) complete('Unconventional');
     if (fight.perfect && ++session.perfectKills >= 5) complete('Perfect Leviathan');
     if (fight.stuns <= 1) complete('Serpentine Solo');
     const task = { player, npc, onTask: false };

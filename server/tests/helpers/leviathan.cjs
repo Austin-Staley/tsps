@@ -11,7 +11,7 @@ async function initialize() {
   core = PluginManager.getCoreApi();
   core.RegionManager.init();
 }
-function harness(t, awakened = false) {
+function harness(t, awakened = false, startingHitpoints = 99) {
   const Common = require('../../plugins/bosses/leviathan/Common.Leviathan');
   const hooks = new Map(), custom = new Map(), tasks = [], spawned = [], emitted = [], messages = [];
   let cycle = 0;
@@ -28,7 +28,7 @@ function harness(t, awakened = false) {
   p.performGraphic = () => {};
   p.performGraphicInSlot = () => {};
   p.addTickHit = () => {};
-  p.getSkillManager().setCurrentLevel(core.Skill.HITPOINTS, 99);
+  p.getSkillManager().setCurrentLevel(core.Skill.HITPOINTS, startingHitpoints);
   p.getSkillManager().setMaxLevels(core.Skill.HITPOINTS, 99);
   p.getSkillManager().setCurrentLevel(core.Skill.PRAYER, 99);
   const api = new Proxy({
@@ -57,6 +57,8 @@ function harness(t, awakened = false) {
   t.mock.method(PluginManager, 'emitNpcDeath', event => dispatch('onNpcDeath', event));
   t.mock.method(PluginManager, 'emitNpcHitModify', (npc, hit) => { dispatch('onNpcHitModify', { npc, hit }); return hit; });
   t.mock.method(PluginManager, 'emitCombatHitRoll', event => dispatch('onCombatHitRoll', event));
+  t.mock.method(PluginManager, 'emitPlayerDealtDamage', event => dispatch('onPlayerDealtDamage', event));
+  t.mock.method(PluginManager, 'emitCustomEvent', (name, event) => api.emitCustomEvent(name, event));
   Common.init(api);
   const area = new core.TemplatedInstanceArea(7, 8);
   for (const plane of [0, 1]) for (let x = 0; x < 7; x++) for (let y = 0; y < 8; y++)

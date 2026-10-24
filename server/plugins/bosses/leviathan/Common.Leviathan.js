@@ -75,6 +75,11 @@ function projectile(fight, style, flight) {
   new Projectile(Projectile.centreOf(fight.boss), Projectile.centreOf(fight.player), fight.player,
     ids.gfx[style], 0, flight * 30, 60, 20, fight.session.area).withSource(fight.boss).sendProjectile();
 }
+function shadowSpell(spell) {
+  return ["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"].some(name =>
+    core.CombatSpells[name].getSpell().spellId() === spell?.spellId?.());
+}
 module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, protectedFrom, projectile,
+  shadowSpell,
   INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, AWAKENED_BEST_ATTRIBUTE,
   get api() { return api; }, get core() { return core; }, get data() { return data; }, get ids() { return ids; } };
