@@ -194,7 +194,9 @@ function hydraHit({ npc, hit }) {
   hit.updateTotalDamage?.();
   if (fight && !fight.enraged) {
     const total = parts.reduce((sum, part) => sum + part.getDamage(), 0);
-    const room = Math.max(0, npc.getHitpoints() - 1);
+    // All due hits are resolved before their queued damage is applied.
+    const queued = npc.getCombat().getHitQueue().getQueuedDamage();
+    const room = Math.max(0, npc.getHitpoints() - queued - 1);
     if (total > room) {
       let over = total - room;
       for (const part of [...parts].reverse()) {

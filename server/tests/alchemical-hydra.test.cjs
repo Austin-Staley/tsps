@@ -11,12 +11,16 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { NPCDeathTask } = require('../dist/game/task/impl/NPCDeathTask');
 const core = PluginManager.getCoreApi();
 
 let Common, Fight, Lair, Kills, tasks, onTaskAnswer;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  new NpcDefinitionLoader().load();
   Common = require('../plugins/bosses/alchemicalhydra/Common.AlchemicalHydra');
   ({ Fight } = { Fight: require('../plugins/bosses/alchemicalhydra/Fight.AlchemicalHydra').Fight });
   Lair = require('../plugins/bosses/alchemicalhydra/Lair.AlchemicalHydra');
@@ -55,7 +59,7 @@ function fakeHydra(hp = 1100) {
     getHitpoints: () => npc.hitpoints,
     isDyingFunction: () => false,
     performAnimation: (anim) => npc.anims.push(anim),
-    getCombat: () => ({ setAttackDelay: () => {} }),
+    getCombat: () => ({ setAttackDelay: () => {}, getHitQueue: () => ({ getQueuedDamage: () => 0 }) }),
   };
   return npc;
 }
@@ -263,4 +267,112 @@ test('before it is enraged, no hit can take its last hitpoint', () => {
   Lair.hydraHit({ npc, hit: { getAttacker: () => player, getHits: () => parts } });
   assert.equal(parts.reduce((sum, p) => sum + p.getDamage(), 0), 40, 'enraged, it can die');
   fight.stop();
+});
+
+
+for (const lastStyle of ['magic', 'ranged']) {
+  test(`enrage opens opposite the last ${lastStyle} attack, then alternates around its special`, () => {
+    for (const priorBasics of [1, 2, 3]) {
+      const npc = fakeHydra(275);
+      const fight = new Fight(fakeLair(null), npc);
+      fight.phase = 2;
+      fight.style = lastStyle;
+      fight.basics = priorBasics;
+      assert.equal(fight.checkPhase(), true);
+      flush();
+      fight.tickCount = fight.transitionUntil;
+      const kinds = [];
+      for (let i = 0; i < 5; i++) {
+        const kind = fight.nextAttack();
+        kinds.push(kind);
+        fight.counted(kind);
+      }
+      const opposite = lastStyle === 'magic' ? 'ranged' : 'magic';
+      assert.deepEqual(kinds, [opposite, lastStyle, opposite, 'special', lastStyle]);
+      fight.stop();
+    }
+  });
+}
+
+/** Real combat/health/death code, dispatching the plugin's registered hooks. */
+function realFlameFight(t) {
+  tasks = [];
+  let beforeDeath;
+  Kills.attach(new Proxy({ onNpcBeforeDeath: (handler) => { beforeDeath = handler; } }, {
+    get: (target, key) => target[key] ?? (() => {}),
+  }));
+  t.mock.method(PluginManager, 'emitNpcBeforeDeath', (event) => {
+    beforeDeath(event);
+    return event.preventDeath === true;
+  });
+  t.mock.method(PluginManager, 'emitNpcHitModify', (npc, hit) => {
+    Lair.hydraHit({ npc, hit });
+    return hit;
+  });
+  const submitted = [];
+  t.mock.method(core.TaskManager, 'submit', (task) => submitted.push(task));
+  const player = new Player(null, loc(1363, 10265));
+  player.getPacketSender = () => new Proxy({}, { get: () => () => {} });
+  player.setRegistered(true);
+  player.setHitpoints(99);
+  player.setNeedsPlacement(false);
+  const npc = core.NPC.create(Common.ids.npcs.serpentine, loc(1364, 10265));
+  npc.setRegistered(true);
+  npc.setNeedsPlacement(false);
+  const fight = new Fight(fakeLair(null), npc);
+  fight.phase = 2;
+  fight.shielded = false;
+  npc.setNpcTransformationId(Common.ids.npcs.flame);
+  npc.setHitpoints(280); // Valid third-phase HP, just above its 275 threshold.
+  onTaskAnswer = () => true;
+  const method = new (class extends core.CombatMethod {
+    type() { return core.CombatType.RANGED; }
+  })();
+  const hit = (damage) => new core.PendingHit(player, npc, method, {
+    delay: 0, damage, rollAccuracy: false, experience: false, handleAfterHitEffects: false,
+  });
+  const queue = npc.getCombat().getHitQueue();
+  t.after(() => {
+    fight.stop();
+    queue.clear();
+    npc.setRegistered(false);
+    player.setRegistered(false);
+  });
+  return { npc, fight, queue, submitted, hit };
+}
+
+test('same-tick real PendingHits keep one HP until enrage, then schedule normal death', (t) => {
+  const { npc, fight, queue, submitted, hit } = realFlameFight(t);
+  const hits = [hit(100), hit(100), hit(100)];
+  for (const pending of hits) queue.addPendingHit(pending, 100);
+  queue.process(100);
+  assert.deepEqual(hits.map((pending) => pending.getTotalDamage()), [100, 100, 79]);
+  assert.equal(npc.getHitpoints(), 1);
+  assert.notEqual(npc.isDyingFunction(), true);
+  assert.equal(npc.getId(), Common.ids.npcs.flame);
+  assert.equal(submitted.filter((task) => task instanceof NPCDeathTask).length, 0);
+
+  fight.tick([]);
+  flush();
+  fight.tickCount = fight.transitionUntil;
+  assert.equal(fight.enraged, true);
+  assert.equal(npc.getId(), Common.ids.npcs.enraged);
+  queue.addPendingHit(hit(10), 101);
+  queue.process(101);
+  assert.equal(npc.getHitpoints(), 0);
+  assert.equal(npc.isDyingFunction(), true);
+  assert.equal(npc.getId(), Common.ids.npcs.dead);
+  assert.equal(submitted.filter((task) => task instanceof NPCDeathTask).length, 1);
+});
+
+test('direct pending damage cannot bypass the pre-enrage death guard', (t) => {
+  const { npc, fight, queue, submitted } = realFlameFight(t);
+  queue.addPendingDamage([new core.HitDamage(300, core.HitMask.RED), new core.HitDamage(300, core.HitMask.RED)]);
+  queue.process(100);
+  assert.equal(npc.getHitpoints(), 1);
+  assert.equal(npc.getId(), Common.ids.npcs.flame);
+  assert.notEqual(npc.isDyingFunction(), true);
+  assert.equal(submitted.filter((task) => task instanceof NPCDeathTask).length, 0);
+  fight.tick([]);
+  assert.equal(fight.enraged, true, 'the rescued hitpoint still lets the final phase begin');
 });

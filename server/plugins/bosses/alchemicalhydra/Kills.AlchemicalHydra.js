@@ -36,6 +36,13 @@ function slayerXp(kill) {
 /** The kill animation plays as the last form (finaldeath) for its death ticks. */
 function beforeDeath(event) {
   if (!Common.isHydra(event.npc) || event.preventDeath) return;
+  const fight = event.npc.__hydraFight;
+  // Direct damage (such as recoil) can bypass the normal attack modifier.
+  if (fight && !fight.enraged) {
+    event.preventDeath = true;
+    event.npc.setHitpoints(1);
+    return;
+  }
   event.npc.setNpcTransformationId(Common.ids.npcs.dead);
   event.npc.performAnimation(new Common.core.Animation(Common.ids.seqs.death));
 }

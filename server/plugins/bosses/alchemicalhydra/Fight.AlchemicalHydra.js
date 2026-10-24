@@ -90,6 +90,7 @@ class Fight {
     this.attacks = 0;
     this.basics = 0;
     this.shielded = !this.enraged && this.phase < 3;
+    if (this.enraged) this.style = this.style === "ranged" ? "magic" : "ranged";
     Common.later(Common.data.combat.phaseChangeTicks, () => {
       if (this.stopped) return;
       this.npc.setNpcTransformationId(Common.phaseForms()[this.phase]);
