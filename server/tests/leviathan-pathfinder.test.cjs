@@ -185,18 +185,36 @@ test("deferred registration matches spawn-to-walk delay in world task order", t 
   assert.deepEqual(origin(h, hazards.pathfinder), [2075, 6377]);
 });
 
-test('recorded pathfinder bases, footprint-blocked spawn and three-tick first step match normal mode', t => {
+test('recorded normal pathfinder keeps its north-west base beside landed rubble and takes its first step after three ticks', t => {
   const h = H.harness(t), hazards = h.fight.hazards;
   h.fight.nextAttack = Infinity;
   hazards.place([2076, 6378]);
   hazards.spawnPathfinder();
-  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6377, 0]);
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2074, 6377, 0]);
   walk(h, 2);
-  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6377, 0]);
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2074, 6377, 0]);
   walk(h);
-  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6376, 0]);
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2075, 6377, 0]);
   walk(h);
-  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6375, 0]);
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2076, 6377, 0]);
+});
+
+test('normal corner selection ignores diagonal or neighboring rubble and advances only past blocked centres', t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  for (const tile of [[2076,6379], [2088,6378], [2088,6366], [2076,6366]]) assert.equal(hazards.place(tile), true);
+  hazards.spawnPathfinder();
+  assert.deepEqual(hazards.pathCentre, [2075,6378]);
+  hazards.clear();
+  hazards.place([2075,6378]); hazards.place([2088,6378]);
+  hazards.spawnPathfinder();
+  assert.deepEqual(hazards.pathCentre, [2087,6378]);
+});
+
+test('disabled awakened pathfinder keeps its unverified footprint-based corner selection', t => {
+  const h = H.harness(t, true), hazards = h.fight.hazards;
+  hazards.place([2076,6378]); hazards.spawnPathfinder();
+  assert.deepEqual(hazards.pathCentre, [2087,6378]);
 });
 
 test('recorded ethereal pathfinder crosses debris in its route without a collision detour', t => {

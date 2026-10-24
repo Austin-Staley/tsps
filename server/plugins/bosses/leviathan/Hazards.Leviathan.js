@@ -24,8 +24,7 @@ class Hazards {
   }
   playerTile() { return this.session.sourceTile(this.fight.player.getLocation()).slice(0, 2); }
   open(tile) { return this.floor.has(Model.key(tile)) && !this.blockers.has(Model.key(tile)); }
-  nearPool() {
-    const at = this.playerTile();
+  nearPool(at = this.playerTile()) {
     return Model.distance(at, Common.data.arena.centre) <= 6 && ADJACENT.some(([dx, dy]) =>
       !this.floor.has(Model.key([at[0] + dx, at[1] + dy])));
   }
@@ -48,11 +47,11 @@ class Hazards {
     if (!this.floor.has(Model.key(tile))) return;
     const target = [...tile];
     const smokeRock = permanent && !this.fight.awakened;
-    if (smokeRock) Common.smokeProjectile(this.fight, target, delay);
+    if (!this.fight.awakened) Common.tileProjectile(this.fight, target, delay, smokeRock ? 'smokeBoulder' : 'debris');
     else this.graphic(target, "debris");
     this.fight.at(delay, () => {
       if (!this.fight.alive()) return;
-      this.graphic(target, smokeRock ? 'smokeBoulderImpact' : 'debrisImpact');
+      this.graphic(target, smokeRock ? 'smokeBoulderImpact' : this.fight.awakened ? 'debrisImpact' : 'lightning');
       if (Model.key(this.playerTile()) === Model.key(target)) Common.damage(this.fight, Common.random(0, Common.data.damage.debris));
       if (permanent && this.place(target)) this.smokeCover.add(Model.key(target));
     });
@@ -103,10 +102,23 @@ class Hazards {
         this.graphic(target, "lightning");
         if (Model.key(this.playerTile()) === Model.key(target)) Common.damage(fight, Common.random(0, Common.data.damage.lightning));
       });
-      // The side bolts never target the tiles immediately surrounding the pool.
-      const tiles = [...this.floor].map(key => key.split(',').map(Number)).filter(at => Model.distance(at, Common.data.arena.centre) > 6);
-      if (tiles.length) this.drop(Common.pick(tiles), false, delay);
+      if (fight.awakened) {
+        const tiles = [...this.floor].map(key => key.split(',').map(Number)).filter(at => Model.distance(at, Common.data.arena.centre) > 6);
+        if (tiles.length) this.drop(Common.pick(tiles), false, delay);
+      }
     });
+    if (!fight.awakened) {
+      // Ordinary clips show five separated cyan trajectories per repeated
+      // burst, with an approximately six-tick cadence/eight-tick flight. The
+      // filmed boundary uncertainty and unmeasured arc are in the ledger.
+      for (let tick = schedule.firstWarningTicks; tick < schedule.firstWarningTicks + schedule.pulses; tick += schedule.sideIntervalTicks)
+        fight.at(tick, () => {
+          if (!fight.alive() || fight.special !== 'lightning') return;
+          const tiles = [...this.floor].map(key => key.split(',').map(Number)).filter(at => !this.nearPool(at));
+          if (tiles.length) for (let orb = 0; orb < schedule.sideOrbs; orb++)
+            this.drop(Common.pick(tiles), false, schedule.sideFlightTicks);
+        });
+    }
     fight.at(schedule.endAnimationTicks, () => {
       if (fight.alive() && fight.special === "lightning") Common.animate(fight.boss, "lightningEnd");
     });
@@ -150,6 +162,9 @@ class Hazards {
   spawnPathfinder() {
     const corners = Common.data.arena.pathCorners;
     this.pathIndex = corners.findIndex(([cx, cy]) => {
+      // The registered normal actor can overlap neighboring rubble. Only its
+      // centre tile selects another corner (Wiki test and original packets).
+      if (!this.fight.awakened) return this.open([cx, cy]);
       for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++)
         if (!this.open([x, y])) return false;
       return true;

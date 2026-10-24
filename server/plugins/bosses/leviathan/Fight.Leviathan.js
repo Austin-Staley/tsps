@@ -9,6 +9,7 @@ class Fight {
     this.stats = Common.data[this.awakened ? "awakened" : "normal"];
     this.normalKillsAtStart = Common.normalKills(this.player);
     this.tick = 0; this.events = []; this.pendingDamage = new Set(); this.tier = 0; this.shots = 0; this.stuns = 0; this.volleyEpoch = 0;
+    this.bites = 0; this.volleyRoars = 0;
     this.stunnedUntil = 0; this.special = null; this.nextSpecial = Common.pick(["lightning", "smoke"]);
     this.enraged = false; this.perfect = true; this.over = false; this.stopped = false;
     this.rewarded = false; this.nextAttack = Common.data.inferred.firstAttackTicks;
@@ -57,7 +58,13 @@ class Fight {
     }
     if (this.special || this.tick < this.nextAttack) return;
     this.boss.setPositionToFace(this.player.getLocation());
-    if (this.hazards.nearPool()) {
+    // Ordinary GM footage explicitly limits the initial bite to one attempt,
+    // lifting that limit after the third normal roar. The counter survives
+    // stuns/tier resets; enrage and disabled awakened retain their prior path.
+    const canBite = this.awakened || this.enraged || this.bites < Common.data.normalBite.earlyLimit ||
+      this.volleyRoars >= Common.data.normalBite.unlockAfterRoars;
+    if (canBite && this.hazards.nearPool()) {
+      if (!this.awakened) this.bites++;
       Common.animate(this.boss, "bite");
       this.session.biteTails?.();
       if (!Common.protectedFrom(this.player, "melee")) {
@@ -100,6 +107,7 @@ class Fight {
   }
   roar() {
     if (!this.alive()) return;
+    if (!this.awakened && !this.enraged) this.volleyRoars++;
     this.volleyEpoch++;
     Common.animate(this.boss, "roar");
     this.at(1, () => { if (this.alive()) Common.damage(this, Common.random(0, Common.data.damage.roar), false); });

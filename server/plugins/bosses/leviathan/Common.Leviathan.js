@@ -106,18 +106,18 @@ function projectile(fight, style, flight, startup = true) {
   new Projectile(fight.session.tile(mouth), Projectile.centreOf(fight.player), fight.player,
     ids.gfx[style], 30, flight * 30, 137.5, 25, fight.session.area).withAngle(30).withProgress(124).sendProjectile();
 }
-function smokeProjectile(fight, target, flight) {
-  // The Wiki/ordinary footage establish a rock from the mouth to a fixed tile
-  // in two ticks. Reuse recorded orb mouth/arc geometry as a bounded visual
-  // choice; smoke-specific height, slope and progress packets remain unmeasured.
+function tileProjectile(fight, target, flight, name) {
+  // Ordinary footage distinguishes traveling rocks and cyan side orbs from
+  // their landing effects. Their source-specific height/slope/progress fields
+  // remain unmeasured; reuse recorded ordinary-orb geometry as a bounded arc.
   new core.Projectile(fight.session.tile(mouthFor(target)), fight.session.tile(target), null,
-    ids.gfx.smokeBoulder, 0, flight * 30, 137.5, 0, fight.session.area).withAngle(30).withProgress(124).sendProjectile();
+    ids.gfx[name], 0, flight * 30, 137.5, 0, fight.session.area).withAngle(30).withProgress(124).sendProjectile();
 }
 function shadowSpell(spell) {
   return ["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"].some(name =>
     core.CombatSpells[name].getSpell().spellId() === spell?.spellId?.());
 }
-module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, biteDamage, protectedFrom, projectile, smokeProjectile,
+module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, biteDamage, protectedFrom, projectile, tileProjectile,
   shadowSpell,
   INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, AWAKENED_BEST_ATTRIBUTE, DEATHS_ATTRIBUTE,
   get api() { return api; }, get core() { return core; }, get data() { return data; }, get ids() { return ids; } };

@@ -176,23 +176,79 @@ test('smoke sends a native rock to the snapshotted tile and its stay impact land
   assert.equal(graphics.some(([, id]) => id === 2506 || id === 2505), false, 'smoke rocks are neither cyan orbs nor orange smoke columns');
 });
 
-test('the provisional lightning side-orb route retains its cyan cache graphic when smoke is corrected', t => {
-  const h = H.harness(t), graphics = [];
+test('normal lightning sends five traveling cyan side orbs every six ticks and lands native bolts after eight ticks', t => {
+  const h = H.harness(t), graphics = [], projectiles = [];
   t.mock.method(Math, 'random', () => 0);
-  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => graphics.push(graphic.getId()) : () => sender });
+  t.mock.method(h.core.World, 'forEachNetworkPlayer', callback => callback(h.p));
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? (graphic, at) => graphics.push([h.fight.tick, graphic.getId(), h.session.sourceTile(at).slice(0, 2)])
+    : name === 'sendProjectile' ? (...args) => projectiles.push([h.fight.tick, args]) : () => sender });
   h.p.getPacketSender = () => sender;
+  h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial(); h.step(4);
+  assert.equal(projectiles.length, 0);
+  h.step();
+  assert.equal(projectiles.length, 5);
+  assert.ok(projectiles.every(([,args]) => args[4] === 2506 && args[3] === 240 && args[8] === 0));
+  const target = h.session.sourceTile(projectiles[0][1][1]).slice(0, 2);
+  h.step(7);
+  assert.equal(graphics.some(([,id,at]) => id === 2504 && at.join(',') === target.join(',')), false);
+  h.step();
+  assert.equal(graphics.filter(([tick,id,at]) => tick === 13 && id === 2504 && at.join(',') === target.join(',')).length, 5);
+  h.step(30);
+  assert.deepEqual(projectiles.map(([tick]) => tick), [5,11,17,23,29,35].flatMap(tick => Array(5).fill(tick)));
+  assert.equal(graphics.some(([,id]) => [2472,2473,2505,2506].includes(id)), false,
+    'side effects are neither smoke rocks, stationary cyan balls nor smoke columns');
+  assert.equal(h.fight.hazards.blockers.size, 0);
+});
+
+test('lightning side-orb eligibility excludes the actual pool-adjacent ring but includes the next safe row', t => {
+  const h = H.harness(t);
+  let eligible;
+  t.mock.method(h.Common, 'pick', tiles => { eligible = tiles; return tiles[0]; });
   h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial(); h.step(5);
+  const has = tile => eligible.some(at => at.join(',') === tile.join(','));
+  assert.equal(has([2081,6378]), true, 'two rows north of the water is a valid non-adjacent arena tile');
+  assert.equal(has([2081,6377]), false, 'north pool adjacency');
+  assert.equal(has([2076,6372]), false, 'west pool adjacency');
+  assert.equal(has([2077,6367]), false, 'diagonal pool adjacency');
+});
+
+for (const outcome of ['hit', 'adjacent', 'death', 'departure']) test(`a flying normal side orb keeps its one-tile landing and damage boundary (${outcome})`, t => {
+  const h = H.harness(t), target = [2075,6378];
+  h.fight.nextAttack = Infinity;
+  t.mock.method(h.Common, 'random', () => 17);
+  h.move(target); h.prayer('magic');
+  h.fight.hazards.drop(target, false, 8);
+  target[0]++;
+  h.step(7);
+  assert.equal(h.p.getHitpoints(), 99, 'the ball has not landed');
+  if (outcome === 'adjacent') h.move([2076,6378]);
+  if (outcome === 'death') h.fight.fell();
+  if (outcome === 'departure') h.fight.stop();
+  h.step();
+  assert.equal(h.p.getHitpoints(), outcome === 'hit' ? 82 : 99);
+  assert.equal(h.fight.perfect, outcome !== 'hit');
+  assert.equal(h.fight.hazards.blockers.size, 0);
+});
+
+test('disabled awakened lightning retains its prior stationary side presentation', t => {
+  const h = H.harness(t, true), graphics = [], projectiles = [];
+  t.mock.method(Math, 'random', () => 0);
+  t.mock.method(h.core.World, 'forEachNetworkPlayer', callback => callback(h.p));
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => graphics.push(graphic.getId())
+    : name === 'sendProjectile' ? (...args) => projectiles.push(args) : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial(); h.step(3);
   assert.ok(graphics.includes(2506));
-  assert.equal(graphics.includes(2472), false);
-  assert.equal(graphics.includes(2473), false);
+  assert.ok(graphics.includes(2505));
+  assert.equal(projectiles.length, 0);
 });
 
 test('normal lightning stages its native animations and thirty-five pulses across the filmed phase', t => {
   const h = H.harness(t), warnings = [], strikes = [];
   t.mock.method(Math, 'random', () => 0);
-  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => {
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? (graphic, at) => {
     if (graphic.getId() === 2503) warnings.push(h.fight.tick);
-    if (graphic.getId() === 2504) strikes.push(h.fight.tick);
+    if (graphic.getId() === 2504 && h.session.sourceTile(at).slice(0,2).join(',') === h.fight.hazards.playerTile().join(',')) strikes.push(h.fight.tick);
   } : () => sender });
   h.p.getPacketSender = () => sender;
   h.fight.tier = 1;
@@ -228,8 +284,8 @@ test('normal lightning stages its native animations and thirty-five pulses acros
 test('the documented low-health lightning launches a tick earlier than its normal-health counterpart', t => {
   const h = H.harness(t, false, 25), strikes = [];
   t.mock.method(Math, 'random', () => 0);
-  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? graphic => {
-    if (graphic.getId() === 2504) strikes.push(h.fight.tick);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? (graphic, at) => {
+    if (graphic.getId() === 2504 && h.session.sourceTile(at).slice(0,2).join(',') === h.fight.hazards.playerTile().join(',')) strikes.push(h.fight.tick);
   } : () => sender });
   h.p.getPacketSender = () => sender;
   h.fight.nextSpecial = 'lightning'; h.fight.beginSpecial();

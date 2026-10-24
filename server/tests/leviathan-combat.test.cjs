@@ -3,6 +3,31 @@ const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
 
+test('the native cache pool gives exactly forty bite tiles including diagonals, excluding every outer wall', t => {
+  const h = H.harness(t), floor = h.fight.hazards.floor, pool = new Set(), queue = [[2081,6372]];
+  const { west, east, south, north } = h.Common.data.arena;
+  const key = ([x,y]) => `${x},${y}`;
+  // Independently flood only the central blocked-water component. Do not use
+  // the implementation's distance bound to decide which obstruction is pool.
+  for (let i = 0; i < queue.length; i++) {
+    const [x,y] = queue[i], at = [x,y];
+    if (x < west || x > east || y < south || y > north || floor.has(key(at)) || pool.has(key(at))) continue;
+    pool.add(key(at)); queue.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+  assert.equal(pool.size, 77);
+  let biteTiles = 0;
+  for (const entry of floor) {
+    const [x,y] = entry.split(',').map(Number);
+    let adjacent = false;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+      if ((dx || dy) && pool.has(key([x+dx,y+dy]))) adjacent = true;
+    h.move([x,y]);
+    assert.equal(h.fight.hazards.nearPool(), adjacent, entry);
+    if (adjacent) biteTiles++;
+  }
+  assert.equal(biteTiles, 40);
+});
+
 test('cache-backed normal boss and bridge-correct arena are usable', t => {
   const h = H.harness(t);
   assert.equal(h.fight.boss.getId(), 12214);
@@ -42,6 +67,78 @@ for (const effect of ['recoil', 'vengeance']) test(`the real normal bite support
   assert.equal(h.fight.perfect, false);
   if (effect === 'recoil') assert.equal(h.p.getAttribute(h.core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 6);
   else assert.equal(h.p.hasVengeanceReturn(), false);
+});
+
+test('the initial normal bite is limited to one attempt so a protected pool-adjacent player still receives orb volleys', t => {
+  const h = H.harness(t), bites = [], orbs = [];
+  t.mock.method(Math, 'random', () => 0);
+  const animate = h.fight.boss.performAnimation.bind(h.fight.boss);
+  t.mock.method(h.fight.boss, 'performAnimation', animation => {
+    if (animation.getId() === h.Common.ids.seqs.bite) bites.push(h.fight.tick);
+    return animate(animation);
+  });
+  t.mock.method(h.fight, 'orb', () => orbs.push(h.fight.tick));
+  h.move([2076,6372]); h.prayer('melee');
+  h.step(13);
+  assert.deepEqual(bites, [4]);
+  assert.deepEqual(orbs, [7,10,13]);
+  assert.equal(h.fight.shots, 3);
+  assert.equal(h.p.getHitpoints(), 99, 'a protected attempt still consumes the early bite');
+});
+
+test('the normal bite limit is lifted after the third actual volley roar and stays lifted across a tier reset', t => {
+  const h = H.harness(t), bites = [];
+  let roars = 0;
+  t.mock.method(Math, 'random', () => 0);
+  const animate = h.fight.boss.performAnimation.bind(h.fight.boss), roar = h.fight.roar.bind(h.fight);
+  t.mock.method(h.fight.boss, 'performAnimation', animation => {
+    if (animation.getId() === h.Common.ids.seqs.bite) bites.push(h.fight.tick);
+    return animate(animation);
+  });
+  t.mock.method(h.fight, 'roar', () => { roars++; return roar(); });
+  t.mock.method(h.fight, 'orb', () => {});
+  h.move([2076,6372]); h.prayer('melee');
+  while (roars < 3 && h.cycle < 100) h.step();
+  assert.equal(roars, 3, 'standing beside the pool must not stall progression');
+  assert.equal(bites.length, 1);
+  h.step(h.fight.nextAttack - h.fight.tick);
+  assert.equal(bites.length, 2);
+  h.fight.tier = 1; h.fight.nextAttack = h.fight.tick + 1;
+  h.step();
+  assert.equal(bites.length, 3, 'a later tier reset does not restore the initial restriction');
+});
+
+test('a third volley roar cancelled by a shadow stun does not prematurely unlock normal bites', t => {
+  const h = H.harness(t), bites = [], orbs = [];
+  h.fight.bites = 1; h.fight.volleyRoars = 2; h.fight.tier = 2; h.fight.shots = 7; h.fight.nextAttack = 1;
+  const animate = h.fight.boss.performAnimation.bind(h.fight.boss);
+  t.mock.method(h.fight.boss, 'performAnimation', animation => {
+    if (animation.getId() === h.Common.ids.seqs.bite) bites.push(h.fight.tick);
+    return animate(animation);
+  });
+  t.mock.method(h.fight, 'orb', () => orbs.push(h.fight.tick));
+  h.step();
+  assert.equal(h.fight.tier, 2, 'the third advance is still waiting for its roar');
+  assert.equal(h.fight.stun(), true);
+  h.move([2076,6372]); h.prayer('melee'); h.step(18);
+  assert.equal(h.fight.volleyRoars, 2);
+  assert.deepEqual(bites, []);
+  assert.ok(orbs.length > 1, 'stun expiry resumes the volley rather than lifting the bite limit');
+});
+
+test('normal enrage and disabled awakened retain their unrestricted bite attempts', t => {
+  for (const awakened of [false,true]) {
+    const h = H.harness(t, awakened), bites = [];
+    if (!awakened) { h.fight.enraged = true; h.fight.nextEnrageDebris = Infinity; }
+    h.fight.bites = 1;
+    const animate = h.fight.boss.performAnimation.bind(h.fight.boss);
+    t.mock.method(h.fight.boss, 'performAnimation', animation => {
+      if (animation.getId() === h.Common.ids.seqs.bite) bites.push(h.fight.tick);
+      return animate(animation);
+    });
+    h.move([2076,6372]); h.prayer('melee'); h.fight.nextAttack = 1; h.step(4);
+    assert.equal(bites.length, 2);
+  }
 });
 
 test('a protected normal bite neither damages nor consumes recoil or Vengeance', t => {

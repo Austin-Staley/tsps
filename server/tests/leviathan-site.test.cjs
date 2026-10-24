@@ -82,6 +82,27 @@ test('the Leviathan scoreboard rejects other bosses and incomplete quests withou
   assert.deepEqual(board.packets, []);
 });
 
+test('a raw null-name Leviathan scoreboard parent Read dispatch opens normal records through its guarded parent hook', t => {
+  const h = H.harness(t), board = scoreboard(h);
+  const event = { player: h.p, objectId: 49475, clickType: 1, definition: { getName: () => 'null' }, handled: false };
+  h.dispatch('onBeforeObjectInteraction', event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(board.packets, [831]);
+  for (const objectId of [47588, 46091]) {
+    const other = { ...event, objectId, handled: false };
+    h.dispatch('onBeforeObjectInteraction', other);
+    assert.equal(other.handled, false, 'resolved names and other bosses stay with their own handlers');
+  }
+  const nonRead = { ...event, clickType: 2, handled: false };
+  h.dispatch('onBeforeObjectInteraction', nonRead);
+  assert.equal(nonRead.handled, false);
+  h.api.onCustomEvent('quest:is-complete', request => { request.complete = false; });
+  const locked = { ...event, handled: false };
+  h.dispatch('onBeforeObjectInteraction', locked);
+  assert.equal(locked.handled, false);
+  assert.equal(board.packets.length, 1);
+});
+
 test('a real active-fight death updates recorded personal/global deaths once, without counting a mere departure', t => {
   const h = H.harness(t), board = scoreboard(h);
   board.read({ player: h.p, objectId: 47588 });

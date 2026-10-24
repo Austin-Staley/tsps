@@ -164,6 +164,12 @@ function readScoreboard({ player, objectId }) {
   if (![locs.scoreboard, locs.scoreboardNormal, locs.scoreboardAwakened].includes(objectId) || !complete(player)) return false;
   return Records.read(player);
 }
+function readScoreboardParent(event) {
+  // Direct/native event producers may retain the map parent's null name.
+  // Keep the fallback restricted to this parent and its normal Read option.
+  if (event.objectId !== Common.ids.locs.scoreboard || event.clickType !== 1) return;
+  if (readScoreboard(event)) event.handled = true;
+}
 function attach(api) {
   Records.attach(api);
   api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
@@ -171,6 +177,7 @@ function attach(api) {
   api.onObjectInteraction('Handholds', { Climb: climb });
   api.onObjectInteraction('Stepping Stone', { Cross: cross });
   api.onObjectInteraction('Scoreboard', { Read: readScoreboard });
+  api.onBeforeObjectInteraction(readScoreboardParent);
   api.onNpcInteraction('Catalytic Guardian', { 'Talk-to': guardian });
   api.onPlayerLogin(recover);
   api.onPlayerDeath(death);
