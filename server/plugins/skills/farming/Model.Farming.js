@@ -84,6 +84,8 @@ function diseaseFree(farm, patch, state, at) {
     if (farm.hosidiusProtected && patch.x >= 1720 && patch.x <= 1760 && patch.y >= 3540 && patch.y <= 3565) return true;
     if (farm.faladorProtected && patch.type === "TREE" && patch.x === 3003 && patch.y === 3372) return true;
     if (farm.fortisProtected && patch.type === "HERB" && patch.x === 1581 && patch.y === 3094) return true;
+    // Harmony Island's diary unlock grants a permanently disease-free herb patch.
+    if (patch.type === "HERB" && patch.x === 3789 && patch.y === 2837 && patch.z === 0) return true;
     if (crop.type !== "ALLOTMENT") return false;
     for (const flower of Data.CACHE.patches.filter(p => p.type === "FLOWER" && p.z === patch.z && Math.abs(p.x - patch.x) < 32 && Math.abs(p.y - patch.y) < 32)) {
         const s = farm.patches[Data.patchKey(flower)];

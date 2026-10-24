@@ -14,6 +14,7 @@ const WORK = new Map();
 const RENDERED = new WeakMap();
 // A patch can be visible from its own 64-tile region or one of its neighbours.
 const PATCHES_BY_REGION = new Map();
+const HARMONY_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 3789 && p.y === 2837 && p.z === 0);
 for (const patch of Data.CACHE.patches) {
     const rx = Math.floor((patch.x + patch.maxX) / 128), ry = Math.floor((patch.y + patch.maxY) / 128);
     for (let x = rx - 1; x <= rx + 1; x++) {
@@ -379,6 +380,14 @@ function inspect(player, patch) {
 function canUsePatch(player, patch) {
     const request = { player, patch, allowed: true };
     core.PluginManager.emitCustomEvent("farming:can-use-patch", request);
+    if (request.allowed !== false && patch === HARMONY_HERB_PATCH) {
+        const diary = { player, diary: "morytania", tier: "elite", complete: false };
+        core.PluginManager.emitCustomEvent("diary:is-complete", diary);
+        if (diary.complete !== true) {
+            player.sendMessage("You must complete the elite Morytania Diary to use this herb patch.");
+            return false;
+        }
+    }
     return request.allowed !== false;
 }
 function objectInteraction(event) {
