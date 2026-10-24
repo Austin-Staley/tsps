@@ -108,18 +108,20 @@ function rewardItem(event) {
     let rewards = item.getMetaValue("farming:rewards");
     if (!rewards) { rewards = name === "Seed pack" ? contents(3, false) : Array.from({ length: 7 }, () => roll(HERBS)); item.setMetaValue("farming:rewards", rewards); }
     if (action === "check") { event.player.sendMessage(`There are ${rewards.length} rewards remaining.`); return; }
+    const initialCount = rewards.length;
     do {
         const reward = rewards[0];
         if (!reward) break;
         if (action === "bank-all") {
             const bank = event.player.getBank(0);
-            if (bank.isFull() && !bank.contains(reward.id)) { event.player.sendMessage("Your bank is full."); return; }
-            bank.addItem(new core.Item(reward.id, reward.count));
-        } else if (!Patches.give(event.player, reward.id, reward.count)) return;
+            const received = new core.Item(reward.id, reward.count);
+            if (bank.getAddableAmount(received) < reward.count) { event.player.sendMessage("Your bank is full."); break; }
+            bank.addItem(received);
+        } else if (!Patches.give(event.player, reward.id, reward.count)) break;
         rewards.shift();
     } while (rewards.length && ["take-all", "bank-all"].includes(action));
     if (!rewards.length) event.player.getInventory().deleteAtSlot(event.slot);
-    else if (name === "Herb box") item.setId(Data.itemId("Open herb box"));
+    else if (name === "Herb box" && rewards.length < initialCount) item.setId(Data.itemId("Open herb box"));
     event.player.getInventory().refreshItems();
 }
 
