@@ -27,15 +27,25 @@ const MESSAGES = {
   level: (level) => `You need a Thieving level of ${level} to enter this room.`,
   entryLevel: `You need a Thieving level of at least ${DATA.entryLevel} to play Pyramid Plunder.`,
   quest: "You need to have started Icthlarin's Little Helper to play Pyramid Plunder.",
-  timeUp: "Your time in the tomb is up.",
+  timeUp: "Your time is up...",
+  guardianTimeUp: "You've had your five minutes of plundering. Now be off with you!",
   looted: "You have already looted this.",
   deadEnd: "This door leads to a dead end.",
   doorFail: "Your attempt fails.",
   lockpick: "You use your lockpick and attempt to open the door.",
   noLockpick: "You attempt to open the door. Lockpicks would make it easier...",
+  trapTry: "You carefully try to temporarily deactivate the trap mechanism.",
   trapDisarmed: "You deactivate the trap!",
-  trapFail: "You fail to deactivate the trap and the spears catch you.",
-  bitten: "You have been bitten by a snake!",
+  trapFail: "You fail to deactivate the trap.",
+  urnLooted: "You successfully loot the urn!",
+  bitten: "You've been bitten by something moving inside the urn.",
+  urnPoisoned: "You've been poisoned by something moving inside the urn.",
+  lastRoomDoor: "This is the last room, opening this door will cause you to leave the game. Do you really want to leave the Tomb?",
+  leaveTomb: "Do you really want to leave the Tomb?",
+  mummyVanishes: "The mummy you're fighting vanishes in a cloud of smoke.",
+  scarabsLeave: "The scarabs scuttle away.",
+  // Not yet checked against a capture: the snake check/charm lines, the swarm, the lid, the
+  // mummy and the sceptre lines below.
   snake: "There's a snake in the urn!",
   noCharm: "You need a snake charm to do this.",
   charmed: "You charm the snake.",
@@ -114,11 +124,15 @@ function resolveIds(cache) {
       urnBitten: cache.getSeqId("urn_search_bit"),
       urnSuccess: cache.getSeqId("urn_search_success"),
       charm: cache.getSeqId("snake_charming"),
-      chest: cache.getSeqId("ntk_tomb_search"),
+      chest: cache.getSeqId("human_pickuptable"),
       push: cache.getSeqId("ntk_tomb_push_loop"),
       lidOff: cache.getSeqId("ntk_tomb_open"),
       pick: cache.getSeqId("human_pickuptable"),
+      door: cache.getSeqId("ntk_tomb_door"),
+      walk: cache.getSeqId("human_walk_f"),
     },
+    /** Captured synths (rsprox, see the review on #935): the trap's work and disarm, the chest, a door. */
+    sound: { trapWork: 1220, trapDisarmed: 2387, chest: 1215, door: 87 },
     npc: {
       guardian: cache.getNpcId("ntk_mummy_guardian"),
       scarabs: cache.getNpcId("ntk_scarab_swarm"),
@@ -249,6 +263,15 @@ function resetRoomVarbits(player) {
   for (const id of v.doors) send(player, id, 0);
 }
 
+/** Entering a room arms its speartrap (ntk_trap_active 1, as live sets it on entry). */
+function armTrap(player) {
+  send(player, ids().varbit.trap, 1);
+}
+
+function sound(player, id) {
+  player.getPacketSender().sendSound(id, 255, 0);
+}
+
 function sendRoomHud(player, run) {
   const v = ids().varbit;
   send(player, v.room, run.room);
@@ -303,6 +326,7 @@ function startRun(player, random = Math.random) {
   player.setAttribute(TIMED_OUT_ATTRIBUTE, false);
   send(player, ids().varbit.playedBefore, 1);
   resetRoomVarbits(player);
+  armTrap(player);
   sendRoomHud(player, run);
   sendTimer(player, run);
   player.getPacketSender().sendSubInterface(OVERLAY_HUD_UID, ids().overlay, 1);
@@ -314,7 +338,9 @@ function enterRoom(player, run, room) {
   run.room = room;
   run.cleared = new Set();
   run.lastSafe = null;
+  run.trapDisarmed = false;
   resetRoomVarbits(player);
+  armTrap(player);
   sendRoomHud(player, run);
   sendTimer(player, run);
   player.moveTo(location(roomData(room).entry));
@@ -326,7 +352,12 @@ function enterRoom(player, run, room) {
  */
 function endRun(player, { silent = false, keepPosition = false, timedOut = false } = {}) {
   const run = sessions.get(player);
-  for (const npc of run?.hostiles ?? []) getApi().removeNpc(npc);
+  for (const npc of run?.hostiles ?? []) {
+    if (!silent && npc.isRegistered?.() !== false && npc.getHitpoints?.() > 0) {
+      player.sendMessage(npc.getId?.() === ids().npc.scarabs ? MESSAGES.scarabsLeave : MESSAGES.mummyVanishes);
+    }
+    getApi().removeNpc(npc);
+  }
   const had = sessions.delete(player) || player.getAttribute(RUN_ATTRIBUTE) === true;
   player.setAttribute(RUN_ATTRIBUTE, null);
   if (!had) return false;
@@ -335,8 +366,21 @@ function endRun(player, { silent = false, keepPosition = false, timedOut = false
   player.getPacketSender().closeSubInterface(OVERLAY_HUD_UID);
   if (timedOut) player.setAttribute(TIMED_OUT_ATTRIBUTE, true);
   if (!keepPosition) player.moveTo(location(DATA.outside));
-  if (!silent && timedOut) player.sendMessage(MESSAGES.timeUp);
+  if (!silent && timedOut) {
+    player.sendMessage(MESSAGES.timeUp);
+    guardianSays(player, MESSAGES.guardianTimeUp);
+  }
   return true;
+}
+
+/** The Guardian mummy's chatbox line, as live shows it when time runs out. */
+function guardianSays(player, text) {
+  const { DialogueChainBuilder, NpcDialogue, EndDialogue } = getCore();
+  if (!DialogueChainBuilder || !NpcDialogue) return;
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+    new NpcDialogue(0, ids().npc.guardian, text),
+    new EndDialogue(1),
+  ));
 }
 
 // --- Loot
@@ -412,6 +456,8 @@ function claim(run, key) {
 }
 
 module.exports = {
+  armTrap,
+  sound,
   DATA,
   ROOMS,
   LAST_ROOM,

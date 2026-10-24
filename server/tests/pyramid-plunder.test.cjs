@@ -80,6 +80,8 @@ function player({ thieving = 99, strength = 99, items = {}, at = { x: 3289, y: 2
     ground: [],
     overlay: null,
     poisoned: 0,
+    sounds: [],
+    dialogues: [],
     varbits,
     inventory,
     getAttribute: (key) => attrs.get(key),
@@ -94,14 +96,20 @@ function player({ thieving = 99, strength = 99, items = {}, at = { x: 3289, y: 2
       getVarbit: (id) => varbits.get(id) ?? 0,
       sendSubInterface: (uid, id) => { p.overlay = id; },
       closeSubInterface: () => { p.overlay = null; },
+      sendSound: (id) => p.sounds.push(id),
+      sendObjectAnimation: () => {},
     }),
+    getDialogueManager: () => ({ startDialogues: (chain) => p.dialogues.push(chain) }),
+    getMovementQueue: () => ({ reset: () => {} }),
+    getForceMovement: () => p.forced,
+    setForceMovement: (value) => { p.forced = value; },
     getInventory: () => ({
       getAmount: (id) => inventory.get(id) ?? 0,
       addItem: (item) => inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()),
       deleteNumber: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) - amount),
       getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
     }),
-    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => p.hits.push(...hits.map((h) => h.getDamage?.() ?? h.damage ?? h)) }) }),
+    getCombat: () => ({ reset: () => {}, getHitQueue: () => ({ addPendingDamage: (hits) => p.hits.push(...hits.map((h) => h.getDamage?.() ?? h.damage ?? h)) }) }),
     performAnimation: (anim) => p.anims.push(anim),
     sendMessage: (message) => p.messages.push(message),
     getLocation: () => ({ getX: () => p.at.x, getY: () => p.at.y, getZ: () => p.at.z, clone: () => ({ ...p.at }) }),
@@ -388,21 +396,39 @@ test("containers in another room do nothing", () => {
 
 // --- The speartrap
 
-test("the speartrap hits on a failure and steps the player across on a success", () => {
+test("the speartrap is armed on entry; its disarm takes the captured six ticks, then the spears go down", () => {
   const p = player({ thieving: 21 });
   T.Entrance.tryStart(p, () => 0);
   const trap = C.roomData(1).trap;
+  const trapVarbit = ids().varbit.trap;
+  assert.equal(p.varbits.get(trapVarbit), 1, "armed as the room starts");
   const event = { player: p, objectId: 21280, location: { x: trap.x, y: trap.y, z: 0 } };
-  p.at = { x: trap.x, y: trap.y + 3, z: 0 };
+  p.at = { x: trap.x, y: trap.y + 2, z: 0 };
   T.Passages.passTrap(event, never);
+  flush(1);
+  assert.equal(p.messages.at(-1), C.MESSAGES.trapTry);
+  flush(5);
+  assert.equal(p.messages.at(-1), C.MESSAGES.trapFail);
   assert.equal(p.hits.length, 1);
-  T.Passages.passTrap(event, always);
-  assert.equal(p.hits.length, 1, "a click during the last attempt is ignored");
+  assert.deepEqual(p.sounds, [ids().sound.trapWork, ids().sound.trapWork]);
+
   next();
   T.Passages.passTrap(event, always);
-  flush(2);
-  assert.deepEqual(p.at, { x: trap.x, y: trap.y - 1, z: 0 });
-  assert.equal(p.xp.THIEVING, T.Passages.TRAP_XP);
+  T.Passages.passTrap(event, always);
+  flush(5);
+  assert.deepEqual(p.at, { x: trap.x, y: trap.y + 2, z: 0 }, "nothing until the sixth tick");
+  flush(1);
+  assert.equal(p.messages.at(-1), C.MESSAGES.trapDisarmed);
+  assert.equal(p.xp.THIEVING, T.Passages.TRAP_XP, "a click during the disarm is ignored");
+  flush(1);
+  assert.deepEqual(p.at, { x: trap.x, y: trap.y - 1, z: 0 }, "walked across");
+  assert.equal(p.varbits.get(trapVarbit), 1, "the spears are still up as the player crosses");
+  flush(1);
+  assert.equal(p.varbits.get(trapVarbit), 0, "down two ticks after the disarm, for the rest of the room");
+  T.Passages.passTrap(event, never);
+  flush(1);
+  assert.deepEqual(p.at, { x: trap.x, y: trap.y + 2, z: 0 }, "Pass on a disarmed trap just walks back across");
+  assert.equal(p.hits.length, 1);
   C.endRun(p);
 });
 
@@ -522,4 +548,31 @@ test("an unanswered one-item offer doesn't stick to Simon's next conversation", 
   T.Simon.forget({ player: p });
   assert.ok(!T.Simon.offered.has(p));
   assert.equal(T.Simon.onDialogueVariant({ player: p, npcId: 5786 }), T.Simon.VARIANT.carrying);
+});
+
+test("Leave Tomb asks first, Quick-leave doesn't; time running out has the live lines", () => {
+  const p = player({ thieving: 21 });
+  T.Entrance.tryStart(p, () => 0);
+  T.Passages.leaveTomb({ player: p, objectId: ids().tombExit, option: "Leave Tomb" });
+  assert.equal(prompts.at(-1).title, C.MESSAGES.leaveTomb);
+  assert.ok(C.sessionOf(p), "nothing happens until the player answers");
+  T.Passages.leaveTomb({ player: p, objectId: ids().tombExit, option: "Quick-leave" });
+  assert.equal(C.sessionOf(p) ?? null, null);
+
+  const q = player({ thieving: 21 });
+  T.Entrance.tryStart(q, () => 0);
+  C.endRun(q, { timedOut: true });
+  assert.equal(q.messages.at(-1), C.MESSAGES.timeUp);
+  assert.equal(q.dialogues.length, 1, "the Guardian mummy's line");
+});
+
+test("ending a run with a mummy or swarm out tells the player they go", () => {
+  const p = player({ thieving: 21 });
+  T.Entrance.tryStart(p, () => 0);
+  const run = C.sessionOf(p);
+  run.hostiles.push({ getId: () => ids().npc.mummy, getHitpoints: () => 10, isRegistered: () => true });
+  run.hostiles.push({ getId: () => ids().npc.scarabs, getHitpoints: () => 10, isRegistered: () => true });
+  C.endRun(p);
+  assert.ok(p.messages.includes(C.MESSAGES.mummyVanishes));
+  assert.ok(p.messages.includes(C.MESSAGES.scarabsLeave));
 });

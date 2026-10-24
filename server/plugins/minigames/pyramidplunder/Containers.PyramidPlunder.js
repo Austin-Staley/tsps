@@ -55,6 +55,7 @@ function bite(player, random) {
   animate(player, Common.ids().anim.urnBitten);
   player.sendMessage(Common.MESSAGES.bitten);
   Common.hit(player, Common.rollHit(random));
+  player.sendMessage(Common.MESSAGES.urnPoisoned);
   CombatFactory.poisonEntity(player, Common.rollHit(random));
 }
 
@@ -93,6 +94,7 @@ function searchUrn(event, random = Math.random) {
       : (room.urnXp * 4) / 9;
   Common.send(player, varbit, URN.SEARCHED);
   animate(player, Common.ids().anim.urnSuccess);
+  player.sendMessage(Common.MESSAGES.urnLooted);
   Common.addXp(player, "THIEVING", xp);
   Common.giveArtefact(player, Common.rollUrnArtefact(run.room, random));
   return true;
@@ -149,6 +151,7 @@ function searchChest(event, random = Math.random) {
   }
   if (!Common.takeAction(run, SEARCH_TICKS) || !Common.claim(run, "chest")) return true;
   animate(player, Common.ids().anim.chest);
+  Common.sound(player, Common.ids().sound.chest);
   Common.send(player, v.chest, 1);
   const room = Common.roomData(run.room);
   const swarm = !Common.roll(Common.chanceOf("chestNoSwarm", Common.thievingLevel(player), run.room), random);

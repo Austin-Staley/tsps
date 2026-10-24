@@ -1,6 +1,6 @@
 {
   "_sources": {
-    "rooms": "Entry tiles and bounds: the cache placements (yarn dump:loc) agree with Zenyte's PlunderRoom and 2009scape's PlunderData; chests, sarcophagi, speartraps and tomb doors fall inside each room's bounds.",
+    "rooms": "Entry tiles and bounds: from the cache placements (yarn dump:loc); chests, sarcophagi, speartraps and tomb doors fall inside each room's bounds.",
     "xp": "OSRS Wiki, Pyramid Plunder: urn/chest/door Thieving XP and sarcophagus Strength XP per room; 10 XP per speartrap.",
     "loot": "OSRS Wiki, Grand Gold Chest and Sarcophagus (Pyramid Plunder): one artefact per opening, rarities per room. The Wiki gives no urn table ('Unconfirmed which urns drop which artefacts and at what rate'); urns pick evenly from the urn artefacts the Pyramid Plunder article lists for that room.",
     "sceptre": "OSRS Wiki, Pyramid Plunder: Pharaoh's sceptre chance per chest and per sarcophagus, rolled on opening.",

@@ -2,9 +2,12 @@
 
 /**
  * The ways through a room:
- * - **Speartrap** (Pass): a Thieving roll to disarm it (10 XP), stepping the player across; a
- *   failed roll and the spears hit for 1-4. It re-arms behind them. The trap loc doesn't block,
- *   so walking onto it while armed springs it (Session pushes the player back).
+ * - **Speartrap** (Pass; ntk_trap_active 1 armed from the room's start, as captured live): the
+ *   disarm takes six ticks - "You carefully try..." a tick in, the work animation (synth 1220) at
+ *   two and four, then at six the Thieving roll (10 XP): "You deactivate the trap!" (synth 2387)
+ *   with the player walking across that tick, and the varbit to 0 two ticks later for the rest
+ *   of the room; or "You fail to deactivate the trap." and the spears hit for 1-4. The trap loc
+ *   doesn't block, so walking onto it while armed springs it (Session pushes the player back).
  * - **Tomb doors** (ntk_tomb_door1..4; ntk_doorN_state 0 locked, 1 open): Pick-lock, easier with
  *   a lockpick, which halves the XP. One door per room leads on (drawn when the run starts);
  *   after three dead ends the fourth always leads on. The
@@ -18,9 +21,10 @@
 const Common = require("./Common.PyramidPlunder");
 
 const TRAP_XP = 10;
-/** Ticks a disarm or a lock pick takes. */
+/** Ticks a lock pick takes. */
 const ACTION_TICKS = 2;
-const LAST_ROOM_PROMPT = "Leave the Tomb?";
+/** The captured disarm: the first line, the two work animations, the result, the trap down. */
+const DISARM = { tryAt: 1, workAt: [2, 4], resultAt: 6, downAt: 8 };
 
 function runIn(player, location) {
   const run = Common.sessionOf(player);
@@ -57,26 +61,65 @@ function passTrap(event, random = Math.random) {
   const player = event.player;
   const run = runIn(player, event.location);
   if (!run) return true;
-  if (!Common.takeAction(run, ACTION_TICKS)) return true;
-  const room = Common.roomData(run.room);
   const v = Common.ids().varbit;
-  player.performAnimation(new (Common.getCore().Animation)(Common.ids().anim.pick));
-  if (!Common.roll(Common.chanceOf("speartrap", Common.thievingLevel(player), run.room), random)) {
-    player.sendMessage(Common.MESSAGES.trapFail);
-    Common.hit(player, Common.rollHit(random));
+  // Already disarmed for this room: Pass just walks across.
+  if (run.trapDisarmed || Common.varbitOf(player, v.trap) === 0) {
+    walkAcross(player, run);
     return true;
   }
+  if (!Common.takeAction(run, DISARM.resultAt)) return true;
   const at = player.getLocation();
-  const tile = crossingTile(room.trap, { x: at.getX(), y: at.getY() });
-  Common.send(player, v.trap, 1);
-  player.sendMessage(Common.MESSAGES.trapDisarmed);
-  Common.later(1, () => {
-    if (Common.sessionOf(player) !== run) return;
-    player.moveTo(Common.location(tile));
+  const origin = { x: at.getX(), y: at.getY() };
+  const still = () => {
+    if (Common.sessionOf(player) !== run) return false;
+    const now = player.getLocation();
+    return now.getX() === origin.x && now.getY() === origin.y;
+  };
+  Common.later(DISARM.tryAt, () => still() && player.sendMessage(Common.MESSAGES.trapTry));
+  for (const tick of DISARM.workAt) {
+    Common.later(tick, () => {
+      if (!still()) return;
+      player.performAnimation(new (Common.getCore().Animation)(Common.ids().anim.pick));
+      Common.sound(player, Common.ids().sound.trapWork);
+    });
+  }
+  Common.later(DISARM.resultAt, () => {
+    if (!still()) return;
+    if (!Common.roll(Common.chanceOf("speartrap", Common.thievingLevel(player), run.room), random)) {
+      player.sendMessage(Common.MESSAGES.trapFail);
+      Common.hit(player, Common.rollHit(random));
+      return;
+    }
+    run.trapDisarmed = true;
+    player.sendMessage(Common.MESSAGES.trapDisarmed);
+    Common.sound(player, Common.ids().sound.trapDisarmed);
     Common.addXp(player, "THIEVING", TRAP_XP);
-    Common.send(player, v.trap, 0);
+    walkAcross(player, run);
+    Common.later(DISARM.downAt - DISARM.resultAt, () => {
+      if (Common.sessionOf(player) === run && run.trapDisarmed) Common.send(player, v.trap, 0);
+    });
   });
   return true;
+}
+
+/**
+ * Walks the player over the trap to the tile across from them, as a forced walk: the map
+ * blocks ordinary walking over the trap, and live shows the player walking across on the
+ * disarm's tick.
+ */
+function walkAcross(player, run) {
+  if (player.getForceMovement?.()) return;
+  const { Location, ForceMovement, ForceMovementTask, TaskManager } = Common.getCore();
+  const room = Common.roomData(run.room);
+  const at = player.getLocation();
+  const tile = crossingTile(room.trap, { x: at.getX(), y: at.getY() });
+  const dx = tile.x - at.getX();
+  const dy = tile.y - at.getY();
+  const steps = Math.max(Math.abs(dx), Math.abs(dy));
+  const direction = dy > 0 ? 0 : dx > 0 ? 1 : dy < 0 ? 2 : 3;
+  player.getMovementQueue().reset?.();
+  TaskManager.submit(new ForceMovementTask(player, 1,
+    new ForceMovement(new Location(at.getX(), at.getY(), at.getZ()), new Location(dx, dy), 0, 30 * steps, direction, Common.ids().anim.walk)));
 }
 
 // --- Tomb doors
@@ -106,9 +149,7 @@ function pickLock(event, random = Math.random) {
   const run = runIn(player, event.location);
   if (!run) return true;
   if (run.room >= Common.LAST_ROOM) {
-    Common.getApi().sendMultiChatboxPrompt(player, LAST_ROOM_PROMPT,
-      "Yes, I'm out of here.", () => Common.endRun(player),
-      "Ah, I think I'll stay a little longer here.", () => {});
+    confirmLeave(player, Common.MESSAGES.lastRoomDoor);
     return true;
   }
   const next = Common.roomData(run.room + 1);
@@ -132,6 +173,10 @@ function pickLock(event, random = Math.random) {
     return true;
   }
   Common.send(player, varbit, 1);
+  Common.sound(player, Common.ids().sound.door);
+  if (event.object && Common.ids().anim.door !== null) {
+    player.getPacketSender().sendObjectAnimation(event.object, new (Common.getCore().Animation)(Common.ids().anim.door));
+  }
   const xp = Common.roomData(run.room).doorXp;
   Common.addXp(player, "THIEVING", lockpick ? xp / 2 : xp);
   if (leadsOn(player, run, door)) nextRoom(player, run);
@@ -141,9 +186,21 @@ function pickLock(event, random = Math.random) {
 
 // --- Exits
 
+/** The tomb's way out asks first, as live does. */
+function confirmLeave(player, question) {
+  Common.getApi().sendMultiChatboxPrompt(player, question,
+    "Yes, I'm out of here.", () => leaveNow(player),
+    "Ah, I think I'll stay a little longer here.", () => {});
+}
+
+function leaveNow(player) {
+  if (!Common.endRun(player)) player.moveTo(Common.location(Common.DATA.outside));
+}
+
 function leaveTomb(event) {
   if (event.objectId === Common.ids().tombExit) {
-    if (!Common.endRun(event.player)) event.player.moveTo(Common.location(Common.DATA.outside));
+    if (event.option === "Quick-leave") leaveNow(event.player);
+    else confirmLeave(event.player, Common.MESSAGES.leaveTomb);
     return true;
   }
   if (event.objectId === Common.ids().antechamberExit) {
@@ -166,4 +223,4 @@ module.exports = function registerPassages(api) {
 
 module.exports.onTrap = onTrap;
 module.exports.springTrap = springTrap;
-module.exports._test = { TRAP_XP, ACTION_TICKS, crossingTile, onTrap, springTrap, passTrap, leadsOn, pickLock, leaveTomb };
+module.exports._test = { TRAP_XP, ACTION_TICKS, DISARM, walkAcross, confirmLeave, leaveNow, crossingTile, onTrap, springTrap, passTrap, leadsOn, pickLock, leaveTomb };

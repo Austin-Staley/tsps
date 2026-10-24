@@ -48,7 +48,8 @@ function guardTrap(player, run) {
     run.lastSafe = { x: at.getX(), y: at.getY(), z: at.getZ() };
     return;
   }
-  if (Common.varbitOf(player, Common.ids().varbit.trap) === 0) Passages.springTrap(player, run);
+  // Armed (ntk_trap_active 1) until this room's disarm; walking over a disarmed trap is safe.
+  if (!run.trapDisarmed && Common.varbitOf(player, Common.ids().varbit.trap) === 1) Passages.springTrap(player, run);
 }
 
 function createArea() {
