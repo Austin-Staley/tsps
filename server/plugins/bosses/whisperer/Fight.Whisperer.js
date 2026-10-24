@@ -25,6 +25,7 @@ class Fight {
         this.startCycle = Common.core.World.getProcessCycle();
         this.boundUntil = 0;
         this.bindingFormUntil = 0;
+        this.pursuitCancelled = false;
         this.wakeMovementTask = null;
         this.deathRecorded = false;
         Rewards.begin(this);
@@ -64,7 +65,7 @@ class Fight {
         const other = base === 'magic' ? 'ranged' : 'magic';
         return this.completed >= 3 ? [base, other, base] : this.completed > 0 ? [base, base, other] : [base, base, base];
     }
-    at(delay, action, launched = false) { this.events.push({ due: this.tick + delay, action, launched }); }
+    at(delay, action, launched = false, binding = false) { this.events.push({ due: this.tick + delay, action, launched, binding }); }
     changeSanity(amount) { this.sanity = Math.max(0, Math.min(100, this.sanity + amount)); Common.sync(this); }
     sanityTick() {
         if (this.sanity <= 0) {
@@ -129,7 +130,7 @@ class Fight {
         }
         if (this.boundUntil > this.tick) {
             this.pursueBound();
-            return;
+            if (!this.pursuitCancelled)return;
         }
         if (this.boss.getNpcTransformationId() === Common.data.npcs.melee && this.tick >= this.bindingFormUntil)
             this.boss.setNpcTransformationId(Common.data.npcs.boss);
@@ -213,7 +214,9 @@ class Fight {
         CombatFactory.executeHit(hit);
     }
     melee() {
-        this.events = [];
+        // Movement/attack recovery must not discard a bind that is already in
+        // flight. Its original deadline and a real counter still guard impact.
+        this.events = this.events.filter(event=>event.binding);
         this.nextAttack = this.tick + 5;
         this.boss.performAnimation(new Common.core.Animation(Common.data.animations.melee));
         const damage = Common.random(28, 42);
@@ -225,6 +228,7 @@ class Fight {
         this.at(1, () => Common.damage(this, amount, 0, !protectedMelee));
     }
     bind() {
+        this.pursuitCancelled = false;
         this.boundUntil = this.tick + 14;
         // A melee attack clears pursuit early; keep its visual form until a
         // real phase change or the existing provisional phase deadline.
@@ -234,19 +238,23 @@ class Fight {
         this.boss.getMovementQueue().reset();
         this.boss.setNpcTransformationId(Common.data.npcs.melee);
         this.boss.performAnimation(new Common.core.Animation(Common.data.animations.binding));
-        // The observed 170-cycle baseline fits seven of nine impact ticks.
-        // Two 200-cycle captures land one tick later; their selection is unresolved.
-        this.player.getPacketSender().sendProjectile(Common.core.Projectile.centreOf(this.boss).clone(), this.player.getLocation().clone(), 0,
-            geometry.arrivalCycles, Common.data.projectiles.bind, geometry.startHeight, geometry.endHeight,
+        this.boss.performGraphic(new Common.core.Graphic(Common.data.graphics.bindingCast,0,120));
+        const start=Common.core.Projectile.centreOf(this.boss).clone(), target=this.player.getLocation().clone();
+        const distance=Math.max(Math.abs(start.getX()-target.getX()),Math.abs(start.getY()-target.getY()));
+        // All 22 independently normal casts match these distance choices and
+        // their ceil(cycles/30) impacts. Distances below three remain unmeasured.
+        const arrival=geometry.nearArrivalCycles[distance]??geometry.arrivalCycles;
+        this.player.getPacketSender().sendProjectile(start, target, 0,
+            arrival, Common.data.projectiles.bind, geometry.startHeight, geometry.endHeight,
             this.player, geometry.launchDelay, geometry.angle, geometry.progress);
-        this.at(geometry.impactTicks, () => {
+        this.at(Math.ceil(arrival/30), () => {
             if (this.boundUntil > this.tick) {
                 this.player.performGraphic(new Common.core.Graphic(Common.data.graphics.bindingImpact));
                 // Ordinary footage rules out twelve ticks. Eight remains
                 // provisional: attacks/clicks obscure the precise expiry tick.
                 Common.core.CombatFactory.freezeTicks(this.player, 8);
             }
-        });
+        },true,true);
     }
     pursueBound() {
         const { TimerKey } = Common.core;
@@ -256,8 +264,14 @@ class Fight {
             this.boss.setNpcTransformationId(Common.data.npcs.boss);
             return;
         }
+        if(this.pursuitCancelled)return;
         if (this.completed >= 3 && this.boss.getHitpoints() < 100) {
             this.boss.getMovementQueue().reset();
+            this.pursuitCancelled = true;
+            this.boss.setNpcTransformationId(Common.data.npcs.boss);
+            // Independently normal captures restore form at cancellation and
+            // launch the first auto two ticks later (volley schedules at +1).
+            this.nextAttack = this.tick + 1;
             return;
         }
         if (this.tick < this.pursuitAt)

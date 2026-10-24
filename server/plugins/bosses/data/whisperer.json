@@ -6,9 +6,9 @@
   "animations": { "spawn": 10227, "wakeKnockback": 9799, "melee": 10234, "ranged": 10237, "rangedAlt": 10238, "magic": 10243, "magicAlt": 10244, "teleport": 10247, "appear": 10248, "screech": 10250, "screechHold": 10251, "screechBlast": 10252, "seeds": 10254, "binding": 10254, "souls": 10256, "soulChant": 10257, "soulResolve": 10259, "death": 10260, "tentacleSpawn": 10263, "tentacleAttack": 10266 },
   "wakeKnockback": { "tiles": 3, "cycles": 60, "ticks": 2 },
   "projectiles": { "ranged": 2444, "magic": 2445, "bind": 2467, "screech": 2471 },
-  "graphics": { "bindingImpact": 2466, "screech": 2470, "screechWater": 2451 },
+  "graphics": { "bindingCast": 177, "bindingImpact": 2466, "screech": 2470, "screechWater": 2451 },
   "volley": { "launchDelay": 30, "arrivalCycles": 90, "startHeight": 87.5, "endHeight": 25, "angle": 254, "progress": 128, "impactTicks": 3 },
-  "binding": { "launchDelay": 80, "arrivalCycles": 170, "startHeight": 145, "endHeight": 0, "angle": 16, "progress": 150, "impactTicks": 6, "pursuitTicks": 5 },
+  "binding": { "launchDelay": 80, "arrivalCycles": 170, "nearArrivalCycles": { "3": 200, "4": 180 }, "startHeight": 145, "endHeight": 0, "angle": 16, "progress": 150, "impactTicks": 6, "pursuitTicks": 5 },
   "objects": { "seedLight": 47573, "seedDark": 47574, "seedReal": 47575, "escape": 47584, "exit": 47586 },
   "site": { "outside": [2656,6386,0], "arrival": [2656,6380,0], "boss": [2655,6368,0], "grave": [2922,5826,0], "realmOffset": 256 },
   "specials": {

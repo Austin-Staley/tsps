@@ -1228,3 +1228,70 @@ test('native screech water waves fill the source footprint while active columns 
         f.fight.stop();
     }
 });
+
+test('normal binding selects its observed flight from Chebyshev distance and lands at the matching tick', t => {
+    for(const [dx,dy,cycles,impact] of [[3,3,200,7],[4,0,180,6],[0,-4,180,6],[-5,0,170,6],[-8,11,170,6]]) {
+        const f=fixture(),packets=[],casts=[];
+        f.boss.moveTo(new core.Location(2655,6368,0));
+        f.player.moveTo(new core.Location(2656+dx,6369+dy,0));
+        const sender=f.player.getPacketSender();
+        f.player.getPacketSender=()=>new Proxy(sender,{get:(target,key)=>key==='sendProjectile'?(...args)=>packets.push(args):target[key]});
+        t.mock.method(f.boss,'performGraphic',graphic=>casts.push(graphic));
+        f.fight.bind();
+        assert.equal(packets[0][3],cycles,`initial offset ${dx},${dy}`);
+        assert.deepEqual(casts.map(graphic=>[graphic.getId(),graphic.getHeight()]),[[177,120]]);
+        for(let tick=1;tick<impact;tick++)f.fight.process();
+        assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
+        f.fight.process();
+        assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
+        f.fight.stop();
+    }
+});
+
+test('a counter before the seventh-tick short-distance bind impact still cancels that impact', t => {
+    const f=fixture(),graphics=[];
+    f.boss.moveTo(new core.Location(2655,6368,0));
+    f.player.moveTo(new core.Location(2659,6372,0));
+    t.mock.method(f.player,'performGraphic',graphic=>graphics.push(graphic.getId()));
+    f.fight.bind();
+    for(let tick=1;tick<=5;tick++)f.fight.process();
+    f.boss.setFlag('combat:freezable',true);
+    core.CombatFactory.freezeTicks(f.boss,20);
+    f.fight.process();f.fight.process();
+    assert.equal(f.fight.boundUntil,0);
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
+    assert.deepEqual(graphics,[]);
+});
+
+test('below one hundred after the third special resumes autos two ticks after cancellation while its bind still lands', t => {
+    const f=fixture(),shots=[];
+    f.fight.completed=f.fight.startedSpecials=3;
+    f.boss.moveTo(new core.Location(2655,6368,0));
+    f.player.moveTo(new core.Location(2659,6372,0));
+    f.boss.setHitpoints(100);
+    const sender=f.player.getPacketSender();
+    f.player.getPacketSender=()=>new Proxy(sender,{get:(target,key)=>key==='sendProjectile'?(...args)=>{if(args[4]!==2467)shots.push(f.fight.tick);}:target[key]});
+    t.mock.method(f.fight,'impact',()=>{});
+    f.fight.bind();f.fight.process();
+    assert.equal(f.boss.getNpcTransformationId(),12205,'one hundred is not below the cancellation threshold');
+    f.boss.setHitpoints(99);
+    f.fight.process();const cancelledAt=f.fight.tick;
+    assert.equal(f.boss.getNpcTransformationId(),12204);
+    assert.ok(f.fight.boundUntil>f.fight.tick,'the launched bind retains its own deadline');
+    f.fight.process();assert.deepEqual(shots,[]);
+    f.fight.process();assert.deepEqual(shots,[cancelledAt+2]);
+    while(f.fight.tick<7)f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
+    f.boss.setFlag('combat:freezable',true);core.CombatFactory.freezeTicks(f.boss,20);
+    f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false,'a real later counter still releases the player');
+});
+
+test('melee after low-health pursuit cancellation cannot erase the launched bind projectile', () => {
+    const f=fixture();f.fight.completed=f.fight.startedSpecials=3;
+    f.boss.moveTo(new core.Location(2655,6368,0));f.player.moveTo(new core.Location(2659,6372,0));
+    f.boss.setHitpoints(99);f.fight.bind();f.fight.process();
+    f.fight.melee();
+    while(f.fight.tick<7)f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
+});
