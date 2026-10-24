@@ -1272,8 +1272,12 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.registerNpcSpotAnimation(this, event);
     }
 
-    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): number | undefined {
         return render.registerWorldSpotAnimation(this, event);
+    }
+
+    override killWorldSpotAnimation(id: number): void {
+        render.killWorldSpotAnimation(this, id);
     }
 
     async init(): Promise<void> {

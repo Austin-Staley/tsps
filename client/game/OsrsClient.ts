@@ -147,6 +147,7 @@ import {
 } from "../network/ServerConnection";
 import { ClientPacketId, createPacket, queuePacket, flushPackets } from "../network/packet";
 import { WebGLMapSquare } from "../render/WebGLMapSquare";
+import { withClientSpotAnims } from "../render/gfx/clientGraphics";
 import type { MinimapIcon } from "../render/loader/SdMapData";
 import { type NpcInstance, npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
 import { MenuTargetType, type OsrsMenuEntry } from "../rs/MenuEntry";
@@ -6450,7 +6451,8 @@ export class OsrsClient {
             this.seqFrameLoader = this.loaderFactory.getSeqFrameLoader();
             this.skeletalSeqLoader = this.loaderFactory.getSkeletalSeqLoader?.();
             this.worldEntityTypeLoader = this.loaderFactory.getWorldEntityTypeLoader?.();
-            this.spotAnimTypeLoader = this.loaderFactory.getSpotAnimTypeLoader();
+            // Client graphics (loot beams) resolve before the cache's spot anims.
+            this.spotAnimTypeLoader = withClientSpotAnims(this.loaderFactory.getSpotAnimTypeLoader());
             this.locTypeLoader = this.loaderFactory.getLocTypeLoader();
             this.objTypeLoader = this.loaderFactory.getObjTypeLoader();
             try {

@@ -36,6 +36,7 @@ import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
+import { migrateGroundItemsConfig } from "../../../game/plugins/grounditems/migrateGroundItems";
 import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
 
@@ -81,7 +82,9 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
         name: "grounditems",
         legacyKey: "osrs.plugin.ground_items.v1",
         config: GroundItemsConfig,
+        fieldMap: { rightClickHidden: "deprioritizeHiddenItems", despawnTimerMode: "groundItemTimers" },
         enabledKey: "grounditemsplugin",
+        migrate: migrateGroundItemsConfig,
     },
     {
         name: "interacthighlight",

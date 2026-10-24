@@ -87,7 +87,7 @@ export { clearPlayerHealthBars } from "./overlays4";
 export { registerHitsplat } from "./overlays4";
 export { registerSpotAnimation } from "./overlays4";
 export { registerNpcSpotAnimation } from "./overlays4";
-export { registerWorldSpotAnimation } from "./overlays4";
+export { killWorldSpotAnimation, registerWorldSpotAnimation } from "./overlays4";
 export { resolvePlayerIdleSeqMaxId } from "./overlays4";
 export { ensureActorTileSelectionForFrame } from "./overlays4";
 export { init } from "./init/core";
