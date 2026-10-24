@@ -44,7 +44,8 @@ PR975 is merged; the branch contains only the owned published PR977 prerequisite
    Contract: Common.initialize(api), getDefinition(itemId), getEquipped(player), read(item),
    set(item,definition,charges,pageId), refresh(player), plus core getter and metadata/capacity
    constants. Definition has element, name, rune, chargedId, emptyId, pageId, optional
-   specialPageId/specialChargedId. getEquipped returns {item,definition,state} or null;
+   specialPageId. Both Fire page kinds retain chargedId20714; ID27358 has no Check/Pages
+   controls and is excluded from ordinary tomes. getEquipped returns {item,definition,state} or null;
    state is {charges,pageId}. Common uses api.core only and excludes notes/placeholders.
 4. Review each owned task for spec and code quality, then final whole-branch review.
    Keep gameplay in plugins; core receives generic context/stage/bounds foundations only.

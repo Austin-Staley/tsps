@@ -112,7 +112,7 @@ function attach(api) {
   const definitions = [I.TOME_OF_FIRE,I.TOME_OF_WATER,I.TOME_OF_EARTH].map(Common.getDefinition);
   const names = new Set();
   for (const definition of definitions) {
-    for (const id of [definition.chargedId,definition.emptyId,definition.specialChargedId].filter(id=>id!==undefined)) {
+    for (const id of [definition.chargedId,definition.emptyId]) {
       const name = core.ItemDefinition.forId(id).getName();
       if (!names.has(name)) { api.onItemAction(name,{Check:check,Pages:pages}); names.add(name); }
       for (const page of [definition.pageId,definition.specialPageId].filter(id=>id!==undefined)) {

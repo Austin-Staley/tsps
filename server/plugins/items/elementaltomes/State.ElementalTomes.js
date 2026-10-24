@@ -12,22 +12,17 @@ function validPage(definition, pageId) {
     (definition.specialPageId !== undefined && pageId === definition.specialPageId);
 }
 
-function chargedId(definition, pageId) {
-  return pageId === definition.specialPageId ? definition.specialChargedId : definition.chargedId;
-}
-
 function read(item) {
   const Common = common();
   const definition = item && Common.getDefinition(item.getId());
   if (!definition) return { charges:0, pageId:null };
-  const pageId = item.getId() === definition.specialChargedId ? definition.specialPageId : definition.pageId;
-  const empty = { charges:0, pageId };
+  const empty = { charges:0, pageId:definition.pageId };
   const state = item.getMetaValue(Common.META_KEY);
   if (!state || typeof state !== 'object' || Array.isArray(state) ||
       !validCharges(state.charges) || !validPage(definition, state.pageId)) return empty;
   // Empty, noted, placeholder or mismatched variants cannot acquire a charge bonus
   // by carrying stale metadata from another item form.
-  if (item.getId() !== chargedId(definition, state.pageId)) return empty;
+  if (item.getId() !== definition.chargedId) return empty;
   return { charges:state.charges, pageId:state.pageId };
 }
 
@@ -39,7 +34,8 @@ function set(item, definition, charges, pageId) {
   if (!validCharges(charges)) throw new RangeError('Tome charges must be an integer from 0 to 20000');
   if (charges > 0 && !validPage(definition, pageId)) throw new TypeError('Invalid page type for tome');
   // Complete validation before either the item variant or its metadata changes.
-  item.setId(charges === 0 ? definition.emptyId : chargedId(definition, pageId));
+  // Burnt and searing pages share the ordinary charged Fire tome item ID.
+  item.setId(charges === 0 ? definition.emptyId : definition.chargedId);
   item.setMetaValue(Common.META_KEY, charges === 0 ? undefined : { charges, pageId });
 }
 

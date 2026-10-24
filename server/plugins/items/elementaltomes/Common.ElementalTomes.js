@@ -11,7 +11,7 @@ function initialize(api) {
   const tomes = [
     { element:'fire', name:'Tome of Fire', rune:I.FIRE_RUNE, chargedId:I.TOME_OF_FIRE,
       emptyId:I.TOME_OF_FIRE_EMPTY_, pageId:I.BURNT_PAGE,
-      specialPageId:I.SEARING_PAGE, specialChargedId:I.TOME_OF_FIRE_3 },
+      specialPageId:I.SEARING_PAGE },
     { element:'water', name:'Tome of Water', rune:I.WATER_RUNE, chargedId:I.TOME_OF_WATER,
       emptyId:I.TOME_OF_WATER_EMPTY_, pageId:I.SOAKED_PAGE },
     { element:'earth', name:'Tome of Earth', rune:I.EARTH_RUNE, chargedId:I.TOME_OF_EARTH,
@@ -20,7 +20,7 @@ function initialize(api) {
   definitions = new Map();
   for (const tome of tomes) {
     Object.freeze(tome);
-    for (const id of [tome.chargedId, tome.emptyId, tome.specialChargedId]) {
+    for (const id of [tome.chargedId, tome.emptyId]) {
       if (id !== undefined) definitions.set(id, tome);
     }
   }
