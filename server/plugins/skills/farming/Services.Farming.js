@@ -20,15 +20,17 @@ function cropRewards(player, crop) {
     const base = Data.petRate(crop);
     if (!base) return;
     const level = Math.min(99, player.getSkillManager().getCurrentLevel(core.Skill.FARMING));
+    if (crop.type !== "HESPORI" && !Patches.farmFor(player).disableHesporiSeeds) {
+        const denominator = ["BARLEY", "HAMMERSTONE"].includes(crop.key) ? 244 : crop.key === "LIMPWURT" ? 449 : Math.floor(base / 500);
+        if (Math.random() < 1 / denominator) {
+            if (player.getInventory().getFreeSlots() || player.getInventory().contains(Data.itemId("Hespori seed"))) Patches.give(player, Data.itemId("Hespori seed"));
+            else core.ItemOnGroundManager.registers(player, new core.Item(Data.itemId("Hespori seed")));
+            player.sendMessage("You find a Hespori seed!");
+        }
+    }
+    // Farming resources have priority over a pet that would need the final backpack slot.
     core.PluginManager.emitCustomEvent("farming:success", { player, skill: core.Skill.FARMING,
         petChance: (base - 25 * level) / (player.getSkillManager().getExperience(core.Skill.FARMING) >= 200000000 ? 15 : 1) });
-    if (crop.type === "HESPORI" || Patches.farmFor(player).disableHesporiSeeds) return;
-    const denominator = ["BARLEY", "HAMMERSTONE"].includes(crop.key) ? 244 : crop.key === "LIMPWURT" ? 449 : Math.floor(base / 500);
-    if (Math.random() < 1 / denominator) {
-        if (player.getInventory().getFreeSlots() || player.getInventory().contains(Data.itemId("Hespori seed"))) Patches.give(player, Data.itemId("Hespori seed"));
-        else core.ItemOnGroundManager.registers(player, new core.Item(Data.itemId("Hespori seed")));
-        player.sendMessage("You find a Hespori seed!");
-    }
 }
 
 function binFor(state) {
