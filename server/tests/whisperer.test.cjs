@@ -204,6 +204,8 @@ test('screech cover is exactly the 2x2 behind a column and each blast weakens al
     f.player.moveTo(new core.Location(column.x, column.y + 2, 0));
     f.fight.special.left = 1;
     Specials.process(f.fight);
+    Specials.process(f.fight);
+    Specials.process(f.fight);
     f.apply();
     assert.equal(f.player.getHitpoints(), 99);
     assert.equal(column.active, false);
@@ -766,6 +768,8 @@ test('special preparation and screech fragment window follow normal packet phase
             assert.equal(f.fight.special.blasts,1);
             for(let tick=24;tick<29;tick++)Specials.process(f.fight);
             assert.equal(f.fight.special.blasts,1);
+            Specials.process(f.fight);assert.ok(f.fight.special);
+            for(let tick=30;tick<=31;tick++){Specials.process(f.fight);assert.ok(f.fight.special);}
             Specials.process(f.fight);assert.equal(f.fight.special,null);
         }
         if(kind==='seeds'||kind==='souls'){
@@ -970,9 +974,10 @@ test('shadow columns use clean native forty-pixel health bars and remove them ou
     Specials.process(f.fight);
     assert.ok(f.fight.special.columns.every(column=>column.npc.getHeadbars().length===1),'shadow bars refresh without hits each tick');
     const strongest = f.fight.special.columns.find(column=>column.hp===60);
-    while (f.fight.special.age<17) Specials.process(f.fight);
+    while (f.fight.special.age<19) Specials.process(f.fight);
     assert.equal(strongest.hp,40);
     assert.deepEqual(strongest.npc.getHeadbars(),[{id:2,fill:27,endFill:27,duration:0,delay:0}]);
+    for(const column of f.fight.special.columns)column.npc.resetUpdating();
     f.fight.setShadow(false);
     for (const column of f.fight.special.columns.filter(column=>column.active)) {
         assert.deepEqual(column.npc.getTickHits(),[]);
@@ -1136,4 +1141,90 @@ test('Whisperer statistics write failures retain memory totals without interrupt
     assert.equal(Number(h.strings.get(15).replace(/[^0-9]/g,'')),beforeKills+1);
     assert.equal(Number(h.strings.get(17).replace(/[^0-9]/g,'')),beforeDeaths+1);
     assert.equal(logs.length,2);
+});
+
+test('screech snapshots cover at the wave and applies column damage two ticks later', t => {
+    const f=fixture(),packets=[],graphics=[];
+    const sender=f.player.getPacketSender();
+    f.player.getPacketSender=()=>new Proxy(sender,{get:(target,key)=>key==='sendProjectile'?(...args)=>packets.push(args):target[key]});
+    t.mock.method(f.boss,'performGraphic',graphic=>graphics.push(graphic));
+    startSpecial(f.fight,'screech');
+    const special=f.fight.special,column=special.columns.find(c=>c.hp===60),initial=special.columns.map(c=>c.hp);
+    f.player.moveTo(new core.Location(column.x,column.y+2,0));
+    while(special.age<17)Specials.process(f.fight);
+    assert.deepEqual(special.columns.map(c=>c.hp),initial,'the wave has not reached the columns');
+    assert.equal(graphics.at(-1).getId(),2470);
+    assert.equal(graphics.at(-1).getHeight(),125);
+    f.player.moveTo(new core.Location(2656,6379,0));
+    Specials.process(f.fight);
+    assert.equal(packets.length,1,'the snapshotted cover receives its projectile after one tick');
+    const args=packets[0];
+    assert.deepEqual([args[3],args[4],args[5],args[6],args[8],args[9],args[10]],[40,2471,100,10,0,127,128]);
+    assert.deepEqual([args[1].getX(),args[1].getY()],[column.x,column.y]);
+    assert.deepEqual(special.columns.map(c=>c.hp),initial);
+    Specials.process(f.fight);f.apply();
+    assert.equal(f.player.getHitpoints(),99,'moving after the wave retains the launch cover');
+    assert.equal(column.active,false,'a covered column falls regardless of its original health');
+    assert.ok(special.columns.every(c=>c.npc.getTickHits().length===1 && c.npc.getTickHits()[0].getDamage()===20),'each column displays the actual screech hit');
+    assert.ok(special.columns.some(c=>c.hp!==initial[special.columns.indexOf(c)]));
+});
+
+test('entering screech cover after the wave does not evade its delayed ordinary damage', () => {
+    const f=fixture();startSpecial(f.fight,'screech');
+    const special=f.fight.special,column=special.columns.find(c=>c.hp===60);
+    f.player.moveTo(new core.Location(2656,6379,0));
+    while(special.age<17)Specials.process(f.fight);
+    f.apply();assert.equal(f.player.getHitpoints(),99);
+    f.player.moveTo(new core.Location(column.x,column.y+2,0));
+    Specials.process(f.fight);f.apply();assert.equal(f.player.getHitpoints(),99);
+    Specials.process(f.fight);f.apply();
+    assert.equal(f.player.getHitpoints(),54);
+    assert.equal(f.fight.sanity,55);
+    assert.equal(f.fight.perfectKill,false);
+});
+
+test('the third screech remains active through impact and stop cancels unresolved column damage', () => {
+    const f=fixture();startSpecial(f.fight,'screech');
+    const special=f.fight.special;
+    while(special.age<29)Specials.process(f.fight);
+    assert.ok(f.fight.special===special,'the third launch does not overwrite its own animation with bind');
+    Specials.process(f.fight);assert.ok(f.fight.special===special);
+    Specials.process(f.fight);assert.ok(f.fight.special===special,'the damage update remains visible before removal');
+    Specials.process(f.fight);assert.equal(f.fight.special,null);
+    const cancelled=fixture();startSpecial(cancelled.fight,'screech');
+    const old=cancelled.fight.special;
+    while(old.age<17)Specials.process(cancelled.fight);
+    const health=old.columns.map(c=>c.hp);
+    cancelled.fight.stop();
+    Specials.process(cancelled.fight);Specials.process(cancelled.fight);cancelled.apply();
+    assert.deepEqual(old.columns.map(c=>c.hp),health);
+    assert.equal(cancelled.player.getHitpoints(),99);
+});
+
+test('native screech water waves fill the source footprint while active columns shelter their two-by-four rectangles', t => {
+    t.mock.method(Math,'random',()=>0);
+    for(const shadow of [false,true]) {
+        const f=fixture(),waves=[];
+        const sender=f.player.getPacketSender();
+        f.player.getPacketSender=()=>new Proxy(sender,{get:(target,key)=>key==='sendGraphic'?(graphic,location)=>waves.push({graphic,location}):target[key]});
+        f.fight.setShadow(shadow);startSpecial(f.fight,'screech');
+        f.player.moveTo(new core.Location(shadow?2400:2656,6379,0));
+        const counts=[];
+        for(const age of [17,23,29]) {
+            while(f.fight.special.age<age)Specials.process(f.fight);
+            counts.push(waves.length-counts.reduce((sum,n)=>sum+n,0));
+        }
+        assert.deepEqual(counts,[311,356,364]);
+        const offset=shadow?256:0;
+        assert.ok(waves.every(({graphic})=>graphic.getId()===2451 && graphic.getHeight()===0));
+        for(const {graphic,location} of waves) {
+            const distance=Math.abs(location.getX()+offset-2656)+Math.abs(location.getY()-6357);
+            assert.equal(graphic.getDelay(),Math.max(5,5+3*(distance-2)));
+        }
+        assert.ok(waves.some(({graphic})=>graphic.getDelay()===50),'a delay equal to GraphicHeight.MIDDLE stays a delay');
+        assert.ok(waves.some(({location})=>location.getX()+offset===2656 && location.getY()===6376));
+        const first=waves.slice(0,counts[0]);
+        assert.ok(first.every(({location})=>!f.fight.special.columns.some(c=>location.getX()>=c.x && location.getX()<c.x+2 && location.getY()>=c.y && location.getY()<c.y+4)));
+        f.fight.stop();
+    }
 });

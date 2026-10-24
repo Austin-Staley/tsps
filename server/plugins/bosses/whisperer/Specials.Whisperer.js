@@ -132,6 +132,56 @@ function finish(fight) {
     }
     fight.bind();
 }
+function screechWave(fight,special) {
+    const {Graphic,Location,Projectile}=Common.core;
+    const origin=Projectile.centreOf(fight.boss);
+    // Native water fills this cathedral footprint except the standing columns'
+    // footprints and their 2x2 cover. All 21 normal captured waves agree.
+    for(const [dy,minimum,maximum] of Common.data.specials.screechWaveRows)
+        for(let dx=minimum;dx<=maximum;dx++) {
+            const x=origin.getX()+dx,y=origin.getY()+dy;
+            if(special.columns.some(c=>c.active && x>=c.x && x<c.x+2 && y>=c.y && y<c.y+4))continue;
+            const graphic=new Graphic(Common.data.graphics.screechWater);
+            // Set the public delay explicitly: the overloaded constructor treats
+            // a delay of 50 as GraphicHeight.MIDDLE instead.
+            graphic.delay=Math.max(5,5+3*(Math.abs(dx)+Math.abs(dy)-2));
+            fight.player.getPacketSender().sendGraphic(graphic,new Location(x,y,0));
+        }
+}
+function screechImpact(fight,special) {
+    const pending=special.pendingBlast;
+    for(const column of special.columns)
+        if(column.removeAt===special.age) {
+            Common.remove(column.npc);
+            delete column.removeAt;
+        }
+    if(special.finishAt===special.age) {
+        finish(fight);
+        return true;
+    }
+    if(!pending)return false;
+    if(special.age===pending.castAge+1 && pending.cover) {
+        const {Projectile,Location}=Common.core,geometry=Common.data.specials.screechProjectile;
+        fight.player.getPacketSender().sendProjectile(Projectile.centreOf(fight.boss),new Location(pending.cover.x,pending.cover.y,0),0,
+            geometry.cycles,Common.data.projectiles.screech,geometry.startHeight,geometry.endHeight,0,0,geometry.angle,geometry.progress);
+    }
+    if(special.age!==pending.castAge+2)return false;
+    if(!pending.cover)Common.damage(fight,45,45);
+    for(const column of special.columns)
+        if(column.active) {
+            column.hp-=20;
+            column.npc.setHitpoints(Math.max(0,column.hp));
+            column.npc.addTickHit(new Common.core.HitDamage(20,Common.core.HitMask.RED));
+            if(column===pending.cover || column.hp<=0) {
+                column.active=false;
+                column.removeAt=special.age+1;
+            }
+            if(fight.shadow)columnHealth(fight,column);
+        }
+    special.pendingBlast=null;
+    if(!special.blasts)special.finishAt=special.age+1;
+    return false;
+}
 function process(fight) {
     const special = fight.special;
     if (!special)
@@ -161,6 +211,7 @@ function process(fight) {
     if (special.kind === 'screech' && fight.shadow)
         for (const column of special.columns)
             if (column.active) columnHealth(fight,column);
+    if(special.kind==='screech' && screechImpact(fight,special))return;
     special.left--;
     if (special.kind === 'seeds') {
         const p = fight.player.getLocation();
@@ -190,27 +241,13 @@ function process(fight) {
     }
     else if (special.kind === 'screech' && special.left <= 0) {
         animate(Common.data.animations.screechBlast);
+        fight.boss.performGraphic(new Common.core.Graphic(Common.data.graphics.screech,0,125));
+        screechWave(fight,special);
         const p = fight.player.getLocation();
         // Boss is south: cover consists of the 2x2 immediately north of a 2x2 column.
         const cover = special.columns.find(c => c.active && p.getX() >= c.x && p.getX() < c.x + 2 && p.getY() >= c.y + 2 && p.getY() < c.y + 4);
-        if (!cover)
-            Common.damage(fight, 45, 45);
-        for (const c of special.columns)
-            if (c.active) {
-                c.hp -= 20;
-                if (c === cover || c.hp <= 0) {
-                    c.active = false;
-                    Common.remove(c.npc);
-                }
-                else {
-                    c.npc.setHitpoints(c.hp);
-                    if (fight.shadow) columnHealth(fight,c);
-                }
-            }
-        if (--special.blasts <= 0)
-            finish(fight);
-        else
-            special.left = 6;
+        special.pendingBlast={castAge:special.age,cover};
+        special.left=--special.blasts ? 6 : Infinity;
     }
     else if (special.kind === 'souls') {
         if (fight.shadow && special.left % 4 === 0)
