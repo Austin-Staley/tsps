@@ -75,3 +75,17 @@ test('recorded mouth origins and client-cycle launch parameters reach the real p
     assert.deepEqual([args[3],args[5]*4,args[6]*4,args[8],args[9],args[10],args[11]], [150,550,100,30,30,124,null]);
   }
 });
+
+test('orb startup and consecutive one-tick launches use the corresponding captured spotanim variants', t => {
+  const h = H.harness(t), graphics = [];
+  t.mock.method(h.fight.boss, 'performGraphic', graphic => graphics.push(graphic.getId()));
+  h.fight.tier = 0; h.fight.shots = 0;
+  h.fight.orb('magic', 5);
+  h.fight.tier = 3; h.fight.shots = 0;
+  h.fight.orb('ranged', 3);
+  h.fight.shots = 1;
+  h.fight.orb('magic', 3); h.fight.orb('melee', 3);
+  h.fight.enraged = true;
+  h.fight.orb('ranged', 5);
+  assert.deepEqual(graphics, [2486,2484,2483,2482,2484]);
+});

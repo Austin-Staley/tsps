@@ -2,6 +2,48 @@ const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
+test('recorded roar rubble uses falling-stay graphics and lands seven ticks later with permanent first-roar tells', t => {
+  const h = H.harness(t), graphics = [];
+  h.fight.nextAttack = Infinity;
+  h.move([2077, 6378]);
+  h.fight.nextSpecial = 'smoke';
+  t.mock.method(Math, 'random', () => 0.5);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? (g, at) => graphics.push([g.getId(), g.getDelay(), h.session.sourceTile(at).slice(0, 2)]) : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.hazards.roar();
+  assert.deepEqual(graphics, [[2479, 50, [2077,6378]], [2479, 50, [2082,6365]], [2479, 50, [2081,6379]]]);
+  h.move([2076, 6378]);
+  h.step(6);
+  assert.equal(h.fight.hazards.blockers.size, 0);
+  h.step();
+  assert.deepEqual([...h.fight.hazards.blockers].sort(), ['2077,6378', '2081,6379', '2082,6365']);
+  assert.deepEqual([...h.fight.hazards.objects.values()].map(o => o.getFace()), [2,2,2]);
+  assert.equal(graphics.length, 3, 'the falling-stay graphic already contains the impact');
+});
+test('the first-roar side tell is not repeated by later volleys or enrage debris', t => {
+  const h = H.harness(t);
+  h.fight.nextAttack = Infinity;
+  t.mock.method(Math, 'random', () => 0.5);
+  h.move([2077, 6378]);
+  h.fight.hazards.roar(); h.step(7);
+  assert.equal(h.fight.hazards.blockers.size, 3);
+  h.move([2076, 6378]);
+  h.fight.hazards.roar(); h.step(7);
+  assert.equal(h.fight.hazards.blockers.size, 4);
+});
+test('first-roar lightning tells use the recorded west/east regions and preserve rubble rotation', t => {
+  const h = H.harness(t), graphics = [];
+  h.fight.nextAttack = Infinity;
+  h.fight.nextSpecial = 'lightning';
+  h.move([2077, 6378]);
+  t.mock.method(Math, 'random', () => 0.999);
+  const sender = new Proxy({}, { get: (_, name) => name === 'sendGraphic' ? (g, at) => graphics.push([g.getId(), g.getDelay(), h.session.sourceTile(at).slice(0, 2)]) : () => sender });
+  h.p.getPacketSender = () => sender;
+  h.fight.hazards.roar();
+  assert.deepEqual(graphics, [[2480, 50, [2077,6378]], [2480, 50, [2074,6373]], [2480, 50, [2090,6373]]]);
+  h.move([2076, 6378]); h.step(7);
+  assert.deepEqual([...h.fight.hazards.objects.values()].map(o => o.getFace()), [3,3,3]);
+});
 test('smoke throws ten real blockers and ray cover blocks its final blast', t => {
   const h = H.harness(t);
   let random = 0;

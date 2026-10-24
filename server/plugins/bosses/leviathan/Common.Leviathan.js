@@ -52,8 +52,13 @@ function later(ticks, action) {
   })());
 }
 const animate = (npc, name) => npc.performAnimation(new core.Animation(ids.seqs[name]));
-function graphic(name) { return new core.Graphic(ids.gfx[name]); }
-function tileGraphic(player, area, at, name) { player.getPacketSender().sendGraphic(graphic(name), tile(area, at)); }
+function graphic(name, delay = 0) {
+  const result = new core.Graphic(ids.gfx[name]);
+  // Graphic's overloaded second argument treats 50 as a height enum.
+  result.delay = delay;
+  return result;
+}
+function tileGraphic(player, area, at, name, delay = 0) { player.getPacketSender().sendGraphic(graphic(name, delay), tile(area, at)); }
 function damage(fight, amount, avoidable = true) {
   if (fight.stopped || fight.over || fight.session.ended || fight.session.fight !== fight || fight.player.getHitpoints() <= 0) return;
   const hit = new core.HitDamage(Math.max(0, Math.floor(amount)), core.HitMask.RED);
@@ -69,14 +74,14 @@ function protectedFrom(player, style) {
   const prayer = { magic: "PROTECT_FROM_MAGIC", ranged: "PROTECT_FROM_MISSILES", melee: "PROTECT_FROM_MELEE" }[style];
   return core.PrayerHandler.isActivated(player, core.PrayerHandler[prayer]);
 }
-function projectile(fight, style, flight) {
+function projectile(fight, style, flight, startup = true) {
   const { Projectile } = core;
   const [cx, cy] = data.arena.centre, [px, py] = fight.hazards.playerTile();
   // Original NPC packets select a mouth on the side(s) outside the 7x7 body,
   // rather than starting every orb at the NPC's ground-level centre.
   const mouth = [cx + (Math.abs(px - cx) > 3 ? Math.sign(px - cx) * 2 : 0),
     cy + (Math.abs(py - cy) > 3 ? Math.sign(py - cy) * 2 : 0)];
-  fight.boss.performGraphic(graphic(`${style}Launch`));
+  fight.boss.performGraphic(graphic(`${style}Launch${startup ? 'Start' : ''}`));
   new Projectile(fight.session.tile(mouth), Projectile.centreOf(fight.player), fight.player,
     ids.gfx[style], 30, flight * 30, 137.5, 25, fight.session.area).withAngle(30).withProgress(124).sendProjectile();
 }

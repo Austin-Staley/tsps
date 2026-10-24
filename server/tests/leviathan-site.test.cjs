@@ -2,6 +2,67 @@ const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
+test('island view includes all five distant tails through native NPC visibility and restores the previous radius on exit', t => {
+  const h = H.harness(t), Site = require('../plugins/bosses/leviathan/Site.Leviathan');
+  h.p.setNpcViewDistance(17);
+  h.api.onCustomEvent('quest:is-complete', request => { request.complete = true; });
+  Site.travel({ player: h.p, objectId: 49212 });
+  const session = Site.sessionOf(h.p);
+  t.after(() => session.end());
+  const byIndex = new Map();
+  for (let i = 0; i < session.tails.length; i++) {
+    const tail = session.tails[i];
+    tail.setIndex(100 + i); tail.setNeedsPlacement(false); byIndex.set(tail.getIndex(), tail);
+  }
+  t.mock.method(h.core.World, 'getNpcs', () => ({ get: index => byIndex.get(index) }));
+  for (const at of [[2072,6370], [2072,6364], [2090,6364], [2072,6380], [2090,6380]]) {
+    h.p.setLocation(session.tile(at));
+    h.core.World.updateLocalNpcs(h.p, session.tails);
+    assert.equal(h.p.getLocalNpcs().length, 5, `native visibility from ${at}`);
+  }
+  Site.leave(h.p);
+  assert.equal(h.p.getNpcViewDistance(), 17);
+});
+test('the five recorded tail actors belong to the island and survive fight replacement until exit', t => {
+  const h = H.harness(t), Site = require('../plugins/bosses/leviathan/Site.Leviathan');
+  h.api.onCustomEvent('quest:is-complete', request => { request.complete = true; });
+  Site.travel({ player: h.p, objectId: 49212 });
+  const session = Site.sessionOf(h.p);
+  t.after(() => session.end());
+  assert.equal(session.tails?.length, 5);
+  assert.deepEqual(session.tails.map(n => [n.getId(), session.sourceTile(n.getLocation()), n.getFace().getDirection().getId()]), [
+    [12216, [2053,6355,0], 2], [12217, [2079,6346,0], 1], [12216, [2075,6393,0], 6],
+    [12216, [2095,6357,0], 0], [12218, [2096,6389,0], 5],
+  ]);
+  for (const tail of session.tails) {
+    assert.equal(tail.getPrivateArea(), session.area);
+    assert.equal(tail.getOwner(), h.p);
+    assert.equal(tail.isOwnerOnly(), true);
+    assert.ok(tail.getLocation().getX() >= session.area.getBaseX(), 'western tail is inside copied chunks');
+  }
+  const tails = [...session.tails];
+  Site.climb({ player: h.p, objectId: 47593 });
+  session.fight.fell(); session.start();
+  assert.deepEqual(session.tails, tails);
+  assert.ok(tails.every(n => n.isRegistered()));
+  Site.leave(h.p);
+  assert.equal(session.tails.length, 0);
+  assert.ok(tails.every(n => !n.isRegistered()));
+});
+test('boss bites animate every native tail using its recorded variant', t => {
+  const h = H.harness(t), Site = require('../plugins/bosses/leviathan/Site.Leviathan'), animations = [];
+  h.api.onCustomEvent('quest:is-complete', request => { request.complete = true; });
+  Site.travel({ player: h.p, objectId: 49212 });
+  const session = Site.sessionOf(h.p);
+  t.after(() => session.end());
+  assert.equal(session.tails?.length, 5);
+  for (const tail of session.tails) t.mock.method(tail, 'performAnimation', animation => animations.push(animation.getId()));
+  Site.climb({ player: h.p, objectId: 47593 });
+  h.p.setLocation(session.tile([2076,6372]));
+  session.fight.nextAttack = 0;
+  session.fight.process();
+  assert.deepEqual(animations, [10301,10302,10301,10301,10303]);
+});
 test('postquest Scar stones connect the two walkable shores in both directions only at their cache locations', t => {
   const h = H.harness(t), Site = require('../plugins/bosses/leviathan/Site.Leviathan');
   h.api.onCustomEvent('quest:is-complete', request => { request.complete = true; });

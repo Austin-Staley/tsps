@@ -56,6 +56,7 @@ class Fight {
     this.boss.setPositionToFace(this.player.getLocation());
     if (this.hazards.nearPool()) {
       Common.animate(this.boss, "bite");
+      this.session.biteTails?.();
       if (!Common.protectedFrom(this.player, "melee")) Common.damage(this, Common.random(0, Common.data.damage.melee));
       this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval);
       return;
@@ -76,8 +77,9 @@ class Fight {
   orb(style, flight) {
     if (!this.alive()) return;
     const interval = this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval;
-    Common.animate(this.boss, interval > 1 || !this.shots ? "orbStart" : "orbLoop");
-    Common.projectile(this, style, flight);
+    const startup = interval > 1 || !this.shots;
+    Common.animate(this.boss, startup ? "orbStart" : "orbLoop");
+    Common.projectile(this, style, flight, startup);
     const epoch = this.volleyEpoch;
     if (interval > 1) this.at(1, () => {
       if (this.alive() && this.volleyEpoch === epoch && !this.stunnedUntil && !this.special) Common.animate(this.boss, "orb");

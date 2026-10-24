@@ -60,9 +60,10 @@ function harness(t, awakened = false, startingHitpoints = 99) {
   t.mock.method(PluginManager, 'emitPlayerDealtDamage', event => dispatch('onPlayerDealtDamage', event));
   t.mock.method(PluginManager, 'emitCustomEvent', (name, event) => api.emitCustomEvent(name, event));
   Common.init(api);
-  const area = new core.TemplatedInstanceArea(7, 8);
-  for (const plane of [0, 1]) for (let x = 0; x < 7; x++) for (let y = 0; y < 8; y++)
-    area.setChunk(plane, x, y, { sourceChunkX: 257 + x, sourceChunkY: 792 + y, sourcePlane: plane, rotation: 0 });
+  const { width, height, planes, sourceChunkX, sourceChunkY } = Common.data.instance;
+  const area = new core.TemplatedInstanceArea(width, height);
+  for (const plane of planes) for (let x = 0; x < width; x++) for (let y = 0; y < height; y++)
+    area.setChunk(plane, x, y, { sourceChunkX: sourceChunkX + x, sourceChunkY: sourceChunkY + y, sourcePlane: plane, rotation: 0 });
   const session = { player: p, area, awakened, ended: false, perfectKills: 0,
     tile: tile => Common.tile(area, tile), sourceTile: at => Common.sourceTile(area, at),
     spawn(id, tile) {

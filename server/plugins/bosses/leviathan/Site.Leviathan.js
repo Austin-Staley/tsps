@@ -24,10 +24,21 @@ function areaClass() {
 class Session {
   constructor(player) {
     this.player = player; this.awakened = false; this.ended = false; this.fight = null; this.perfectKills = 0;
+    this.previousNpcViewDistance = player.getNpcViewDistance();
+    player.setNpcViewDistance(Math.max(this.previousNpcViewDistance, Common.data.npcViewDistance));
     this.area = new (areaClass())(); this.area.session = this;
     const { sourceChunkX, sourceChunkY, width, height, planes } = Common.data.instance;
     for (const z of planes) for (let x = 0; x < width; x++) for (let y = 0; y < height; y++)
       this.area.setChunk(z, x, y, { sourceChunkX: sourceChunkX + x, sourceChunkY: sourceChunkY + y, sourcePlane: z, rotation: 0 });
+    this.tails = Common.data.tails.map(({ npc, tile, face }) => {
+      const tail = this.spawn(Common.ids.npcs[npc], tile);
+      if (tail) {
+        tail.setScriptedMovement(true);
+        tail.getMovementQueue().setBlockMovement(true);
+        tail.setFace(Common.core.Direction[face]);
+      }
+      return tail;
+    }).filter(Boolean);
   }
   tile(tile) { return Common.tile(this.area, tile); }
   sourceTile(tile) { return Common.sourceTile(this.area, tile); }
@@ -35,6 +46,12 @@ class Session {
     const at = this.tile(tile), npc = Common.api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: this.player, ownerOnly: true, wanderRadius: 0 });
     if (npc) { npc.__skipDefaultRespawn = true; this.area.add(npc); }
     return npc;
+  }
+  biteTails() {
+    for (const tail of this.tails) {
+      const entry = Common.data.tails.find(entry => Common.ids.npcs[entry.npc] === tail.getId());
+      if (tail.isRegistered() && entry) Common.animate(tail, entry.bite);
+    }
   }
   start() {
     if (this.ended || this.fight && !this.fight.over) return;
@@ -57,6 +74,12 @@ class Session {
   end() {
     if (this.ended) return;
     this.ended = true; sessions.delete(this.player); this.fight?.stop();
+    this.player.setNpcViewDistance(this.previousNpcViewDistance);
+    for (const tail of this.tails) {
+      if (tail.getPrivateArea() === this.area) this.area.remove(tail);
+      Common.api.removeNpc(tail);
+    }
+    this.tails = [];
     this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
     if (this.player.getPrivateArea() === this.area) this.area.remove(this.player);
     if (!this.area.isDestroyed()) this.area.destroy();

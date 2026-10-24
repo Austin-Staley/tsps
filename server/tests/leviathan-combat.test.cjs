@@ -40,7 +40,7 @@ test('roar chip does not spoil perfection; debris can be dodged and blocks its t
   assert.equal(h.fight.perfect, true);
   const old = h.session.sourceTile(h.p.getLocation());
   h.move([old[0], old[1] + 1]);
-  h.step(h.Common.data.inferred.debrisFlightTicks);
+  h.step(h.Common.data.roar.flightTicks - 1);
   assert.equal(h.p.getHitpoints(), 92);
   assert.ok(h.fight.hazards.blockers.has(old.slice(0, 2).join(',')));
   assert.ok(h.area.getClip(h.session.tile(old)) & h.core.RegionManager.BLOCKED_TILE);

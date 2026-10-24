@@ -13,6 +13,43 @@ function walk(h, ticks = 1) {
   }
 }
 
+test('registered pathfinder aura refreshes the recorded one-tick player tint through the native packet encoder', t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  hazards.process();
+  assert.equal(h.p.getTint(), null);
+  hazards.spawnPathfinder();
+  h.move([2075,6378]);
+  hazards.pathfinder.__testRemoved = true;
+  hazards.process();
+  assert.equal(h.p.getTint(), null);
+  hazards.pathfinder.__testRemoved = false;
+  hazards.process();
+  assert.deepEqual(h.p.getTint(), { startCycle: 0, endCycle: 30, hue: 9, saturation: 7, lightness: 70, weight: 70 });
+  const { createPlayerSyncState, encodePlayerSync } = require('../dist/net/protocol/ClientProtocol');
+  const tile = { x: 2075, y: 6378, level: 0 };
+  const packet = encodePlayerSync(1, 0, 0, 0, [{ index: 1, ...tile, tint: h.p.getTint() }], createPlayerSyncState(1, tile));
+  // The packet appends its two-byte loop-cycle trailer after the update block.
+  assert.deepEqual([...packet.subarray(-10, -2)], [0,0,30,0,119,7,198,186]);
+});
+
+test('aura tint follows actual movement and expires after leaving or stopping without a persistent recolour', t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  hazards.spawnPathfinder(); h.move([2073,6378]);
+  h.step(3);
+  assert.equal(h.p.getTint()?.endCycle, 30, 'queued east movement does not shift the glow early');
+  h.p.resetUpdating();
+  hazards.pathfinder.getMovementQueue().process();
+  hazards.process();
+  assert.equal(hazards.inAura(), false);
+  assert.equal(h.p.getTint(), null, 'outside the aura no new tint extends its thirty-cycle lifetime');
+  h.move(hazards.pathfinderCentre()); hazards.process();
+  assert.equal(h.p.getTint()?.weight, 70);
+  h.p.resetUpdating(); h.fight.stop(); hazards.process();
+  assert.equal(h.p.getTint(), null, 'stopping removes the pathfinder and stops refreshing the tint');
+});
+
 test("pathfinder follows captured clockwise rectangle with ordinary walking packets", t => {
   const h = H.harness(t), hazards = h.fight.hazards;
   h.fight.nextAttack = Infinity;

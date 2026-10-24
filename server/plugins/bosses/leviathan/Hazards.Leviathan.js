@@ -15,6 +15,7 @@ class Hazards {
     this.tornado = null;
     this.pathCentre = null;
     this.pathNext = null;
+    this.firstRoar = true;
     const { west, east, south, north } = Common.data.arena;
     for (let x = west; x <= east; x++) for (let y = south; y <= north; y++) {
       if ((this.session.area.getClip(this.session.tile([x, y])) & 0x200100) === 0) this.floor.add(Model.key([x, y]));
@@ -28,14 +29,14 @@ class Hazards {
       !this.floor.has(Model.key([at[0] + dx, at[1] + dy])));
   }
   graphic(tile, name) { Common.tileGraphic(this.fight.player, this.session.area, tile, name); }
-  place(tile) {
+  place(tile, rotation = 0) {
     const key = Model.key(tile);
     if (!this.floor.has(key) || this.blockers.has(key)) return;
     const { GameObject, ObjectManager, RegionManager } = Common.core;
     const at = this.session.tile(tile);
     const before = this.session.area.getClip(at);
     this.originalClip.set(key, before);
-    const object = new GameObject(Common.ids.locs.debris, at, 10, 0, this.session.area);
+    const object = new GameObject(Common.ids.locs.debris, at, 10, rotation, this.session.area);
     ObjectManager.register(object, true);
     RegionManager.addClipping(at.getX(), at.getY(), at.getZ(), RegionManager.BLOCKED_TILE, this.session.area);
     this.objects.set(key, object);
@@ -52,14 +53,27 @@ class Hazards {
       if (permanent) this.place(target);
     });
   }
+  dropRoar(tile) {
+    if (!this.floor.has(Model.key(tile))) return;
+    const target = [...tile], rotation = Common.random(0, 3);
+    // The falling-stay animation includes its own impact. Its variant matches
+    // the permanent rubble rotation; roar rocks are not smoke-bomb projectiles.
+    Common.tileGraphic(this.fight.player, this.session.area, target, `roarRubble${rotation}`, Common.data.roar.graphicDelayCycles);
+    this.fight.at(Common.data.roar.flightTicks, () => {
+      if (!this.fight.alive()) return;
+      if (Model.key(this.playerTile()) === Model.key(target)) Common.damage(this.fight, Common.random(0, Common.data.damage.debris));
+      this.place(target, rotation);
+    });
+  }
   roar() {
     const tile = this.playerTile();
-    this.drop(tile);
-    if (this.fight.awakened) for (const [dx, dy] of ADJACENT.slice(0, 4)) this.drop([tile[0] + dx, tile[1] + dy]);
+    this.dropRoar(tile);
+    if (this.fight.awakened) for (const [dx, dy] of ADJACENT.slice(0, 4)) this.dropRoar([tile[0] + dx, tile[1] + dy]);
     // The first roar's side debris previews which alternating special comes first.
-    const [cx, cy] = Common.data.arena.centre;
-    const sides = this.fight.nextSpecial === "lightning" ? [[cx - 6, cy], [cx + 6, cy]] : [[cx, cy - 6], [cx, cy + 7]];
-    for (const at of sides) this.drop(at, false);
+    if (!this.firstRoar) return;
+    this.firstRoar = false;
+    for (const [west, south, east, north] of Common.data.roar.tellRegions[this.fight.nextSpecial])
+      this.dropRoar([Common.random(west, east), Common.random(south, north)]);
   }
   lightning() {
     const fight = this.fight, { inferred } = Common.data;
@@ -139,6 +153,9 @@ class Hazards {
   }
   process() {
     const fight = this.fight;
+    // Native packets refresh a thirty-client-cycle tint while the player is
+    // inside the registered actor's actual aura. Leaving simply lets it expire.
+    if (this.inAura()) fight.player.tint(Common.data.pathfinder.auraTint);
     if (this.pathReady() && fight.tick >= this.pathNext) {
       this.pathCentre = this.pathfinderCentre();
       const corners = Common.data.arena.pathCorners;
