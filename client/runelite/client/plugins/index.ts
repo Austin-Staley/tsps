@@ -27,6 +27,7 @@ import {
     PoisonTimerPlugin,
 } from "../../../game/plugins/statustimer/StatusTimerPlugin";
 import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkersConfig";
+import { GroundMarkerPlugin } from "../../../game/plugins/groundmarkers/GroundMarkerPlugin";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
@@ -44,6 +45,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     GameFrame317Plugin,
     GroundItemsPlugin,
     InteractHighlightPlugin,
+    GroundMarkerPlugin,
     TileMarkersPlugin,
     MenuSwapperPlugin,
     // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
