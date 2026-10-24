@@ -23,6 +23,7 @@ class Fight {
     const boss = this.session.spawn(Common.ids.npcs.boss, Common.data.arena.boss);
     if (!boss) { this.stopped = true; return; }
     this.boss = boss; boss.__leviathanFight = this; boss.__skipDefaultRespawn = true;
+    boss.setFlag('combat:no-regen');
     boss.setMaxHitpoints(this.stats.hitpoints); boss.setHitpoints(this.stats.hitpoints);
     const stats = [...boss.getDefinition().getStats()];
     [stats[0], stats[1], stats[2], stats[3], stats[4]] = [this.stats.attack, this.stats.strength, this.stats.defence, this.stats.ranged, this.stats.magic];
@@ -42,7 +43,6 @@ class Fight {
     for (const event of due) if (!this.stopped) event.action();
     if (!this.alive()) return;
     Achievements.observe(this);
-    this.boss.getCombat().getLastAttack().reset();
     if (!this.enraged && this.boss.getHitpoints() <= this.stats.hitpoints * 0.2) this.enterEnrage();
     this.hazards.process();
     if (this.enraged && this.tick >= this.nextEnrageDebris) {

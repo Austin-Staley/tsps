@@ -1,5 +1,16 @@
 # Leviathan normal-mode evidence ledger
 
+### Owned-boss idle regeneration correction (24 October 2026)
+
+A real `NPC.process()` regression reproduced boss HP 300→390 when an elapsed
+idle clock reaches the NPC turn before the scripted fight task. The boss now
+receives the existing `combat:no-regen` flag at creation. This replaces the
+per-process attack timestamp reset that previously masked regeneration during
+continuous processing. The regression preserves HP 300 while the unchanged
+stopwatch remains elapsed beyond 24 seconds, proving the policy does not
+fabricate an attack. Each new boss gets the flag; generic NPC regeneration
+and the encounter's real attack schedule remain unchanged.
+
 This ledger tracks unresolved mechanics explicitly. A passing test against a chosen value does not establish OSRS fidelity. Normal mode is not complete while a required item below remains unresolved. Awakened mode remains outside this change and inaccessible.
 
 ## Sources and measurement rules

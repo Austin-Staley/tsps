@@ -3,6 +3,14 @@ const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
 
+test('normal Leviathan preserves HP across the real idle NPC clock without resetting attack timestamps',t=>{
+  const h=H.harness(t);h.fight.nextAttack=Infinity;h.step(40);
+  const boss=h.fight.boss;boss.setHitpoints(300);boss.getCombat().getLastAttack().reset(1);
+  boss.process();assert.equal(boss.getHitpoints(),300,'scripted boss HP must not heal before its fight task');
+  h.step();assert.ok(boss.getCombat().getLastAttack().elapsed()>=24000,'regen policy does not falsify an attack');
+  boss.process();assert.equal(boss.getHitpoints(),300);
+});
+
 test('the native cache pool gives exactly forty bite tiles including diagonals, excluding every outer wall', t => {
   const h = H.harness(t), floor = h.fight.hazards.floor, pool = new Set(), queue = [[2081,6372]];
   const { west, east, south, north } = h.Common.data.arena;
