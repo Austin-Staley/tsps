@@ -234,7 +234,7 @@ test('an unlimited item never runs out', () => {
   assert.equal(remainingLimit(p, UNLIMITED, 0), Infinity);
 });
 
-function exchange(t) {
+function exchange(t, config = {}) {
   const hooks = {};
   const buttons = [];
   const messages = [];
@@ -263,6 +263,7 @@ function exchange(t) {
   });
   plugin.register(new Proxy({
     core: { WorldDefinition: { isMembersWorld: () => true } },
+    getPluginConfig: (key, defaultValue) => Object.hasOwn(config, key) ? config[key] : defaultValue,
     onInterfaceActionButton: (ids, handler) => buttons.push({ ids, handler }),
   }, { get: (api, key) => api[key] ?? (handler => { hooks[key] = handler; }) }));
 
@@ -286,6 +287,31 @@ function exchange(t) {
   };
   return { p, inventory, place, click, hooks, messages, timers };
 }
+
+test('maxTradeDelay overrides volume and price caps for newly placed buys and sells', t => {
+  const now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(Math, 'random', () => 0.49);
+  for (const maxDelay of [5_000, 60_000, 2 * 60 * 60_000, 0x7fffffff]) {
+    for (const sell of [false, true]) {
+      const { inventory, place, timers } = exchange(t, { 'GrandExchange:maxTradeDelay': maxDelay });
+      assert.equal(fillDelayMs({ itemId: SLOW, quantity: 1_000_000 }, half), maxDelay);
+      const price = sell ? 180 : 50;
+      inventory.add(new Item(sell ? PRICED : 995, sell ? 1 : price), false);
+      const offer = place(sell, PRICED, 1, price);
+      assert.equal(offer.completesAt, now + maxDelay);
+      assert.equal(timers[0].delay, maxDelay);
+      assert.equal(fillDelayMs(offer, () => 0.99), null);
+    }
+  }
+});
+
+test('invalid maxTradeDelay values fall back to one hour', t => {
+  for (const value of [undefined, null, 0, -1, 4_999, NaN, Infinity, 0x80000000, 'invalid']) {
+    exchange(t, { 'GrandExchange:maxTradeDelay': value });
+    assert.equal(fillDelayMs({ itemId: PRICED, quantity: 1, price: 50 }, () => 0.49), 60 * 60_000);
+  }
+});
 
 test('selling above the buy limit succeeds and leaves the buy allowance unchanged', t => {
   const { p, inventory, place } = exchange(t);

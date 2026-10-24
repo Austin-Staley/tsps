@@ -38,6 +38,8 @@ const OFFERS_ATTRIBUTE = "grand-exchange-offers";
 const LIMITS_ATTRIBUTE = "grand-exchange-limits";
 const LIMIT_WINDOW_MS = 4 * 60 * 60 * 1000;
 const OFFER_MIN_DELAY_MS = 5_000;
+// Milliseconds; applies to newly placed offers.
+const MAX_TRADE_DELAY_CONFIG = "GrandExchange:maxTradeDelay";
 const OFFER_MAX_DELAY_MS = 60 * 60_000;
 const OFFER_ILLIQUID_MIN_MS = 60_000;
 const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
@@ -134,9 +136,12 @@ function fillDelayMs(offer, random = Math.random) {
   const delay = Number.isFinite(volume) && volume > 0
     ? quantity / (volume / 1440) * 60_000 * (0.75 + 0.75 * random()) * OFFER_GUIDE_DELAY
     : OFFER_ILLIQUID_MIN_MS + random() * (OFFER_ILLIQUID_MAX_MS - OFFER_ILLIQUID_MIN_MS);
-  const volumeDelay = Math.max(OFFER_MIN_DELAY_MS, Math.min(OFFER_MAX_DELAY_MS, delay));
+  const configuredMaxDelay = Number(pluginApi?.getPluginConfig(MAX_TRADE_DELAY_CONFIG, OFFER_MAX_DELAY_MS));
+  const maxDelay = Number.isFinite(configuredMaxDelay) && configuredMaxDelay >= OFFER_MIN_DELAY_MS && configuredMaxDelay <= MAX
+    ? configuredMaxDelay : OFFER_MAX_DELAY_MS;
+  const volumeDelay = Math.max(OFFER_MIN_DELAY_MS, Math.min(maxDelay, delay));
   const priceFactor = Math.exp(-OFFER_PRICE_SENSITIVITY * aggressiveness);
-  return Math.max(OFFER_MIN_DELAY_MS, Math.min(OFFER_MAX_DELAY_MS, volumeDelay * priceFactor));
+  return Math.max(OFFER_MIN_DELAY_MS, Math.min(maxDelay, volumeDelay * priceFactor));
 }
 
 function limitKey(itemId) {
