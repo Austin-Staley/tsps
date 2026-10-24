@@ -48,7 +48,9 @@ function hidden([x,y]) {
 function melee([x,y]) { return x>=3035 && x<=3043 && y>=6451 && y<=6459; }
 function near([x,y],[tx,ty],distance=1) { return Math.abs(x-tx)<=distance && Math.abs(y-ty)<=distance; }
 function extremityHit(eye,[x,y]) {
-  const corridor=eye.face===3?x>=3030&&x<=3032:x>=3046&&x<=3048;
-  return corridor&&y===eye.tile[1]+1;
+  // The rotated 3x2 wall object leaves a one-tile cone tip immediately in
+  // front, then three and five tiles on successive outward rows (DT2 Wiki).
+  const depth=eye.face===3?x-eye.tile[0]-2:eye.tile[0]-1-x;
+  return depth>=0&&depth<=2&&Math.abs(y-(eye.tile[1]+1))<=depth;
 }
 module.exports = { powderYield, saltYield, feed, gasCount, attackTicks, AttackClock, hidden, melee, near,extremityHit };

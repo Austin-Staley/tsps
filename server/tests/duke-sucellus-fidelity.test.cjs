@@ -210,11 +210,40 @@ test('icefall uses the native shadow and impact four ticks apart with safe mushr
   assert.equal(warned.some(([x,y])=>y>=6451),false);
 });
 
-test('the documented run-through tiles skip the extremities dangerous centre line',()=>{
+test('the documented wall-adjacent run-through tiles skip the extremities narrow cone tips',()=>{
   const M=require('../plugins/bosses/dukesucellus/Model.DukeSucellus'),d=require('../plugins/bosses/data/duke-sucellus.json');
-  for(const x of [3031,3032,3046,3047])for(let y=6439;y<=6453;y+=2)
+  for(const x of [3030,3048])for(let y=6439;y<=6453;y+=2)
     assert.equal(d.extremities.some(eye=>M.extremityHit(eye,[x,y])),false,`${x},${y}`);
   assert.equal(M.extremityHit(d.extremities[2],[3032,6450]),true);
+});
+
+test('every extremity covers mirrored one-three-five tile cone rows from its cache footprint',()=>{
+  const M=require('../plugins/bosses/dukesucellus/Model.DukeSucellus'),d=require('../plugins/bosses/data/duke-sucellus.json');
+  for(const eye of d.extremities){
+    const centreY=eye.tile[1]+1,west=eye.face===3;
+    for(let depth=0;depth<=2;depth++){
+      const x=west?3030+depth:3048-depth;
+      const hits=[];
+      for(let offset=-3;offset<=3;offset++){
+        const hit=M.extremityHit(eye,[x,centreY+offset]);
+        assert.equal(hit,Math.abs(offset)<=depth,`${eye.tile}, depth ${depth}, offset ${offset}`);
+        if(hit)hits.push(offset);
+      }
+      assert.equal(hits.length,1+2*depth);
+    }
+    for(const x of west?[3029,3033]:[3045,3049])assert.equal(M.extremityHit(eye,[x,centreY]),false);
+  }
+});
+
+for(const tile of [[3031,6451],[3047,6451]])
+test(`an off-centre north extremity gaze reaches ${tile}`,t=>{
+  const h=H.harness(t);h.enter();h.move(tile);
+  const Hazards=require('../plugins/bosses/dukesucellus/Hazards.DukeSucellus');
+  t.mock.method(Math,'random',()=>0);
+  t.mock.method(Hazards,'preparation',()=>{});
+  Hazards.eye(h.fight,2);h.step(5);
+  assert.equal(h.p.getHitpoints(),49);
+  assert.equal(h.p.getTimers().has(h.core.TimerKey.FREEZE),true);
 });
 
 test('icefall covers the four corridor entrance corner tiles recorded in ordinary preparation',t=>{

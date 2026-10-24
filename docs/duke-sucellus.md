@@ -8,7 +8,7 @@ The expanded audit uses original OSRS recordings [1751](https://rsprox.net/downl
 
 Normal 1827 ticks 1657/1662/1667 show waking, the first melee launch five ticks later, and another launch five ticks after that. Chip hits are in the launch update. Seven ground effects at x3036..3042,y6451 use 2440/2441/2442/2443/2442/2441/2440, with body effect 2439. The implementation now uses those effects rather than placing unused chip/slam graphics on the player's tile. Normal magic at tick 1973 originates at 3039,6453, uses projectile 2434 with start/end cycles 50/120, fine heights 350/100, angle 5 and start position 32, and hits at 1977. The source location has no actor attachment. Normal 1751 ticks 10121/10124/10127 and 10915/10918/10922 establish the three-tick second gas spit and the following auto interval at enrage/normal speeds. Gas now has its native projectile, faster casting animation and passive vent actor.
 
-Normal 1827's first room clock begins asleep at 1248. Middle/south/north cones start at 1250/1252/1254 and repeat every 15 ticks, independently of vents. Vent actors begin at 1263 then 1288/1313, with each row progressing east independently. Native cone NPCs 12199..12201 and vent NPC 12198 are cache verified; cones last four ticks and the eye returns to its sleeping sequence five ticks after rousing. The dangerous corridor centre line implements the ordinary Wiki's documented run-through route, which skips those true tiles. Preparation vent graphics start with a 120-client-cycle delay, idle at +6/+8/+10 and end at +11. Actors expire independently, including after fight-event cancellation.
+Normal 1827's first room clock begins asleep at 1248. Middle/south/north cones start at 1250/1252/1254 and repeat every 15 ticks, independently of vents. Vent actors begin at 1263 then 1288/1313, with each row progressing east independently. Native cone NPCs 12199..12201 and vent NPC 12198 are cache verified; cones last four ticks and the eye returns to its sleeping sequence five ticks after rousing. The later footprint follow-up below replaces the original centre-line approximation with the published one/three/five cone; its narrow wall-side tips retain the documented run-through route. Preparation vent graphics start with a 120-client-cycle delay, idle at +6/+8/+10 and end at +11. Actors expire independently, including after fight-event cancellation.
 
 Ice uses native shadow 1447 and impact 538 four ticks later; warnings occur throughout both corridors rather than only on the player's occupied tile. The captured three-on/three-off warning cadence and mushroom safe tiles replace the old unrelated melee-chip warning. The observed density is represented by an explicit empirical per-tile roll; a finite recording does not reveal Jagex's exact random selection algorithm. Likewise, observed normal combat vents last 12–14 ticks from their passive actor spawn to their end effect, but their exact lifetime distribution is not published. These are empirical choices, not a claim to have recovered the original random algorithm.
 
@@ -38,6 +38,44 @@ The normal fight implements aimed melee chip/slam, magic, pillar-hidden freezing
 
 ## Evidence and limits
 
+### Extremity footprint follow-up, 24 October 2026
+
+The current [Desert Treasure II walkthrough, Duking it Out](https://oldschool.runescape.wiki/w/Desert_Treasure_II_-_The_Fallen_Empire?oldid=15374592#Duking_it_Out)
+explicitly describes the extremity footprint as one tile nearest the eye,
+then three tiles and then five on successive outward rows. This is a quest
+walkthrough (revision 15374592, 17 October 2026 at 15:34:08 UTC), not a newly
+measured postquest damage sample. The shared
+[Extremity description](https://oldschool.runescape.wiki/w/Extremity) and
+ordinary [strategy video](https://oldschool.runescape.wiki/images/Duke_Sucellus_-_running_past_extremities.mp4?c9b16)
+show the same outward-widening cone. Original video frames at 2.0–3.0 seconds
+visibly show the narrow wall-side tip and wider fence-side edge; the green
+true-tile marker's safe route follows the wall-side column. The earlier
+ordinary quest capture's north-eye hit at `3047,6451` also falls within the
+published three-tile row and outside the previous centre-line approximation.
+
+Cache revision 241 objects 47544/47545/47546 are 3×2, rotated so that the wall
+footprint occupies two x-columns and three y-rows. Thus a west eye at x3028
+has its nearest cone tile at x3030, widening at x3031 and x3032; an east eye at
+x3049 mirrors this at x3048, x3047 and x3046. The y-centre is one tile north
+of the object's origin. The model now implements those nine dangerous tiles
+for all six eyes. The safe-run regression now checks x3030/x3048, where the
+odd-y true tiles skip the cone tips; the previous test incorrectly certified
+the same parity across the wider outer columns. Mushroom tiles remain clear.
+
+Three new regressions failed against the previous model: exhaustive mirrored
+one/three/five coverage and actual queued damage/freeze at both off-centre
+north-eye tiles. The damage check remains at its existing cycle; the geometry
+correction does not establish an exact active-window/check algorithm. All
+75 focused Duke tests and a fresh TypeScript build pass.
+
+The [dragon-pickaxe page](https://oldschool.runescape.wiki/w/Dragon_pickaxe)
+publishes a generic one-in-six shortened mining cycle, and the
+[salt-deposit page](https://oldschool.runescape.wiki/w/Salt_Deposit) quotes
+different rune/dragon experience rates. These are a useful lead, but do not
+alone establish the exact current Duke-specific roll or other tiers' rates.
+The confirmed rune/iron intervals remain separate from that unresolved lead;
+no generic Mining plugin or unpublished RNG formula is changed here.
+
 ### Wiki and original-video follow-up, 24 October 2026
 
 The ordinary [Extremity page](https://oldschool.runescape.wiki/w/Extremity)
@@ -55,8 +93,9 @@ marker skipping across the active cones; at 5.5–6.5 seconds it reaches the
 mushroom-side safe tile. The clip corroborates the documented running route,
 but contains no unsafe damage sample or complete tile-by-tile coverage test.
 It does not display a boss-health or quest discriminator, so it cannot alone
-distinguish ordinary postquest preparation from the quest. The existing broad
-centre-line approximation is not certified by this video.
+distinguish ordinary postquest preparation from the quest. The video alone
+does not certify every tile; the later footprint follow-up above supplies the
+explicit published geometry.
 
 The Wiki's [melee-flinching clip](https://oldschool.runescape.wiki/images/Duke_Sucellus_-_melee_flinching.mp4?e5666),
 uploaded on 14 February 2024 at 01:37:16 UTC, is 25.123946 seconds at 30 fps.
@@ -89,7 +128,7 @@ checked. They do not publish the protected boss-magic or covered-gas bounds.
 The strategy page adds that the initial preparation-vent pattern can differ
 when the player is already in the vent area, without publishing that area's
 selection boundary or the phase-selection algorithm. Protected magic 24,
-covered gas 4, complete extremity coverage/check timing, remaining pickaxe
+covered gas 4, exact extremity check timing, remaining pickaxe
 tiers, vent tie ordering/lifetime distribution/initial selection and ice RNG
 therefore remain explicit evidence limits. Finite footage is not proof of an
 unpublished random formula. Fresh build and all 72 focused Duke tests pass.
@@ -149,7 +188,9 @@ five 14-tick and two 12-tick lifetimes. Quest timings must not silently replace
 the current postquest implementation. Nearest-vent selection remains supported
 by the ordinary Wiki; equidistant tie ordering is unidentifiable here.
 
-Complete extremity coverage remains unresolved. Ordinary quest 1703 starts a
+At this earlier checkpoint, complete extremity coverage remained unresolved;
+the footprint follow-up above supersedes its centre-line approximation.
+Ordinary quest 1703 starts a
 north cone at 10486; the player reaches `3047,6451` at 10489, receives freeze
 graphic 369 at 10490 and a 56-damage hit at 10491. No ice warning targets that
 row. This observation warrants checking the existing centre-line approximation,
@@ -191,7 +232,7 @@ Primary behavior sources:
 
 Installed revision-241 gamevals, definitions and map placements establish NPC/item/object IDs, options, animations, the 7x7 boss footprint, pillars, vents and resource coordinates. The authored `bosses/data/duke-sucellus.json` is encounter configuration, not a generated drop artifact.
 
-This is a functional normal-mode implementation, not a claim of capture-exact OSRS parity. The capture-backed corrections above supersede the initial provisional visual effects and timing choices. Iron-pickaxe salt gathering now follows the ordinary measured first-yield delay and seven-tick repeats; other pickaxe tiers and tick manipulation remain unverified. Exact icefall selection, vent lifetime distributions and complete extremity coverage remain empirical. Normal protected magic max 24 and covered gas max 4 are provisional reductions; the source establishes reduced damage but does not explicitly give both bounds. A future capture can replace these values without changing the instance or reward contracts. Awakened hazards and achievements are intentionally not offered.
+This is a functional normal-mode implementation, not a claim of capture-exact OSRS parity. The capture-backed corrections above supersede the initial provisional visual effects and timing choices. Iron-pickaxe salt gathering now follows the ordinary measured first-yield delay and seven-tick repeats; other pickaxe tiers and tick manipulation remain unverified. Exact icefall selection, vent lifetime distributions and extremity check timing remain empirical; the cone geometry now follows the explicit primary description above. Normal protected magic max 24 and covered gas max 4 are provisional reductions; the source establishes reduced damage but does not explicitly give both bounds. A future capture can replace these values without changing the instance or reward contracts. Awakened hazards and achievements are intentionally not offered.
 
 The generic grave multiplier defaults to one, accepts only finite values from zero through one, and affects gravestone reclamation rather than Death's Office. Duke supplies .25 until five normal kills. Merged graves retain the larger multiplier, a conservative policy preventing discounting previously normal-fee contents; that merge policy is not asserted as capture-confirmed OSRS behavior.
 
