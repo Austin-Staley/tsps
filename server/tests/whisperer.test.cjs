@@ -59,7 +59,9 @@ function fixture(spellbook) {
     boss.setHitpoints(900);
     const fight = session.fight = new Fight(session, boss);
     boss.__whispererFight = fight;
-    let cycle = 100;
+    // Real PendingHits use the absolute World cycle; do not process them on an
+    // unrelated test clock after achievement fixtures advance that cycle.
+    let cycle = Math.max(100, core.World.getProcessCycle());
     const apply = () => player.getCombat().getHitQueue().process(++cycle);
     return { player, session, boss, fight, apply };
 }
@@ -165,6 +167,127 @@ test('a real counter between pursuit route preparation and the NPC pass prevents
     assert.ok(f.boss.getLocation().equals(origin),'the counter cancels prepared movement');
     assert.equal(f.fight.boundUntil,0);
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false,'the counter also suppresses the in-flight player bind');
+});
+
+test('generic pre-rolled hits retain ordinary prayer blocking unless explicit mitigation bypass is requested', () => {
+    for(const bypassProtectionPrayer of [false,true]) {
+        const f=fixture();
+        f.player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE]=true;
+        const method=new(class extends core.CombatMethod {type(){return core.CombatType.MELEE;}hits(){return[];}})();
+        const hit=new core.PendingHit(f.boss,f.player,method,{damage:28,rollAccuracy:false,bypassProtectionPrayer});
+        assert.equal(hit.getTotalDamage(),bypassProtectionPrayer?28:0);
+    }
+});
+
+for (const protectedMelee of [false, true]) test(`paired melee supports rearmed real Vengeance with protected=${protectedMelee}`, t => {
+    const f = fixture();
+    t.mock.method(Math, 'random', () => 0.999);
+    f.player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE] = protectedMelee;
+    const damage = protectedMelee ? 28 : 42, returned = Math.floor(damage * .75);
+    f.player.setHasVengeance(true);
+    f.fight.melee();
+    f.apply();
+    assert.equal(f.player.getHitpoints(), 99 - damage);
+    assert.equal(f.player.hasVengeanceReturn(), false, 'first impact consumes Vengeance');
+    f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.boss.getHitpoints(), 900 - returned);
+    // A second successful cast between impacts must trigger on the second hit.
+    f.player.setHasVengeance(true);
+    f.fight.process();
+    f.apply();
+    f.boss.getCombat().getHitQueue().process(102);
+    assert.equal(f.player.getHitpoints(), 99 - damage * 2);
+    assert.equal(f.player.hasVengeanceReturn(), false);
+    assert.equal(f.boss.getHitpoints(), 900 - returned * 2);
+    assert.equal(f.fight.perfectKill, protectedMelee);
+});
+
+test('both real melee impacts expend recoil according to the applied paired damage', t => {
+    const f = fixture();
+    t.mock.method(Math, 'random', () => 0.999);
+    f.player.getEquipment().set(core.Equipment.RING_SLOT, new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    f.fight.melee();
+    f.apply();
+    f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.boss.getHitpoints(), 895);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 5);
+    f.fight.process();
+    f.apply();
+    f.boss.getCombat().getHitQueue().process(102);
+    assert.equal(f.boss.getHitpoints(), 890);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 10);
+});
+
+test('physical melee applies the actual Elysian reaction only once per impact', t => {
+    const f=fixture(),graphics=[];
+    f.player.getEquipment().set(core.Equipment.SHIELD_SLOT,new core.Item(core.ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
+    t.mock.method(Math,'random',()=>0);
+    t.mock.method(f.player,'performGraphic',graphic=>graphics.push(graphic.getId()));
+    f.fight.melee();f.apply();
+    assert.equal(f.player.getHitpoints(),78,'28 reduced by one 25-percent shield reaction');
+    assert.deepEqual(graphics,[321]);
+    f.fight.process();f.apply();
+    assert.equal(f.player.getHitpoints(),57);
+    assert.deepEqual(graphics,[321,321]);
+});
+
+test('lethal melee reflection follows player HP and cancels the second strike in real NPC-before-player order', t => {
+    let cycle=100;
+    t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    const f=fixture();
+    t.mock.method(Math,'random',()=>.999);
+    t.mock.method(PluginManager,'emitNpcBeforeDeath',event=>{beforeDeath(event);return event.preventDeath;});
+    f.player.getEquipment().set(core.Equipment.RING_SLOT,new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    f.fight.enraged=true;f.fight.nextAttack=Infinity;f.fight.startedSpecials=3;
+    f.boss.setHitpoints(5);
+    // The player's HP pass has already run when its area queues this melee.
+    f.player.getCombat().getHitQueue().process(cycle);
+    f.fight.melee();
+    assert.equal(f.player.getHitpoints(),99);
+    cycle++;
+    f.boss.getCombat().getHitQueue().process(cycle);
+    f.player.getCombat().getHitQueue().process(cycle);
+    f.fight.process(); // Queue the second strike after the HP pass.
+    assert.equal(f.player.getHitpoints(),57);
+    assert.equal(f.boss.getHitpoints(),5,'reflection waits for the next NPC pass');
+    assert.equal(f.fight.perfectKill,false);
+    assert.equal(f.fight.over,false);
+    cycle++;
+    f.boss.getCombat().getHitQueue().process(cycle);
+    assert.equal(f.boss.getHitpoints(),0);
+    assert.equal(f.fight.over,true);
+    assert.equal(f.fight.perfectKill,false,'lethal grade includes the actual preceding damage');
+    assert.equal(f.fight.elapsedTicks,2);
+    f.player.getCombat().getHitQueue().process(cycle);
+    assert.equal(f.player.getHitpoints(),57,'the queued second strike cannot land after victory');
+});
+
+for(const terminal of ['finish','stop']) test(`queued physical melee does not consume retaliation after ${terminal}`, t=>{
+    const f=fixture();
+    f.player.setHasVengeance(true);
+    f.player.getEquipment().set(core.Equipment.RING_SLOT,new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    f.fight.melee();
+    assert.equal([...f.fight.pendingDamage][0].getSource(),f.boss);
+    f.fight[terminal]();
+    f.apply();f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.player.getHitpoints(),99);
+    assert.equal(f.boss.getHitpoints(),900);
+    assert.equal(f.player.hasVengeanceReturn(),true);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),undefined);
+    assert.equal(f.fight.perfectKill,true);
+});
+
+test('ordinary hazard damage retains its non-reflecting path', () => {
+    const f=fixture();
+    f.player.setHasVengeance(true);
+    f.player.getEquipment().set(core.Equipment.RING_SLOT,new core.Item(core.ItemIdentifiers.RING_OF_RECOIL));
+    Common.damage(f.fight,20,20);
+    f.apply();f.boss.getCombat().getHitQueue().process(101);
+    assert.equal(f.player.getHitpoints(),79);
+    assert.equal(f.boss.getHitpoints(),900);
+    assert.equal(f.player.hasVengeanceReturn(),true);
+    assert.equal(f.player.getAttribute(core.CombatFactory.RECOIL_DAMAGE_ATTRIBUTE),undefined);
+    assert.equal(f.fight.sanity,80);
 });
 test('cache identities distinguish spawn, boss, soul, effect and animation', () => {
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.boss).name, 'The Whisperer');
@@ -1002,6 +1125,8 @@ test('binding impact shows its target graphic once at the scheduled impact and a
 test('a binding melee attack retains its form through both hits and restores before its following volley', () => {
     const f = fixture();
     f.player.moveTo(new core.Location(2655, 6372, 0));
+    // Complete the setup teleport before the real combat resolver accepts hits.
+    f.player.setNeedsPlacement(false);
     f.fight.bind();
     for (let tick = 0; tick < 5; tick++) f.fight.process();
     f.apply();

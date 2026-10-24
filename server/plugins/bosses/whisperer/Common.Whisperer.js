@@ -32,6 +32,10 @@ function damage(fight, amount, sanity = 0, avoidable = true) {
     return;
   const { HitDamage, HitMask } = api.core;
   const hit = new HitDamage(amount, amount > 0 ? HitMask.RED : HitMask.BLUE);
+  trackDamage(fight, hit, sanity, avoidable);
+  fight.player.getCombat().getHitQueue().addPendingDamage([hit]);
+}
+function trackDamage(fight, hit, sanity, avoidable) {
   hit.setSource(fight.boss);
   fight.pendingDamage ??= new Set();
   fight.pendingDamage.add(hit);
@@ -44,11 +48,37 @@ function damage(fight, amount, sanity = 0, avoidable = true) {
     if (sanity)
       fight.changeSanity(-sanity);
   });
-  fight.player.getCombat().getHitQueue().addPendingDamage([hit]);
+}
+function meleeDamage(fight, amount, avoidable) {
+  if (!fight.alive())
+    return;
+  const { CombatMethod, CombatType, PendingHit, CombatFactory } = api.core;
+  const method = new (class extends CombatMethod {
+    type() { return CombatType.MELEE; }
+    hits() { return []; }
+  })();
+  const hit = new PendingHit(fight.boss, fight.player, method,
+    { delay: 0, damage: amount, bypassProtectionPrayer: true, rollAccuracy: false, experience: false, handleAfterHitEffects: false });
+  // The paired attack already rolled damage and snapshotted partial prayer
+  // mitigation. Ordinary armour reactions still apply once to each impact.
+  fight.pendingMeleeHits ??= new Set();
+  fight.pendingMeleeHits.add(hit);
+  for (const part of hit.getHits()) {
+    trackDamage(fight, part, 0, avoidable);
+    part.onApplied(() => fight.pendingMeleeHits.delete(hit));
+  }
+  // Player-area attacks are queued after this tick's player HP pass. Resolve
+  // next player turn so HP/perfect grading precedes lethal NPC retaliation.
+  CombatFactory.addPendingHit(hit);
 }
 function cancelDamage(fight) {
   for (const hit of fight.pendingDamage ?? [])
     hit.setDamage(0);
+  // PendingHit also caches its total for recoil/Vengeance. Zeroing only the
+  // displayed parts would still consume retaliation after finish/departure.
+  for (const hit of fight.pendingMeleeHits ?? [])
+    hit.updateTotalDamage();
+  fight.pendingMeleeHits?.clear();
   fight.pendingDamage?.clear();
 }
 function remove(npc) {
@@ -95,4 +125,4 @@ module.exports = { data, init, get api() {
     return api;
   }, get core() {
     return api.core;
-  }, later, location, random, protectedFrom, damage, cancelDamage, remove, sync, fragment, sessions, sessionOf, inBounds, sound, messageBox, objectBox, INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, BEST_ATTRIBUTE, DEATHS_ATTRIBUTE, MONSTER };
+  }, later, location, random, protectedFrom, damage, meleeDamage, cancelDamage, remove, sync, fragment, sessions, sessionOf, inBounds, sound, messageBox, objectBox, INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, BEST_ATTRIBUTE, DEATHS_ATTRIBUTE, MONSTER };
