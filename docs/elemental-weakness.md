@@ -56,3 +56,11 @@ duplicate general modifiers. Existing stance assertions retain their exact value
 This corrects the elemental calculation stages, not every magic-combat mechanic. Tome
 ordering, special NPC spell rules, client presentation and unresolved boss timing/RNG are
 separate verification work. Do not infer complete boss fidelity from these formula checks.
+
+Native packet checks on an isolated normal Whisperer confirmed five actual cast calculations
+with a Kodai wand: Earth Wave38 versus Fire Wave23 with the Earth amulet; Earth Bolt29
+with that amulet and Chaos gauntlets; Wind Bolt19 with the universal amulet and gauntlets;
+Ice Barrage34 with no elemental bonus. Their accuracy calculations were independently
+checked from the same live calculation events: matching Earth uses raw11016 plus6609;
+the other spells retain11016. These are calculated maximums/rolls from real casts, not a
+claim that every random hit lands for its maximum. QA accounts saved and the world stopped.
