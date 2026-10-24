@@ -294,3 +294,17 @@ test("answer variants and branches are found under the transcripts' other names"
   assert.ok(played.some(line => line.npc === "Spot on!"));
   assert.ok(f.sent.some(([name, text]) => name === "message" && text === "Ali the Kebab seller has given you another clue scroll!"));
 });
+
+test("an exact npc-dialogue:start request for a missing variant gets nothing, not the NPC's default chat", () => {
+  const api = PluginManager.createApi("NpcDialoguesExactVariant");
+  require("../plugins/npcs/NpcDialogues.plugin").register(api);
+  const torgan = steps().find(step => step.key === "cluehelper_anagram_medium_torgan").npcIds[0];
+  const ask = exact => {
+    let found = null;
+    api.emitCustomEvent("npc-dialogue:start", { player: {}, npcId: torgan, variant: "treasure-trails-medium", exact, handled: false,
+      select: stepsFound => { found = stepsFound; return []; } });
+    return found;
+  };
+  assert.equal(ask(true), null, "Elder Torgan has no treasure-trails-medium variant");
+  assert.ok(Array.isArray(ask(false)) && ask(false).length, "without exact, the default transcript still plays");
+});

@@ -122,12 +122,13 @@ test("a solved step hands over another step item, and the last step a reward cas
   assert.equal(f.items[0].getId(), I.REWARD_CASKET_EASY_);
 });
 
-test("every NPC cryptic step completes only after its dialogue, near the NPC", () => {
+test("every NPC cryptic step completes only after its dialogue, even if the NPC wanders off", () => {
   const f = fixture();
   for (const step of ofFamily("cryptic", "npc")) {
     f.items.fill(null);
     f.place(step, 2);
-    const npc = { getLocation: () => f.player.getLocation() };
+    // The NPC has wandered five tiles away by the time the dialogue ends.
+    const npc = { getLocation: () => new core.Location(f.player.getLocation().getX() + 5, f.player.getLocation().getY(), f.player.getLocation().getZ()) };
     const event = { player: f.player, npcId: step.npcIds[0], npc, clickType: 1, handled: false, definition: { getActions: () => ["Talk-to"] } };
     Runtime.talk(event);
     assert.equal(event.handled, true, step.key);

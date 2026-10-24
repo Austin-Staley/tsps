@@ -17,7 +17,8 @@ function attach(pluginApi) {
 /** The steps of one variant of the NPC's transcript, or null when it has none. */
 function transcript(player, npc, npcId, variant) {
   let found = null;
-  api.emitCustomEvent("npc-dialogue:start", { player, npc, npcId, variant, handled: false,
+  // `exact`: an NPC without this variant has nothing to say here, not its everyday chat.
+  api.emitCustomEvent("npc-dialogue:start", { player, npc, npcId, variant, exact: true, handled: false,
     select: steps => { found = steps; return []; } });
   return Array.isArray(found) && found.length ? found : null;
 }

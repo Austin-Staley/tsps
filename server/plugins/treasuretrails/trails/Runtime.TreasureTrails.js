@@ -9,7 +9,6 @@ const META_PREFIX = "treasure-trails:";
 // runtime's usual radius around it; music steps need the player near Cecilia's bridge.
 const EMOTE_RADIUS = 3;
 const MUSIC_RADIUS = 5;
-const NPC_RADIUS = 3;
 const URI_STANDARD = "standard-dialogue";
 const URI_REFUSAL = "speaking-with-another-player-s-uri-or-with-incorrect-attire";
 let api;
@@ -194,9 +193,8 @@ function talk(event) {
     return;
   }
   const said = Dialogue.lines(Dialogue.transcript(player, npc, npcId, `treasure-trails-${trail.tier.name}`));
-  Dialogue.play(player, npcId, said.length ? said : [{ npc: "Well done, you've found me!" }], () => {
-    if (distance(location(player), location(npc)) <= NPC_RADIUS) advance(player, trail);
-  });
+  // The talk began beside the NPC; a wandering NPC (Elder Torgan) may step away during it.
+  Dialogue.play(player, npcId, said.length ? said : [{ npc: "Well done, you've found me!" }], () => advance(player, trail));
 }
 
 /** Uri (Wiki transcript): wrong attire or a missing emote gets his refusal; otherwise a random phrase. */

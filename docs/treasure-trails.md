@@ -79,7 +79,8 @@ assumption.
 
 - **NPC:** talk to the target NPC; the step completes after the dialogue, within 3 tiles.
   - NPCs speak their own transcript: the `treasure-trails-<tier>` variant in `npc-dialogues.json`,
-    read through NpcDialogues' `npc-dialogue:start` with a `select` that only captures the steps.
+    read through NpcDialogues' `npc-dialogue:start` with `exact: true` and a `select` that only
+    captures the steps. An NPC without that variant gets the fallback line, not its everyday chat.
   - Where the transcript has nothing, a shared fallback line is used.
 - **Challenge scroll** (Wiki "Challenge scroll"):
   - The first talk hands over the step's challenge scroll in place of the clue.
@@ -261,8 +262,14 @@ the Spot it becomes a scroll box (`treasure-trails:clue-item`).
   - an empty dialogue never ran its action;
   - the "nothing worn" `blankobject` outfits were treated as an item to wear;
   - a wandering NPC could walk out of range before the challenge hand-over.
-- Torgan's anagram step stalled because no Torgan stands at the cache's target tile in this
-  world. That is an NPC-spawn gap, not a clue rule.
+- Elder Torgan's anagram step first looked as though Torgan wasn't spawned, but he is. He has no
+  Treasure Trails transcript, and two things went wrong:
+  - `npc-dialogue:start` fell back to his everyday chat for the missing variant;
+  - the step then demanded he still be within 3 tiles after that long talk, though he wanders.
+
+  The clue transcripts now ask with the new `exact: true` flag. Without that flag, a missing variant
+  still plays the default transcript, so other callers are unchanged. NPC steps no longer re-check
+  range after the dialogue. Both fixes are tested, and Torgan's step completes live.
 - Keyed steps were left to the unit tests in the walk, because they need a kill.
 
 Sources:
