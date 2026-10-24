@@ -49,7 +49,7 @@ const HERB_LOW = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUT
     RANARR: 39, TOADFLAX: 43, IRIT: 46, AVANTOE: 50, KWUARM: 54, SNAPDRAGON: 57, HUASCA: 59,
     CADANTINE: 60, LANTADYME: 64, DWARF_WEED: 67, TORSTOL: 71 };
 const CROP_LOW = { POTATO: 101, ONION: 105, CABBAGE: 107, TOMATO: 112, SWEETCORN: 88, STRAWBERRY: 103,
-    BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 120, WILDBLOOD: 128 };
+    BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 121, WILDBLOOD: 128 };
 function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0, attas = false) {
     let low, high;
     if (crop.type === "HERB") { low = HERB_LOW[crop.key]; high = 80; }
