@@ -943,7 +943,7 @@ export class Bank extends ItemContainer {
     }
 
     public open(): Bank {
-        const pluginCanBank = getPluginManager().emitCanBank(this.getPlayer());
+        const pluginCanBank = getPluginManager().emitCanBank(this.getPlayer(), "open");
         if (pluginCanBank === false) {
             return this;
         }
