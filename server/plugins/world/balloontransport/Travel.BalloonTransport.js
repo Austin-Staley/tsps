@@ -13,8 +13,10 @@
  * - the flight is a fade to the destination's basket, the player held still; one at a time; a
  *   logout mid-flight lands them, a death ends it where they are.
  * Opened routes are saved, and their baskets and assistants shown from the zep_multi_* varbits.
+ * A trip's logs may come from the log storage (Storage.BalloonTransport.js) instead.
  */
 const Common = require("./Common.BalloonTransport");
+const Storage = require("./Storage.BalloonTransport");
 
 const OPEN_MAP_TARGET = "Balloon transport system";
 const BALLOONISTS = ["Auguste", "Assistant Stan", "Assistant Brock", "Assistant Serf", "Assistant Marrow", "Assistant Le Smith", "Assistant Lori"];
@@ -44,10 +46,6 @@ function say(player, npcId, text, then = null) {
 
 function fill(text, values) {
   return text.replace(/\[(\w+)\]/g, (whole, key) => (values[key] !== undefined ? String(values[key]) : whole));
-}
-
-function logsHeld(player, station) {
-  return player.getInventory().getAmount(Common.ids.objs[station.log]);
 }
 
 function firemaking(player) {
@@ -136,13 +134,13 @@ function travel(player, from, to, npcId = null) {
     return false;
   }
   const cost = opening ? to.unlockLogs : 1;
-  if (logsHeld(player, to) < cost) {
+  if (!Storage.canPay(player, to, cost)) {
     const type = to.logName ?? "normal";
     say(player, npcId, opening ? fill(messages.unlockLogs, { count: cost, type }) : fill(messages.needLog, { type }));
     return false;
   }
   const refusal = () => {
-    if (logsHeld(player, to) < cost) return opening ? fill(messages.unlockLogs, { count: cost, type: to.logName ?? "normal" }) : fill(messages.needLog, { type: to.logName ?? "normal" });
+    if (!Storage.canPay(player, to, cost)) return opening ? fill(messages.unlockLogs, { count: cost, type: to.logName ?? "normal" }) : fill(messages.needLog, { type: to.logName ?? "normal" });
     if (hasPet(player)) return messages.pet;
     if (weightKg(player, to) > Common.data.maxWeightKg) return messages.weight;
     return null;
@@ -152,11 +150,20 @@ function travel(player, from, to, npcId = null) {
     say(player, npcId, before);
     return false;
   }
-  const go = () => fly(player, to, cost, opening ? () => {
+  const arrived = opening ? () => {
     Common.openRoute(player, to);
     player.getSkillManager().addExperience(Common.core.Skill.FIREMAKING, unlockXp, false);
     player.sendMessage(fill(messages.unlocked, { place: to.label }));
-  } : null);
+  } : null;
+  // The logs' source may be asked for: the trip is checked again once it's chosen, and the
+  // player must still be at the station they started from.
+  const startedAt = Common.stationAt(player.getLocation());
+  const go = () => Storage.chooseSource(player, to, cost, (source) => {
+    if (Common.stationAt(player.getLocation()) !== startedAt) return;
+    const after = refusal();
+    if (after) return say(player, npcId, after);
+    if (!fly(player, to, cost, arrived, source) && !flying(player)) say(player, npcId, refusal() ?? fill(messages.needLog, { type: to.logName ?? "normal" }));
+  });
   if (to.key !== ENTRANA) return go();
   // Entrana: searched first (the assistants' transcript); the trip is checked again after it.
   say(player, npcId, messages.entranaSearch, () => {
@@ -170,18 +177,15 @@ function travel(player, from, to, npcId = null) {
 }
 
 /**
- * The flight: the logs taken as the screen fades, the player at the destination's basket
- * `flightTicks` later. `arrived` runs as they land (a route opened).
+ * The flight: the logs taken (from the inventory or the log storage) as the screen fades, the
+ * player at the destination's basket `flightTicks` later. `arrived` runs as they land (a route
+ * opened).
  */
-function fly(player, to, logs, arrived = null) {
+function fly(player, to, logs, arrived = null, source = Storage.INVENTORY) {
   if (flying(player)) return false;
   const { flightTicks, closeTicks } = Common.data;
   const movement = player.getMovementQueue?.();
-  const inventory = player.getInventory();
-  const logId = Common.ids.objs[to.log];
-  if (inventory.getAmount(logId) < logs) return false;
-  inventory.delete(logId, logs);
-  inventory.refreshItems?.();
+  if (!Storage.pay(player, to, logs, source)) return false;
   const from = player.getLocation();
   const departed = { x: from.getX(), y: from.getY(), z: from.getZ() };
   movement?.setBlockMovement?.(true);
@@ -198,14 +202,14 @@ function fly(player, to, logs, arrived = null) {
   flight.land = () => {
     if (flight.done) return;
     player.moveTo(Common.tile(to.land));
+    if (source === Storage.STORAGE) Storage.tellLeft(player, to);
     arrived?.();
     finish();
   };
   /** No flight after all: the logs back, the player where they are. */
   flight.abort = () => {
     if (flight.done) return;
-    inventory.adds?.(logId, logs) ?? inventory.add?.(new Common.core.Item(logId, logs));
-    inventory.refreshItems?.();
+    Storage.refund(player, to, logs, source);
     Common.closeFade(player);
     finish();
   };
