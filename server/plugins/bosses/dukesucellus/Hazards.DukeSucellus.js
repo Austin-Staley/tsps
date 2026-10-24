@@ -32,7 +32,9 @@ function eye(fight,ordinal) {
     if(cone)s.passiveExpiry.set(cone,s.tick+4);
     fight.at(5,()=>{
       if(M.extremityHit(spec,C.source(s,s.player.getLocation()))){
-        C.hurt(fight,70);C.drainPrayer(s.player,Math.floor(s.player.getSkillManager().getCurrentLevel(C.core.Skill.PRAYER)/4));
+        const protectedMagic=C.protectedFrom(s.player,'PROTECT_FROM_MAGIC');
+        C.hurt(fight,protectedMagic?55:70,{min:protectedMagic?40:50});
+        C.drainPrayer(s.player,Math.floor(s.player.getSkillManager().getCurrentLevel(C.core.Skill.PRAYER)/4));
         s.player.getTimers().registers(C.core.TimerKey.FREEZE,5);
       }
       s.player.getPacketSender().sendObjectAnimation(object,new C.core.Animation(C.data.animations.eyeSleep));

@@ -38,6 +38,62 @@ The normal fight implements aimed melee chip/slam, magic, pillar-hidden freezing
 
 ## Evidence and limits
 
+### Wiki and original-video follow-up, 24 October 2026
+
+The ordinary [Extremity page](https://oldschool.runescape.wiki/w/Extremity)
+publishes a 50–70 damage range, reduced to 40–55 with Protect from Magic.
+The previous implementation rolled 0–70 regardless of prayer. It now uses
+the published inclusive ranges at the damage check. Four endpoint regressions
+exercise both prayer states; three failed against the previous implementation.
+Prayer drain and freeze remain on the existing check cycle. These published
+ranges do not establish a different footprint or check cycle.
+
+The Wiki's original [running-past-extremities clip](https://oldschool.runescape.wiki/images/Duke_Sucellus_-_running_past_extremities.mp4?c9b16)
+was uploaded on 16 February 2024 at 17:34:37 UTC. It is 7.035646 seconds,
+600×400 at 30 fps. Actual frames at 2.0–5.0 seconds show the green true-tile
+marker skipping across the active cones; at 5.5–6.5 seconds it reaches the
+mushroom-side safe tile. The clip corroborates the documented running route,
+but contains no unsafe damage sample or complete tile-by-tile coverage test.
+It does not display a boss-health or quest discriminator, so it cannot alone
+distinguish ordinary postquest preparation from the quest. The existing broad
+centre-line approximation is not certified by this video.
+
+The Wiki's [melee-flinching clip](https://oldschool.runescape.wiki/images/Duke_Sucellus_-_melee_flinching.mp4?e5666),
+uploaded on 14 February 2024 at 01:37:16 UTC, is 25.123946 seconds at 30 fps.
+Its visible 440 HP maximum is **ordinary postquest Duke at that date**, not the
+quest variant: [the 12 February 2024 boss revision](https://oldschool.runescape.wiki/w/Duke_Sucellus?oldid=14546029)
+lists normal 758/440, awakened 1099/1540 and quest 538/200. The
+[25 June 2025 update](https://oldschool.runescape.wiki/w/Update:Summer_Sweep_Up:_Combat)
+later added 45 normal HP alongside the preparation changes. Old poison
+quantities and preparation speeds are therefore not imported. Sampling the
+original combat clip every 0.2 seconds shows the first cloud visible at
+10.8 seconds and the second at 12.6 seconds, corroborating the three-tick
+separation. The first cloud is fully absent at 20.0 seconds while the second
+remains visible at 20.8. Rendered visibility includes native effect tails;
+these timestamps cannot be substituted for a packet-measured actor lifetime
+or used to infer its random distribution.
+
+[10Boot OSRS's original guide](https://www.youtube.com/watch?v=O1V5U4E20pY),
+published 11 July 2025, provides a current ordinary postquest preparation
+sample (level 758 and the normal 200-point meter, without Leagues indicators).
+The 03:20–03:40 segment is 1920×1080 at 30 fps; the visible item tooltip
+identifies a rune pickaxe around 03:27.2. Inspecting the inventory every 0.2
+seconds first shows salt quantities 5/10/15/20/25/30/35/40/45 at
+03:24.4/03:26.2/03:28.0/03:29.8/03:31.6/03:33.4/03:35.2/03:37.0/03:38.8.
+Eight successive 1.8-second intervals corroborate the existing rune-pickaxe
+three-tick repeat cadence. This closes that tier's repeat-cadence check;
+it does not establish every other pickaxe tier or the first click response.
+
+The current gas-mask, facemask, salax-salt and salt-deposit pages were also
+checked. They do not publish the protected boss-magic or covered-gas bounds.
+The strategy page adds that the initial preparation-vent pattern can differ
+when the player is already in the vent area, without publishing that area's
+selection boundary or the phase-selection algorithm. Protected magic 24,
+covered gas 4, complete extremity coverage/check timing, remaining pickaxe
+tiers, vent tie ordering/lifetime distribution/initial selection and ice RNG
+therefore remain explicit evidence limits. Finite footage is not proof of an
+unpublished random formula. Fresh build and all 72 focused Duke tests pass.
+
 ### Remaining-gap measurement, 24 October 2026
 
 The follow-up inspects immutable decoder helper `7ca21602b38f` outputs using the

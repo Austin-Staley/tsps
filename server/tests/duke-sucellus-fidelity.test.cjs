@@ -173,6 +173,20 @@ test('preparation eyes use independent staggered native cones, not the vent cloc
   assert.equal([...s.passive].filter(n=>n.getId()===12198).length,0);
 });
 
+for(const [protectedMagic,roll,damage] of [[false,0,50],[false,.999999,70],[true,0,40],[true,.999999,55]])
+test(`extremity gaze damage is ${damage} at the ${roll===0?'lower':'upper'} bound with magic protection ${protectedMagic}`,t=>{
+  const h=H.harness(t),s=h.enter(),Hazards=require('../plugins/bosses/dukesucellus/Hazards.DukeSucellus');
+  h.move([3031,6450]);
+  t.mock.method(Math,'random',()=>roll);
+  t.mock.method(h.C,'protectedFrom',(_player,prayer)=>protectedMagic&&prayer==='PROTECT_FROM_MAGIC');
+  // Keep this a controlled gaze, without unrelated room ice or eye clocks.
+  t.mock.method(Hazards,'preparation',()=>{});
+  Hazards.eye(h.fight,2);
+  h.step(5);
+  assert.equal(h.p.getHitpoints(),99-damage);
+  assert.equal(h.p.getSkillManager().getCurrentLevel(h.core.Skill.PRAYER),75);
+});
+
 test('preparation vents move east independently in each row every 25 ticks',t=>{
   const h=H.harness(t),s=h.enter();h.move([3039,6434]);h.step(15);
   const vents=()=>[...s.passive].filter(n=>n.getId()===12198);

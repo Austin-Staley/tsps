@@ -37,9 +37,9 @@ function track(fight, part, avoidable, evenZero=false) {
     if(avoidable && (amount>0 || evenZero)) fight.perfect=false;
   });
 }
-function hurt(fight,max,{avoidable=true,evenZero=false}={}) {
+function hurt(fight,max,{min=0,avoidable=true,evenZero=false}={}) {
   if(fight.over || fight.stopped || fight.session.ended || fight.player.getHitpoints()<=0) return;
-  const hit=new api.core.HitDamage(random(max),api.core.HitMask.RED);
+  const hit=new api.core.HitDamage(min+random(max-min),api.core.HitMask.RED);
   hit.setSource(fight.boss);
   track(fight,hit,avoidable,evenZero);
   fight.player.getCombat().getHitQueue().addPendingDamage([hit]);
