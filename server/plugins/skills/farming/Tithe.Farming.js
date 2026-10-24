@@ -214,7 +214,7 @@ function titheNpc(event) {
     const entries = REWARDS.map(([name, cost, amount]) => [`${name} (${cost} points)`, () => {
         if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
         if (score.points < cost) { player.sendMessage("You do not have enough points."); return; }
-        if (name === "Herb sack" && player.getSkillManager().getCurrentLevel(core.Skill.HERBLORE) < 58) { player.sendMessage("You need level 58 Herblore."); return; }
+        if (name === "Herb sack" && player.getSkillManager().getMaxLevel(core.Skill.HERBLORE) < 58) { player.sendMessage("You need a base Herblore level of 58."); return; }
         if (name === "Bologa's blessing" && !score.bologa) { player.sendMessage("First arrange for Bologa to bless your grapes."); return; }
         const itemId = Data.itemId(name);
         const received = name === "Seed pack"
