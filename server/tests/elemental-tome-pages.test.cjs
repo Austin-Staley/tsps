@@ -37,7 +37,7 @@ test('native item-on-item adds integer pages, clamps capacity, and never mixes p
   use(s,28931);s.enter(1);assert.deepEqual(Common.read(s.item),{charges:20000,pageId:20718});assert.equal(s.inventory.getAmount(28931),1001);
 });
 test('every element and searing fire accept only actual matching pages',()=>{
-  for(const [empty,page,charged] of [[20716,28931,27358],[25576,25578,25574],[30066,30068,30064]]) {
+  for(const [empty,page,charged] of [[20716,28931,20714],[25576,25578,25574],[30066,30068,30064]]) {
     const s=setup(empty);use(s,page);s.enter(2);assert.equal(s.item.getId(),charged);
     assert.deepEqual(Common.read(s.item),{charges:40,pageId:page});assert.equal(s.inventory.getAmount(page),999);
   }
@@ -66,7 +66,7 @@ function open(s) {
   return s.menu.getDialogues().get(0);
 }
 test('Pages menu adds while worn and full removal returns only whole original pages',()=>{
-  for(const [id,page,charges,refund] of [[20714,20718,39,1],[27358,28931,41,2],[25574,25578,19,0],[30064,30068,40,2]]) {
+  for(const [id,page,charges,refund] of [[20714,20718,39,1],[20714,28931,41,2],[25574,25578,19,0],[30064,30068,40,2]]) {
     for(const worn of [false,true]) {
       const s=setup(id,worn),definition=Common.getDefinition(id);Common.set(s.item,definition,charges,page);
       const menu=open(s);menu.execute(definition.specialPageId?3:2);
@@ -110,7 +110,7 @@ test('reverse item use, remaining capacity, changing page supplies and replayed 
   const other=setup(20716);assert.equal(fn({player:other.player,usedItem:s.item,usedWithItem:page}),false);
 });
 test('fire Check identifies burnt and searing pages explicitly',()=>{
-  for(const [id,page,kind] of [[20714,20718,'burnt'],[27358,28931,'searing']]) {
+  for(const [id,page,kind] of [[20714,20718,'burnt'],[20714,28931,'searing']]) {
     const s=setup(id);Common.set(s.item,Common.getDefinition(id),39,page);
     actions.get(core.ItemDefinition.forId(id).getName()).Check({player:s.player,item:s.item});
     assert.match(s.messages.at(-1),new RegExp(`39.*${kind}`));

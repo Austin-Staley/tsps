@@ -16,18 +16,18 @@ before(async () => {
 
 test('recognizes wearable cache variants and excludes noted and placeholder copies', () => {
   assert.equal(typeof Common.getDefinition, 'function', 'tome definition lookup must exist');
-  for (const [id, element] of [[20714,'fire'],[20716,'fire'],[27358,'fire'],[25574,'water'],[25576,'water'],[30064,'earth'],[30066,'earth']]) {
+  for (const [id, element] of [[20714,'fire'],[20716,'fire'],[25574,'water'],[25576,'water'],[30064,'earth'],[30066,'earth']]) {
     assert.equal(ItemDefinition.forId(id).getEquipmentType().getSlot(), 5);
     assert.equal(ItemDefinition.forId(id).isNoted(), false);
     assert.equal(Common.getDefinition(id).element, element);
   }
-  for (const id of [20715,20717,25575,25577,30065,30067,20718,28931,-1,0]) assert.equal(Common.getDefinition(id), null);
+  for (const id of [27358,20715,20717,25575,25577,30065,30067,20718,28931,-1,0]) assert.equal(Common.getDefinition(id), null);
   for (const id of [20715,25575,30065,20719,25579,30069,28932]) assert.equal(CacheDefinitions.getItem(id).placeholderTemplate, 14401);
   for (const id of [20717,25577,30067]) assert.equal(ItemDefinition.forId(id).isNoted(), true);
 });
 
-test('raw charged variants never mint free charges and searing zero state retains its page kind', () => {
-  for (const [id,pageId] of [[20714,20718],[27358,28931],[25574,25578],[30064,30068],[20716,20718]]) {
+test('raw charged variants never mint free charges and default to ordinary pages', () => {
+  for (const [id,pageId] of [[20714,20718],[25574,25578],[30064,30068],[20716,20718]]) {
     assert.deepEqual(Common.read(new Item(id)), { charges:0, pageId });
   }
 });
@@ -39,24 +39,49 @@ test('rejects malformed, over-capacity and wrong-page metadata without changing 
     assert.deepEqual(Common.read(item), {charges:0,pageId:20718});
     assert.ok(item.equals(before));
   }
-  for (const [id,pageId] of [[20716,20718],[20714,28931],[27358,20718],[20717,20718],[20715,20718]]) {
+  for (const [id,pageId] of [[20716,20718],[20716,28931],[27358,20718],[27358,28931],[20717,20718],[20715,20718]]) {
     assert.equal(Common.read(new Item(id,1,{'elemental-tomes':{charges:20,pageId}})).charges, 0);
   }
 });
 
-test('sets capacity, switches ordinary/searing variants, then removes metadata on empty', () => {
+test('sets capacity, switches ordinary/searing metadata, then removes metadata on empty', () => {
   const item = new Item(20716,1,{preset:true});
   const definition = Common.getDefinition(20716);
   Common.set(item,definition,20000,20718);
   assert.equal(item.getId(),20714);
   assert.deepEqual(Common.read(item),{charges:20000,pageId:20718});
   Common.set(item,definition,21,28931);
-  assert.equal(item.getId(),27358);
+  assert.equal(item.getId(),20714);
   assert.deepEqual(Common.read(item),{charges:21,pageId:28931});
   assert.equal(Common.wholePages(Common.read(item)),1);
   Common.set(item,definition,0,28931);
   assert.equal(item.getId(),20716);
   assert.deepEqual(item.getMeta(),{preset:true});
+});
+
+test('searing charges preserve native charged-tome Check, Pages and Wield actions', () => {
+  const item = new Item(20716);
+  Common.set(item,Common.getDefinition(20716),20,28931);
+  const actions = core.CacheDefinitions.getItem(item.getId()).inventoryActions;
+  for (const action of ['Check','Pages','Wield']) assert.ok(actions.includes(action), action);
+  assert.equal(item.getId(),20714);
+  assert.deepEqual(Common.read(item),{charges:20,pageId:28931});
+});
+
+test('ordinary fire tome reads either page kind and rejects nonstandard charged variants', () => {
+  for (const pageId of [20718,28931]) {
+    assert.deepEqual(Common.read(new Item(20714,1,{'elemental-tomes':{charges:20,pageId}})),{charges:20,pageId});
+    const unsupported = new Item(27358,1,{'elemental-tomes':{charges:20,pageId},other:true});
+    assert.deepEqual(Common.read(unsupported),{charges:0,pageId:null});
+    assert.throws(() => Common.set(unsupported,Common.getDefinition(20714),20,pageId));
+    assert.equal(unsupported.getId(),27358);
+    assert.deepEqual(unsupported.getMeta(),{'elemental-tomes':{charges:20,pageId},other:true});
+  }
+  for (const id of [25574,30064]) {
+    const item = new Item(id);
+    assert.throws(() => Common.set(item,Common.getDefinition(id),20,28931));
+    assert.equal(Common.read(item).charges,0);
+  }
 });
 
 test('sets each elemental tome and rejects invalid writes atomically', () => {
@@ -131,6 +156,6 @@ test('refresh sends changed inventory and worn item variants and marks appearanc
   Common.set(worn,Common.getDefinition(20716),20,28931);
   Common.refresh(player);
   assert.equal(packets.find(packet => packet.interfaceId === 3214)?.ids[0],25574);
-  assert.equal(packets.find(packet => packet.interfaceId === 1688)?.ids[5],27358);
+  assert.equal(packets.find(packet => packet.interfaceId === 1688)?.ids[5],20714);
   assert.equal(updates.flagged(core.Flag.APPEARANCE),true);
 });
