@@ -38,3 +38,9 @@ without rune or tome-charge loss, intervening effects, splashes, large NPC immun
 and player targets with Protect from Magic. Initial tests reproduced the missing
 maxima, fractional/incorrect hold times and refusal behavior before implementation;
 separate failing checks reproduced Snare's members flag and missing Water rune.
+
+Native revision241 casts on an isolated world confirmed hold/immunity receipts of
+8/13,16/21,24/29 ticks for the three ordinary spells and30/35 ticks for full-Swampbark
+Entangle. Each matched its paid cast's captured duration. A subsequent cast on that
+held target produced the refusal message without changing its caster's rune counts.
+The QA account logged out cleanly and its server was stopped before full testing.
