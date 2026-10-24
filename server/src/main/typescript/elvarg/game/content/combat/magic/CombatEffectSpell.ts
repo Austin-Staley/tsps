@@ -6,6 +6,7 @@ import { Animation } from "../../../model/Animation";
 import { Graphic } from "../../../model/Graphic";
 import { Projectile } from "../../../model/Projectile";
 import { PluginManager } from "../../../../plugins/PluginManager";
+import type { SpellCastContext } from "./Spell";
 
 interface CombatEffectSpellInterface {
     maximumHit?: () => number;
@@ -70,13 +71,13 @@ export class  CombatEffectSpell extends CombatSpell {
         return null;
     }
 
-    public finishCast(cast: Mobile, castOn: Mobile, accurate: boolean, damage: number): void {
+    public finishCast(cast: Mobile, castOn: Mobile, accurate: boolean, damage: number, context?: SpellCastContext | null): void {
         if (accurate) {
-            this.spellEffect(cast, castOn);
+            this.spellEffect(cast, castOn, context);
         }
     }
-    public spellEffect(cast: Mobile, castOn: Mobile) {
-        const event = { attacker: cast, target: castOn, spell: this, allowed: true, handled: false };
+    public spellEffect(cast: Mobile, castOn: Mobile, context?: SpellCastContext | null) {
+        const event = { attacker: cast, target: castOn, spell: this, context, allowed: true, handled: false };
         PluginManager.emitCustomEvent("magic:utility-effect-check", event);
         if (!event.allowed) return;
         PluginManager.emitCustomEvent("magic:utility-effect", event);

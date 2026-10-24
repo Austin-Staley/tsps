@@ -100,6 +100,7 @@ test('Count Draynor garlic cannot turn any nondamaging curse into a damaging imp
   for (const [name] of cases) {
     const spell = core.CombatSpells[name];
     attacker.getCombat().setCastSpell(spell);
+    assert.deepEqual(core.DamageFormulas.getMagicHitBounds(attacker, spell, target), { minimum: 0, maximum: 0 }, name);
     assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, spell), 0, name);
     const hit = new PendingHit(attacker, target, new MagicCombatMethod(), { rollAccuracy: false });
     assert.equal(hit.isAccurate(), true, name);
