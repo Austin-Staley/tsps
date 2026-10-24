@@ -59,6 +59,7 @@ export class GroundMarkerPlugin extends Plugin {
     /** The marked tiles in the loaded regions (RuneLite's points multimap). */
     points: ColorTileMarker[] = [];
     private sceneKey = "";
+    private sceneTemplates: InstanceScene["templates"] = null;
 
     constructor(osrsClient?: OsrsClient, deps?: { configManager?: ConfigManager; chatboxPanelManager?: ChatboxPanelManager; menuManager?: MenuManager }) {
         super();
@@ -87,6 +88,7 @@ export class GroundMarkerPlugin extends Plugin {
         this.sharingManager.removeMenuOptions();
         this.points = [];
         this.sceneKey = "";
+        this.sceneTemplates = null;
     }
 
     onConfigChanged(event: ConfigChanged): void {
@@ -99,9 +101,9 @@ export class GroundMarkerPlugin extends Plugin {
         }
     }
 
-    /** Stands in for WorldViewLoaded: reloads the points when the loaded regions change. */
+    /** Reload on region or instance-template replacement, as WorldViewLoaded would. */
     onGameTick(): void {
-        if (this.currentSceneKey() !== this.sceneKey) this.loadPoints();
+        if (this.currentSceneKey() !== this.sceneKey || this.instanceScene().templates !== this.sceneTemplates) this.loadPoints();
     }
 
     // ------------------------------------------------------------------ storage
@@ -127,9 +129,10 @@ export class GroundMarkerPlugin extends Plugin {
     /** loadPoints: every saved point in the loaded regions, at each of its scene tiles. */
     loadPoints(): void {
         this.sceneKey = this.currentSceneKey();
+        const scene = this.instanceScene();
+        this.sceneTemplates = scene.templates;
         const points: ColorTileMarker[] = [];
         if (this.sceneKey) {
-            const scene = this.instanceScene();
             for (const regionId of this.getMapRegions()) {
                 for (const point of this.getPoints(regionId)) {
                     const template = fromRegion(point.regionId, point.regionX, point.regionY, point.z);
