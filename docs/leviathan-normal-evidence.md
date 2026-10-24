@@ -27,13 +27,13 @@ This ledger tracks unresolved mechanics explicitly. A passing test against a cho
 | Area | Current behavior / unresolved fact | Evidence or next verification |
 |---|---|---|
 | Normal stats and bonuses | Normal levels and consumed attack/defence bonuses match | Wiki strength22/magic58/ranged26 are unrepresented, unconsumed fields: the NPC definition explicitly leaves slots6/8/15–17 unused and uses maxHit directly. This is not a missing gameplay bonus or a dumper-fix requirement |
-| Volley counts | Opening five tiers implemented as6/8/8/12/12 | Normal video and opening packet schedule agree; final two12-shot counts remain extrapolated |
+| Volley counts | Normal6/8/8/12/10/10/10 | Original2026 complete detached tracks correct the prior fifth12 and extrapolated final two12; see late-volley correction below |
 | Volley speed/styles | Seven tiers, Wiki 3/2/2/1/1/1/1 | Retain source-backed tiers; verify transitions at packet boundaries |
 | Early projectile flight | Implemented5/5/4/3/3ticks | Original mode-classified packets; normal footage corroborates opening cadence, not every flight offset |
 | Late projectile flight | Wiki explicitly 2 ticks then 1 tick | Verify client-cycle offsets and damage timing |
 | Enrage projectile flight | Implemented5ticks | Captures3285/1751 normal900HP actors; special-world mode limitation retained |
 | First attack | Implemented4ticks | Captures3285/1751 normal900HP actors |
-| Volley roar gap | Roar one attack interval after final shot; next shot5ticks after roar | Capture1751 opening offsets22/27,43/48,64/69 |
+| Volley roar gap | Retain queued roar one attack interval after final shot; next shot5ticks after roar in firstthree,6in normal one-tick tiers | Capture1751 opening offsets22/27,43/48,64/69; ordinary2026 same-phase last-to-next7ticks corrects later recovery, not exact roar packet time |
 | Roar damage | Maximum 7 source-backed; zero-inclusive roll unverified | Original damage observations and source formula evidence |
 | Roar debris flight | Seven ticks; falling-stay gfx2477–2480 with50client-cycle delay, then permanent rubble47590 with matching rotation | 1,151matched normal900HP landings across306completed fights; eight ordinary quest landings independently agree;84unmatched announcements excluded |
 | First-special tell | First roar leaves permanent rocks in the recorded opposite3x3regions; later roars do not repeat the side tell | All306normal first roars leave three rocks; Wiki corroborates E/Wlightning and N/Ssmoke; exact RNG weights, independence and blocked/duplicate selection remain unverified |
@@ -214,3 +214,57 @@ Concrete unresolved mechanics are now distinct from unknowable sample precision:
 New media SHA256values are `5c117600c6b83756d038f5a2cc61857c0a884af07bd63b794afb35edfe0fa56c` (Leyr), `aeae22b118195c2243c1c991d302a624c8a2010cf74997977d5a93de163c4fd7` (MrFailology), `0f601ff4f46919f61e43fc612f88da6b646027cb5a9d44b9f3862c24450347d8` (Molgoatkirby) and `c0c92c1df05f180254291326ed3d0edfe4dda1e76978f7faae58840321a3170e` (Thebrokekid). Research frames, raw audit output and read-only model projections remain in temporary storage rather than the repository.
 
 Final verification for this follow-up: fresh TypeScript build passes;116Leviathan checks plus3generic current-level checks pass119/119 with no failures/skips, using concurrency2to bound memory. Seven source-backed mismatch cases were observed RED before correction. Independent parent review cleared the complete code delta; a separate read-only reviewer inspected the early-bite source frames and independently passed all four new limiter/lifecycle checks. The real bite queue-order, lethal reflection, protection-zero, special reduction and smoke-cover regressions remain green. `git diff --check` passes. The parent owns complete-suite execution, shared-runtime integration, publication and installation; those are not claimed by this focused result.
+
+
+### Ordinary late-volley count and recovery correction (24 October 2026)
+
+The original [MrFailology normal stunless kill](https://www.youtube.com/watch?v=CwJ-Zj6GS_w),
+uploaded5May2026, was reacquired with an isolated yt-dlp2026.10.21 reader after the
+old2026.07.04 reader returned403. Local format398 is1280x720/60fps, duration152.483333s,
+SHA256 aeae22b118195c2243c1c991d302a624c8a2010cf74997977d5a93de163c4fd7.
+The900HP fight has the ordinary arena, no awakened tornado and uninterrupted natural
+progression through the documented style sequence. The independent reviewer inspected
+complete source boundaries and actual detached trajectories, not narration or a
+white-pose threshold. Cyan upward thrall darts are excluded.
+
+| Natural volley | First–last detached projectile (seconds) | Count | Next first |
+| --- | --- | ---: | ---: |
+| Fourth (blue/green) |53.0–59.6|12|63.8|
+| Fifth (all styles) |63.8–69.2|10|73.4|
+| Sixth (all styles) |73.4–78.8|10|83.0|
+| Seventh (all styles) |83.0–88.4|10|92.6|
+
+Each row's last-to-next-first interval is4.2seconds, or seven nominal game ticks.
+The later first-to-first interval is9.6seconds, or16ticks; the fourth interval is
+10.8seconds, or18ticks. Mouth startup leads detached travel by approximately0.6s;
+comparing the same phase cancels that lead. Mouths are visibly closed immediately
+before fifth/sixth/seventh startups63.2/72.8/82.4 and after the final tracks, strongly
+excluding two entirely hidden extra launches. This is filmed timing with roughly
+0.1s sampling uncertainty, not original server packet timestamps.
+
+An exploratory color-corridor detector initially counted only ten crossings even
+in a twelve-shot window and missed the visible84.4 cyan crossing. Rocks, alpha and
+sampling censor those peaks. Its outputs were rejected as a standalone event oracle;
+manual detached tracks and source/tail boundaries establish the listed counts.
+
+The normal scheduler now uses6/8/8/12/10/10/10 shots and adds six recovery ticks after
+the regular one-tick attack interval (seven ticks total). Earlier three-tick and
+two-tick opening patterns and their existing five extra recovery ticks are retained.
+The inaccessible awakened branch retains its previous provisional schedule. No
+projectile IDs, raw flight values, queued roar delay, damage rolls or selection RNG
+are replaced from this footage. A true Fight.process regression failed against the
+old fifth12-shot sequence starting tick86 instead of the filmed pattern's87; the
+new full progression exercises fourth69–80, fifth87–96, sixth103–112 and repeated
+seventh119–128/135–144/151–160. Late-recovery stun and awakened controls are included.
+
+The independent [Leyr2023 original](https://www.youtube.com/watch?v=MxsQ8aTpQBk) was also
+reacquired (format136,1280x662/30fps, duration113.6s, SHA256
+5c117600c6b83756d038f5a2cc61857c0a884af07bd63b794afb35edfe0fa56c).
+Its late-start rocks/camera/cyan thrall make the sampled corridors incomplete;
+this pass does not assert a second independent full count or historical parity.
+The older narration and modified-world capture interpretation remain historical
+evidence, superseded for these ordinary late counts by the complete2026 tracks.
+
+Exact roar packet timestamps, client interpolation, every raw flight offset,
+special-damage distribution and remaining normal evidence gaps are still open.
+Only the count and equal-phase schedule demonstrated above are corrected.

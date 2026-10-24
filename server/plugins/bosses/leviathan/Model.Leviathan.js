@@ -1,13 +1,19 @@
-const TIERS = [
+const NORMAL_TIERS = [
   { interval: 3, shots: 6, styles: ["magic", "ranged"], flight: 5 },
   { interval: 2, shots: 8, styles: ["magic", "ranged"], flight: 5 },
   { interval: 2, shots: 8, styles: ["magic", "ranged", "melee"], flight: 4 },
   { interval: 1, shots: 12, styles: ["magic", "ranged"], flight: 3 },
-  { interval: 1, shots: 12, styles: ["magic", "ranged", "melee"], flight: 3 },
-  { interval: 1, shots: 12, styles: ["magic", "ranged", "melee"], flight: 2 },
-  { interval: 1, shots: 12, styles: ["magic", "ranged", "melee"], flight: 1 },
-];
-const volley = tier => TIERS[Math.max(0, Math.min(6, tier))];
+  { interval: 1, shots: 10, styles: ["magic", "ranged", "melee"], flight: 3 },
+  { interval: 1, shots: 10, styles: ["magic", "ranged", "melee"], flight: 2 },
+  { interval: 1, shots: 10, styles: ["magic", "ranged", "melee"], flight: 1 },
+].map((tier, index) => ({ ...tier, recoveryTicks: index >= 3 ? 6 : 5 }));
+// Recovery is additional to the regular attack interval: one-tick normal
+// volleys leave seven ticks between their last shot and the next first shot.
+// Awakened is inaccessible; retain its previous provisional schedule.
+const AWAKENED_TIERS = NORMAL_TIERS.map((tier, index) => ({
+  ...tier, shots: index >= 3 ? 12 : tier.shots, recoveryTicks: 5,
+}));
+const volley = (tier, awakened = false) => (awakened ? AWAKENED_TIERS : NORMAL_TIERS)[Math.max(0, Math.min(6, tier))];
 const resetTier = stuns => Math.min(6, Math.max(1, stuns));
 const key = ([x, y]) => `${x},${y}`;
 const distance = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
