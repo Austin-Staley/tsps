@@ -583,11 +583,12 @@ function tableForNpc(npcId) {
 
 function dropFor(player, npc, npcId, location, damagers = []) {
   const table = tableForNpc(npcId);
-  if (!table || !itemOnGroundManager) {
+  if (!itemOnGroundManager) {
     return 0;
   }
 
-  const drops = rollTable(table, player, npc);
+  // A kill with no base table can still receive contextual drops from plugins.
+  const drops = table ? rollTable(table, player, npc) : [];
   // Loot that depends on where or what the NPC was rather than its table (the Catacombs of
   // Kourend's totem pieces and shards), added before anything below reads the drops.
   pluginApi?.emitCustomEvent("npc-drops:add", { player, npc, npcId, drops });

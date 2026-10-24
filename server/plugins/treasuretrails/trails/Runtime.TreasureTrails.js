@@ -55,6 +55,8 @@ function stateOf(player, slot, random = Math.random) {
   const tier = item && tierOfItem(item.getId());
   if (!tier) return null;
   const current = item.getMetaValue(metaKey(tier));
+  if (data(tier).byItem.get(item.getId()).challenge?.itemId === item.getId())
+    return trails(player).find(trail => trail.state.token === current?.token && trail.state.revision === current?.revision) ?? null;
   if (validState(tier, item, current)) return { tier, item, slot, state: current, step: data(tier).byRow.get(current.row) };
   // A clue without a trail (a drop, box or vessel) starts one on a random step of its tier.
   const step = pick(data(tier).steps, random);
@@ -69,7 +71,8 @@ function trails(player) {
   return player.getInventory().getItems().flatMap((item, slot) => {
     const tier = item && item.getAmount() > 0 ? tierOfItem(item.getId()) : null;
     const state = tier ? item.getMetaValue(metaKey(tier)) : null;
-    return tier && validState(tier, item, state) ? [{ tier, item, slot, state, step: data(tier).byRow.get(state.row) }] : [];
+    return tier && validState(tier, item, state) && data(tier).byItem.get(item.getId()).itemId === item.getId()
+      ? [{ tier, item, slot, state, step: data(tier).byRow.get(state.row) }] : [];
   });
 }
 
@@ -99,20 +102,29 @@ function clueText(step) {
   return step.text;
 }
 
-function holdsChallenge(trail) {
-  return trail.step.challenge?.itemId != null && trail.item.getId() === trail.step.challenge.itemId;
+function challengeSlot(player, trail) {
+  return player.getInventory().getItems().findIndex(item => item && item.getId() === trail.step.challenge?.itemId &&
+    item.getMetaValue(metaKey(trail.tier))?.token === trail.state.token &&
+    item.getMetaValue(metaKey(trail.tier))?.revision === trail.state.revision);
+}
+
+function holdsChallenge(player, trail) {
+  return challengeSlot(player, trail) >= 0;
 }
 
 function read(event) {
   if (!clicked(event)) return false;
-  const trail = stateOf(event.player, event.slot);
   const sender = event.player.getPacketSender();
-  if (holdsChallenge(trail)) {
-    const group = data(trail.tier).textInterface;
+  const item = event.player.getInventory().getItems()[event.slot];
+  const tier = tierOfItem(item.getId());
+  const step = data(tier).byItem.get(item.getId());
+  if (item.getId() === step.challenge?.itemId) {
+    const group = data(tier).textInterface;
     sender.sendInterface(group);
-    sender.sendString(trail.step.challenge.question, (group << 16) | 2);
+    sender.sendString(step.challenge.question, (group << 16) | 2);
     return true;
   }
+  const trail = stateOf(event.player, event.slot);
   if (trail.step.family === "map" && trail.step.interfaceId != null) {
     sender.sendInterface(trail.step.interfaceId);
     return true;
@@ -137,22 +149,27 @@ function dismissUri(player) {
 }
 
 /** `said` overrides the hand-over message, as the giving NPC's transcript words it: { clue, casket }. */
-function advance(player, snapshot, random = Math.random, said = {}) {
+function advance(player, snapshot, random = Math.random, said = {}, show = true, removeUri = true) {
   const trail = stillHeld(player, snapshot);
   if (!trail) return false;
-  dismissUri(player);
+  if (removeUri) dismissUri(player);
   const inventory = player.getInventory();
+  const challenge = challengeSlot(player, trail);
+  if (challenge >= 0) inventory.setItem(challenge, null);
   const completed = trail.state.completed + 1;
+  let received, words;
   if (completed >= trail.state.length) {
     // The exact slot matters when scrolls of several tiers are carried.
-    inventory.setItem(trail.slot, new core.Item(data(trail.tier).casket, 1));
-    player.sendMessage(said.casket ?? "You've found a reward casket!");
+    received = new core.Item(data(trail.tier).casket, 1);
+    words = said.casket ?? "You've obtained a casket!";
   } else {
     const step = pick(data(trail.tier).steps, random);
-    inventory.setItem(trail.slot, stepItem(trail.tier, step, { ...trail.state, completed, revision: trail.state.revision + 1 }));
-    player.sendMessage(said.clue ?? "You've found another clue!");
+    received = stepItem(trail.tier, step, { ...trail.state, completed, revision: trail.state.revision + 1 });
+    words = said.clue ?? "You've found another clue!";
   }
+  inventory.setItem(trail.slot, received);
   inventory.refreshItems();
+  if (show) Dialogue.itemBox(player, received.getId(), words);
   return true;
 }
 
@@ -188,13 +205,15 @@ function talk(event) {
   event.handled = true;
   if (trail.step.family === "music") { hearSong(player, npcId, trail); return; }
   if (trail.step.challenge?.itemId != null) {
-    if (holdsChallenge(trail)) askAnswer(player, npc, npcId, trail);
+    if (holdsChallenge(player, trail)) askAnswer(player, npc, npcId, trail);
     else handOutChallenge(player, npc, npcId, trail);
     return;
   }
-  const said = Dialogue.lines(Dialogue.transcript(player, npc, npcId, `treasure-trails-${trail.tier.name}`));
+  const steps = Dialogue.transcript(player, npc, npcId, `treasure-trails-${trail.tier.name}`);
+  const said = Dialogue.lines(steps, Math.random, npcName(npcId));
   // The talk began beside the NPC; a wandering NPC (Elder Torgan) may step away during it.
-  Dialogue.play(player, npcId, said.length ? said : [{ npc: "Well done, you've found me!" }], () => advance(player, trail));
+  Dialogue.play(player, npcId, said.length ? said : [{ npc: "Well done, you've found me!" }], () => advance(player, trail, Math.random,
+    { clue: Dialogue.message(steps) ?? `${npcName(npcId)} has given you another clue scroll!`, casket: Dialogue.message(steps, true) ?? "You've obtained a casket!" }));
 }
 
 /** Uri (Wiki transcript): wrong attire or a missing emote gets his refusal; otherwise a random phrase. */
@@ -202,65 +221,70 @@ function meetUri(player, npc, npcId, trail) {
   const active = uris.get(player);
   const ready = emoteReady(player, trail.step) && active.done >= trail.step.emotes.length;
   if (!ready) {
-    const refusal = Dialogue.lines(Dialogue.transcript(player, npc, npcId, URI_REFUSAL));
+    const refusal = Dialogue.lines(Dialogue.transcript(player, npc, npcId, URI_REFUSAL), Math.random, npcName(npcId));
     Dialogue.play(player, npcId, refusal.length ? refusal : [{ npc: "I do not believe we have any business, Comrade." }]);
     return;
   }
   const steps = Dialogue.transcript(player, npc, npcId, URI_STANDARD);
-  const said = steps ? Dialogue.lines(steps) : [];
+  const said = steps ? Dialogue.lines(steps, Math.random, npcName(npcId)) : [];
   // The standard variant is a random phrase, then the player's "What?" and the hand-over.
   const what = steps?.find(step => typeof step.player === "string");
-  Dialogue.play(player, npcId, what ? [...said, { player: what.player }] : said, () => {
-    const current = stillHeld(player, trail);
-    if (uris.get(player)?.npc !== npc || !current || !emoteReady(player, current.step)) return;
-    const casket = current.state.completed + 1 >= current.state.length;
-    const words = Dialogue.message(steps, casket);
-    advance(player, current, Math.random, casket ? { casket: words ?? undefined } : { clue: words ?? undefined });
-  });
+  const casket = trail.state.completed + 1 >= trail.state.length;
+  const words = (!casket && trail.tier.uriClueMessage) || Dialogue.message(steps, casket) || (casket ? "You've obtained a casket!" : "You have been given a new clue!");
+  if (!advance(player, trail, Math.random, {}, false, false)) return;
+  const received = !casket && trail.tier.uriClueDisplay ? core.CacheDefinitions.getObjId(trail.tier.uriClueDisplay) : player.getInventory().getItems()[trail.slot].getId();
+  Dialogue.play(player, npcId, what ? [...said, { player: what.player }] : said,
+    () => {
+      if (uris.get(player)?.npc === npc) dismissUri(player);
+      Dialogue.itemBox(player, received, words);
+    });
 }
 
 function npcName(npcId) {
   return core.CacheDefinitions.getNpc(npcId)?.name ?? "";
 }
 
-/** The NPC asks first and hands over its challenge scroll in place of the clue (Wiki "Challenge scroll"). */
+/** The challenge is carried alongside its clue; it does not count as another trail step. */
 function handOutChallenge(player, npc, npcId, trail) {
   const steps = Dialogue.transcript(player, npc, npcId, `treasure-trails-${trail.tier.name}`);
-  Dialogue.play(player, npcId, Dialogue.lines(steps), () => {
+  Dialogue.play(player, npcId, Dialogue.lines(steps, Math.random, npcName(npcId)), () => {
     const current = stillHeld(player, trail);
     // The talk began beside the NPC; a wandering NPC (the flax keeper) may have stepped away since.
-    if (!current || holdsChallenge(current)) return;
-    const scroll = new core.Item(current.step.challenge.itemId, 1).setMetaValue(metaKey(current.tier), { ...current.state, revision: current.state.revision + 1 });
-    player.getInventory().setItem(current.slot, scroll);
-    player.getInventory().refreshItems();
-    player.sendMessage(Dialogue.message(steps) ?? `${npcName(npcId)} has given you a challenge scroll!`);
+    if (!current || holdsChallenge(player, current)) return;
+    const inventory = player.getInventory();
+    const slot = inventory.getItems().findIndex(item => !item || item.getAmount() <= 0);
+    if (slot < 0) { player.sendMessage("You need a free inventory space to receive a challenge scroll."); return; }
+    const scroll = new core.Item(current.step.challenge.itemId, 1).setMetaValue(metaKey(current.tier), { ...current.state });
+    inventory.setItem(slot, scroll);
+    inventory.refreshItems();
+    Dialogue.itemBox(player, scroll.getId(), Dialogue.message(steps) ?? `${npcName(npcId)} has given you a challenge scroll!`);
   });
 }
 
 /** Talking again asks for the answer; a wrong one costs nothing (Wiki "Challenge scroll"). */
 function askAnswer(player, npc, npcId, trail) {
   const steps = Dialogue.againTranscript(player, npc, npcId, trail.tier.name);
-  const prompt = Dialogue.lines(steps);
+  const prompt = Dialogue.lines(steps, Math.random, npcName(npcId));
   const ask = prompt.find(line => line.npc)?.npc ?? "Please enter the answer to the question.";
   Dialogue.play(player, npcId, prompt.length ? prompt : [{ npc: ask }], () => {
     player.setEnteredAmountAction({ execute: amount => answered(player, npc, npcId, trail, steps, amount) });
-    player.getPacketSender().sendEnterAmountPrompt(ask);
+    player.getPacketSender().sendEnterAmountPrompt("Enter amount:");
   });
 }
 
 function answered(player, npc, npcId, trail, steps, amount) {
   const current = stillHeld(player, trail);
-  if (!current || !holdsChallenge(current)) return;
+  if (!current || !holdsChallenge(player, current)) return;
   if (Number(amount) !== Number(current.step.challenge.answer)) {
-    const wrong = Dialogue.lines(Dialogue.wrongBranch(steps));
+    const wrong = Dialogue.lines(Dialogue.wrongBranch(steps), Math.random, npcName(npcId));
     Dialogue.play(player, npcId, wrong.length ? wrong : [{ npc: "Wrong! Try again." }]);
     return;
   }
   const correct = Dialogue.correctBranch(steps);
-  const said = Dialogue.lines(correct);
+  const said = Dialogue.lines(correct, Math.random, npcName(npcId));
   Dialogue.play(player, npcId, said.length ? said : [{ npc: "Correct." }], () => {
     const latest = stillHeld(player, current);
-    if (!latest || !holdsChallenge(latest)) return;
+    if (!latest || !holdsChallenge(player, latest)) return;
     const casket = latest.state.completed + 1 >= latest.state.length;
     const words = Dialogue.message(correct, casket);
     advance(player, latest, Math.random, casket ? { casket: words ?? "You've obtained a casket!" } :
@@ -275,9 +299,12 @@ function search(event) {
     distance(event.location, entry.step.location) === 0);
   if (!trail) return;
   const inventory = player.getInventory();
-  // A keyed step opens only with its key, which the search uses up; without it the loc stays locked.
-  if (trail.step.target === "key" && !inventory.getItems().some(item => item && item.getId() === trail.step.keyItem)) return;
   event.handled = true;
+  // The exact locked-note wording is not in the cache; its helper supplies the key's source.
+  if (trail.step.target === "key" && !inventory.getItems().some(item => item && item.getId() === trail.step.keyItem)) {
+    player.sendMessage(`It is locked. ${trail.step.description}`);
+    return;
+  }
   if (trail.step.target === "key") inventory.delete(trail.step.keyItem, 1);
   advance(player, trail);
 }

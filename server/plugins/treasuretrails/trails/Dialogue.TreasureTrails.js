@@ -37,14 +37,18 @@ function againTranscript(player, npc, npcId, tier) {
 }
 
 /** Spoken lines up to the first action, message, condition or end; a random step picks one option. */
-function lines(steps, random = Math.random) {
+function lines(steps, random = Math.random, npcName) {
   const spoken = [];
   for (const step of steps ?? []) {
     if (typeof step.npc === "string") spoken.push({ npc: step.npc });
     else if (typeof step.player === "string") spoken.push({ player: step.player });
-    else if (step.type === "line" && typeof step.text === "string") spoken.push({ npc: step.text });
+    else if (step.type === "line" && typeof step.text === "string") {
+      if (/^player$/i.test(step.speaker ?? "")) spoken.push({ player: step.text });
+      else if (!step.speaker || !npcName || step.speaker === npcName) spoken.push({ npc: step.text });
+      else break;
+    }
     else if (step.type === "random" && step.options?.length) {
-      spoken.push(...lines(step.options[Math.floor(random() * step.options.length)].steps, random));
+      spoken.push(...lines(step.options[Math.floor(random() * step.options.length)].steps, random, npcName));
       break;
     } else break;
   }
@@ -83,4 +87,9 @@ function play(player, npcId, spoken, onEnd) {
   player.getDialogueManager().startDialogues(chain);
 }
 
-module.exports = { attach, transcript, againTranscript, lines, branch, wrongBranch, correctBranch, message, play };
+function itemBox(player, itemId, text) {
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder()
+    .add(new core.ItemStatementDialogue(0, itemId, text)).add(new core.EndDialogue(1)));
+}
+
+module.exports = { attach, transcript, againTranscript, lines, branch, wrongBranch, correctBranch, message, play, itemBox };

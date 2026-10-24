@@ -77,22 +77,32 @@ assumption.
 
 ## Steps
 
-- **NPC:** talk to the target NPC; the step completes after the dialogue, within 3 tiles.
+- **NPC:** talk to the target NPC; the step completes after the dialogue. The NPC may wander
+  during the conversation without invalidating the handover.
   - NPCs speak their own transcript: the `treasure-trails-<tier>` variant in `npc-dialogues.json`,
     read through NpcDialogues' `npc-dialogue:start` with `exact: true` and a `select` that only
     captures the steps. An NPC without that variant gets the fallback line, not its everyday chat.
   - Where the transcript has nothing, a shared fallback line is used.
+  - The received item and handover wording appear in the native item dialogue (`objectbox`,
+    group 193, item argument 400). The transcript supplies its wording, including Lowe's
+    generic "You've found another clue!"; the fallback names the giving NPC.
 - **Challenge scroll** (Wiki "Challenge scroll"):
-  - The first talk hands over the step's challenge scroll in place of the clue.
+  - The first talk adds the challenge alongside the clue, requiring a free inventory slot.
+    The challenge carries the same trail token and revision; it is not a second trail.
   - Reading the challenge scroll shows the question.
-  - The next talk asks for the answer through the number prompt. A wrong answer costs nothing; the
-    right one gives the next clue or the casket.
+  - The next talk shows the NPC's question-request line, then opens the number prompt labelled
+    "Enter amount:". A wrong answer costs nothing; the right one consumes both scrolls in one
+    inventory refresh and gives the next clue or casket with an item dialogue.
+  - Without its matching clue in the inventory, the challenge remains readable but cannot advance
+    a trail. Repeated answers and stale dialogue callbacks cannot grant another step.
   - The words come from the NPC's transcript. The "talk again" variant goes under nine names
     (`when-talked-to-again`, `answering-the-clue`, …), and the wrong/correct branches under several
     wordings; any missing part uses the most common transcript wording.
 - **Key** (medium cryptic): killing one of the step's NPCs drops its key (`npc-drops:add`) while
   the trail is held and the player has no key. The target loc then opens only with the key, which
-  is used up.
+  is used up. Contextual drop events also run when the NPC has no base drop table. A search without
+  the key is handled as locked and shows the cache clue-helper's hint about the key's source;
+  this feedback is functional wording, not a replay of each container's exact locked note.
 - **Search:** a new generic core hook, `onBeforeObjectInteraction`, claims an interaction on the
   target loc at its exact tile before ordinary object handlers. It mirrors `onBeforeNpcInteraction`,
   and unclaimed interactions fall through.
@@ -100,11 +110,16 @@ assumption.
 - **Map:** Read opens the step's map interface; the dig is as above.
 - **Emote:**
   - The player performs the step's emote within 3 tiles of its target while wearing the full outfit.
-  - That spawns that tier's Uri for the player only; talking to him completes the step.
+  - That spawns that tier's Uri for the player only; a successful talk advances the inventory on
+    his first phrase, even if the player closes the conversation before "What?".
   - Medium steps need a second emote after Uri appears and before he is spoken to.
   - Uri speaks his transcript. With the wrong outfit or a missing emote he says "I do not believe we
     have any business, Comrade."; otherwise a random phrase, the player's "What?", then "You have
-    been given a new clue!" (or a casket).
+    been given a new clue!" (or a casket). The verified medium handover instead says "You've been
+    given a clue!" and displays cache item `trail_medium_emote_exp9` (19780), independently of the
+    next clue actually in the inventory. Uri remains through the spoken lines and is removed at
+    the handover continuation; the recording's additional 3–5 tick transmitted-list delay is not
+    reproduced.
   - The cache gives a target tile but no area, so the 3-tile radius follows the beginner runtime's
     usual value. This is an assumption.
 - **Music:** from Cecilia's Wiki transcript, the player selects the requested track, then speaks to
@@ -219,6 +234,31 @@ the Spot it becomes a scroll box (`treasure-trails:clue-item`).
 
 ## Verification
 
+PR #890 review verification independently decoded RSProx recordings
+[559](https://rsprox.net/download/559), [1063](https://rsprox.net/download/1063),
+[1064](https://rsprox.net/download/1064) and [1067](https://rsprox.net/download/1067):
+
+- 559 is **revision 227, Leagues V**. Its medium Baraek (12057/12058), Karim (2849/2850) and
+  Charlie (19750/19751) windows retain the clue when adding the challenge, then remove both on a
+  correct answer. Karim and Charlie receive another clue; Baraek receives a medium casket.
+  All handovers use objectbox 193:1 with integer argument 400. The NPC's answer-request line
+  precedes count-prompt script 108 with "Enter amount:". These are narrow inventory/UI facts;
+  no trail lengths, reward rates or gameplay timing are derived from Leagues.
+- 1063/1064/1067 are **revision 235, ordinary members worlds**. Each replaces the medium clue in
+  the same tick as Uri's first phrase, before "What?" and the handover. The handover displays
+  item 19780; Uri leaves the transmitted NPC list 3–5 ticks later.
+- No ordinary-world challenge handout sample was found in the database's challenge-text search.
+  The selected windows do not establish the full-inventory case; refusing the handout without
+  a free slot is the tested implementation policy.
+- The imported Baraek answer-request line names Dunstan because the cached Wiki source itself
+  (`Transcript:Baraek`, revision 15315303) names Dunstan. This is not a parser defect. Generated
+  data remains unchanged pending an upstream Wiki correction and regeneration. The dialogue
+  adapter preserves player lines and rejects unrelated named NPC speakers, using the common
+  question-request fallback here.
+- Loaded drop tables cover Hill Giant 7261 already. NPCs 11195, 10498, 10499, 3063 and 3266 have
+  no base table; their kills now reach the same contextual-drop lifecycle. All six variants are
+  covered through the real NPC death callback, including no duplicate key when one is carried.
+
 - `tests/treasure-trails-easy.test.cjs` runs on the real cache and checks:
   - the object-hook contract;
   - all 166 steps resolving to distinct items and targets;
@@ -240,9 +280,21 @@ the Spot it becomes a scroll box (`treasure-trails:clue-item`).
   - crate maps, coordinate and map digs;
   - all 25 double emotes with item groups and Uri's transcript;
   - "no boots";
+  - challenge coexistence, full inventories, orphan challenges and repeated answers;
+  - native item dialogue packets and prompt wording;
+  - Uri's immediate inventory advancement and early dialogue closure;
+  - player versus NPC transcript speakers and actual death-drop dispatch without base tables;
   - the medium casket and medium STASH units.
-- Clue, casket and Mimic tests pass 128/128 with the imported tables.
-- Beginner, beginner-casket and clue-capacity tests still pass unchanged.
+- Original implementation baseline: clue, casket and Mimic tests passed 128/128 with the
+  imported tables; beginner, beginner-casket and clue-capacity tests passed unchanged.
+- Review-fix verification: server TypeScript build passed; the easy, medium, NPC drop override
+  and looting-bag drop tests passed 42/42, followed by a fresh medium-file run including the
+  additional final-challenge atomic-refresh/casket regression (19/19). The final full server
+  suite, 366 files at concurrency 4, passed **4,938/4,938**, with no failures, cancellations or
+  skips (248 seconds); its log includes that additional regression.
+- **Original implementation live checks, before the review fixes:** the following natural-route
+  results are historical; the review follow-up uses recordings and automated tests, without a
+  fresh live-account walkthrough.
 - **Natural route:** on the isolated slot-8 world (game 43708, agent MCP 49808), a headless test
   account completed three full easy trails through real packets: 7 NPC, 5 search, 2 dig and 1 emote
   steps. Each ended in a reward casket.

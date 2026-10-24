@@ -24,18 +24,18 @@ const play = Dialogue.play;
 Dialogue.play = (player, npcId, spoken, onEnd) => { played.push(...spoken); return play(player, npcId, spoken, onEnd); };
 
 function fixture() {
-  const actions = new Map(), events = new Map(), attributes = new Map(), sent = [], ground = [], spawned = [];
+  const actions = new Map(), events = new Map(), attributes = new Map(), sent = [], ground = [], spawned = [], refreshed = [];
   let position = new core.Location(3222, 3218, 0), chain, amountAction, placed = 0;
   const items = Array(28).fill(null), worn = [];
   const inventory = {
-    getItems: () => items, refreshItems() {}, setItem(slot, item) { items[slot] = item; return inventory; },
+    getItems: () => items, refreshItems() { refreshed.push(items.map(item => item?.getId() ?? null)); }, setItem(slot, item) { items[slot] = item; return inventory; },
     getFreeSlots: () => items.filter(i => !i).length, isFull() { return this.getFreeSlots() === 0; },
     delete(id, amount) { while (amount > 0) { const slot = items.findIndex(i => i?.getId() === id); if (slot < 0) return; const take = Math.min(amount, items[slot].getAmount()); this.deleteAtSlot(slot, take); amount -= take; } },
     deleteAtSlot(slot, amount) { const item = items[slot]; if (!item) return; if (item.getAmount() <= amount) items[slot] = null; else item.setAmount(item.getAmount() - amount); },
     adds(id, amount) { this.forceAdd(null, new core.Item(id, amount)); },
     forceAdd(player, item) { const slot = items.findIndex(i => !i); if (slot < 0) ground.push(item); else items[slot] = item; },
   };
-  const sender = new Proxy({}, { get: (_, name) => (...args) => sent.push([name, ...args]) });
+  const sender = new Proxy({}, { get: (_, name) => (...args) => { sent.push([name, ...args]); return sender; } });
   const skills = { level: 1, xp: 0, getCurrentLevel() { return this.level; }, addExperiences(skill, xp) { this.xp += xp; } };
   const player = { getInventory: () => inventory, getSkillManager: () => skills, getEquipment: () => ({ getItems: () => worn }),
     getPacketSender: () => sender, getLocation: () => position, getPrivateArea: () => null,
@@ -67,11 +67,12 @@ function fixture() {
     Runtime.talk(event);
     return event;
   };
-  return { player, items, worn, skills, attributes, actions, sent, ground, spawned, place, talk, on: api.onCustomEvent, emit: api.emitCustomEvent,
+  return { player, items, worn, skills, attributes, actions, sent, ground, spawned, refreshed, place, talk, on: api.onCustomEvent, emit: api.emitCustomEvent,
     event: (slot = 0) => ({ player, slot, item: items[slot], itemId: items[slot]?.getId() }),
     move: target => { position = new core.Location(target.x, target.y, target.z); },
     answer: value => amountAction.execute(value),
     state: () => items[0]?.getMetaValue(Runtime.metaKey(MEDIUM)),
+    box: () => { const box = chain?.getDialogues().get(0); assert.ok(box instanceof core.ItemStatementDialogue); box.send(player); return box; },
     finish: () => { const current = chain; chain = null; for (const d of current?.getDialogues().values() ?? []) if (d instanceof core.ActionDialogue) d.send(player); },
   };
 }
@@ -111,21 +112,24 @@ test("every challenge NPC hands over its scroll, then takes only the cache's ans
     f.place(step);
     assert.equal(f.talk(step.npcIds[0]).handled, true, step.key);
     f.finish();
-    assert.equal(f.items[0].getId(), step.challenge.itemId, `${step.key} hands over the challenge scroll`);
-    f.actions.get("Challenge scroll (medium)").Read(f.event());
+    assert.equal(f.items[0].getId(), step.itemId, `${step.key} keeps the clue scroll`);
+    assert.equal(f.items[1].getId(), step.challenge.itemId, `${step.key} adds the challenge scroll`);
+    assert.equal(Runtime.trails(f.player).length, 1, "the challenge is not a second trail");
+    f.actions.get("Challenge scroll (medium)").Read(f.event(1));
     assert.ok(f.sent.some(([name, text]) => name === "sendString" && text === step.challenge.question), step.key);
     f.talk(step.npcIds[0]);
     f.finish();
-    assert.ok(f.sent.some(([name]) => name === "sendEnterAmountPrompt"), step.key);
+    assert.ok(f.sent.some(([name, text]) => name === "sendEnterAmountPrompt" && text === "Enter amount:"), step.key);
     f.answer(step.challenge.answer + 1);
     f.finish();
-    assert.equal(f.items[0].getId(), step.challenge.itemId, `${step.key} keeps the scroll after a wrong answer`);
+    assert.equal(f.items[1].getId(), step.challenge.itemId, `${step.key} keeps the scroll after a wrong answer`);
     f.talk(step.npcIds[0]);
     f.finish();
     f.answer(step.challenge.answer);
     f.finish();
     assert.equal(f.state().completed, 1, step.key);
     assert.notEqual(f.items[0].getId(), step.challenge.itemId);
+    assert.equal(f.items[1], null, "the correct answer removes the challenge with the clue");
   }
 });
 
@@ -136,12 +140,12 @@ test("challenge NPCs speak their own transcript where it has the words", () => {
   played.length = 0;
   f.talk(baraek.npcIds[0]); f.finish();
   assert.deepEqual(played[0], { npc: "I must ask you something..." });
-  assert.ok(f.sent.some(([name, text]) => name === "message" && text === "Baraek has given you a challenge scroll!"));
+  assert.equal(f.box().getText(), "Baraek has given you a challenge scroll!");
   f.talk(baraek.npcIds[0]); f.finish(); f.answer(1); f.finish();
   assert.ok(played.some(line => line.npc === "Wrong! Try again."));
   f.talk(baraek.npcIds[0]); f.finish(); f.answer(baraek.challenge.answer); f.finish();
   assert.ok(played.some(line => line.npc === "Correct."));
-  assert.ok(f.sent.some(([name, text]) => name === "message" && text === "Baraek has given you another clue scroll!"));
+  assert.equal(f.box().getText(), "Baraek has given you another clue scroll!");
 });
 
 test("an NPC with no transcript lines hands over its challenge scroll at once", () => {
@@ -151,8 +155,8 @@ test("an NPC with no transcript lines hands over its challenge scroll at once", 
   played.length = 0;
   f.talk(otto.npcIds[0]);
   assert.deepEqual(played, []);
-  assert.equal(f.items[0].getId(), otto.challenge.itemId, "no dialogue is left holding the hand-over");
-  assert.ok(f.sent.some(([name, text]) => name === "message" && text === "Otto Godblessed has given you a challenge scroll!"));
+  assert.equal(f.items[1].getId(), otto.challenge.itemId, "no dialogue is left holding the hand-over");
+  assert.equal(f.box().getText(), "Otto Godblessed has given you a challenge scroll!");
 });
 
 test("plain anagram, cipher and cryptic NPCs complete after their dialogue", () => {
@@ -163,6 +167,8 @@ test("plain anagram, cipher and cryptic NPCs complete after their dialogue", () 
     assert.equal(f.talk(step.npcIds[0]).handled, true, step.key);
     f.finish();
     assert.equal(f.state().completed, 1, step.key);
+    const transcript = TRANSCRIPTS[C.getNpc(step.npcIds[0]).name]?.variants?.["treasure-trails-medium"];
+    assert.equal(f.box().getText(), Dialogue.message(transcript) ?? `${C.getNpc(step.npcIds[0]).name} has given you another clue scroll!`, step.key);
   }
 });
 
@@ -177,7 +183,10 @@ test("keyed steps drop their key only during the trail, and the loc opens only w
     f.emit("npc-drops:add", { player: f.player, npcId: step.npcIds[0], drops });
     assert.deepEqual(drops, [{ itemId: step.keyItem, amount: 1 }], step.key);
     const open = () => { const event = { player: f.player, objectId: step.locIds[0], location: step.location, handled: false }; Runtime.search(event); return event.handled; };
-    assert.equal(open(), false, `${step.key} stays locked without the key`);
+    f.sent.length = 0;
+    assert.equal(open(), true, `${step.key} handles its locked container without a key`);
+    assert.equal(f.state().completed, 0, "a locked search does not advance the clue");
+    assert.deepEqual(f.sent.at(-1), ["message", `It is locked. ${step.description}`]);
     f.items[5] = new core.Item(step.keyItem, 1);
     const again = [];
     f.emit("npc-drops:add", { player: f.player, npcId: step.npcIds[0], drops: again });
@@ -230,10 +239,13 @@ test("medium emotes need both emotes in order, the outfit (groups included) and 
     assert.equal(f.state().completed, 0);
     Runtime.emote({ player: f.player, slot: step.emotes[1] });
     played.length = 0;
-    f.talk(uri.def.id, uri); f.finish();
+    f.talk(uri.def.id, uri);
+    assert.equal(f.state().completed, 1, `${step.key} advances on Uri's first phrase`);
+    f.finish();
     assert.deepEqual(played.at(-1), { player: "What?" }, step.key);
     assert.equal(f.state().completed, 1, step.key);
-    assert.ok(f.sent.some(([name, text]) => name === "message" && text === "You have been given a new clue!"), step.key);
+    assert.equal(f.box().getText(), "You've been given a clue!", step.key);
+    assert.equal(f.box().getItemId(), C.getObjId("trail_medium_emote_exp9"), "Uri's display item differs from the inventory clue");
   }
 });
 
@@ -292,7 +304,7 @@ test("answer variants and branches are found under the transcripts' other names"
   assert.ok(played.some(line => line.npc === "Nope, not correct!"));
   f.talk(ali.npcIds[0]); f.finish(); f.answer(ali.challenge.answer); f.finish();
   assert.ok(played.some(line => line.npc === "Spot on!"));
-  assert.ok(f.sent.some(([name, text]) => name === "message" && text === "Ali the Kebab seller has given you another clue scroll!"));
+  assert.equal(f.box().getText(), "Ali the Kebab seller has given you another clue scroll!");
 });
 
 test("an exact npc-dialogue:start request for a missing variant gets nothing, not the NPC's default chat", () => {
@@ -307,4 +319,104 @@ test("an exact npc-dialogue:start request for a missing variant gets nothing, no
   };
   assert.equal(ask(true), null, "Elder Torgan has no treasure-trails-medium variant");
   assert.ok(Array.isArray(ask(false)) && ask(false).length, "without exact, the default transcript still plays");
+});
+
+test("challenge handouts need room, cannot duplicate, and completing a full pack removes both scrolls", () => {
+  const f = fixture(), step = steps().find(entry => entry.challenge);
+  f.place(step);
+  const clue = f.items[0];
+  f.items.fill(new core.Item(I.COINS, 1), 1);
+  f.talk(step.npcIds[0]); f.finish();
+  assert.equal(f.items[0], clue);
+  assert.ok(!f.items.some(item => item?.getId() === step.challenge.itemId));
+  assert.equal(f.ground.length, 0);
+  f.items[8] = null;
+  f.talk(step.npcIds[0]); f.finish();
+  assert.equal(f.items[0], clue);
+  assert.equal(f.items[8].getId(), step.challenge.itemId);
+  f.box();
+  assert.ok(f.sent.some(([name, widget, itemId, zoom]) => name === "sendItemOnInterfaces" && widget === (193 << 16 | 1) && itemId === step.challenge.itemId && zoom === 400));
+  assert.ok(f.sent.some(([name, script, text]) => name === "sendClientScript" && text === "Click here to continue"));
+  const snapshot = f.state();
+  f.talk(step.npcIds[0]);
+  assert.ok(!f.sent.some(([name]) => name === "sendEnterAmountPrompt"), "NPC line precedes the amount prompt");
+  f.finish();
+  f.answer(step.challenge.answer); f.finish();
+  assert.equal(f.items[8], null);
+  assert.equal(f.state().completed, 1);
+  assert.equal(f.state().token, snapshot.token);
+  f.answer(step.challenge.answer); f.finish();
+  assert.equal(f.state().completed, 1, "replayed answer cannot advance twice");
+});
+
+test("an orphan challenge can be read but cannot answer or initialize a replacement trail", () => {
+  const f = fixture(), step = steps().find(entry => entry.challenge);
+  f.place(step); f.talk(step.npcIds[0]); f.finish();
+  f.items[0] = null;
+  const challenge = f.items[1];
+  f.actions.get("Challenge scroll (medium)").Read(f.event(1));
+  assert.equal(f.items[1], challenge);
+  assert.equal(Runtime.trails(f.player).length, 0);
+  assert.equal(f.talk(step.npcIds[0]).handled, false);
+  assert.ok(!f.sent.some(([name]) => name === "sendEnterAmountPrompt"));
+});
+
+test("the final challenge replaces the clue and removes its challenge in the same refresh before the casket box", () => {
+  const f = fixture(), step = steps().find(entry => entry.challenge);
+  f.place(step, 3, 0, 2); f.talk(step.npcIds[0]); f.finish();
+  f.talk(step.npcIds[0]); f.finish(); f.answer(step.challenge.answer);
+  f.refreshed.length = 0;
+  f.finish();
+  assert.equal(f.refreshed.length, 1);
+  assert.deepEqual(f.refreshed[0].slice(0, 2), [I.REWARD_CASKET_MEDIUM_, null]);
+  assert.equal(f.box().getItemId(), I.REWARD_CASKET_MEDIUM_);
+  assert.equal(f.box().getText(), "You've obtained a casket!");
+});
+
+test("line transcripts preserve player speech and reject an unrelated NPC speaker", () => {
+  assert.deepEqual(Dialogue.lines([{ type: "line", speaker: "Player", text: "What?" }], Math.random, "Uri"), [{ player: "What?" }]);
+  assert.deepEqual(Dialogue.lines([{ type: "line", speaker: "Dunstan", text: "Please enter the answer to the question." }], Math.random, "Baraek"), []);
+});
+
+test("Uri keeps standing during his first phrase even when the player closes the advanced dialogue", () => {
+  const f = fixture(), step = ofKind("emote")[0];
+  f.place(step);
+  for (const requirement of step.equipment) {
+    if (requirement.emptySlot != null) continue;
+    const id = requirement.anyOf?.[0] ?? [...C.getObjNames().keys()].find(item => C.getItem(item)?.params?.get?.(Catalogue.TRAIL_ITEM_GROUP_PARAM) === requirement.group);
+    f.worn.push(new core.Item(id, 1));
+  }
+  Runtime.emote({ player: f.player, slot: step.emotes[0] });
+  Runtime.emote({ player: f.player, slot: step.emotes[1] });
+  const uri = f.spawned[0];
+  f.talk(uri.def.id, uri);
+  assert.equal(f.state().completed, 1);
+  assert.notEqual(uri.removed, true, "Uri is present while the first phrase is shown");
+  f.talk(uri.def.id, uri);
+  assert.equal(f.state().completed, 1, "a repeated click after closing cannot grant a second clue");
+});
+
+test("key NPC variants with and without tables use one canonical death-drop lifecycle", () => {
+  const f = fixture(), Drops = require("../plugins/npcs/NpcDrops.plugin");
+  const placed = [], lifecycle = [];
+  let death;
+  const noop = () => {};
+  const api = new Proxy({ core, getItemOnGroundManager: () => ({ registerLocation: (player, item) => placed.push(item) }),
+    onNpcDeath: callback => { death = callback; }, emitCustomEvent: (name, event) => { lifecycle.push(name); f.emit(name, event); }
+  }, { get: (target, key) => key in target ? target[key] : noop });
+  Drops.register(api);
+  Drops._test.loadDrops();
+  for (const npcId of [7261, 11195, 10498, 10499, 3063, 3266]) {
+    f.items.fill(null); placed.length = 0; lifecycle.length = 0;
+    const step = ofKind("cryptic", "key").find(entry => entry.npcIds.includes(npcId));
+    assert.ok(step, `key step for NPC ${npcId}`);
+    f.place(step);
+    death({ killer: f.player, npcId, npc: { getLocation: () => f.player.getLocation() } });
+    assert.equal(placed.filter(item => item.getId() === step.keyItem).length, 1, `NPC ${npcId}`);
+    assert.equal(lifecycle.filter(name => name === "npc-drops:add").length, 1);
+    assert.equal(lifecycle.filter(name => name === "npc-drops:generated").length, 1);
+    f.items[5] = new core.Item(step.keyItem, 1); placed.length = 0;
+    death({ killer: f.player, npcId, npc: { getLocation: () => f.player.getLocation() } });
+    assert.equal(placed.filter(item => item.getId() === step.keyItem).length, 0, "carrying the key prevents another drop");
+  }
 });
