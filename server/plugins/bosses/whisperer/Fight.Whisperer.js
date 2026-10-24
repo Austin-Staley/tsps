@@ -1,0 +1,365 @@
+const Common = require('./Common.Whisperer');
+const Specials = require('./Specials.Whisperer');
+class Fight {
+    constructor(session, boss) {
+        this.session = session;
+        this.player = session.player;
+        this.boss = boss;
+        this.tick = 0;
+        this.sanityClock = 0;
+        this.sanity = 100;
+        this.shadow = false;
+        this.perfectKill = true;
+        this.enraged = false;
+        this.over = false;
+        this.stopped = false;
+        this.completed = 0;
+        this.startedSpecials = 0;
+        this.special = null;
+        this.attacks = 0;
+        this.nextAttack = 3;
+        this.events = [];
+        this.tentacles = [];
+        this.rotation = Common.random(0, 1) ? ['screech', 'souls', 'seeds'] : ['seeds', 'screech', 'souls'];
+        this.startCycle = Common.core.World.getProcessCycle();
+        this.boundUntil = 0;
+    }
+    alive() { return !this.over && !this.stopped && !this.session.ended && this.session.fight === this; }
+    pattern(base = 'ranged') {
+        if (this.enraged)
+            return [Math.floor(this.attacks / 2) % 2 ? 'magic' : 'ranged'];
+        const other = base === 'magic' ? 'ranged' : 'magic';
+        return this.completed >= 3 ? [base, other, base] : this.completed > 0 ? [base, base, other] : [base, base, base];
+    }
+    at(delay, action) { this.events.push({ due: this.tick + delay, action }); }
+    changeSanity(amount) { this.sanity = Math.max(0, Math.min(100, this.sanity + amount)); Common.sync(this); }
+    sanityTick() {
+        if (this.sanity <= 0) {
+            this.insanity = (this.insanity ?? 0) + 1;
+            Common.damage(this, Math.min(99, 5 * this.insanity));
+            return;
+        }
+        if (++this.sanityClock % 4 !== 0)
+            return;
+        if (this.shadow) {
+            this.changeSanity(-3);
+            const { Skill } = Common.core;
+            const skills = this.player.getSkillManager();
+            skills.setCurrentLevel(Skill.PRAYER, Math.max(0, skills.getCurrentLevel(Skill.PRAYER) - 3), true);
+        }
+        else
+            this.changeSanity(1);
+    }
+    setShadow(shadow) {
+        if (this.shadow === shadow)
+            return;
+        const offset = Common.data.site.realmOffset * (shadow ? -1 : 1);
+        const move = entity => { const p = entity.getLocation(); entity.moveTo(new Common.core.Location(p.getX() + offset, p.getY(), p.getZ())); };
+        move(this.player);
+        move(this.boss);
+        for (const tentacle of this.tentacles) {
+            move(tentacle.npc);
+            tentacle.x += offset;
+            tentacle.targetX += offset;
+        }
+        this.shadow = shadow;
+        Specials.render(this);
+        Common.sync(this);
+    }
+    process() {
+        if (!this.alive() || this.player.getHitpoints() <= 0)
+            return;
+        this.tick++;
+        this.sanityTick();
+        const hp = this.boss.getHitpoints();
+        if (this.shownHp !== hp) {
+            this.shownHp = hp;
+            Common.api.emitCustomEvent('boss-hud:update', { player: this.player, current: hp, maximum: this.boss.getMaxHitpoints() });
+        }
+        const due = this.events.filter(e => e.due <= this.tick);
+        this.events = this.events.filter(e => e.due > this.tick);
+        for (const event of due)
+            if (this.alive())
+                event.action();
+        this.processTentacles();
+        if (this.special) {
+            Specials.process(this);
+            return;
+        }
+        if (!this.enraged && this.startedSpecials < 3 && this.boss.getHitpoints() <= Common.data.thresholds[this.startedSpecials]) {
+            this.events = [];
+            this.clearTentacles();
+            Specials.start(this, this.rotation[this.startedSpecials++]);
+            return;
+        }
+        if (this.boundUntil > this.tick) {
+            this.pursueBound();
+            return;
+        }
+        if (this.inMelee()) {
+            if (this.tick >= this.nextAttack)
+                this.melee();
+            return;
+        }
+        if (this.boss.getLocation().getDistance(this.player.getLocation())>10) {
+            const p=this.player.getLocation();
+            this.boss.getMovementQueue().reset();
+            this.boss.getMovementQueue().addStep(p.getX(),p.getY());
+            return;
+        }
+        this.boss.getMovementQueue().reset();
+        if (this.tick >= this.nextAttack)
+            this.volley();
+    }
+    inMelee() {
+        const a = this.boss.getLocation(), b = this.player.getLocation(), size = 3;
+        const dx = Math.max(a.getX() - b.getX(), b.getX() - (a.getX() + size - 1), 0);
+        const dy = Math.max(a.getY() - b.getY(), b.getY() - (a.getY() + size - 1), 0);
+        return dx + dy <= 1;
+    }
+    volley() {
+        const base = Common.random(0, 1) ? 'magic' : 'ranged';
+        const pattern = this.pattern(base);
+        this.attacks++;
+        this.boss.performAnimation(new Common.core.Animation(Common.data.animations[pattern[0]]));
+        pattern.forEach((style, index) => this.at(index + 1, () => {
+            if (this.inMelee()) {
+                this.events = [];
+                this.melee();
+                return;
+            }
+            const { Projectile } = Common.core;
+            const travel = Math.max(1, Projectile.arrivalTicks(this.boss, this.player, 51));
+            Projectile.createProjectile(this.boss, this.player, Common.data.projectiles[style], 51, 46 + this.boss.getLocation().getDistance(this.player.getLocation()) * 10, 43, 31).sendProjectile();
+            this.at(travel, () => this.impact(style));
+        }));
+        this.at(pattern.length + 3, () => this.spawnTentacles());
+        this.nextAttack = this.tick + (this.enraged ? 2 : 10);
+    }
+    impact(style) {
+        if (!this.alive())
+            return;
+        // Roll at impact: the Whisperer's overheads are checked when projectiles land.
+        const { CombatMethod, CombatType, PendingHit, CombatFactory } = Common.core;
+        const method = new (class extends CombatMethod {
+            type() { return style === 'magic' ? CombatType.MAGIC : CombatType.RANGED; }
+            hits() { return []; }
+        })();
+        // Start with zero damage so the explicit style roll applies armour
+        // reactions once; the constructor still performs the accuracy roll.
+        const hit = new PendingHit(this.boss, this.player, method, { delay: 0, damage: 0 });
+        CombatFactory.applyStyleDamage(hit, Common.data.maxHit[style]);
+        if (Common.protectedFrom(this.player, style)) {
+            for (const part of hit.getHits())
+                part.setDamage(0);
+            hit.updateTotalDamage();
+        }
+        this.pendingDamage ??= new Set();
+        for (const part of hit.getHits()) {
+            this.pendingDamage.add(part);
+            part.onApplied(taken => {
+                this.pendingDamage.delete(part);
+                if (taken > 0 && this.alive())
+                    this.perfectKill = false;
+            });
+        }
+        // Already at the scheduled projectile impact. Resolve now rather than adding
+        // another tick before impact; executeHit still queues real HP damage normally.
+        CombatFactory.executeHit(hit);
+    }
+    melee() {
+        this.events = [];
+        this.nextAttack = this.tick + 5;
+        this.boss.performAnimation(new Common.core.Animation(Common.data.animations.melee));
+        const damage = Common.random(28, 42);
+        const amount = Common.protectedFrom(this.player, 'melee') ? Math.floor(damage * .75) : damage;
+        Common.damage(this, amount);
+        this.at(1, () => Common.damage(this, amount));
+    }
+    bind() {
+        this.boundUntil = this.tick + 14;
+        Common.core.Projectile.createProjectile(this.boss, this.player, Common.data.projectiles.bind, 51, 100, 43, 31).sendProjectile();
+        this.at(2, () => {
+            if (this.boundUntil > this.tick)
+                Common.core.CombatFactory.freezeTicks(this.player, 12);
+        });
+    }
+    pursueBound() {
+        const { TimerKey } = Common.core;
+        if (this.boss.getTimers().has(TimerKey.FREEZE)) {
+            this.player.getTimers().cancel(TimerKey.FREEZE);
+            this.boundUntil = 0;
+            return;
+        }
+        if (this.inMelee()) {
+            this.boundUntil = 0;
+            this.melee();
+            return;
+        }
+        const p = this.player.getLocation();
+        this.boss.getMovementQueue().addStep(p.getX(), p.getY());
+    }
+    spawnTentacles() {
+        if (!this.alive())
+            return;
+        const p = this.player.getLocation();
+        const x = p.getX(), y = p.getY();
+        const plus = this.completed >= 2 && Common.random(0, 1);
+        const offsets = this.enraged ? [[0, y > 6370 ? -4 : 4]] : plus ? [[0, -4], [4, 0], [0, 4], [-4, 0]] : [[-4, -4], [4, -4], [4, 4], [-4, 4]];
+        const wave = { hit: false };
+        for (const [dx, dy] of offsets) {
+            const sx = x + dx, sy = y + dy;
+            if (!this.validTentacleTile(sx, sy))
+                continue;
+            const npc = this.session.spawn(Common.data.npcs.tentacle, sx, sy);
+            if (!npc)
+                continue;
+            npc.performAnimation(new Common.core.Animation(Common.data.animations.tentacleSpawn));
+            this.tentacles.push({ npc, x: sx, y: sy, targetX: x, targetY: y, wait: 1, wave });
+        }
+    }
+    validTentacleTile(x, y) {
+        const shift = this.shadow ? 256 : 0, b = this.boss.getLocation();
+        return x >= 2644 - shift && x <= 2668 - shift && y >= 6356 && y <= 6384 &&
+            !(x >= b.getX() && x < b.getX() + 3 && y >= b.getY() && y < b.getY() + 3) &&
+            !Common.core.RegionManager.blocked(new Common.core.Location(x,y,0),this.session.area);
+    }
+    processTentacles() {
+        let struck = false;
+        for (const t of [...this.tentacles]) {
+            if (t.wait-- > 0)
+                continue;
+            t.x += Math.sign(t.targetX - t.x);
+            t.y += Math.sign(t.targetY - t.y);
+            t.npc.moveTo(new Common.core.Location(t.x, t.y, 0));
+            const p = this.player.getLocation();
+            if (!struck && !t.wave.hit && p.getX() === t.x && p.getY() === t.y) {
+                Common.damage(this, 20, 20);
+                struck = true;
+                t.wave.hit = true;
+            }
+            if (t.x === t.targetX && t.y === t.targetY) {
+                Common.remove(t.npc);
+                this.tentacles.splice(this.tentacles.indexOf(t), 1);
+            }
+        }
+    }
+    clearTentacles() {
+        for (const t of this.tentacles)
+            Common.remove(t.npc);
+        this.tentacles = [];
+    }
+    finish() {
+        this.over = true;
+        this.events = [];
+        Common.cancelDamage(this);
+        this.clearTentacles();
+        Specials.clear(this);
+        this.sanity = 100;
+        if (this.shadow)
+            this.setShadow(false);
+        Common.sync(this);
+    }
+    stop() { this.stopped = true; this.events = []; Common.cancelDamage(this); this.clearTentacles(); Specials.clear(this); }
+}
+function fightOf(npc) { return npc?.__whispererFight; }
+function beforeDeath(event) {
+    const fight = fightOf(event.npc);
+    if (!fight || !fight.alive())
+        return;
+    if (event.npc !== fight.boss) {
+        Specials.soulDied(fight, event.npc);
+        return;
+    }
+    if (!fight.enraged) {
+        event.preventDeath = true;
+        fight.enraged = true;
+        fight.events = [];
+        fight.clearTentacles();
+        Specials.clear(fight);
+        fight.boss.setMaxHitpoints(140);
+        fight.boss.setHitpoints(140);
+        fight.boss.setCombatOverride(null);
+        for (const skill of [Common.core.Skill.ATTACK, Common.core.Skill.STRENGTH, Common.core.Skill.DEFENCE, Common.core.Skill.MAGIC, Common.core.Skill.RANGED])
+            fight.boss.setCurrentLevels(skill, fight.boss.getMaxLevel(skill));
+        fight.attacks = 0;
+        fight.nextAttack = fight.tick + 3;
+        fight.setShadow(true);
+    }
+    else
+        fight.finish();
+}
+function modifyHit({ npc, hit }) {
+    const fight = fightOf(npc);
+    if (!fight || !hit)
+        return;
+    if (npc !== fight.boss) {
+        if (npc.__whispererSoul != null && !fight.shadow)
+            for (const part of hit.getHits())
+                part.setDamage(0);
+    }
+    else if (fight.special)
+        for (const part of hit.getHits())
+            part.setDamage(Math.floor(part.getDamage() * (fight.shadow ? .4 : .3)));
+    hit.updateTotalDamage();
+}
+function dropContext({ player, npc, context }) {
+    const fight = fightOf(npc);
+    if (context && fight && fight.over && !fight.stopped && !fight.session.ended && fight.session.fight === fight && npc === fight.boss && player === fight.player)
+        context.perfectKill = fight.perfectKill;
+}
+function bindingCounter(event) {
+    const fight = fightOf(event.target);
+    if (!fight || event.target !== fight.boss || !fight.alive() || fight.boundUntil <= fight.tick || event.attacker !== fight.player)
+        return;
+    const spell = event.attacker.getCombat().getCastSpell();
+    const { CombatSpells } = Common.core;
+    if (['BIND', 'SNARE', 'ENTANGLE', 'ICE_RUSH', 'ICE_BURST', 'ICE_BLITZ', 'ICE_BARRAGE'].some(name => CombatSpells[name] === spell))
+        event.forceAccurate = true;
+}
+function onDeath({ npc }) {
+    const fight = fightOf(npc);
+    if (!fight)
+        return;
+    if (npc !== fight.boss) {
+        Specials.soulDied(fight, npc);
+        return;
+    }
+    if (!fight.over || fight.stopped || fight.session.ended)
+        return;
+    const player = fight.player;
+    // The existing CA death listener counts this normal NPC already. Query its
+    // canonical count rather than emitting an additional kill event.
+    const known={player,monster:Common.MONSTER,total:0};
+    Common.api.emitCustomEvent('combat-achievements:count',known);
+    const count = Math.max((Number(player.getAttribute(Common.KILLS_ATTRIBUTE)) || 0) + 1,Number(known.total)||0);
+    player.setAttribute(Common.KILLS_ATTRIBUTE, count);
+    player.getPacketSender().sendConfig(3969, count);
+    player.sendMessage(`Your Whisperer kill count is: <col=ff0000>${count}</col>.`);
+    const ticks = Common.core.World.getProcessCycle() - fight.startCycle;
+    const best = Number(player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
+    if (!best || ticks < best)
+        player.setAttribute(Common.BEST_ATTRIBUTE, ticks);
+    player.sendMessage(`Fight duration: ${Math.floor(ticks * .6 / 60)}:${String(Math.floor(ticks * .6) % 60).padStart(2, '0')}${!best || ticks < best ? ' (new personal best)' : ''}.`);
+    Common.later(30, () => {
+        if (!fight.session.ended && fight.session.fight === fight)
+            require('./Site.Whisperer').respawn(fight.session);
+    });
+}
+function combatClass() {
+    return class extends Common.core.CombatMethod {
+        hits() { return []; }
+        attackSpeed() { return 1; }
+        attackDistance() { return 10; }
+        type() { return Common.core.CombatType.MAGIC; }
+    };
+}
+function attach(api) {
+    api.registerNpcCombatMethodProvider(Common.data.npcs.boss, combatClass());
+    api.onNpcBeforeDeath(beforeDeath);
+    api.onNpcDeath(onDeath);
+    api.onNpcHitModify(modifyHit);
+    api.onCombatHitRoll(bindingCounter);
+    api.onCustomEvent('npc-drops:context', dropContext);
+}
+module.exports = { Fight, beforeDeath, modifyHit, dropContext, bindingCounter, attach };
