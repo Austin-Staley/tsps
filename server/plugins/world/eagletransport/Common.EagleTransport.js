@@ -89,7 +89,7 @@ function travel(player, tile, ticks, onArrival = null) {
   fade(player, true);
   later(ticks, () => {
     if (player.__eagleTravelling !== trip) return;
-    if (player.isRegistered?.() === false || player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0) {
+    if (!core.World.isPlayerSessionConnected(player) || player.isRegistered?.() === false || player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0) {
       cancelTravel({ player });
       return;
     }

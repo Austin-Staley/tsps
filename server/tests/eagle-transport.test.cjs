@@ -13,6 +13,9 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 const { Player } = require('../dist/game/entity/impl/player/Player');
 const { PlayerDeathTask } = require('../dist/game/task/impl/PlayerDeath');
+const { PlayerSession } = require('../dist/net/PlayerSession');
+const { HeadlessBinaryChannel } = require('../dist/net/BinaryChannel');
+const { ClientConnection } = require('../dist/net/NetworkBuilder');
 
 let Common, Flight, Eyries, QuestRuntime, tasks, cycle, questDone, spawned, removed, clipped;
 
@@ -27,7 +30,7 @@ before(async () => {
     core: {
       ...core,
       TaskManager: { submit: (task) => tasks.push(task) },
-      World: { ...core.World, getProcessCycle: () => cycle },
+      World: { ...core.World, getProcessCycle: () => cycle, isPlayerSessionConnected: core.World.isPlayerSessionConnected },
       RegionManager: { ...core.RegionManager, BLOCKED_TILE: core.RegionManager.BLOCKED_TILE, addClipping: (x, y, z, flag) => clipped.push([x, y, z, flag]) },
     },
     persistAttribute: () => {},
@@ -67,6 +70,7 @@ function fakePlayer(x = 2022, y = 4960, z = 3, { rope = true, strength = 99 } = 
     getLocation: () => tile,
     moveTo: (to) => { tile = to; },
     isRegistered: () => true,
+    getSession: () => ({ getChannel: () => ({ readyState: 1 }) }),
     sendMessage: (m) => player.messages.push(m),
     getAttribute: (k) => player.attributes[k],
     setAttribute: (k, v) => { player.attributes[k] = v; },
@@ -332,4 +336,32 @@ test("Eagles' Peak's own stages are untouched: eaglepeak_quest is not driven to 
   const source = require('node:fs').readFileSync(path.join(__dirname, '..', 'plugins', 'quests', 'quests', 'EaglesPeak.Quest.js'), 'utf8');
   assert.doesNotMatch(source, /varbitValue/);
   assert.match(source, /EagleTransport\.plugin\.js/);
+});
+
+test('a closed connection cannot arrive while real combat keeps the player registered', () => {
+  const channel = new HeadlessBinaryChannel();
+  const connection = new ClientConnection(channel);
+  const player = new Player(new PlayerSession(channel));
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.setUsername('eagle-close');
+  player.setRegistered(true);
+  player.moveTo(loc(2022, 4960, 3));
+  connection.player = player;
+  player.getCombat().setUnderAttack(new Player(null));
+  Common.travel(player, Common.data.eyries.jungle.arrive, Common.data.flightTicks);
+  try {
+    channel.close();
+    assert.equal(core.World.isPlayerSessionConnected(player), false);
+    assert.ok(core.World.getRemovePlayerQueue().includes(player), 'the actual close callback queues removal');
+    assert.equal(player.readyToLeaveWorld(), false, 'combat delays the disconnect hooks');
+    assert.equal(player.isRegistered(), true);
+    flush();
+    assert.deepEqual(at(player), [2022, 4960, 3]);
+    assert.equal(Boolean(player.__eagleTravelling), false);
+  } finally {
+    const queue = core.World.getRemovePlayerQueue();
+    const index = queue.indexOf(player);
+    if (index >= 0) queue.splice(index, 1);
+  }
 });
