@@ -19,6 +19,8 @@
  *   6 gave Nickolaus his disguise (he leaves the nest),
  *   7 caught the ferret with Nickolaus at the camp,
  *   8 gave the ferret to Charlie (complete).
+ * Complete is sent as 40, the value the cache keys on (the far eyries' eagles are multinpcs
+ * that show at 40); the stages before it are this plugin's own.
  * The OSRS side varbits in the same varp (3087-3113: unblocked eagles, winches,
  * net trap, tracking, metal birds/gates, eagle door) are tracked in persisted
  * "quest.eagles_peak.*" attributes instead; only the stage varbit is mirrored
@@ -44,9 +46,8 @@
  *   - the golden pedestal sends a plain game message while the puzzle is unsolved;
  *   - the spawned quest kebbit has no combat definition in this cache, so the
  *     Threaten -> Taunt path is the reliable one; the death drop is wired anyway;
- *   - the eagle transport system (eagles 1487-1489, rope lasso and the
- *     jungle/desert nest unlocks) is not implemented - no plugin owns it, so the
- *     eyrie is left empty and the "attempting to travel" transcript is unreachable;
+ *   - the eagle transport system (the eagles, rope lasso and the jungle/desert
+ *     nest access) is plugins/world/EagleTransport.plugin.js;
  *   - extra eagle costumes (5 feathers, swamp tar, yellow dye, 25 gp) are
  *     described by Asyff's repeat dialogue but not sold;
  *   - the dungeon tunnel pairs are inferred (the real partners are not in this
@@ -198,6 +199,8 @@ module.exports = function registerEaglesPeakQuest(api) {
   const STAGE_RESCUED = 6;
   const STAGE_HAS_FERRET = 7;
   const STAGE_COMPLETE = 8;
+  /** eaglepeak_quest when complete, as the cache reads it. */
+  const VARBIT_COMPLETE_VALUE = 40;
 
   const HUNTER_REQUIREMENT = 27;
   const COSTUME_FEATHER_COST = 10;
@@ -1175,6 +1178,7 @@ module.exports = function registerEaglesPeakQuest(api) {
     name: "Eagles' Peak",
     varpId: VARP_EAGLES_PEAK,
     varbitId: VARBIT_EAGLES_PEAK_STAGE,
+    varbitValue: (stage) => (stage >= STAGE_COMPLETE ? VARBIT_COMPLETE_VALUE : stage),
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,
