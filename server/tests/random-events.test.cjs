@@ -402,7 +402,7 @@ test('the four original Hunter biomes exclude teleport events without suppressin
 
 test('safe managed areas allow events; underwater and Kalphite Lair use their reduced pools', t => {
   const h = harness(t), p = h.player();
-  for (const name of ['GiantsFoundry', 'DarkArea', 'SlayerTowerBasement', 'CreatureCreationDungeon', 'DogQuestArea']) {
+  for (const name of ['GiantsFoundry', 'DarkArea', 'DogQuestArea']) {
     p.area = { getName: () => name };
     assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, name);
   }
@@ -420,6 +420,38 @@ test('safe managed areas allow events; underwater and Kalphite Lair use their re
     for (const kind of ['genie', 'countcheck', 'jekyll', 'certer', 'gift', 'dwarf', 'drill', 'plant', 'sandwich', 'mime', 'maze']) {
       assert.equal(Locations.available(h.api, { kind }, p), kinds.includes(kind), `${x},${y},${z}: ${kind}`);
     }
+  }
+});
+
+test('real Slayer Tower and Creature Creation Areas permit natural invitations, commands and followers', t => {
+  const h = harness(t);
+  const { Area } = require('../dist/game/model/areas/Area');
+  const { Boundary } = require('../dist/game/model/Boundary');
+  const areas = [], startup = [];
+  const areaApi = new Proxy({
+    core: { Area, Boundary },
+    registerArea(area) { areas.push(area); },
+    onServerStartup(handler) { startup.push(handler); },
+  }, { get(target, name) { return target[name] ?? (() => {}); } });
+  require('../plugins/areas/SlayerTower.plugin').register(areaApi);
+  require('../plugins/minigames/CreatureCreation.plugin').register(areaApi);
+  startup.forEach(handler => handler());
+  assert.equal(areas.length, 2);
+  for (const area of areas) {
+    const p = h.player(), bounds = area.getBoundaries()[0];
+    p.location = new Location(Math.floor((bounds.getX() + bounds.getX2()) / 2),
+      Math.floor((bounds.getY() + bounds.getY2()) / 2), bounds.height);
+    const follower = h.spawn(p, 0);
+    p.area = area;
+    h.emit('PlayerProcess', { player: p });
+    assert.equal(follower.removed, undefined, `${area.getName()} retains its owned invitation`);
+    h.hooks.Genie.Dismiss({ player: p, npc: follower });
+    const before = h.npcs.length;
+    const natural = h.spawn(p, 0);
+    assert.equal(h.npcs.length, before + 1, `${area.getName()} creates a fresh invitation`);
+    assert.equal(natural?.getId(), N.GENIE, `${area.getName()} permits natural scheduling`);
+    h.hooks.randevt.handler({ player: p, parts: ['randevt', '20'] });
+    assert.match(p.messages.at(-1), /Spawned random event 20/, `${area.getName()} permits the test command`);
   }
 });
 

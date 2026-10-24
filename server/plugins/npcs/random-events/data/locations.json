@@ -87,7 +87,7 @@
     [3158,3171,3509,3509,0]
   ],
   "oldHunter": {"Feldip": [[2496,2623,2880,2943,0]],"Piscatoris": [[2240,2367,3520,3647,0],[2368,2431,3584,3647,0]],"Rellekka": [[2688,2751,3744,3839,0]],"Uzer": [[3392,3455,3072,3199,0]]},
-  "allowedManagedAreas": ["GiantsFoundry","DarkArea","SlayerTowerBasement","CreatureCreationDungeon","DogQuestArea"],
+  "allowedManagedAreas": ["GiantsFoundry","DarkArea","Slayer Tower basement","Creature Creation dungeon","DogQuestArea"],
   "kalphite": [
     [3456,3519,9472,9535,0]
   ],

@@ -129,8 +129,9 @@ plaza refusal versus adjacent grass permission inside `DogQuestArea`, removing a
 following Genie on entry to the paving, refusing invitations by a crashed star,
 allowing them beyond its vicinity, and releasing the old exclusion on replacement.
 The targeted Random Events,
-Ferox, Shooting Stars and food suites pass 119 tests, including actual-cache
-bank/street/floor and GE terrain checks, plus the live-star exclusion lifecycle.
+Ferox, Shooting Stars and food suites pass 120 tests, including actual-cache
+bank/street/floor and GE terrain checks, the live-star exclusion lifecycle,
+and the registered Slayer Tower and Creature Creation Areas.
 
 Rewards require inventory capacity and retain the event on failure. Stackable gifts
 can join an existing stack; Jekyll's exchange frees its exact herb slot. State clears
