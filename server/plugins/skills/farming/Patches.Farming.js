@@ -14,6 +14,7 @@ const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 22
 // Player -> queued rake/harvest, stepped every tick by the farming task.
 const WORK = new Map();
 const RENDERED = new WeakMap();
+const LLETYA_FRUIT_PATCH = Data.CACHE.patches.find(p => p.type === "FRUIT_TREE" && p.x === 2346 && p.y === 3161 && p.z === 0);
 // A patch can be visible from its own 64-tile region or one of its neighbours.
 const PATCHES_BY_REGION = new Map();
 const HARMONY_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 3789 && p.y === 2837 && p.z === 0);
@@ -392,6 +393,14 @@ function canUsePatch(player, patch) {
         if (quest.complete !== true) { player.sendMessage("You must complete My Arm's Big Adventure to use this herb patch."); return false; }
     }
     const request = { player, patch, allowed: true };
+    if (patch === LLETYA_FRUIT_PATCH) {
+        const quest = { player, key: "mournings_end_part_i", started: false };
+        core.PluginManager.emitCustomEvent("quest:is-started", quest);
+        if (quest.started !== true) {
+            player.sendMessage("You must start Mourning's End Part I to use this fruit tree patch.");
+            return false;
+        }
+    }
     core.PluginManager.emitCustomEvent("farming:can-use-patch", request);
     if (request.allowed !== false && patch === HARMONY_HERB_PATCH) {
         const diary = { player, diary: "morytania", tier: "elite", complete: false };
