@@ -294,7 +294,7 @@ class MiningTask extends Task {
       CrystalPickaxe.tryUseCharge(player);
       player.getSkillManager().addExperiences(Skill.MINING, outcome?.xp ?? state.rock.xp);
       if (!outcome) mineExtraOre(player, state.rock);
-      pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase });
+      pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase, itemId: oreId });
       if (state.rock.infinite) {
         if (inventoryBlocks(player, state.rock.oreId)) {
           player.getInventory().full();
