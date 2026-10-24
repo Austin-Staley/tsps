@@ -10,6 +10,10 @@ function areaClass() {
     constructor() { super(C.data.instance.width,C.data.instance.height); this.session=null; }
     getName(){return 'Duke Sucellus asylum';}
     allowSummonPet(){return false;}
+    process(mobile) {
+      const s=this.session;
+      if(s && !s.ended && mobile===s.player && !mobile.isNeedsPlacement() && mobile.getRunningDirection()!==C.core.Direction.NONE) s.ranSinceKill=true;
+    }
     canAttack(attacker,target) {
       const s=this.session;
       if(target===s?.boss) return attacker===s.player && s.fight.active && !s.fight.over;
@@ -30,7 +34,7 @@ function areaClass() {
 class Session {
   constructor(player) {
     this.player=player; this.area=new (areaClass())(); this.area.session=this;
-    this.ended=false; this.tick=0; this.perfectKills=0; this.vats=new Map(); this.tools=new Set();
+    this.ended=false; this.tick=0; this.perfectKills=0; this.ranSinceKill=false; this.vats=new Map(); this.tools=new Set();
     this.picks={arder:0,musca:0}; this.meter=0; this.action=null;
     const i=C.data.instance;
     for(let x=0;x<i.width;x++) for(let y=0;y<i.height;y++) this.area.setChunk(0,x,y,{sourceChunkX:i.sourceChunkX+x,sourceChunkY:i.sourceChunkY+y,sourcePlane:0,rotation:0});

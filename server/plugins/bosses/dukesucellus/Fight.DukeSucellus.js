@@ -8,6 +8,7 @@ class Fight {
     this.events=[]; this.pending=new Set(); this.clock=new M.AttackClock(); this.nextAttack=Infinity;
     this.started=0; this.respawnAt=Infinity; this.wonAlready=false;
     this.baselineKills=C.kills(this.player);
+    this.lastAttackCycle=-1; this.mirror=true; this.coldFeetEligible=false;
   }
   valid() { return !this.over && !this.stopped && !this.session.ended && this.session.fight===this && this.player.getHitpoints()>0; }
   at(delay,action) { this.events.push({due:this.session.tick+delay,action}); }
@@ -41,6 +42,7 @@ class Fight {
     this.nextAttack=this.session.tick+(action==='gaze'?C.data.timing.gaze:M.attackTicks(this.boss.getHitpoints()));
   }
   auto() {
+    this.lastAttackCycle=C.core.World.getProcessCycle();
     const {normal:n,timing:t,graphics:g,animations:a}=C.data;
     const target=C.source(this.session,this.player.getLocation());
     this.boss.setPositionToFace(this.player.getLocation());
@@ -68,6 +70,7 @@ class Fight {
     }
   }
   gaze() {
+    this.lastAttackCycle=C.core.World.getProcessCycle();
     this.boss.performAnimation(new C.core.Animation(C.data.animations.gaze));
     this.player.sendMessage('Duke Sucellus turns his gaze upon you...');
     this.at(C.data.timing.gazeWarning,()=>{
@@ -89,6 +92,7 @@ class Fight {
   gas() {
     const amount=M.gasCount(this.boss.getHitpoints());
     for(let i=0;i<amount;i++) this.at(i*2,()=>{
+      this.lastAttackCycle=C.core.World.getProcessCycle();
       const here=C.source(this.session,this.player.getLocation());
       const vents=[...C.data.vents].sort((a,b)=>Math.hypot(a[0]-here[0],a[1]-here[1])-Math.hypot(b[0]-here[0],b[1]-here[1]));
       this.ignite(vents[0]);
@@ -125,6 +129,8 @@ class Fight {
   fell() {
     if(this.over || this.stopped || !this.active) return;
     this.over=true; this.events=[]; C.cancelPending(this);
+    this.coldFeetEligible=this.perfect && !this.session.ranSinceKill;
+    this.session.ranSinceKill=false;
     this.finishedTicks=Math.max(1,C.core.World.getProcessCycle()-this.started);
     this.respawnAt=this.session.tick+C.data.timing.respawn;
     this.session.setExit(false);
@@ -140,6 +146,8 @@ class Fight {
     if(!previous || ticks<previous) this.player.setAttribute(C.BEST,ticks);
     this.player.sendMessage(`Fight duration: ${(ticks*.6).toFixed(1)} seconds.`);
     if(this.perfect) this.session.perfectKills++;
+    if(this.coldFeetEligible) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Cold Feet'});
+    if(this.mirror) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Mirror Image'});
     if(this.session.perfectKills>=5) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Perfect Duke Sucellus'});
     const task={player:this.player,npc:this.boss,onTask:false}; C.api.emitCustomEvent('slayer:on-task',task);
     if(!task.onTask) for(const [rank,seconds] of [['Trialist',60],['Chaser',50],['Runner',40]]) {
@@ -153,6 +161,10 @@ class Fight {
 const fightOf=npc=>npc?.__dukeSucellusFight;
 function beforeDeath({npc}) { fightOf(npc)?.fell(); }
 function death({npc,killer}) { fightOf(npc)?.won(killer); }
+function playerAttack({attacker,target}) {
+  const f=fightOf(target);
+  if(f && f.boss===target && attacker===f.player && f.active && !f.over && !f.stopped && !f.session.ended && f.session.fight===f && f.lastAttackCycle!==C.core.World.getProcessCycle()) f.mirror=false;
+}
 function context({player,npc,context}) {
   const f=fightOf(npc);
   if(f?.over && f.boss===npc && !f.stopped && f.player===player && f.session.fight===f && !f.session.ended && npc.getHitpoints()<=0) context.perfectKill=f.perfect;
@@ -165,6 +177,7 @@ function noDefaultCombat() {
 function attach(api) {
   api.registerNpcCombatMethodProvider(C.data.npcs.awake,noDefaultCombat());
   api.onNpcBeforeDeath(beforeDeath); api.onNpcDeath(death);
+  api.onCombatHitRoll(playerAttack);
   api.onCustomEvent('npc-drops:context',context);
   api.onCustomEvent('npc-drops:location',lootLocation);
 }

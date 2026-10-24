@@ -36,6 +36,7 @@ function harness(t) {
   t.mock.method(core.TaskManager,'submit',task=>{task.setRunning(true);tasks.push(task);});
   t.mock.method(PluginManager,'emitNpcBeforeDeath',event=>{dispatch('onNpcBeforeDeath',event);return event.preventDeath;});
   t.mock.method(PluginManager,'emitNpcDeath',event=>dispatch('onNpcDeath',event));
+  t.mock.method(PluginManager,'emitCombatHitRoll',event=>dispatch('onCombatHitRoll',event));
   C.init(api); Site.attach(api); Prep.attach(api);require('../../plugins/bosses/dukesucellus/Fight.DukeSucellus').attach(api);
   function enter(){api.onCustomEvent('quest:is-complete',e=>{e.complete=true;});Site.enter(p);return C.sessionOf(p);}
   function move(tile){p.setLocation(C.sessionOf(p).tile(tile));}

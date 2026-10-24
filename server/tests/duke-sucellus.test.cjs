@@ -149,8 +149,8 @@ test('actual NPC death task records once and respawns an asleep encounter',t=>{
 test('source speed achievements use lethal time and are excluded on a Slayer task',t=>{
   const h=H.harness(t);const s=h.enter();s.fight.wake();s.fight.fell();s.fight.won(h.p);
   const Data=require('../plugins/achievements/combatachievements/Data.CombatAchievements');Data(h.api);
-  for(const name of ['Perfect Duke Sucellus','Duke Sucellus Speed-Trialist','Duke Sucellus Speed-Chaser','Duke Sucellus Speed-Runner']) assert.ok(Data.taskNamed(name),name);
-  const awards=()=>h.emitted.filter(([name])=>name==='combat-achievements:complete').map(([,e])=>e.task);
+  for(const name of ['Cold Feet','Mirror Image','Perfect Duke Sucellus','Duke Sucellus Speed-Trialist','Duke Sucellus Speed-Chaser','Duke Sucellus Speed-Runner']) assert.ok(Data.taskNamed(name),name);
+  const awards=()=>h.emitted.filter(([name])=>name==='combat-achievements:complete').map(([,e])=>e.task).filter(name=>name.startsWith('Duke Sucellus Speed-'));
   assert.ok(awards().includes('Duke Sucellus Speed-Runner'));
   const before=awards().length;s.reset();s.fight.wake();
   h.api.onCustomEvent('slayer:on-task',e=>{e.onTask=true;});s.fight.fell();s.fight.won(h.p);
