@@ -8,6 +8,7 @@ const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
 
 const FARM_ATTRIBUTE = "farming:state";
+const TROLL_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 2826 && p.y === 3694 && p.z === 0);
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
 // Player -> queued rake/harvest, stepped every tick by the farming task.
 const WORK = new Map();
@@ -160,6 +161,7 @@ function plant(player, patch, id) {
     if (state.crop || state.scarecrow) { player.sendMessage("There is already something growing here."); return; }
     if (state.weeds) { player.sendMessage("You need to rake the weeds out first."); return; }
     if (!crop || crop.type !== patch.type) { player.sendMessage("That cannot be planted in this patch."); return; }
+    if (patch === TROLL_HERB_PATCH && crop.key === "GOUTWEED") { player.sendMessage("Regular goutweed cannot grow in this patch."); return; }
     if (player.getSkillManager().getCurrentLevel(core.Skill.FARMING) < crop.level) { player.sendMessage(`You need level ${crop.level} Farming to plant that.`); return; }
     const barbarian = farmFor(player).barbarian;
     const bareHanded = !crop.sapling && crop.type !== "GRAPES" && barbarian?.planting > 0 && !hasTool(player, "Seed dibber");
@@ -377,6 +379,11 @@ function inspect(player, patch) {
     player.sendMessage(`Soil: ${["untreated", "compost", "supercompost", "ultracompost"][state.compost]}.${state.watered ? " The crop is watered." : ""}`);
 }
 function canUsePatch(player, patch) {
+    if (patch === TROLL_HERB_PATCH) {
+        const quest = { player, key: "my_arms_big_adventure", complete: null };
+        core.PluginManager.emitCustomEvent("quest:is-complete", quest);
+        if (quest.complete !== true) { player.sendMessage("You must complete My Arm's Big Adventure to use this herb patch."); return false; }
+    }
     const request = { player, patch, allowed: true };
     core.PluginManager.emitCustomEvent("farming:can-use-patch", request);
     return request.allowed !== false;
