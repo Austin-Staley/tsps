@@ -81,6 +81,17 @@ function load(core, tier) {
     const [question, answer] = values(challengeRow, "question");
     return { row: challengeRow.id, key: C.getDbRowName(challengeRow.id), question, answer };
   }
+  /** The fight a dig or emote summons; the cache names the exact NPC per step. */
+  function encounter(row) {
+    const encounterRow = value(row, "combat_encounter") == null ? null : C.getDbRow(value(row, "combat_encounter"));
+    return encounterRow ? { key: C.getDbRowName(encounterRow.id), npcIds: values(encounterRow, "npcs") } : null;
+  }
+  /** A challenge box: "puzzle", "light" or "puzzle_or_light" (cluehelper_challenge_box_<kind>). */
+  function box(row) {
+    const challengeRow = value(row, "challenge") == null ? null : C.getDbRow(value(row, "challenge"));
+    if (!challengeRow || tableName(challengeRow) !== "cluehelper_challenge_box") return null;
+    return { kind: C.getDbRowName(challengeRow.id).replace("cluehelper_challenge_box_", "") };
+  }
   function music(row) {
     const track = C.getDbRow(value(row, "music"));
     return { musicRow: track?.id ?? null, midi: track ? value(track, "midi") : null, track: track ? value(track, "displayname", "") : "",
@@ -102,6 +113,10 @@ function load(core, tier) {
       if (family === "coordinate") step.text = coordinateText(step.text);
       const asked = challenge(row);
       if (asked) step.challenge = asked;
+      const fight = encounter(row);
+      if (fight) step.encounter = fight;
+      const puzzle = box(row);
+      if (puzzle) step.puzzle = puzzle;
       steps.push(step);
     }
   }
@@ -117,13 +132,19 @@ function load(core, tier) {
     if (definition.name === scrollName && !itemByRow.has(row)) itemByRow.set(row, id);
     if (definition.name === challengeName && !challengeByRow.has(row)) challengeByRow.set(row, id);
   }
+  // A puzzle box pairs with its clue by gameval name: "<clue gameval>_puzzlebox".
+  const objIdByName = new Map([...C.getObjNames()].map(([id, objName]) => [objName, id]));
   const clueSteps = steps.filter(step => itemByRow.has(step.row)).map(step => {
     const itemId = itemByRow.get(step.row);
-    return step.challenge ? { ...step, itemId, challenge: { ...step.challenge, itemId: challengeByRow.get(step.row) ?? null } } : { ...step, itemId };
+    const resolved = { ...step, itemId };
+    if (step.challenge) resolved.challenge = { ...step.challenge, itemId: challengeByRow.get(step.row) ?? null };
+    if (step.puzzle) resolved.puzzle = { ...step.puzzle, itemId: objIdByName.get(`${C.getObjNames().get(itemId)}_puzzlebox`) ?? null };
+    return resolved;
   });
   const byRow = new Map(clueSteps.map(step => [step.row, step]));
   const byItem = new Map(clueSteps.map(step => [step.itemId, step]));
   for (const step of clueSteps) if (step.challenge?.itemId != null) byItem.set(step.challenge.itemId, step);
+  for (const step of clueSteps) if (step.puzzle?.itemId != null) byItem.set(step.puzzle.itemId, step);
   const items = core.ItemIdentifiers;
   const name = tier.name.toUpperCase();
   return { tier, steps: clueSteps, byRow, byItem, scrollName, challengeName,

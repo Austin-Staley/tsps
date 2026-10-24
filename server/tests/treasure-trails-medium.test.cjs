@@ -47,7 +47,7 @@ function fixture() {
     onBeforeNpcInteraction() {}, onBeforeObjectInteraction() {}, onCanUseItem() {},
     onCustomEvent: (name, fn) => { if (!events.has(name)) events.set(name, []); events.get(name).push(fn); },
     emitCustomEvent: (name, request) => { for (const fn of events.get(name) ?? []) fn(request); },
-    onPlayerLogout() {}, onPlayerDisconnect() {}, onPlayerLogin() {},
+    onPlayerLogout() {}, onPlayerDisconnect() {}, onPlayerLogin() {}, onPlayerDeath() {}, onNpcDeath() {}, onInterfaceActionButton() {},
     spawnNpc: def => { const npc = { getLocation: () => new core.Location(def.x, def.y, def.z), def }; spawned.push(npc); return npc; },
     removeNpc: npc => { npc.removed = true; }, getRegionManager: () => ({ blocked: () => false, canMovestart: () => true }) };
   plugin.register(api);
@@ -129,7 +129,7 @@ test("every challenge NPC hands over its scroll, then takes only the cache's ans
     f.finish();
     assert.equal(f.state().completed, 1, step.key);
     assert.notEqual(f.items[0].getId(), step.challenge.itemId);
-    assert.equal(f.items[1], null, "the correct answer removes the challenge with the clue");
+    assert.equal(f.items[1].getId(), -1, "the correct answer removes the challenge with the clue");
   }
 });
 
@@ -342,7 +342,7 @@ test("challenge handouts need room, cannot duplicate, and completing a full pack
   assert.ok(!f.sent.some(([name]) => name === "sendEnterAmountPrompt"), "NPC line precedes the amount prompt");
   f.finish();
   f.answer(step.challenge.answer); f.finish();
-  assert.equal(f.items[8], null);
+  assert.equal(f.items[8].getId(), -1);
   assert.equal(f.state().completed, 1);
   assert.equal(f.state().token, snapshot.token);
   f.answer(step.challenge.answer); f.finish();

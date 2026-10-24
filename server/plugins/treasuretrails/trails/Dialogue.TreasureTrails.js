@@ -4,6 +4,7 @@
 // "npc-dialogue:start" with a `select` that only captures the steps). The trail decides what
 // happens; the transcript supplies the words, with the wording most transcripts share as a fallback.
 // The transcripts name the "talk again with the scroll" variant several ways.
+const PUZZLE_HOLDING_SUFFIXES = ["while-holding-the-puzzle-box", "when-holding-the-puzzle-box", "talking-again-while-holding-the-puzzle-box"];
 const AGAIN_SUFFIXES = ["when-talked-to-again", "when-spoken-to-again", "talking-again", "spoken-to-again", "talked-to-again",
   "talked-to-when-talked-to-again", "speaking-to-him-again-with-the-challenge-scroll-in-the-inventory", "answering-the-clue", "solving-the-challenge"];
 let api;
@@ -55,6 +56,30 @@ function lines(steps, random = Math.random, npcName) {
   return spoken;
 }
 
+/** A hand-over's spoken lines around its receive action and message, up to a condition or end. */
+function speech(steps, random = Math.random) {
+  const spoken = [];
+  for (const step of steps ?? []) {
+    if (typeof step.npc === "string") spoken.push({ npc: step.npc });
+    else if (typeof step.player === "string") spoken.push({ player: step.player });
+    else if (step.type === "line" && typeof step.text === "string") spoken.push({ npc: step.text });
+    else if (step.type === "random" && step.options?.length) spoken.push(...lines(step.options[Math.floor(random() * step.options.length)].steps, random));
+    else if (step.type !== "action" && step.type !== "message") break;
+  }
+  return spoken;
+}
+
+/**
+ * The NPC's words with a puzzle box in hand, solved or not: its own "having solved" /
+ * "without having solved" variant, or the matching branch of a "holding the puzzle box" one.
+ */
+function puzzleTranscript(player, npc, npcId, tier, solved) {
+  const own = transcript(player, npc, npcId, `treasure-trails-${tier}-when-talked-to-${solved ? "having" : "without-having"}-solved-the-puzzle-box`);
+  if (own) return own;
+  const holding = firstTranscript(player, npc, npcId, PUZZLE_HOLDING_SUFFIXES.map(suffix => `treasure-trails-${tier}-${suffix}`));
+  return branch(holding, text => /solved/i.test(text) && /\bnot\b/i.test(text) !== solved);
+}
+
 function branch(steps, test) {
   return (steps ?? []).find(step => step.type === "condition" && test(step.text ?? ""))?.steps ?? null;
 }
@@ -76,12 +101,21 @@ function message(steps, casket = false) {
   return null;
 }
 
+// The transcripts' name placeholder, as NpcDialogues fills it ("Thanks [player name]!").
+const PLAYER_NAME = /\[(?:player name|playername|player)(\.?)\]|<player name>/gi;
+
+function named(text, player) {
+  const name = player.getUsername?.();
+  return name ? String(text).replace(PLAYER_NAME, (_, period) => `${name}${period ?? ""}`) : String(text);
+}
+
 /** Plays spoken lines, then `onEnd` (if any) once the player has continued past them. */
 function play(player, npcId, spoken, onEnd) {
   // A dialogue of only an action never shows, so its action would never run.
   if (!spoken.length) { onEnd?.(); return; }
   const chain = new core.DialogueChainBuilder();
-  spoken.forEach((line, index) => chain.add(line.player != null ? new core.PlayerDialogue(index, line.player) : new core.NpcDialogue(index, npcId, line.npc)));
+  spoken.forEach((line, index) => chain.add(line.player != null ? new core.PlayerDialogue(index, named(line.player, player)) :
+    new core.NpcDialogue(index, npcId, named(line.npc, player))));
   if (onEnd) chain.add(new core.ActionDialogue(spoken.length, { execute: onEnd }));
   chain.add(new core.EndDialogue(spoken.length + 1));
   player.getDialogueManager().startDialogues(chain);
@@ -92,4 +126,4 @@ function itemBox(player, itemId, text) {
     .add(new core.ItemStatementDialogue(0, itemId, text)).add(new core.EndDialogue(1)));
 }
 
-module.exports = { attach, transcript, againTranscript, lines, branch, wrongBranch, correctBranch, message, play, itemBox };
+module.exports = { attach, transcript, againTranscript, puzzleTranscript, lines, speech, branch, wrongBranch, correctBranch, message, play, itemBox };
