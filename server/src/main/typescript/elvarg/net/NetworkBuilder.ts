@@ -497,6 +497,14 @@ export class ClientConnection {
           if (this.player) {
             const spellName = CacheDefinitions.getSpellName(packet.spellWidget, packet.spellItemId);
             const target = World.getPlayers().get(packet.targetIndex);
+            if (target) {
+              const event = {
+                player: this.player, target, spellName, spellWidget: packet.spellWidget,
+                spellChild: packet.spellChild, spellItemId: packet.spellItemId, handled: false,
+              };
+              PluginManager.emitCustomEvent("magic:spell-on-player", event);
+              if (event.handled) continue;
+            }
             if (target && LunarSpells.handlePlayerTarget(this.player, target, spellName)) {
               continue;
             }
