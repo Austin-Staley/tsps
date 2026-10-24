@@ -89,3 +89,23 @@ test('observers run once before reactive healing and cannot break the damage que
     assert.equal(target.shown.length, 2);
     assert.equal(console.error.mock.calls.length, 1);
 });
+
+test('applied observers see actual HP loss once before reactive healing',t=>{
+    const {CombatFactory}=require('../dist/game/content/combat/CombatFactory');
+    const target=buildTarget(5),queue=new HitQueue(target),seen=[];
+    t.mock.method(CombatFactory,'handleRedemption',()=>{target.hp+=2;});
+    const hit=new HitDamage(10,HitMask.RED).onApplied(amount=>seen.push([amount,target.hp]));
+    queue.addPendingDamage([hit]);queue.process(1);
+    assert.deepEqual(seen,[[5,0]]);assert.equal(target.hp,2);
+    hit.notifyApplied(10);assert.equal(seen.length,1);
+});
+
+test('a failing applied observer cannot suppress later observers or reactive healing',t=>{
+    const {CombatFactory}=require('../dist/game/content/combat/CombatFactory');
+    const target=buildTarget(5),queue=new HitQueue(target),seen=[];
+    t.mock.method(console,'error',()=>{});
+    t.mock.method(CombatFactory,'handleRedemption',()=>seen.push('healing'));
+    queue.addPendingDamage([new HitDamage(2,HitMask.RED)
+        .onApplied(()=>{throw new Error('observer fixture');}).onApplied(amount=>seen.push(amount))]);
+    queue.process(1);assert.deepEqual(seen,[2,'healing']);
+});
