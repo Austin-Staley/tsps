@@ -146,6 +146,7 @@
     "changeTicks": 100,
     "_changeTicks": "60 seconds (Wiki, since 8 May 2024)",
     "takeMany": 5,
+    "alchemyTicks": 5,
     "_calibrated": "how often an item is free to convert: the Wiki says only 'sometimes'",
     "freeChance": 0.5,
     "coinsPerPoint": 100,

@@ -10,7 +10,9 @@
  *   spell's own XP); the Coin Collector takes them: 1 Alchemist Pizazz Point per 100 (the rest
  *   a chance of one more), 10 real coins per 100 to the bank (the inventory for an Ultimate
  *   Ironman) and 2 Magic XP per coin;
- * - leaving deposits the arena's coins first, then the room's items and coins are gone.
+ * - both alchemies take 5 ticks here (Wiki), so a cast inside that is refused;
+ * - leaving deposits the arena's coins first, then the room's items and coins are gone; logging
+ *   out keeps both (since 8 May 2024).
  */
 const Common = require("./Common.MageTrainingArena");
 
@@ -125,14 +127,22 @@ const takeFive = ({ player, objectId }) => takeFrom(player, objectId, true);
 
 // --- Alchemy on the room's items
 
-/** "magic:alchemy-policy": the room's items alch for this turn's value in the arena's coins. */
+/**
+ * "magic:alchemy-policy": the room's items alch for this turn's value in the arena's coins, one
+ * cast per 5 ticks (low alchemy as slow as high here, Wiki).
+ */
 function alchemyPolicy(policy) {
   const { player, itemId } = policy;
   const key = keyOf(itemId);
   if (!key || !inPlayground(player.getLocation())) return;
+  const cycle = Common.core.World.getProcessCycle();
+  if ((player.__mtaNextAlch ?? -1) > cycle) {
+    policy.allowed = false;
+    return;
+  }
   policy.allowed = true;
   policy.coins = 0;
-  player.__mtaAlch = { itemId, coins: playground.values[key] ?? 0, free: key === playground.free, spellId: policy.spellId, cycle: Common.core.World.getProcessCycle() };
+  player.__mtaAlch = { itemId, coins: playground.values[key] ?? 0, free: key === playground.free, spellId: policy.spellId, cycle };
 }
 
 /** The free item's alchemy takes no runes (only for the cast its policy just allowed). */
@@ -146,6 +156,7 @@ function alchemyCompleted({ player, itemId }) {
   const pending = player.__mtaAlch;
   player.__mtaAlch = null;
   if (!pending || pending.itemId !== itemId) return;
+  player.__mtaNextAlch = Common.core.World.getProcessCycle() + Common.data.alchemists.alchemyTicks;
   if (pending.coins > 0) player.getInventory().adds(Common.ids.items.arenaCoins, pending.coins);
   updateOverlay(player);
 }
@@ -177,19 +188,31 @@ function depositCoins(player, random = Math.random) {
   return points;
 }
 
-/** The real coins: to the bank, or the inventory for an Ultimate Ironman (Wiki). */
+/**
+ * The real coins: to the bank, or the inventory for an Ultimate Ironman (Wiki). What the bank
+ * can't take goes to the pack, and what the pack can't take to the floor.
+ */
 function payCoins(player, amount) {
-  const { Bank, Item } = Common.core;
+  const { Bank, Item, ItemOnGroundManager } = Common.core;
   const coins = Common.ids.items.coins;
+  let left = amount;
   if (!isUltimateIronman(player) && Bank && player.getBank) {
     const bank = player.getBank(Bank.getTabForItem(player, coins));
-    if (bank?.add) {
-      bank.add(new Item(coins, amount));
-      player.sendMessage(Common.message("coinsToBank", { coins: amount.toLocaleString("en-GB") }));
-      return;
+    const room = Math.min(left, Number(bank?.getAddableAmount?.(new Item(coins, left))) || 0);
+    if (room > 0) {
+      bank.add(new Item(coins, room));
+      left -= room;
+      player.sendMessage(Common.message("coinsToBank", { coins: room.toLocaleString("en-GB") }));
     }
   }
-  player.getInventory().adds(coins, amount);
+  if (left <= 0) return;
+  const inventory = player.getInventory();
+  const carried = Math.min(left, Number(inventory.getAddableAmount?.(new Item(coins, left)) ?? left) || 0);
+  if (carried > 0) {
+    inventory.adds(coins, carried);
+    left -= carried;
+  }
+  if (left > 0) ItemOnGroundManager.registerLocation(player, new Item(coins, left), player.getLocation().clone());
 }
 
 function collector({ player, objectId }) {
@@ -251,11 +274,12 @@ function defineArea() {
       updateOverlay(player);
     }
 
-    /** Coins are paid in on any way out, logout included (since 2 May 2019); then the items go. */
-    postLeave(mobile) {
+    /** Coins are paid in on any way out but a logout (that keeps them, since 8 May 2024); then the items go. */
+    postLeave(mobile, logout) {
       if (!mobile?.isPlayer?.()) return;
       const player = mobile.getAsPlayer();
       Common.closeOverlay(player);
+      if (logout) return;
       depositCoins(player);
       if (removeRoomItems(player) > 0) player.sendMessage(Common.message("itemsTaken"));
     }

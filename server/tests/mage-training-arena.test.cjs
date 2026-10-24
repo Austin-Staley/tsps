@@ -344,7 +344,7 @@ test('the Coin Collector: a point per 100 (the rest a chance of one more), 10 re
   const { items } = Common.ids;
   const banked = [];
   const player = fakePlayer(x, y, z);
-  player.getBank = () => ({ contains: () => false, add: (item) => banked.push([item.getId(), item.getAmount()]) });
+  player.getBank = () => ({ contains: () => false, getAddableAmount: (item) => item.getAmount(), add: (item) => banked.push([item.getId(), item.getAmount()]) });
   player.items.set(items.arenaCoins, 250);
   assert.equal(Alchemists.depositCoins(player, () => 0.4), 3, '50% chance taken');
   assert.equal(player.items.get(items.arenaCoins), 0);
@@ -383,13 +383,45 @@ test("leaving pays the arena coins in first, then the room's items and coins are
   const player = fakePlayer(x, y, z);
   player.isPlayer = () => true;
   player.getAsPlayer = () => player;
-  player.getBank = () => ({ contains: () => false, add() {} });
+  player.getBank = () => ({ contains: () => false, getAddableAmount: (item) => item.getAmount(), add() {} });
   const { items } = Common.ids;
   player.items.set(items.arenaCoins, 300);
   player.items.set(items.emerald, 4);
   const before = Common.points(player, 'alchemist');
   area.postLeave(player, true);
+  assert.equal(player.items.get(items.arenaCoins), 300, 'logging out keeps them');
+  area.postLeave(player, false);
   assert.equal(Common.points(player, 'alchemist') - before, 3);
   assert.equal(player.items.get(items.arenaCoins), 0);
   assert.equal(player.items.get(items.emerald), 0);
+});
+
+test("a full bank can't swallow the Coin Collector's real coins: they go to the pack", () => {
+  const [x, y, z] = playgroundTile();
+  const { items } = Common.ids;
+  const player = fakePlayer(x, y, z);
+  player.getBank = () => ({ contains: () => false, getAddableAmount: () => 0, add() { throw new Error('nothing fits'); } });
+  player.items.set(items.arenaCoins, 300);
+  Alchemists.depositCoins(player, () => 0.9);
+  assert.equal(player.items.get(items.coins), 30);
+  assert.ok(!player.messages.some((m) => /added to your bank/.test(m)));
+});
+
+test('in the room an alchemy takes 5 ticks: a cast before then is refused', () => {
+  const [x, y, z] = playgroundTile();
+  const player = fakePlayer(x, y, z);
+  const { items } = Common.ids;
+  Alchemists.playground.values = { boots: 30, kiteshield: 1, helm: 5, emerald: 8, longsword: 15 };
+  Alchemists.playground.free = null;
+  const first = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(first);
+  assert.equal(first.allowed, true);
+  Alchemists.alchemyCompleted({ player, itemId: items.emerald });
+  const second = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(second);
+  assert.equal(second.allowed, false);
+  player.__mtaNextAlch = -1;
+  const later = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(later);
+  assert.equal(later.allowed, true);
 });
