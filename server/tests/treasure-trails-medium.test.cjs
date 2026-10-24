@@ -28,7 +28,7 @@ function fixture() {
   let position = new core.Location(3222, 3218, 0), chain, amountAction, placed = 0;
   const items = Array(28).fill(null), worn = [];
   const inventory = {
-    getItems: () => items, refreshItems() { refreshed.push(items.map(item => item?.getId() ?? null)); }, setItem(slot, item) { items[slot] = item; return inventory; },
+    getItems: () => items, refreshItems() { refreshed.push(items.map(item => item?.getId() > 0 ? item.getId() : null)); }, setItem(slot, item) { items[slot] = item; return inventory; },
     getFreeSlots: () => items.filter(i => !i).length, isFull() { return this.getFreeSlots() === 0; },
     delete(id, amount) { while (amount > 0) { const slot = items.findIndex(i => i?.getId() === id); if (slot < 0) return; const take = Math.min(amount, items[slot].getAmount()); this.deleteAtSlot(slot, take); amount -= take; } },
     deleteAtSlot(slot, amount) { const item = items[slot]; if (!item) return; if (item.getAmount() <= amount) items[slot] = null; else item.setAmount(item.getAmount() - amount); },
@@ -418,5 +418,41 @@ test("key NPC variants with and without tables use one canonical death-drop life
     f.items[5] = new core.Item(step.keyItem, 1); placed.length = 0;
     death({ killer: f.player, npcId, npc: { getLocation: () => f.player.getLocation() } });
     assert.equal(placed.filter(item => item.getId() === step.keyItem).length, 0, "carrying the key prevents another drop");
+  }
+});
+
+test('challenge completion preserves real Inventory slots, held-clue capacity and stale guards', t => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const Capacity = require('../plugins/treasuretrails/Capacity.ClueCapacity');
+  const events = new Map();
+  const api = new Proxy({ core,
+    onCustomEvent: (name, fn) => events.set(name, fn),
+    emitCustomEvent: (name, request) => events.get(name)?.(request),
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+  plugin.register(api); Capacity(api);
+  t.mock.method(Dialogue, 'play', (_player, _npc, _lines, end) => end?.());
+  t.mock.method(Dialogue, 'itemBox', () => {});
+  const step = Runtime.data(MEDIUM).steps.find(entry => entry.challenge);
+  for (const completed of [0, 2]) {
+    const player = new Player(null), sender = new Proxy({}, { get: () => () => sender });
+    player.getPacketSender = () => sender; player.sendMessage = () => {};
+    player.moveTo(new core.Location(step.location.x, step.location.y, step.location.z));
+    const inventory = player.getInventory(), key = Runtime.metaKey(MEDIUM);
+    inventory.setItem(0, new core.Item(step.itemId).setMetaValue(key,
+      { version: 1, token: `real-${completed}`, revision: 0, completed, length: 3, row: step.row }));
+    const npc = { getLocation: () => player.getLocation() };
+    Runtime.talk({ player, npcId: step.npcIds[0], npc, clickType: 1, definition: { getActions: () => ['Talk-to'] } });
+    assert.equal(inventory.getAmount(step.itemId), 1);
+    assert.equal(inventory.getAmount(step.challenge.itemId), 1);
+    assert.equal(Capacity.count(player, 'medium'), 1);
+    const snapshot = Runtime.trails(player)[0];
+    Runtime.answered(player, npc, step.npcIds[0], snapshot, null, step.challenge.answer);
+    assert.equal(inventory.getAmount(step.challenge.itemId), 0);
+    assert.ok(inventory.getItems().every(item => item instanceof core.Item));
+    assert.equal(inventory.getFreeSlots(), 27);
+    assert.equal(Runtime.advance(player, snapshot), false, 'a stale answer cannot advance again');
+    inventory.add(new core.Item(I.SPADE), false);
+    assert.equal(inventory.getAmount(I.SPADE), 1);
+    if (completed === 2) assert.equal(inventory.getAmount(I.REWARD_CASKET_MEDIUM_), 1);
   }
 });

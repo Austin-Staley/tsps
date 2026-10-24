@@ -155,7 +155,7 @@ function advance(player, snapshot, random = Math.random, said = {}, show = true,
   if (removeUri) dismissUri(player);
   const inventory = player.getInventory();
   const challenge = challengeSlot(player, trail);
-  if (challenge >= 0) inventory.setItem(challenge, null);
+  if (challenge >= 0) inventory.setItem(challenge, new core.Item(-1, 0));
   const completed = trail.state.completed + 1;
   let received, words;
   if (completed >= trail.state.length) {
