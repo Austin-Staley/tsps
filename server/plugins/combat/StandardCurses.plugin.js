@@ -5,9 +5,11 @@ const CURSES = [
 ];
 const spells = new Map();
 let core;
+let api;
 
-function initialize(api) {
-  core = api.core;
+function initialize(pluginApi) {
+  api = pluginApi;
+  core = pluginApi.core;
   spells.clear();
   for (const [name, skill, percent] of CURSES) {
     spells.set(core.CombatSpells[name].spellId(), { skill: core.Skill[skill], percent });
@@ -31,7 +33,10 @@ function applyCurse(event) {
       `The spell has no effect because the ${npc ? 'NPC' : 'player'} is already weakened.`);
     return;
   }
-  const decrease = Math.floor(current * curse.percent / 100);
+  const strength = { attacker, target, spell: event.spell, context: event.context, percent: curse.percent };
+  api.emitCustomEvent('combat:stat-drain-modify', strength);
+  const percent = Number.isFinite(strength.percent) && strength.percent >= 0 && strength.percent <= 100 ? strength.percent : curse.percent;
+  const decrease = Math.floor(current * percent / 100);
   if (npc) {
     // The NPC API owns encounter immunity and per-instance restoration state.
     npc.setCurrentLevels(curse.skill, current - decrease);
