@@ -12,3 +12,7 @@ Design: `docs/superpowers/specs/2026-10-24-duke-sucellus-design.md`. User explic
 8. Independently review, correct findings, build and run the full server suite. Publish a ready individual Duke PR with sources, dependency PR882, validation and any material limitations.
 
 Leviathan and Whisperer are owned by separate workers/worktrees. The God Wars publication audit is a fourth independent workstream. Do not edit their modules or Claude's active work.
+
+## Completed normal-mode milestone
+
+Steps 1–6 are implemented. Step 7 deliberately leaves awakened entry unavailable; source gaps are listed in `docs/duke-sucellus.md`, with no orb consumption. Step 8: encounter and canonical reward integration received separate independent reviews, review findings have red/green regressions, and the final build plus 27 Duke checks pass. The full-server run passed 4,959 of 4,967 checks; all eight unrelated sandbox failures passed whole-file reruns outside the sandbox (133 bot/network checks and 28 save checks). Final Duke review changes were followed by the fresh focused run. Ready PR publication follows the final incremental review.

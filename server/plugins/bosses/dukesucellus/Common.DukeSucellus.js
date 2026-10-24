@@ -10,6 +10,10 @@ function init(value) { api = value; }
 const sessionOf = player => { const s=sessions.get(player); return s && !s.ended ? s : null; };
 const random = max => Math.floor(Math.random() * (Math.max(0,max)+1));
 const count = (player,key) => Math.max(0,Math.trunc(Number(player.getAttribute(key)) || 0));
+function kills(player) {
+  const request={player,monster:'Duke Sucellus',total:0}; api.emitCustomEvent('combat-achievements:count',request);
+  return Math.max(count(player,KILLS),Math.max(0,Math.trunc(Number(request.total)||0)));
+}
 function source(session, location) {
   return [(location.getX?.() ?? location.x)-session.area.getBaseX()+data.instance.sourceChunkX*8,
     (location.getY?.() ?? location.y)-session.area.getBaseY()+data.instance.sourceChunkY*8];
@@ -63,5 +67,5 @@ function faceCovered(player) {
 }
 const ephemeral = () => [data.items.arder,data.items.musca,data.items.arderPowder,data.items.muscaPowder,data.items.salt,data.items.poison];
 function clearSupplies(player) { for(const id of ephemeral()) player.getInventory().deleteNumber(id,player.getInventory().getAmount(id)); }
-module.exports={ init,data,sessions,sessionOf,random,count,source,protectedFrom,graphic,give,hurt,strike,cancelPending,drainPrayer,faceCovered,clearSupplies,INSIDE,KILLS,BEST,DEMONBANE,
+module.exports={ init,data,sessions,sessionOf,random,count,kills,source,protectedFrom,graphic,give,hurt,strike,cancelPending,drainPrayer,faceCovered,clearSupplies,INSIDE,KILLS,BEST,DEMONBANE,
   get api(){return api;}, get core(){return api.core;} };

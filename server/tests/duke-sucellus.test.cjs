@@ -2,6 +2,13 @@ const assert=require('node:assert/strict');
 const {test,before}=require('node:test');
 const H=require('./helpers/duke-sucellus.cjs');
 before(H.initialize);
+test('source-cache approach, arrival and front combat tiles are walkable',t=>{
+  const h=H.harness(t),s=h.enter();
+  for(const [x,y] of [h.C.data.site.outside,h.C.data.site.arrival,[3039,6451],[3035,6451]]) {
+    const at=s.tile([x,y]);
+    assert.equal(s.area.getClip(at)&0x200100,0,`source tile ${x},${y} must be clear`);
+  }
+});
 test('postquest heavy door reaches asylum gates without replaying the quest prison',t=>{
   const h=H.harness(t);const event={player:h.p,objectId:49513,location:{x:2926,y:10354,z:0},handled:false};
   h.p.setLocation(new h.core.Location(2925,10354,0));
@@ -120,5 +127,32 @@ test('perfect reward context only belongs to dead current boss and its owner',t=
   const F=require('../plugins/bosses/dukesucellus/Fight.DukeSucellus');
   const context={};F.context({player:h.p,npc:s.boss,context});assert.equal(context.perfectKill,true);
   const foreign={};F.context({player:{},npc:s.boss,context:foreign});assert.deepEqual(foreign,{});
+  const copied={};F.context({player:h.p,npc:{__dukeSucellusFight:h.fight,getHitpoints:()=>0},context:copied});assert.deepEqual(copied,{});
   h.fight.perfect=false;F.context({player:h.p,npc:s.boss,context});assert.equal(context.perfectKill,false);
+});
+test('kill time freezes at lethal damage and reconciles existing generic kill counts',t=>{
+  const h=H.harness(t);let total=41;
+  h.api.onCustomEvent('combat-achievements:count',e=>{if(e.monster==='Duke Sucellus')e.total=total;});
+  const s=h.enter();s.fight.wake();s.fight.nextAttack=Infinity;h.step(3);s.fight.fell();
+  total=42;h.step(4);s.fight.won(h.p);
+  assert.equal(h.p.getAttribute(h.C.KILLS),42);
+  assert.equal(h.p.getAttribute(h.C.BEST),3);
+});
+test('actual NPC death task records once and respawns an asleep encounter',t=>{
+  const h=H.harness(t),s=h.enter();h.move([3035,6451]);s.fight.wake();s.fight.nextAttack=Infinity;
+  const first=s.fight;s.boss.getCombat().addDamage(h.p,1);s.boss.setHitpoints(0);
+  h.step(10);assert.equal(first.over,true);assert.equal(first.wonAlready,true);
+  assert.equal(h.p.getAttribute(h.C.KILLS),1);
+  h.step(11);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
+  assert.equal(s.boss.getContentId(h.p),12167);assert.equal(s.perfectKills,1);
+});
+test('source speed achievements use lethal time and are excluded on a Slayer task',t=>{
+  const h=H.harness(t);const s=h.enter();s.fight.wake();s.fight.fell();s.fight.won(h.p);
+  const Data=require('../plugins/achievements/combatachievements/Data.CombatAchievements');Data(h.api);
+  for(const name of ['Perfect Duke Sucellus','Duke Sucellus Speed-Trialist','Duke Sucellus Speed-Chaser','Duke Sucellus Speed-Runner']) assert.ok(Data.taskNamed(name),name);
+  const awards=()=>h.emitted.filter(([name])=>name==='combat-achievements:complete').map(([,e])=>e.task);
+  assert.ok(awards().includes('Duke Sucellus Speed-Runner'));
+  const before=awards().length;s.reset();s.fight.wake();
+  h.api.onCustomEvent('slayer:on-task',e=>{e.onTask=true;});s.fight.fell();s.fight.won(h.p);
+  assert.equal(awards().length,before);
 });

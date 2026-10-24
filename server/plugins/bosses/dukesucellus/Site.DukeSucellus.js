@@ -122,7 +122,7 @@ function login({player}) {
 function grave(request) {
   if(!C.sessionOf(request.player)) return;
   const [x,y,z]=C.data.site.outside; request.tile={x,y,z};
-  if(C.count(request.player,C.KILLS)<5) request.feeMultiplier=.25;
+  if(C.kills(request.player)<5) request.feeMultiplier=.25;
 }
 function counts({player,counts}) { const n=C.count(player,C.KILLS); if(n>0) counts['Duke Sucellus']=n; }
 function best(request) { if(request.monster==='Duke Sucellus') request.best=C.count(request.player,C.BEST); }

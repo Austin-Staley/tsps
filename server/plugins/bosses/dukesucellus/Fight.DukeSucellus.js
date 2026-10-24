@@ -7,6 +7,7 @@ class Fight {
     this.active=false; this.over=false; this.stopped=false; this.perfect=true;
     this.events=[]; this.pending=new Set(); this.clock=new M.AttackClock(); this.nextAttack=Infinity;
     this.started=0; this.respawnAt=Infinity; this.wonAlready=false;
+    this.baselineKills=C.kills(this.player);
   }
   valid() { return !this.over && !this.stopped && !this.session.ended && this.session.fight===this && this.player.getHitpoints()>0; }
   at(delay,action) { this.events.push({due:this.session.tick+delay,action}); }
@@ -33,6 +34,7 @@ class Fight {
     for(const e of due) { if(!this.valid()) break; e.action(); }
     if(!this.valid()) return;
     if(!this.active) { this.preparationHazards(); return; }
+    C.api.emitCustomEvent('boss-hud:update',{player:this.player,current:this.boss.getHitpoints()});
     if(this.session.tick<this.nextAttack) return;
     const action=this.clock.next(this.boss.getHitpoints());
     if(action==='gaze') this.gaze(); else if(action==='gas') this.gas(); else this.auto();
@@ -123,6 +125,7 @@ class Fight {
   fell() {
     if(this.over || this.stopped || !this.active) return;
     this.over=true; this.events=[]; C.cancelPending(this);
+    this.finishedTicks=Math.max(1,C.core.World.getProcessCycle()-this.started);
     this.respawnAt=this.session.tick+C.data.timing.respawn;
     this.session.setExit(false);
     C.api.emitCustomEvent('boss-hud:update',{player:this.player,current:0});
@@ -130,7 +133,7 @@ class Fight {
   won(killer) {
     if(!this.over || this.wonAlready || killer!==this.player || this.session.fight!==this) return;
     this.wonAlready=true;
-    const count=C.count(this.player,C.KILLS)+1, ticks=C.core.World.getProcessCycle()-this.started;
+    const count=Math.max(this.baselineKills+1,C.count(this.player,C.KILLS)+1,C.kills(this.player)), ticks=this.finishedTicks;
     this.player.setAttribute(C.KILLS,count); this.player.getPacketSender().sendConfig(C.data.killCountVarp,count);
     this.player.sendMessage(`Your Duke Sucellus kill count is: ${count}.`);
     const previous=C.count(this.player,C.BEST);
@@ -138,6 +141,10 @@ class Fight {
     this.player.sendMessage(`Fight duration: ${(ticks*.6).toFixed(1)} seconds.`);
     if(this.perfect) this.session.perfectKills++;
     if(this.session.perfectKills>=5) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Perfect Duke Sucellus'});
+    const task={player:this.player,npc:this.boss,onTask:false}; C.api.emitCustomEvent('slayer:on-task',task);
+    if(!task.onTask) for(const [rank,seconds] of [['Trialist',60],['Chaser',50],['Runner',40]]) {
+      if(ticks*.6<seconds) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:`Duke Sucellus Speed-${rank}`});
+    }
     this.boss.setNpcTransformationId(C.data.npcs.dead);
     C.api.emitCustomEvent('boss-hud:hide',{player:this.player,fade:false,afterTicks:0});
   }
@@ -148,9 +155,9 @@ function beforeDeath({npc}) { fightOf(npc)?.fell(); }
 function death({npc,killer}) { fightOf(npc)?.won(killer); }
 function context({player,npc,context}) {
   const f=fightOf(npc);
-  if(f?.over && !f.stopped && f.player===player && f.session.fight===f && !f.session.ended && npc.getHitpoints()<=0) context.perfectKill=f.perfect;
+  if(f?.over && f.boss===npc && !f.stopped && f.player===player && f.session.fight===f && !f.session.ended && npc.getHitpoints()<=0) context.perfectKill=f.perfect;
 }
-function lootLocation(event) { const f=fightOf(event.npc); if(f && event.player===f.player) event.location=f.session.tile([3039,6451,0]); }
+function lootLocation(event) { const f=fightOf(event.npc); if(f && f.boss===event.npc && !f.stopped && !f.session.ended && f.session.fight===f && event.player===f.player) event.location=f.session.tile([3039,6451,0]); }
 function noDefaultCombat() {
   const {CombatMethod,CombatType}=C.core;
   return class extends CombatMethod { hits(){return [];} type(){return CombatType.MELEE;} attackSpeed(){return 1;} attackDistance(){return 1;} };
