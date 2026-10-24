@@ -166,8 +166,8 @@ function plant(player, patch, id) {
     if (!bareHanded && !requireTool(player, crop.sapling ? "Spade" : "Seed dibber")) return;
     if (patch.type === "GRAPES" && !state.compost) { player.sendMessage("Treat the vine patch with saltpetre first."); return; }
     if (crop.type === "SPIRIT_TREE") {
-        const level = player.getSkillManager().getMaxLevel(core.Skill.FARMING);
-        const limit = level >= 99 ? Infinity : level >= 91 ? 2 : 1;
+        const level = player.getSkillManager().getCurrentLevel(core.Skill.FARMING);
+        const limit = level >= 99 ? Infinity : level >= 96 ? 4 : level >= 93 ? 3 : level >= 88 ? 2 : 1;
         if (Object.values(farmFor(player).patches).filter(s => s.crop === crop.key).length >= limit) {
             player.sendMessage("You cannot grow any more spirit trees at your Farming level."); return;
         }
