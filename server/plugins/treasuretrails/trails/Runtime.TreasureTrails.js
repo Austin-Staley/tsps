@@ -15,6 +15,9 @@ let api;
 let core;
 let catalogues = new Map();
 const uris = new WeakMap();
+// A trail's live fight (Wiki "Saradomin wizard", "Double agent"): player -> { npc, token }, and back.
+const encounters = new WeakMap();
+const encounterOwners = new WeakMap();
 const playing = new WeakMap();
 const pick = (entries, random = Math.random) => entries[Math.floor(random() * entries.length)];
 const location = entity => ({ x: entity.getLocation().getX(), y: entity.getLocation().getY(), z: entity.getLocation().getZ() });
@@ -96,11 +99,16 @@ function clueText(step) {
   }
   if (step.family === "anagram") return `This anagram reveals<br>who to speak to next:<br><br>${step.text}`;
   if (step.family === "cipher") return `The cipher reveals who to speak to:<br><br>${step.text}`;
+  if (step.family === "fairyring") return `The cryptic reveals where to dig:<br><br>${step.text}`;
   return step.text;
 }
 
 function holdsChallenge(trail) {
   return trail.step.challenge?.itemId != null && trail.item.getId() === trail.step.challenge.itemId;
+}
+
+function holdsPuzzle(trail) {
+  return trail.step.puzzle?.itemId != null && trail.item.getId() === trail.step.puzzle.itemId;
 }
 
 function read(event) {
@@ -141,15 +149,18 @@ function advance(player, snapshot, random = Math.random, said = {}) {
   const trail = stillHeld(player, snapshot);
   if (!trail) return false;
   dismissUri(player);
+  dismissEncounter(player);
   const inventory = player.getInventory();
   const completed = trail.state.completed + 1;
+  // A step's own progress (a beaten fight, a solved puzzle and its image) ends with it.
+  const { defeated, solved, image, ...carried } = trail.state;
   if (completed >= trail.state.length) {
     // The exact slot matters when scrolls of several tiers are carried.
     inventory.setItem(trail.slot, new core.Item(data(trail.tier).casket, 1));
     player.sendMessage(said.casket ?? "You've found a reward casket!");
   } else {
     const step = pick(data(trail.tier).steps, random);
-    inventory.setItem(trail.slot, stepItem(trail.tier, step, { ...trail.state, completed, revision: trail.state.revision + 1 }));
+    inventory.setItem(trail.slot, stepItem(trail.tier, step, { ...carried, completed, revision: trail.state.revision + 1 }));
     player.sendMessage(said.clue ?? "You've found another clue!");
   }
   inventory.refreshItems();
@@ -187,6 +198,11 @@ function talk(event) {
   if (!trail) return;
   event.handled = true;
   if (trail.step.family === "music") { hearSong(player, npcId, trail); return; }
+  if (trail.step.puzzle?.itemId != null) {
+    if (holdsPuzzle(trail)) puzzleAgain(player, npc, npcId, trail);
+    else handOutPuzzle(player, npc, npcId, trail);
+    return;
+  }
   if (trail.step.challenge?.itemId != null) {
     if (holdsChallenge(trail)) askAnswer(player, npc, npcId, trail);
     else handOutChallenge(player, npc, npcId, trail);
@@ -234,6 +250,38 @@ function handOutChallenge(player, npc, npcId, trail) {
     player.getInventory().setItem(current.slot, scroll);
     player.getInventory().refreshItems();
     player.sendMessage(Dialogue.message(steps) ?? `${npcName(npcId)} has given you a challenge scroll!`);
+  });
+}
+
+/** The NPC hands over a puzzle box in place of the clue, on one of the tier's images (Wiki "Puzzle box"). */
+function handOutPuzzle(player, npc, npcId, trail) {
+  const steps = Dialogue.transcript(player, npc, npcId, `treasure-trails-${trail.tier.name}`);
+  Dialogue.play(player, npcId, Dialogue.speech(steps), () => {
+    const current = stillHeld(player, trail);
+    if (!current || holdsPuzzle(current)) return;
+    const state = { ...current.state, image: pick(current.tier.puzzleImages), solved: false, revision: current.state.revision + 1 };
+    player.getInventory().setItem(current.slot, new core.Item(current.step.puzzle.itemId, 1).setMetaValue(metaKey(current.tier), state));
+    player.getInventory().refreshItems();
+    player.sendMessage(Dialogue.message(steps) ?? `${npcName(npcId)} has given you a puzzle box!`);
+  });
+}
+
+/** With the box solved the NPC gives the next clue; unsolved, it asks again. */
+function puzzleAgain(player, npc, npcId, trail) {
+  const solved = trail.state.solved === true;
+  const steps = Dialogue.puzzleTranscript(player, npc, npcId, trail.tier.name, solved);
+  const said = Dialogue.lines(steps);
+  if (!solved) {
+    Dialogue.play(player, npcId, said.length ? said : [{ npc: "Sorry but you haven't solved the puzzle yet." }]);
+    return;
+  }
+  Dialogue.play(player, npcId, said, () => {
+    const latest = stillHeld(player, trail);
+    if (!latest || !holdsPuzzle(latest) || latest.state.solved !== true) return;
+    const casket = latest.state.completed + 1 >= latest.state.length;
+    const words = Dialogue.message(steps, casket);
+    advance(player, latest, Math.random, casket ? { casket: words ?? "You've obtained a casket!" } :
+      { clue: words ?? `${npcName(npcId)} has given you another clue scroll!` });
   });
 }
 
@@ -295,12 +343,64 @@ function dig(event) {
   if (event.allow === false || !/\bdig\b/i.test(String(event.option)) || ![I.SPADE, I.EASTFLOOR_SPADE].includes(event.itemId)) return;
   const { player } = event;
   if (!player.getInventory().getItems().some(item => item && item.getId() === event.itemId)) return;
-  const trail = startedTrails(player).find(entry => ["map", "cryptic", "coordinate"].includes(entry.step.family) &&
+  const trail = startedTrails(player).find(entry => ["map", "cryptic", "coordinate", "fairyring"].includes(entry.step.family) &&
     entry.step.target === "coord" && distance(location(player), entry.step.location) === 0);
   if (!trail) return;
   event.allow = false;
   player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_dig") ?? 830));
+  // Wiki coordinates guide: the dig summons the step's wizard, who must be beaten before digging again.
+  if (trail.step.encounter && trail.state.defeated !== true) {
+    if (!liveEncounter(player, trail)) summon(player, trail);
+    return;
+  }
   advance(player, trail);
+}
+
+function liveEncounter(player, trail) {
+  const active = encounters.get(player);
+  if (!active || active.token !== trail.state.token) return null;
+  const registered = typeof active.npc.isRegistered !== "function" || active.npc.isRegistered();
+  return registered && active.npc.getHitpoints() > 0 ? active : null;
+}
+
+function freeTile(player) {
+  const origin = player.getLocation();
+  const region = api.getRegionManager();
+  return [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => new core.Location(origin.getX() + dx, origin.getY() + dy, origin.getZ()))
+    .find(tile => !region.blocked(tile, player.getPrivateArea?.()) && region.canMovestart(origin, tile, 1, 1, player.getPrivateArea?.()));
+}
+
+/** Spawns the step's fight for the player alone and sets it on them. */
+function summon(player, trail) {
+  dismissEncounter(player);
+  const spot = freeTile(player);
+  if (!spot) return null;
+  const npc = api.spawnNpc({ id: trail.step.encounter.npcIds[0], x: spot.getX(), y: spot.getY(), z: spot.getZ(), owner: player, ownerOnly: true, wanderRadius: 0 });
+  if (!npc) return null;
+  encounters.set(player, { npc, token: trail.state.token });
+  encounterOwners.set(npc, player);
+  npc.getCombat?.().attack(player);
+  return npc;
+}
+
+function dismissEncounter(player) {
+  const active = encounters.get(player);
+  if (active && (typeof active.npc.isRegistered !== "function" || active.npc.isRegistered()) && active.npc.getHitpoints() > 0) api.removeNpc(active.npc);
+  encounters.delete(player);
+}
+
+/** A beaten fight marks the trail; a double agent's death also brings Uri. */
+function encounterDied({ npc }) {
+  const player = encounterOwners.get(npc);
+  const active = player && encounters.get(player);
+  if (!active || active.npc !== npc) return;
+  encounters.delete(player);
+  const trail = trails(player).find(entry => entry.state.token === active.token);
+  if (!trail) return;
+  const state = { ...trail.state, defeated: true, revision: trail.state.revision + 1 };
+  trail.item.setMetaValue(metaKey(trail.tier), state);
+  player.getInventory().refreshItems();
+  if (trail.step.family === "emote") spawnUri(player, { ...trail, state });
 }
 
 function wearing(player, requirement) {
@@ -325,11 +425,17 @@ function emote({ player, slot }) {
   }
   const trail = startedTrails(player).find(entry => entry.step.family === "emote" && entry.step.emotes[0] === slot && emoteReady(player, entry.step));
   if (!trail) return;
+  // Wiki "Double agent": hard steps send the agent first, unless the emote is the trail's first step.
+  if (trail.step.encounter && trail.state.defeated !== true && trail.state.completed > 0) {
+    if (!liveEncounter(player, trail)) { dismissUri(player); summon(player, trail); }
+    return;
+  }
+  spawnUri(player, trail);
+}
+
+function spawnUri(player, trail) {
   dismissUri(player);
-  const origin = player.getLocation();
-  const region = api.getRegionManager();
-  const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => new core.Location(origin.getX() + dx, origin.getY() + dy, origin.getZ()))
-    .find(tile => !region.blocked(tile, player.getPrivateArea?.()) && region.canMovestart(origin, tile, 1, 1, player.getPrivateArea?.()));
+  const spot = freeTile(player);
   if (!spot) return;
   const npc = api.spawnNpc({ id: data(trail.tier).uri, x: spot.getX(), y: spot.getY(), z: spot.getZ(), owner: player, ownerOnly: true, wanderRadius: 0 });
   if (npc) uris.set(player, { npc, trail, done: 1 });
@@ -362,7 +468,7 @@ function categoryCount(request) {
   if (tier) request.count = Number(request.player.getAttribute(completedAttribute(tier))) || 0;
 }
 
-function leave({ player }) { dismissUri(player); }
+function leave({ player }) { dismissUri(player); dismissEncounter(player); }
 
 function readActions() {
   return { Read: read, "Check steps": checkSteps };
@@ -386,7 +492,9 @@ module.exports = function attachTreasureTrails(pluginApi) {
   api.onPlayerLogin(restore);
   api.onPlayerLogout(leave);
   api.onPlayerDisconnect(leave);
+  api.onPlayerDeath(leave);
+  api.onNpcDeath(encounterDied);
 };
 
 Object.assign(module.exports, { META_PREFIX, EMOTE_RADIUS, MUSIC_RADIUS, data, tierOfItem, trailLength, stateOf, trails, read, checkSteps,
-  advance, talk, search, keyDrop, dig, emote, songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey });
+  advance, talk, search, keyDrop, dig, emote, encounterDied, songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey });

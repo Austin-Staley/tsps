@@ -2,7 +2,7 @@
 
 Beginner clues are in [beginner-treasure-trails.md](beginner-treasure-trails.md). This page covers
 the members tiers, built in `server/plugins/treasuretrails/TreasureTrails.plugin.js`
-(`members: true`) and its `trails/` units. Easy and medium are implemented. Hard, elite and master
+(`members: true`) and its `trails/` units. Easy, medium and hard are implemented. Elite and master
 add their step families to the same engine.
 
 ## Where the content comes from
@@ -50,6 +50,19 @@ Medium has 167 steps, 44 of them with a challenge scroll:
 | Map | Dig / crate | 10 / 2 |
 | Music (Cecilia) | NPC | 6 |
 
+Hard has 186 steps:
+
+| Family | Target | Steps | Extra |
+| --- | --- | --- | --- |
+| Anagram | NPC / loc | 17 / 1 | 13 question challenges, 5 puzzle boxes |
+| Cipher | NPC | 11 | 6 questions, 5 puzzle boxes |
+| Coordinate | Dig | 54 | 53 summon a wizard named by the row: Saradomin 2955 (32), Zamorak 2954 (21) |
+| Cryptic | NPC / loc / dig | 23 / 17 / 18 | 3 question challenges |
+| Emote | Tile, outfit, Uri | 17 | the row names a double agent: 1778 (14), 1777 (3) |
+| Fairy ring | Dig | 11 | read as "The cryptic reveals where to dig:" then the code, as on the Wiki |
+| Map | Dig / crate | 4 / 3 | |
+| Music (Cecilia) | NPC | 10 | |
+
 The challenge answers are read from the cache. They agree with the Wiki's challenge-scroll guide
 (the osrsreboxed-db `clue-challenges.json` export) on 89 of 90 questions. The exception is the Old
 Crone's Slayer Tower question: the cache says 623, the Wiki 619. The game uses the cache.
@@ -71,7 +84,7 @@ A trail's state lives in the scroll's item metadata, under `treasure-trails:<tie
 - Banking, dropping, death and saves keep the trail, because they keep item metadata. A scroll
   read before a logout resumed at the same step after logging in again.
 
-**Trail length:** easy trails are 2–4 steps and medium 3–5 (Wiki, "Clue scroll (<tier>)"). The
+**Trail length:** easy trails are 2–4 steps, medium 3–5 and hard 4–6 (Wiki, "Clue scroll (<tier>)"). The
 Wiki publishes no per-length weights, so the length is chosen uniformly; this is an implementation
 assumption.
 
@@ -107,6 +120,39 @@ assumption.
     been given a new clue!" (or a casket).
   - The cache gives a target tile but no area, so the 3-tile radius follows the beginner runtime's
     usual value. This is an assumption.
+- **Puzzle box** (hard; `Puzzle.TreasureTrails.js`, Wiki "Puzzle box" and the puzzle box guide):
+  - **Hand-over:** the first talk hands over the step's box in place of the clue, on one of the
+    tier's images (hard: castle, tree, troll).
+    - The box pairs with its clue by gameval name (`<clue gameval>_puzzlebox`).
+    - The image is stored in the trail meta.
+  - **The board:**
+    - Opening the box shows interface `trail_slidepuzzle`. Its board is inventory `trail_puzzleinv`
+      (slots 0–24, an empty slot is the blank), and varp `if1` picks the image.
+    - Each image's 24 pieces come from cache enum 1864.
+    - The client predicts each slide and plays the sounds.
+    - The server owns the board: it accepts only a piece next to the blank and always resends the
+      board, so a refused move snaps back.
+  - **Scramble:** a box starts 101 random slides from solved (Wiki), which keeps every board
+    solvable. The board lasts the session, so a relog gives a new puzzle, as the Wiki says.
+  - **Solving and words:**
+    - Solving it marks the trail; talking to the NPC with the solved box gives the next clue.
+    - The NPC's words come from its transcript: the "having solved" / "without having solved"
+      variants or the "holding the puzzle box" branches.
+    - "[player name]" is filled in.
+- **Fights** (hard; Wiki coordinates guide, "Saradomin wizard", "Double agent"):
+  - **Coordinate digs:** the first correct dig summons the step's wizard, owned by the player,
+    seen only by them and attacking at once. Digging again does nothing while it lives. Its death
+    marks the trail, and the next dig gives the clue.
+  - **Emotes:** the emote summons the double agent first; its death brings Uri. There's no agent
+    when the emote is the trail's first step (Wiki "Double agent"). The outfit must be worn again
+    to speak to Uri.
+  - **A wizard that is gone** (logout, death, despawn) is summoned again by the next dig. The
+    Wiki notes that hiding and digging again summons another.
+  - **Drops:** the fights keep their own Wiki drop tables.
+  - **Data gaps, outside clue code:**
+    - The Saradomin wizard only melees, because the NPC loader picks one combat style.
+    - The Zamorak wizard lacks the Flames of Zamorak graphic.
+    - Their shouts are missing.
 - **Music:** from Cecilia's Wiki transcript, the player selects the requested track, then speaks to
   her.
   - "Select the song I asked you to play, and speak to me again."
@@ -140,6 +186,13 @@ it with the agent MCP's vision clip, and comparing it with the Wiki's map images
 | `cluehelper_map_medium_9` | South-east of the Lighthouse | `trail_clue_medium_map011` |
 | `cluehelper_map_medium_10` | Between Seers' Village and Rellekka | `trail_clue_medium_map012` |
 | `cluehelper_map_medium_11` | East of the Ranging Guild | `trail_map04` |
+| `cluehelper_map_hard_0` | Lumber Yard crate | `trail_map05` |
+| `cluehelper_map_hard_1` | Yanille anvils | `trail_map08` |
+| `cluehelper_map_hard_2` | West Ardougne | `trail_map12` |
+| `cluehelper_map_hard_3` | Observatory crate | `trail_map13` |
+| `cluehelper_map_hard_4` | Dark Warriors' Fortress crate | `trail_map14` |
+| `cluehelper_map_hard_5` | South-east of the Wilderness Agility Course (volcanoes) | `trail_clue_hard_map006` |
+| `cluehelper_map_hard_6` | South of the Legends' Guild (picnic tables) | `trail_clue_hard_map007` |
 
 The named `trail_clue_medium_map008`–`012` interfaces were rendered too, not assumed from their
 names. `trail_map19` looks like the Lighthouse map but belongs to another tier.
@@ -164,7 +217,8 @@ rules:
 
 - **Build:** a hammer, any saw and 10 nails of one metal (not dragon), plus:
   - easy: Construction 27 (boostable) and 2 planks, for 150 Construction XP;
-  - medium: Construction 42 and 2 oak planks, for 250 XP.
+  - medium: Construction 42 and 2 oak planks, for 250 XP;
+  - hard: Construction 55 and 2 teak planks, for 400 XP.
 
   Building sets the unit's varbit.
 - **Search a built unit:** it stores the step's complete outfit, or returns it if the inventory has
@@ -272,6 +326,30 @@ the Spot it becomes a scroll box (`treasure-trails:clue-item`).
   range after the dialogue. Both fixes are tested, and Torgan's step completes live.
 - Keyed steps were left to the unit tests in the walk, because they need a kill.
 
+- `tests/treasure-trails-hard.test.cjs` covers all 186 hard steps, with every fight, puzzle box and
+  challenge. It checks:
+  - the 24 cache pieces of each hard image;
+  - that scrambles are real, solvable boards (even inversions) and that only adjacent slides count;
+  - all 10 puzzle steps (hand-over, the board sent to the client, refusal unsolved, the next clue
+    solved), with Brambickle's transcript words;
+  - wizards (summon, no second while one lives, death, then the dig), a wizard summoned again after
+    it vanished, and double agents before Uri (none on a first step);
+  - fairy-ring digs, the hard casket and hard STASH units.
+- **Joint casket outcomes:** the hard table's mega-rare Super attack, strength and defence entry is a
+  joint outcome (`items`). The shared casket roller rejected it, which would have kept every hard
+  casket shut; it now grants all of its items (`tests/casket-reward-rolls.test.cjs`).
+- **Hard natural route** on the isolated slot-13 world (game 43713, agent MCP 49813), through real
+  packets:
+  - Saradomin and Zamorak wizards fought and the dig repeated, including in the Wilderness.
+  - A double agent fought, the outfit worn again, and Uri's phrase.
+  - Challenge scrolls answered.
+  - Fairy-ring digs.
+  - Puzzle boxes handed over with their image varp set, refused unsolved, and rendered in the real
+    client (vision clip).
+  - Hard caskets opened.
+- An unarmed walker was killed by a wizard once. The clue survived, and the next dig summoned a fresh
+  wizard, as the Wiki describes.
+
 Sources:
 - [Clue scroll (easy)](https://oldschool.runescape.wiki/w/Clue_scroll_(easy))
 - [STASH](https://oldschool.runescape.wiki/w/STASH)
@@ -284,4 +362,9 @@ Sources:
 - [Emote clues](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Emote_clues)
 - [Uri's transcript](https://oldschool.runescape.wiki/w/Transcript:Uri)
 - [Medium maps](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Maps/Medium)
+- [Clue scroll (hard)](https://oldschool.runescape.wiki/w/Clue_scroll_(hard))
+- [Puzzle box](https://oldschool.runescape.wiki/w/Puzzle_box)
+- [Double agent](https://oldschool.runescape.wiki/w/Double_agent)
+- [Saradomin wizard](https://oldschool.runescape.wiki/w/Saradomin_wizard)
+- [Hard maps](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Maps/Hard)
 - installed cache revision 241

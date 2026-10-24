@@ -47,7 +47,7 @@ function fixture() {
     onBeforeNpcInteraction() {}, onBeforeObjectInteraction() {}, onCanUseItem() {},
     onCustomEvent: (name, fn) => { if (!events.has(name)) events.set(name, []); events.get(name).push(fn); },
     emitCustomEvent: (name, request) => { for (const fn of events.get(name) ?? []) fn(request); },
-    onPlayerLogout() {}, onPlayerDisconnect() {}, onPlayerLogin() {},
+    onPlayerLogout() {}, onPlayerDisconnect() {}, onPlayerLogin() {}, onPlayerDeath() {}, onNpcDeath() {}, onInterfaceActionButton() {},
     spawnNpc: def => { const npc = { getLocation: () => new core.Location(def.x, def.y, def.z), def }; spawned.push(npc); return npc; },
     removeNpc: npc => { npc.removed = true; }, getRegionManager: () => ({ blocked: () => false, canMovestart: () => true }) };
   plugin.register(api);
