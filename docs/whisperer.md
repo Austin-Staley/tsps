@@ -24,7 +24,7 @@ Rev241 cache gamevals/configs were inspected directly: NPCs 12203–12212, seque
 
 ## Verification limits
 
-This is not a verified 1:1 implementation. Seed/column geometry is now corroborated by normal-fight packet observations and ordinary-game diagrams, while the column-health distribution beyond published guarantees remains unresolved. Special animation timings and deadlines now follow the independently classified normal capture; binding flight timing remains under analysis. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Special realm switching begins when special actors materialize; screech disables the fragment at teleport+14 until the special ends. No in-game client smoke run has been performed.
+This is not a verified 1:1 implementation. Seed/column geometry is now corroborated by normal-fight packet observations and ordinary-game diagrams, while the column-health distribution beyond published guarantees remains unresolved. Special animation timings and deadlines now follow the independently classified normal capture; binding uses the observed170cycle baseline, while its variable flight selection remains under analysis. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Special realm switching begins when special actors materialize; screech disables the fragment at teleport+14 until the special ends. No in-game client smoke run has been performed.
 
 Awakened geometry, timing, full five-projectile patterns, stat/slayer immunity integration, prayer/sanity changes, special rotations and final-phase mechanics are not implemented. No Awakened CA is awarded.
 
@@ -40,7 +40,7 @@ All eight normal achievement paths are supplied: the generic CA handler owns Ade
 | Seeds | Every tile/color of all four patterns and centre (2656,6369) corroborated by capture and ordinary tile diagram | Teleport+6 activation and 40-tick deadline implemented |
 | Screech | Eight exact column positions, three blasts and cover rule corroborated | Health-distribution discrepancy remains; blasts +17/+23/+29 implemented |
 | Souls | Twelve souls and 20-tick chant, group effects verified | Fixed positions, shuffled roles and teleport+21 deadline implemented |
-| Binding | Existing freeze counters and low-health pursuit cancellation verified | Flight/pursuit timing and optional-bind selection |
+| Binding | Existing freeze counters and low-health pursuit cancellation verified | Captured constant geometry, six-tick baseline impact and pursuit+5 implemented provisionally; variable flight and optional-bind selection remain unresolved |
 | Fragment | Correct real/cache state identities and realm mirror verified | Screech teleport+14 deactivation implemented; other selection rules remain under audit |
 | Melee | Max 42, mirrored guaranteed hits and partial prayer verified | Exact roll distribution and protected amount; Tentacular page describes roughly 33% mitigation, conflicting with provisional 25% |
 | Enrage/death | Wiki 140 HP, stat restore, two-tick paired styles, cancelled damage and 30-tick respawn verified | Enrage appearance +4, realm +5 and first shot +7 implemented; event-world respawn differs from ordinary published timing |
@@ -93,3 +93,22 @@ Finite packet samples constrain behavior; they do not identify exact RNG algorit
 Decoder checkpoint for these facts: immutable helper7ca21602b38f3a2a8210cd7746c6e9671f5f10a166a618e08e7562e0481d2af7, output249a07e261ea3f877bc4754bf8d5e6840df5ef023d96e06b34afecacd8126517. The later allowlisted fragment/varp decoder9d836fe28973fa4f22cca49ef0d7519be37a01c7c6196aa075b46c91889692b7 independently retains the same geometry and sequence facts; fragment changes first occur at20925, the seed activation tick. Raw logs and account identifiers remain private.
 
 Verification for this checkpoint: the enrage and wake regressions were observed RED before their fixes, then all46Whisperer plus5HitQueue tests passed (51/51), and a fresh TypeScript build passed. A new unconstrained full-suite attempt was stopped because its parallel test workers saturated the host; it is incomplete and supplies no full-suite claim. No new client smoke is claimed. Ordinary quest capture1703 has different quest stats and is excluded from normal damage/RNG inference.
+
+
+Binding follow-up uses the common observed170clientcycle arrival as an explicitly provisional baseline, replacing the old100cycle packet and two-tick freeze that disagree with every captured cast. The packet launches at80cycles with raw heights580/0, angle16, progress150 and a cast-time target-coordinate snapshot. Pursuit starts at cast+5; freeze applies at+6. This matches all five170cycle and both180cycle impact ticks, but is one tick early for the two200cycle samples. No inverse-distance clamp or flight RNG is inferred. The existing12tick freeze and14tick pursuit-window limits remain provisional and unchanged; event-world movement does not establish ordinary freeze duration.
+
+| Cast tick | Mouth tile | Target at cast | Chebyshev / Manhattan distance | Arrival cycles | Target bind graphic after cast |
+| --- | --- | --- | --- | --- | --- |
+|21405|(2656,6369)|(2655,6373)|4 / 5|180|6ticks|
+|21484|(2656,6369)|(2656,6364)|5 / 5|170|6ticks|
+|21929|(2656,6369)|(2659,6372)|3 / 6|200|7ticks|
+|22106|(2656,6357)|(2659,6367)|10 / 13|170|6ticks|
+|22149|(2656,6369)|(2659,6364)|5 / 8|170|6ticks|
+|22553|(2656,6369)|(2659,6371)|3 / 5|200|7ticks|
+|22603|(2656,6357)|(2653,6365)|8 / 11|170|6ticks|
+|22776|(2656,6369)|(2652,6365)|4 / 8|180|6ticks|
+|23058|(2656,6357)|(2648,6367)|10 / 18|170|6ticks|
+
+These points do not follow80+10×distance. There are no observations below three tiles in this table, so no behavior there is inferred. Target graphic2466 occurs at ceil(arrivalCycles/30); the player can move between cast and impact, for example21405 target(2655,6373) versus impact(2652,6373). The projectile retains its target lock while its packet endpoint is a cast-time snapshot. All eight unobstructed examples first move the boss at+5;22149 has no approach step because subsequent health/enrage conditions intervene. Ordinary strategy text corroborates a post-special projectile followed by walking pursuit and optional replacement by auto-attacks; it does not supply the duration-selection formula.
+
+Binding regression was RED on the old early freeze and missing captured packet, then GREEN with47Whisperer plus5HitQueue tests (52/52). No new full-suite or client-smoke claim accompanies this follow-up.

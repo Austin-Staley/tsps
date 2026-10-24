@@ -200,8 +200,15 @@ class Fight {
     }
     bind() {
         this.boundUntil = this.tick + 14;
-        Common.core.Projectile.createProjectile(this.boss, this.player, Common.data.projectiles.bind, 51, 100, 43, 31).sendProjectile();
-        this.at(2, () => {
+        const geometry = Common.data.binding;
+        this.pursuitAt = this.tick + geometry.pursuitTicks;
+        this.boss.getMovementQueue().reset();
+        // The observed 170-cycle baseline fits seven of nine impact ticks.
+        // Two 200-cycle captures land one tick later; their selection is unresolved.
+        this.player.getPacketSender().sendProjectile(Common.core.Projectile.centreOf(this.boss).clone(), this.player.getLocation().clone(), 0,
+            geometry.arrivalCycles, Common.data.projectiles.bind, geometry.startHeight, geometry.endHeight,
+            this.player, geometry.launchDelay, geometry.angle, geometry.progress);
+        this.at(geometry.impactTicks, () => {
             if (this.boundUntil > this.tick)
                 Common.core.CombatFactory.freezeTicks(this.player, 12);
         });
@@ -217,6 +224,8 @@ class Fight {
             this.boss.getMovementQueue().reset();
             return;
         }
+        if (this.tick < this.pursuitAt)
+            return;
         if (this.inMelee()) {
             this.boundUntil = 0;
             this.melee();

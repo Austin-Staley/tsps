@@ -509,7 +509,7 @@ test('low-health pursuit cancellation preserves the launched bind and a later fr
     f.player.moveTo(new core.Location(2656, 6378, 0));
     t.mock.method(f.boss.getMovementQueue(), 'addStep', () => assert.fail('pursuit must stop'));
     f.fight.bind();
-    f.fight.process();
+    for(let i=0;i<5;i++)f.fight.process();
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), false);
     f.fight.process();
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), true);
@@ -776,4 +776,29 @@ test('wake holds the Odd Figure for four ticks and launches the first shot at wa
     assert.deepEqual(forms,[[0,12203],[4,12204]]);
     for(let i=0;i<4;i++)f.fight.process();
     assert.deepEqual(animations.map(([tick,id])=>[tick,id]),[[0,10227],[4,65535],[8,10237]]);
+});
+
+
+test('binding uses captured packet constants and a provisional six-tick impact with pursuit beginning at five', t => {
+    const f=fixture(), packets=[], steps=[];
+    const sender=new Proxy({}, {get:(_,key)=>key==='sendProjectile'?((...args)=>packets.push(args)):(()=>sender)});
+    f.player.getPacketSender=()=>sender;
+    f.player.moveTo(new core.Location(2659,6378,0));
+    t.mock.method(f.boss.getMovementQueue(),'addStep',()=>steps.push(f.fight.tick));
+    f.fight.bind();
+    assert.equal(packets.length,1);
+    const packet=packets[0];
+    assert.deepEqual([packet[3],packet[4],packet[5]*4,packet[6]*4,packet[8],packet[9],packet[10]], [170,2467,580,0,80,16,150]);
+    assert.deepEqual([packet[0].getX(),packet[0].getY(),packet[1].getX(),packet[1].getY()],[2656,6370,2659,6378]);
+    f.player.moveTo(new core.Location(2660,6379,0));
+    assert.equal(packet[1].getX(),2659,'flight endpoint is the cast-time snapshot');
+    for(let i=0;i<4;i++)f.fight.process();
+    assert.deepEqual(steps,[]);
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
+    f.fight.process();
+    assert.deepEqual(steps,[5]);
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
+    f.fight.process();
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
+    assert.equal(f.fight.boundUntil,14,'existing provisional phase duration is retained');
 });
