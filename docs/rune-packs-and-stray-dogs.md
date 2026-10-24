@@ -28,6 +28,10 @@ preserve a pack at the stack limit, and reject notes/invalid slots. Dog tests co
 public variants, feeding the exact slot, rejected items, quest isolation, indoor waiting,
 cat ears, expiry and logout.
 
+The shared item-on-NPC packet handler also revalidates the offered item and target on
+arrival. Rearranging inventory or removing the NPC during the walk cancels the old action;
+feeding cannot consume an unrelated item moved into the original slot.
+
 Live agent MCP on this branch confirmed Open changes an air rune pack into 100 air runes
 without equipping it. The naturally spawned Varrock dog accepted Pet, consumed bones,
 credited the diary and responded to Shoo-away.
