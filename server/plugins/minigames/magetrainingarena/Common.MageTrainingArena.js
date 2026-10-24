@@ -40,6 +40,7 @@ function init(pluginApi) {
     npcs: resolve(data.names.npcs, (name) => cache.getNpcId(name), "npc"),
     locs: resolve(data.names.locs, (name) => cache.getLocId(name), "loc"),
     items: resolve(data.names.items, (name) => cache.getObjId(name), "item"),
+    varbits: resolve(data.names.varbits, (name) => cache.getVarbitId(name), "varbit"),
     interfaces: resolve(data.names.interfaces, (name) => cache.getInterfaceId(name), "interface"),
     components: resolve(data.names.components, (name) => cache.getComponentId(name), "component"),
   };

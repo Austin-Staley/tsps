@@ -545,7 +545,9 @@ test('the Graveyard Teleport needs Magic 15, and no fruit or bones', () => {
 function shopPlayer() {
   const player = fakePlayer(3362, 3318, 1);
   player.getEquipment = () => ({ get: () => null, set() {}, refreshItems() {} });
-  player.getPacketSender = () => ({ sendConfig() {}, sendSubInterface() {}, sendInterfaceFlagsRange() {}, sendString() {}, sendInterfaceDisplayState() {} });
+  player.varbitsSent = [];
+  player.getPacketSender = () => ({ sendConfig() {}, sendSubInterface() {}, sendInterfaceFlagsRange() {}, sendString() {}, sendInterfaceDisplayState() {},
+    sendVarbit: (id, value) => player.varbitsSent.push([id, value]), isSubInterfaceOpen: () => player.shopOpen !== false });
   player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, true);
   return player;
 }
@@ -625,12 +627,22 @@ test('Select, a quantity and Confirm buy through the interface', () => {
   const player = shopPlayer();
   for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
   Rewards.open(player);
+  const selection = Common.ids.varbits.shopSelection;
+  assert.deepEqual(player.varbitsSent.at(-1), [selection, 63], 'nothing selected');
   Rewards.rewardClicked({ player, slot: slotOf(565), opId: 1 });
+  assert.deepEqual(player.varbitsSent.at(-1), [selection, slotOf(565)]);
   Rewards.quantity(10)({ player });
   Rewards.confirm({ player });
   assert.equal(player.items.get(565), 10);
-  Rewards.quantity('all')({ player });
+  Rewards.quantity(10)({ player });
   Rewards.rewardClicked({ player, slot: slotOf(564), opId: 1 });
   Rewards.confirm({ player });
-  assert.equal(player.items.get(564), 950, 'cosmic: 5 enchantment each, with the 4,750 the blood runes left');
+  assert.equal(player.items.get(564), 1, 'a new selection is x1, as the client shows');
+  Rewards.rewardClicked({ player, slot: slotOf(564), opId: 1 });
+  Rewards.quantity(Common.data.shop.mostAtOnce)({ player });
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(564), 29, 'the fourth button is 28');
+  player.shopOpen = false;
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(564), 29, 'nothing bought with the shop closed');
 });

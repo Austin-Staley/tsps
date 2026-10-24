@@ -64,7 +64,13 @@
       "earth": "earthrune",
       "nature": "naturerune",
       "peachSpell": "magictraining_peachspell",
-      "runePouch": "bh_rune_pouch"
+      "runePouch": "bh_rune_pouch",
+      "runePouchLocked": "bh_rune_pouch_trouver",
+      "divinePouch": "divine_rune_pouch",
+      "divinePouchLocked": "divine_rune_pouch_trouver"
+    },
+    "varbits": {
+      "shopSelection": "magictraining_shop"
     },
     "interfaces": {
       "lobby": "magictraining_main",
@@ -264,6 +270,8 @@
       "graveyard": 264
     },
     "quantityVarp": 2224,
+    "_mostAtOnce": "the fourth quantity button: client script 2930 sets the quantity varp to 28 for this shop",
+    "mostAtOnce": 28,
     "peachesLevel": 60
   }
 }

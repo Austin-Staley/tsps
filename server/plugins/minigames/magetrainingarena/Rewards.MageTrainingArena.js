@@ -4,8 +4,9 @@
  * - Trade-with, or "Can I trade my Pizazz Points please?" in his transcript, opens the cache's own
  *   shop interface; its clientscripts lay out the stock (enum 2753) and every price in all four
  *   point types (one enum each), reading the player's points from varps 261-264;
- * - Select picks a reward, 1 / 5 / 10 / All the quantity, Confirm buys it if every type of point
- *   covers it;
+ * - Select picks a reward (the server sets the selection varbit; the client resets the quantity to
+ *   1), 1 / 5 / 10 / 28 the quantity (the fourth button's own value, client script 2930), Confirm
+ *   buys it if every type of point covers it - only while the shop is open;
  * - the wands are upgrades: each needs the tier before it (enum 2759), carried or wielded, and
  *   takes it; Bones to Peaches is a one-time unlock (Magic 60); the rune pouch only for a player
  *   who has none;
@@ -19,6 +20,8 @@ const MODAL = 0;
 const SELECT_OP = 1 << 1;
 const EXAMINE_OP = 1 << 2;
 const NO_HAT_VARIANT = "if-entrance-guardian-hasn-t-been-spoken-to";
+/** The selection varbit's "nothing selected" (client script 3262: "Select a reward"). */
+const NOTHING_SELECTED = 63;
 
 const choices = new Map();
 
@@ -49,11 +52,12 @@ function sendPoints(player) {
 }
 
 function open(player) {
-  const { interfaces, components } = Common.ids;
+  const { interfaces, components, varbits } = Common.ids;
   choices.set(player, { slot: -1, quantity: 1 });
   sendPoints(player);
   const sender = player.getPacketSender();
   sender.sendConfig(Common.data.shop.quantityVarp, 1);
+  sender.sendVarbit(varbits.shopSelection, NOTHING_SELECTED);
   sender.sendSubInterface(MAIN_MODAL, interfaces.shop, MODAL);
   sender.sendInterfaceFlagsRange(components.shopRewards, 0, stock().length - 1, SELECT_OP | EXAMINE_OP);
 }
@@ -88,15 +92,21 @@ function tradeWith({ player, npc }) {
 
 // --- The interface
 
+function shopOpen(player) {
+  return player.getPacketSender().isSubInterfaceOpen?.(Common.ids.interfaces.shop) === true;
+}
+
+/** The client draws the chosen reward from the selection varbit, and resets the quantity to 1. */
 function select({ player, slot }) {
-  const choice = choices.get(player) ?? { slot: -1, quantity: 1 };
-  choice.slot = Number.isInteger(slot) ? slot : -1;
-  choices.set(player, choice);
+  if (!shopOpen(player) || !Number.isInteger(slot) || slot < 0 || slot >= stock().length) return true;
+  choices.set(player, { slot, quantity: 1 });
+  player.getPacketSender().sendVarbit(Common.ids.varbits.shopSelection, slot);
   return true;
 }
 
 function quantity(amount) {
   return ({ player }) => {
+    if (!shopOpen(player)) return true;
     const choice = choices.get(player) ?? { slot: -1, quantity: 1 };
     choice.quantity = amount;
     choices.set(player, choice);
@@ -120,11 +130,13 @@ function wandsCarried(player, wandId) {
   return player.getInventory().getAmount(wandId) + (weapon?.getId?.() === wandId ? 1 : 0);
 }
 
+/** Any rune pouch: the ordinary, divine and Trouver-locked ones (Wiki: "does not already own a pouch"). */
 function ownsRunePouch(player) {
-  const id = Common.ids.items.runePouch;
-  if (player.getInventory().contains(id)) return true;
+  const { items } = Common.ids;
+  const pouches = [items.runePouch, items.runePouchLocked, items.divinePouch, items.divinePouchLocked];
+  if (pouches.some((id) => player.getInventory().contains(id))) return true;
   const searchTab = Common.core.Bank?.BANK_SEARCH_TAB_INDEX;
-  return (player.getBanks?.() ?? []).some((bank, tab) => tab !== searchTab && bank?.contains?.(id));
+  return (player.getBanks?.() ?? []).some((bank, tab) => tab !== searchTab && pouches.some((id) => bank?.contains?.(id)));
 }
 
 /** Takes one of the previous wand, from the pack first, then the hand. */
@@ -133,10 +145,12 @@ function takeWand(player, wandId) {
     player.getInventory().deleteNumber(wandId, 1);
     return;
   }
-  const { Equipment, Item } = Common.core;
+  const { Equipment, Item, Flag, WeaponInterfaceManager } = Common.core;
   const equipment = player.getEquipment();
   equipment.set(Equipment.WEAPON_SLOT, new Item(-1));
   equipment.refreshItems?.();
+  WeaponInterfaceManager?.assign?.(player);
+  player.getUpdateFlag?.()?.flag?.(Flag?.APPEARANCE);
 }
 
 /** Buys `requested` of the stock's slot; returns how many were bought. */
@@ -203,9 +217,8 @@ function buy(player, slot, requested) {
 
 function confirm({ player }) {
   const choice = choices.get(player);
-  if (!choice) return true;
-  const requested = choice.quantity === "all" ? Number.MAX_SAFE_INTEGER : choice.quantity;
-  buy(player, choice.slot, requested);
+  if (!choice || !shopOpen(player)) return true;
+  buy(player, choice.slot, choice.quantity);
   return true;
 }
 
@@ -247,7 +260,7 @@ function attach(api) {
   api.onInterfaceActionButton(components.shopMake1, quantity(1));
   api.onInterfaceActionButton(components.shopMake5, quantity(5));
   api.onInterfaceActionButton(components.shopMake10, quantity(10));
-  api.onInterfaceActionButton(components.shopMakeAll, quantity("all"));
+  api.onInterfaceActionButton(components.shopMakeAll, quantity(Common.data.shop.mostAtOnce));
   api.onPlayerLogout(forget);
   api.registerCommand("pizazz", setPoints, api.core.PlayerRights.DEVELOPER, "Set Mage Training Arena points: ::pizazz <type> <amount>");
 }
