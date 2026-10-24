@@ -28,7 +28,7 @@ before(async () => {
 });
 function fixture(t, { damage = 30, prayer = 99, symbol = 'HOLY_SYMBOL', read = true, book = true } = {}) {
   const p = new Player(null), messages = [];
-  const sender = new Proxy({}, { get: () => () => sender });
+  const sender = new Proxy({}, { get: (_, key) => key === 'hasInterruptibleInterface' ? () => false : () => sender });
   t.mock.method(p, 'getPacketSender', () => sender);
   t.mock.method(p, 'sendMessage', text => messages.push(text));
   p.setRegistered(true); p.setPoisonDamage(damage); p.setVenomed(false);
