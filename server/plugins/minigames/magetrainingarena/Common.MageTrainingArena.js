@@ -43,6 +43,20 @@ function init(pluginApi) {
   };
 }
 
+/** Runs `action` once, `ticks` game ticks from now. */
+function later(ticks, action) {
+  const { Task, TaskManager } = core;
+  TaskManager.submit(new (class extends Task {
+    constructor() {
+      super(Math.max(1, ticks), null, false);
+    }
+    execute() {
+      this.stop();
+      action();
+    }
+  })());
+}
+
 function message(key, values = {}) {
   return data.messages[key].replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
 }
@@ -126,7 +140,7 @@ function closeOverlay(player) {
 }
 
 module.exports = {
-  init, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
+  init, later, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
   POINT_TYPES, POINTS_ATTRIBUTE, HAT_GIVEN_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },

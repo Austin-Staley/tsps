@@ -1,8 +1,9 @@
 /**
  * The entrance hall (Wiki: Mage_Training_Arena, Enchanters_Teleport, Exit_Teleport):
  * - the hall shows the four Pizazz Point totals while the player is in it;
- * - the Enchanters Teleport takes a player with Magic 7 to the Enchanting Chamber (the other
- *   three rooms' teleports are left until their rooms exist);
+ * - the Enchanters Teleport takes a player with Magic 7 to the Enchanting Chamber (the
+ *   Alchemists Teleport is Alchemists.MageTrainingArena.js'; the other two rooms' teleports are left
+ *   until their rooms exist);
  * - every room's Exit Teleport brings the player back to the hall.
  */
 const Common = require("./Common.MageTrainingArena");
