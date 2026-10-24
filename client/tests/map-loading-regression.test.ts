@@ -502,7 +502,7 @@ function instanceFurnitureReplacesOnlyItsHotspot(): void {
     {
         // A house door in a drawn instance scene: only the scene's door geometry rebuilds, as a
         // map square's would; a whole-scene rebuild opened it a second late.
-        const door = { id: 13016, isInteractive: true, actions: ["Open"], name: "Door" };
+        const door = { id: 13016, isInteractive: true, actions: ["Open"], name: "Door", seqId: -1 };
         const updates: string[] = [];
         let rebuilds = 0;
         const host = {

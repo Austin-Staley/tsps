@@ -13,7 +13,6 @@ import { baseNpcTypeId } from "../../custom/npcs/NpcModelOverrideRegistry";
 import { InteractType } from "../../render/InteractType";
 import { WebGLMapSquare } from "../../render/WebGLMapSquare";
 import type { LocAnimated } from "../../render/loc/LocAnimated";
-import { isDoorLocType } from "../../render/loc/SceneLocs";
 import { interpolateActorHeight, sampleBridgeHeightForWorldTile } from "./BridgeHeightSampler";
 import {
     BridgePlaneStrategy,
@@ -959,8 +958,7 @@ export class SceneRaycaster {
      * OSRS click-tests a loc's model as it is drawn: the house portal's swirl is shrunk to a
      * point in its first frame, then fills the arch. A loc the square animates uses its current
      * frame (the first, for skeletal ones: their frames are ticks, hundreds per sequence, and
-     * each would be a mesh). Animated doors are drawn unanimated (addLocEntities), and the
-     * portal's Lock option makes it one; other locs not animated yet use their first frame.
+     * each would be a mesh); one not animated yet uses its first frame.
      */
     private getLocModelMesh(
         locType: LocType,
@@ -969,7 +967,7 @@ export class SceneRaycaster {
         animated?: LocAnimated,
     ): LocModelMesh | undefined {
         const seqType = animated?.seqType;
-        const seqId = seqType ? seqType.id : isDoorLocType(locType) ? -1 : locType.seqId;
+        const seqId = seqType ? seqType.id : locType.seqId;
         const seqFrame =
             seqId === -1 ? -1 : seqType && !seqType.isSkeletalSeq() ? animated!.frame | 0 : 0;
         const key = `${locType.id | 0}|${modelType | 0}|${modelRotation | 0}|${seqId}|${seqFrame}`;

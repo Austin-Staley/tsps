@@ -9,7 +9,7 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 40));
 function fixture() {
     const reloads: string[] = [];
     let rebuilds = 0;
-    const door = { id: 13016, name: "Door", actions: ["Open"] };
+    const door = { id: 13016, name: "Door", actions: ["Open"], seqId: -1 };
     const renderer: any = {
         instanceActive: true,
         instanceSceneMap: { mapX: 100, mapY: 100 },
