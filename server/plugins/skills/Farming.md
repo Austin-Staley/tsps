@@ -102,6 +102,14 @@ bonus follows the acted-on patch; it does not apply to Falador Park trees,
 other planes/patches or unrelated Farming awards. Tests cover composting,
 planting, harvesting, deferred herb planting XP and incomplete/easy-only diaries.
 Source: [South Falador Farm](https://oldschool.runescape.wiki/w/South_Falador_Farm).
+node --test tests/farming-hespori-recoil.test.cjs tests/ring-of-recoil.test.cjs tests/ring-of-suffering.test.cjs
+```
+
+The grown Farming Hespori is immune to ordinary-ring and Ring of Suffering recoil.
+Its content sets the generic `combat:recoil-immune` policy used by both recoil paths;
+Vengeance/Retribution retain their existing reflected-damage behavior. Tests verify
+the actual boss wake-up, unchanged flowers, charge conservation and normal recoil.
+Source: [Hespori](https://oldschool.runescape.wiki/w/Hespori).
 
 The second command checks the state machine and mocked hooks without server startup
 or sockets. It covers offline/save equivalence,

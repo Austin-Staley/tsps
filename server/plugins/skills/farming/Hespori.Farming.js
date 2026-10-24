@@ -73,6 +73,8 @@ function harvestHespori(player, patch) {
     const fight = { player, patch, area, boss: null, flowers: [], phase: 0, attacks: 0, vinesUntil: 0, escapeClicks: 0 };
     FIGHTS.set(player, fight);
     fight.boss = spawn(fight, core.NpcIdentifiers.HESPORI, patch.x, patch.y);
+    // https://oldschool.runescape.wiki/w/Hespori: immune to ring-of-recoil damage.
+    fight.boss.setAttribute(core.CombatFactory.RECOIL_IMMUNE_ATTRIBUTE, true);
     fight.boss.setHitpoints(300);
     fight.maxHitpoints = 300;
     fight.boss.performAnimation(new core.Animation(ANIMATION.SPAWN));
