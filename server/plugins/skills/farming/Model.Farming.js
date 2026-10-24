@@ -75,6 +75,17 @@ function activeAnima(farm, at) {
     return Object.values(farm.patches).find(s => s.crop && Data.CACHE.timing[s.crop]?.type === "ANIMA"
         && at >= s.plantedAt && at < s.nextAt + (8 - s.stage - 1) * 640 * MINUTE && s.status !== "dead")?.crop;
 }
+function kronosGrowth(farm, at, minutes, random, skips) {
+    if (activeAnima(farm, at) !== "KRONOS") return 1;
+    const key = `${at}:${minutes}`;
+    if (!skips.has(key)) {
+        let extra = 0;
+        // ponytail: shared repeatable skips are documented, but their probability is unpublished.
+        while (extra < 12 && random() < 0.1) extra++;
+        skips.set(key, extra);
+    }
+    return 1 + skips.get(key);
+}
 function diseaseFree(farm, patch, state, at) {
     const crop = Data.CROPS.get(state.crop);
     if (state.protected || ["POISON_IVY", "HESPORI", "CRYSTAL_TREE"].includes(crop.key) || ["ANIMA", "GRAPES"].includes(crop.type)) return true;
@@ -145,23 +156,17 @@ function advanceFarm(farm, now, random = Math.random) {
         const at = state.nextAt;
         if (state.status === "grown") {
             if (state.stump) { state.stump = false; continue; }
-            const ticks = 1 + Math.floor((now - at) / (crop.regrow * MINUTE));
-            state.lives = Math.min(startingLives(crop, state.compost), state.lives + ticks);
+            const maximum = startingLives(crop, state.compost);
+            // Partial patches need chronological rolls, including anima planting and expiry.
+            // Once full, skip empty work in bulk; at most the produce cap needs individual ticks.
+            const ticks = state.lives >= maximum ? 1 + Math.floor((now - at) / (crop.regrow * MINUTE)) : 1;
+            if (state.lives < maximum) state.lives = Math.min(maximum,
+                state.lives + kronosGrowth(farm, at, crop.regrow, random, kronos));
             state.nextAt = at + ticks * crop.regrow * MINUTE;
             continue;
         }
         if (state.status === "diseased") { state.status = "dead"; continue; }
-        let growth = 1;
-        if (crop.type !== "ANIMA" && activeAnima(farm, at) === "KRONOS") {
-            const key = `${at}:${crop.minutes}`;
-            if (!kronos.has(key)) {
-                let extra = 0;
-                // ponytail: the wiki describes shared repeatable skips but does not publish the roll; calibrate this estimate when measured.
-                while (extra < 12 && random() < 0.1) extra++;
-                kronos.set(key, extra);
-            }
-            growth += kronos.get(key);
-        }
+        const growth = crop.type === "ANIMA" ? 1 : kronosGrowth(farm, at, crop.minutes, random, kronos);
         state.stage = Math.min(crop.stages, state.stage + growth);
         if (crop.type === "ANIMA") {
             if (state.stage >= crop.stages) state.status = "dead";
