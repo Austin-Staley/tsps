@@ -251,6 +251,21 @@ function allowWeapons(request) {
   if (bh.inArena(request.attacker) && bh.inArena(request.target)) request.allowed = true;
 }
 
+function allowLootKeys(request) {
+  if (bh.isArenaTile(request.killer.getLocation()) && bh.isArenaTile(request.victim.getLocation())) request.allowed = true;
+}
+
+/** Respawning changes the destination, not the crater's dangerous-death rules. */
+function respawnInLobby(event) {
+  const player = event.player;
+  if (event.handled || player.isPlayerBot?.() === true) return;
+  const location = player.getLocation();
+  if (!bh.isArenaTile(location) && !bh.isLobbyTile(location)) return;
+  player.moveTo(new core.Location(bh.CRATER.lobbyArrival.x, bh.CRATER.lobbyArrival.y, 0));
+  api.getAreaManager().process(player);
+  event.handled = true;
+}
+
 function registerAreas() {
   for (const area of createAreas()) api.registerArea(area);
 }
@@ -265,6 +280,8 @@ module.exports = function attachArea(pluginApi, state) {
   api.onAttackTiming(noteSpecialAttack);
   api.onCombatHitResolved(endImmunity);
   api.onCustomEvent("bounty-hunter:weapon-area", allowWeapons);
+  api.onCustomEvent("loot-keys:eligible-kill", allowLootKeys);
+  api.onCustomEvent("player:respawn", respawnInLobby);
 };
 
 Object.assign(module.exports, { _test: { canAttackInArena, endImmunity, arenaBoundaries, lobbyTick, LOBBY_ALLOWANCE_TICKS } });
