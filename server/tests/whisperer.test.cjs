@@ -1040,6 +1040,27 @@ function recordBoard() {
     return {...f,hooks,interfaces,strings,api,setComplete:value=>complete=value,setCanonical:value=>canonical=value};
 }
 
+test('owned Whisperer boss, columns and souls retain scripted HP through the real idle NPC regeneration clock',t=>{
+    const h=recordBoard(),session=new Site.Session(h.player);
+    t.after(()=>session.end());
+    let cycle=1;t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    session.start();
+    const boss=session.fight.boss;boss.isRegistered=()=>true;boss.setHitpoints(300);
+    startSpecial(session.fight,'screech');
+    const columns=session.fight.special.columns;
+    for(const column of columns){column.npc.isRegistered=()=>true;column.npc.setHitpoints(column.hp);column.npc.getCombat().getLastAttack().reset();}
+    boss.getCombat().getLastAttack().reset();
+    cycle=100;
+    for(let tick=0;tick<5;tick++){
+        cycle++;boss.process();for(const column of columns)column.npc.process();
+    }
+    assert.equal(boss.getHitpoints(),300,'idle NPC healing must not refill the boss between scripted phases');
+    for(const column of columns)assert.equal(column.npc.getHitpoints(),column.hp,'the native headbar HP must not regenerate');
+    const soul=session.spawn(Common.data.npcs.soul,2656,6364);soul.isRegistered=()=>true;
+    soul.setMaxHitpoints(10);soul.setHitpoints(1);soul.getCombat().getLastAttack().reset(1);
+    soul.process();assert.equal(soul.getHitpoints(),1,'owned soul HP is scripted too');
+});
+
 test('normal and shadow Whisperer scoreboard parents Read the native statistics interface and existing personal records', () => {
     const h=recordBoard(), read=h.hooks.objects.get('Scoreboard')?.Read;
     assert.equal(typeof read,'function');

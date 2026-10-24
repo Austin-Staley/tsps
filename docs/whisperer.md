@@ -1,5 +1,17 @@
 # The Whisperer
 
+### Owned-actor idle regeneration correction (24 October 2026)
+
+Native staging exposed generic NPC idle healing leaking into the scripted fight:
+the boss recovered from 300 to 900 HP and columns recovered six HP per tick.
+A real `NPC.process()` clock regression reproduced boss 300→750 over five
+updates after the unchanged 20-second idle threshold. Every actor created by
+the private session now receives the existing `combat:no-regen` flag before
+scripted HP setup. Boss, columns and souls retain their owned HP policy across
+transforms and new spawns; explicit soul-special boss healing still runs.
+The regression now preserves boss 300, native column HP and owned soul HP.
+No generic regeneration formula or attack timestamp is changed.
+
 `plugins/bosses/Whisperer.plugin.js` owns a post-quest normal encounter. The DT2 quest's own scene and progress are unchanged. Depends on PR #882 for conditional loot and actual-damage observers. Awakened is deliberately unavailable: no orb prompt or consumption occurs.
 
 The public normal Whisperer spawn is replaced at load with the cache's Odd Figure. Disturb requires completed Desert Treasure II and a real Blackstone fragment; the bank placeholder does not qualify. Ketla can replace a lost fragment. A PrivateArea isolates the cathedral and its Shadow Realm mirror per player. Tentacle exit/quick-escape, teleport, logout and death clean the session; login recovery returns a saved occupant outside. Graves relocate to the Camdozaal rope, with a 0.25 fee multiplier before five normal kills through the shared grave contract.

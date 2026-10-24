@@ -39,6 +39,7 @@ class Session {
         if (!npc)
             return null;
         npc.__skipDefaultRespawn = true;
+        npc.setFlag('combat:no-regen');
         npc.setScriptedMovement(true);
         this.area.add(npc);
         return npc;
