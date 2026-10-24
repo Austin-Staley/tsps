@@ -6,6 +6,7 @@ const {PlayerSave}=require('../dist/game/entity/impl/player/persistence/PlayerSa
 const {GameConstants}=require('../dist/game/GameConstants');
 const {TaskManager}=require('../dist/game/task/TaskManager');
 const {CombatPoisonEffect}=require('../dist/game/task/impl/CombatPoisonEffect');
+const {curePoisonAndVenom}=require('../plugins/items/ConsumableEffects');
 
 function player(t,venom=false){
  const p=new Player(null);p.setRegistered(true);p.setPoisonDamage(venom?10:27);p.setVenomed(venom);
@@ -70,13 +71,13 @@ test('cancelling player activity tasks does not suspend or restart the poison cl
  assert.equal(hits,1);assert.equal(p.getPoisonDamage(),12);
 });
 
-test('immunity, explicit cure and natural poison expiry still terminate their task',t=>{
- for(const reason of ['immunity','cure','expiry']){
+test('explicit antidote cures and natural poison expiry still terminate their task',t=>{
+ for(const reason of ['antidote','cure','expiry']){
   const p=player(t,reason!=='expiry');
   if(reason==='expiry')p.setPoisonDamage(1);
   const effect=new CombatPoisonEffect(p);TaskManager.submit(effect);
-  if(reason==='immunity')p.getCombat().getPoisonImmunityTimer().start(60);
-  if(reason==='cure'){p.setPoisonDamage(0);p.setVenomed(false);}
+  if(reason==='antidote'){curePoisonAndVenom(p);p.getCombat().getPoisonImmunityTimer().start(60);}
+  if(reason==='cure')curePoisonAndVenom(p);
   const hits=[];t.mock.method(p.getCombat().getHitQueue(),'addPendingDamage',values=>hits.push(...values));
   for(let i=0;i<35;i++)effect.tick();
   assert.equal(effect.isRunning(),false,reason);assert.equal(p.getPoisonDamage(),0,reason);assert.equal(p.isVenomed(),false,reason);
