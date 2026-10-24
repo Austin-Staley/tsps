@@ -69,6 +69,10 @@ function refresh(player, kingdom) {
 function open(player) {
   const kingdom = Common.catchUp(player);
   if (!kingdom) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "miscellania", resume: () => open(player) };
+  Common.getApi().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   player.getDialogueManager?.().reset();
   player.getPacketSender().sendConfig(VARP_HELP, 0);
   refresh(player, kingdom);
