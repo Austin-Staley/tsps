@@ -39,17 +39,36 @@ function grind(event) {
   const raw=ids.has(items.arder)?items.arder:ids.has(items.musca)?items.musca:null;
   if(raw==null) return false;
   event.handled=true;
-  const inventory=event.player.getInventory();
-  if(inventory.getAmount(raw)<1 || inventory.getAmount(items.pestle)<1) return true;
+  C.core.TaskManager.cancelTasks(event.player.getIndex());
+  if(!grindOne(session,raw)) return true;
+  // The click acts immediately; the next response is two ticks after its response
+  // cycle, followed by three-tick repeats (current powder creation pages).
+  let wait=3;
+  C.core.TaskManager.submit(new(class extends C.core.Task {
+    constructor(){super(1,event.player.getIndex(),false);}
+    execute(){
+      if(session.ended || !event.player.isRegistered() || event.player.getHitpoints()<=0) {this.stop();return;}
+      if(--wait>0) return;
+      wait=3;
+      if(!grindOne(session,raw)) this.stop();
+    }
+  })());
+  return true;
+}
+function grindOne(session,raw) {
+  const player=session.player,inventory=player.getInventory(),{items}=C.data;
+  if(inventory.getAmount(raw)<1 || inventory.getAmount(items.pestle)<1) return false;
   const result=raw===items.arder?items.arderPowder:items.muscaPowder;
-  const amount=M.powderYield(event.player.getSkillManager().getCurrentLevel(C.core.Skill.HERBLORE));
+  const amount=M.powderYield(player.getSkillManager().getCurrentLevel(C.core.Skill.HERBLORE));
   const before=inventory.getCopiedItems();
   inventory.deleteNumber(raw,1);
   if(inventory.getAddableAmount(new C.core.Item(result,amount))<amount) {
     inventory.setItems(before); inventory.refreshItems();
-    event.player.sendMessage("You don't have enough inventory space."); return true;
+    player.sendMessage("You don't have enough inventory space."); return false;
   }
   inventory.add(new C.core.Item(result,amount),true);
+  const sequence=C.core.CacheDefinitions.getSeqId('human_herbing_grind');
+  player.performAnimation(new C.core.Animation(sequence));
   return true;
 }
 function fill(session,at) {
@@ -117,11 +136,16 @@ function feed(event) {
   if(event.itemId!=null && ![C.data.items.poison,C.data.items.arderPowder,C.data.items.muscaPowder].includes(event.itemId)) return false;
   event.handled=true;
   if(session.fight.active || session.fight.over) return true;
-  const inventory=event.player.getInventory(), item=event.itemId ?? (inventory.getAmount(C.data.items.poison)>0?C.data.items.poison:null);
+  const inventory=event.player.getInventory(),{items}=C.data;
+  const powder=inventory.getItems().find(held=>held && held.getAmount()>0 && [items.arderPowder,items.muscaPowder].includes(held.getId()))?.getId();
+  const item=event.itemId ?? (inventory.getAmount(items.poison)>0?items.poison:powder);
   if(!item || inventory.getAmount(item)<1) { event.player.sendMessage('You need arder-musca poison to wake the Duke.'); return true; }
+  const cycle=C.core.World.getProcessCycle();
+  if(item!==items.poison && session.lastPowderCycle===cycle) return true;
   const result=M.feed(session.meter,item===C.data.items.poison?C.data.normal.poison:5,C.data.normal.meter);
   if(!result.consumed) return true;
   inventory.deleteNumber(item,1); session.meter=result.meter;
+  if(item!==items.poison) session.lastPowderCycle=cycle;
   event.player.sendMessage(`Duke Sucellus' poison meter: ${session.meter}/${C.data.normal.meter}.`);
   if(result.awake) {
     session.picks={arder:0,musca:0}; refresh(session);

@@ -10,6 +10,7 @@ async function initialize() {
   new NpcDefinitionLoader().load(); core=PluginManager.getCoreApi(); core.RegionManager.init();
 }
 function harness(t) {
+  require('../../plugins/bosses/dukesucellus/Records.DukeSucellus').resetWorld();
   const C=require('../../plugins/bosses/dukesucellus/Common.DukeSucellus');
   const Site=require('../../plugins/bosses/dukesucellus/Site.DukeSucellus');
   const Prep=require('../../plugins/bosses/dukesucellus/Preparation.DukeSucellus');

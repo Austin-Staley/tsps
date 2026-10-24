@@ -1,6 +1,7 @@
 "use strict";
 const C=require('./Common.DukeSucellus');
 const M=require('./Model.DukeSucellus');
+const Records=require('./Records.DukeSucellus');
 class Fight {
   constructor(session,boss) {
     this.session=session; this.player=session.player; this.boss=boss;
@@ -128,6 +129,9 @@ class Fight {
   }
   fell() {
     if(this.over || this.stopped || !this.active) return;
+    // Slayer's death handler may complete the assignment before won() runs.
+    const task={player:this.player,npc:this.boss,onTask:false}; C.api.emitCustomEvent('slayer:on-task',task);
+    this.completedOnSlayerTask=task.onTask;
     this.over=true; this.events=[]; C.cancelPending(this);
     this.coldFeetEligible=this.perfect && !this.session.ranSinceKill;
     this.session.ranSinceKill=false;
@@ -144,13 +148,13 @@ class Fight {
     this.player.sendMessage(`Your Duke Sucellus kill count is: ${count}.`);
     const previous=C.count(this.player,C.BEST);
     if(!previous || ticks<previous) this.player.setAttribute(C.BEST,ticks);
+    Records.kill(ticks);
     this.player.sendMessage(`Fight duration: ${(ticks*.6).toFixed(1)} seconds.`);
     if(this.perfect) this.session.perfectKills++;
     if(this.coldFeetEligible) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Cold Feet'});
     if(this.mirror) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Mirror Image'});
     if(this.session.perfectKills>=5) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:'Perfect Duke Sucellus'});
-    const task={player:this.player,npc:this.boss,onTask:false}; C.api.emitCustomEvent('slayer:on-task',task);
-    if(!task.onTask) for(const [rank,seconds] of [['Trialist',60],['Chaser',50],['Runner',40]]) {
+    if(!this.completedOnSlayerTask) for(const [rank,seconds] of [['Trialist',60],['Chaser',50],['Runner',40]]) {
       if(ticks*.6<seconds) C.api.emitCustomEvent('combat-achievements:complete',{player:this.player,task:`Duke Sucellus Speed-${rank}`});
     }
     this.boss.setNpcTransformationId(C.data.npcs.dead);

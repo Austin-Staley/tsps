@@ -1,5 +1,13 @@
 # Postquest Duke Sucellus
 
+## Normal fidelity audit, 24 October 2026 (in progress)
+
+The current follow-up corrects left-click Feed to choose poison first, then held mushroom powder, as documented by the powder pages' 2 July 2025 update. Raw mushrooms remain ineligible. Powder feeding is limited to one item per game cycle and stops on waking. Grinding now repeats using a player-keyed cancellable task: immediate response, two ticks after that response cycle, then every three ticks (the current powder creation footnote and the existing captured Herblore action convention). Each conversion retains the atomic full-inventory check. The final Slayer-task kill freezes eligibility before Slayer clears its assignment at death.
+
+The revision-241 cache's `duke_sucellus_scoreboard` (828) has static value components 9/11/13/15/17/19, with no transmit listeners. Reading object 47563 opens it with personal kills/deaths/best and local-world totals. Personal deaths persist as a namespaced attribute; world records use an atomic JSON save, following the other boss scoreboard stores. Duplicate death/death-task callbacks cannot count twice. Cache dump confirms the title and close operation.
+
+This checkpoint builds and passes all 43 focused Duke tests (six new regressions were observed failing first). The broader remaining audit is tracked in `docs/superpowers/plans/2026-10-24-normal-boss-fidelity.md`; publishing a checkpoint does not establish that its remaining numeric/effect/loot findings are complete.
+
 This members-only plugin adds the normal, repeatable solo encounter after Desert Treasure II. The quest's separate NPCs, prison and progression are unchanged. The postquest heavy door at 2926,10354 skips the prison to the asylum gates; entering the gate creates an owner-only copy of the cache room. Leaving or logging out destroys that copy and its temporary ingredients. Login recovery returns a saved in-instance character to the outside gate.
 
 The eight-pick mushroom patches, Herblore-based powder yield, pickaxe-assisted salt gathering, six-of-each vat recipe, six-tick fermentation and two-poison meter support repeated kills. Finished poison stays in its vat when inventory space prevents collection. Ingredients and poison persist between kills but are removed before a player-death inventory snapshot and on exit. Awakened mode is unavailable; no awakener's orb is consumed.

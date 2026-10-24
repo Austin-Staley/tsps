@@ -2,6 +2,7 @@
 const C=require('./Common.DukeSucellus');
 const Preparation=require('./Preparation.DukeSucellus');
 const {Fight}=require('./Fight.DukeSucellus');
+const Records=require('./Records.DukeSucellus');
 let AreaClass;
 function areaClass() {
   if(AreaClass) return AreaClass;
@@ -117,7 +118,12 @@ function beforeObject(event) {
   if((p?.getX?.() ?? p?.x)!==C.data.site.gate[0] || (p?.getY?.() ?? p?.y)!==C.data.site.gate[1] || (p?.getZ?.() ?? p?.z)!==0) return;
   if(enter(player)) event.handled=true;
 }
-function beforePlayerDeath({player}) { if(C.sessionOf(player)) C.clearSupplies(player); }
+function beforePlayerDeath({player}) {
+  const s=C.sessionOf(player);
+  if(!s)return;
+  C.clearSupplies(player);
+  if(!s.deathRecorded){s.deathRecorded=true;Records.died(player);}
+}
 function disconnect({player}) { C.sessionOf(player)?.end(); }
 function login({player}) {
   if(!player.getAttribute(C.INSIDE) || C.sessionOf(player)) return;
