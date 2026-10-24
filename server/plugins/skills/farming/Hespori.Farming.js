@@ -242,9 +242,16 @@ function hesporiNpc(event) {
             player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, 25000);
             farm.deathbankPaid = true;
         }
-        while (farm.deathbank.length && player.getInventory().getFreeSlots()) {
-            const saved = farm.deathbank.shift();
-            player.getInventory().addItem(new core.Item(saved.id, saved.amount, saved.meta));
+        const inventory = player.getInventory();
+        for (let index = 0; index < farm.deathbank.length;) {
+            const saved = farm.deathbank[index];
+            const item = new core.Item(saved.id, saved.amount, saved.meta);
+            const amount = inventory.getAddableAmount(item);
+            if (amount <= 0) { index++; continue; }
+            inventory.addItem(item.setAmount(amount));
+            saved.amount -= amount;
+            if (saved.amount <= 0) farm.deathbank.splice(index, 1);
+            else index++;
         }
     }]]);
 }
