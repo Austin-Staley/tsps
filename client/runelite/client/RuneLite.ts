@@ -10,7 +10,10 @@ import { BeforeRender } from "@runelite/api/events/BeforeRender";
 import type { OsrsClient } from "../../game/OsrsClient";
 import { subscribeTick } from "../../network/serverConnection/timing";
 import { subscribeChatMessages, subscribeSkills } from "../../network/serverConnection/subscriptions/ui";
+import { setManagedMenus } from "../../ui/menu/menuTransforms";
 import { ConfigManager } from "./config/ConfigManager";
+import { ChatboxPanelManager } from "./game/chatbox/ChatboxPanelManager";
+import { MenuManager } from "./menus/MenuManager";
 import { EventBus } from "./eventbus/EventBus";
 import { PluginManager } from "./plugins/PluginManager";
 import { ClientToolbar } from "./ui/ClientToolbar";
@@ -37,6 +40,10 @@ export class RuneLite {
     readonly clientToolbar: ClientToolbar;
     /** Lays out movable overlays and lets the player Alt-drag them. */
     readonly overlayRenderer: OverlayRenderer;
+    /** Plugin prompts in the chatbox (`inject(ChatboxPanelManager)`). */
+    readonly chatboxPanelManager: ChatboxPanelManager;
+    /** Plugin options on widget menus (`inject(MenuManager)`). */
+    readonly menuManager = new MenuManager();
 
     private constructor(
         private readonly client: OsrsClient,
@@ -46,6 +53,8 @@ export class RuneLite {
         this.pluginManager = new PluginManager(this.eventBus, this.configManager);
         this.clientToolbar = this.pluginManager.getInjector().get(ClientToolbar);
         this.overlayRenderer = new OverlayRenderer(client, this.configManager);
+        this.chatboxPanelManager = new ChatboxPanelManager(client, undefined,
+            (tick) => this.eventBus.subscribe(ClientTick, tick));
     }
 
     static start(client: OsrsClient, loadPlugins = true): RuneLite {
@@ -81,6 +90,10 @@ export class RuneLite {
     private load(): void {
         const injector = this.pluginManager.getInjector();
         injector.provide(CLIENT_TOKEN, this.client);
+        injector.provide(ChatboxPanelManager, this.chatboxPanelManager);
+        injector.provide(MenuManager, this.menuManager);
+        this.eventBus.subscribe(GameStateChanged, (event) => this.chatboxPanelManager.onGameStateChanged(event));
+        setManagedMenus((entries, context) => this.menuManager.apply(entries, context));
 
         this.client.stateMachine.subscribe((transition) => {
             this.eventBus.post(new GameStateChanged(toRuneLiteGameState(transition.to)));
