@@ -56,15 +56,21 @@ function onLogout({ player }) {
 
 /** Bank slots the collection needs beyond what the bank has free. */
 function spaceShort(player, collected) {
-  const { Bank } = Common.getCore();
-  const { Item } = Common.getCore();
+  const { Bank, Item } = Common.getCore();
   let needed = 0;
-  for (const key of collected.keys()) {
-    const itemId = key === "clue" ? Common.items().TRAIL_CLUE_EASY_SIMPLE001 : key;
-    if (!Bank.contains(player, new Item(itemId, 1))) needed++;
+  let capped = 0;
+  let free = 0;
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+    if (tab !== Bank.BANK_SEARCH_TAB_INDEX) free += player.getBank(tab).getFreeSlots();
   }
-  const free = player.getBank(0).getFreeSlots?.() ?? Infinity;
-  return Math.max(0, needed - free);
+  for (const [key, count] of collected) {
+    const itemId = key === "clue" ? clueItemId(player) : key;
+    if (itemId == null) continue;
+    const bank = player.getBank(Bank.getTabForItem(player, itemId));
+    if (!bank.contains(itemId)) needed++;
+    if (bank.getAddableAmount(new Item(itemId, count)) < count) capped++;
+  }
+  return Math.max(0, needed - free, capped);
 }
 
 function hasNothing(player) {
@@ -97,15 +103,23 @@ function collect(player) {
 }
 
 /** An easy clue goes through the clue system's own capacity and scroll-box rules. */
-function deliverClue(player) {
+function clueItemId(player) {
   const api = Common.getApi();
   const can = { player, tier: "easy", allowed: null };
   api.emitCustomEvent("treasure-trails:can-receive", can);
-  if (can.allowed !== true) return;
+  if (can.allowed !== true) return null;
   const clue = { player, itemId: Common.items().TRAIL_CLUE_EASY_SIMPLE001, box: false };
   api.emitCustomEvent("treasure-trails:clue-item", clue);
+  return clue.itemId;
+}
+
+function deliverClue(player) {
+  const itemId = clueItemId(player);
+  if (itemId == null) return;
   const { Bank, Item } = Common.getCore();
-  player.getBank(Bank.getTabForItem(player, clue.itemId)).add(new Item(clue.itemId, 1), false);
+  const bank = player.getBank(Bank.getTabForItem(player, itemId));
+  const item = new Item(itemId, 1);
+  if (bank.getAddableAmount(item) >= 1) bank.add(item, false);
 }
 
 // --- Dialogue

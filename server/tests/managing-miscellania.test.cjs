@@ -67,6 +67,8 @@ function player({ at = MISCELLANIA, favour = 127, coins = 0, bankFree = 800 } = 
       getFreeSlots: () => bankFree,
       contains: (id) => bank.has(id),
       getAmount: (id) => bank.get(id) ?? 0,
+      getAddableAmount: (item) => bank.has(item.getId()) || bankFree > 0
+        ? Math.min(item.getAmount(), 2147483647 - (bank.get(item.getId()) ?? 0)) : 0,
     }),
     getPacketSender: () => ({
       sendVarbit: (id, v) => varbits.set(id, v),
@@ -231,6 +233,55 @@ test('collection goes to the bank once and waits while the bank is short of spac
   assert.equal(p.bank.get(Common.items().MAPLE_LOGS), Common.baseQuantity(5, 160, 762));
   assert.equal(Common.kingdomOf(p).points, 0);
   assert.equal(Ghrim.collect(p), false);
+});
+
+function bankCollectionPlayer(t, rewards) {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const p = new Player(null), today = Common.today();
+  p.setLocation(new core.Location(MISCELLANIA.x, MISCELLANIA.y));
+  p.favourValue = 127;
+  t.mock.method(p, 'sendMessage', () => {});
+  p.setAttribute(Common.KINGDOM_ATTRIBUTE, kingdom({ points: 762, lastDay: today, lastVisitDay: today }));
+  const held = Ghrim.pendingFor(p, Common.kingdomOf(p));
+  held.clear();
+  for (const [id, count] of rewards) held.set(id, count);
+  t.after(() => Ghrim.pending.delete(p));
+  return p;
+}
+
+test('a capped real bank stack keeps the entire collection and points until it fits', t => {
+  install();
+  const { Item } = core, { MAPLE_LOGS, COAL } = Common.items();
+  const p = bankCollectionPlayer(t, [[COAL, 1], [MAPLE_LOGS, 595]]);
+  const bank = p.getBank(0);
+  bank.add(new Item(MAPLE_LOGS, 2147483647), false);
+  assert.equal(Ghrim.collect(p), false);
+  assert.equal(Common.kingdomOf(p).points, 762);
+  assert.equal(bank.getAmount(COAL), 0, 'failure must not deliver an earlier resource');
+  assert.equal(bank.getAmount(MAPLE_LOGS), 2147483647);
+  bank.deleted(MAPLE_LOGS, 595, false);
+  assert.equal(Ghrim.collect(p), true);
+  assert.equal(bank.getAmount(MAPLE_LOGS), 2147483647);
+  assert.equal(bank.getAmount(COAL), 1);
+  assert.equal(Common.kingdomOf(p).points, 0);
+  assert.equal(Ghrim.collect(p), false);
+});
+
+test('collection counts real bank-tab room and ignores free search-result slots', t => {
+  install();
+  const p = bankCollectionPlayer(t, [[Common.items().MAPLE_LOGS, 595], [Common.items().COAL, 1]]);
+  for (let tab = 0; tab < core.Bank.BANK_SEARCH_TAB_INDEX; tab++) {
+    const bank = p.getBank(tab);
+    bank.setItems(Array.from({ length: bank.capacity() }, (_, i) => new core.Item(10000 + i, 1)));
+  }
+  assert.ok(Ghrim.spaceShort(p, Ghrim.pendingFor(p, Common.kingdomOf(p))) > 0);
+  const spare = p.getBank(1);
+  spare.setItem(0, new core.Item(-1, 0));
+  assert.equal(Ghrim.collect(p), false, 'two new resources require two slots');
+  spare.setItem(1, new core.Item(-1, 0));
+  assert.equal(Ghrim.collect(p), true);
+  assert.equal(spare.getAmount(Common.items().MAPLE_LOGS), 595);
+  assert.equal(spare.getAmount(Common.items().COAL), 1);
 });
 
 test('a changed job or choice rolls the collection again', () => {

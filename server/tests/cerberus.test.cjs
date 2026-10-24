@@ -208,6 +208,45 @@ test('three souls attack west to east, two ticks apart, and a stop removes them'
   assert.equal(fight.souls.length, 0);
 });
 
+test('departing targets lose their summoned souls while another player remains', t => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const arena = westArena(), target = new Player(null), remaining = fakePlayer(1240, 1244);
+  target.setRegistered(true);
+  target.setLocation(location(1240, 1244));
+  target.prayers = new Set();
+  const hits = [];
+  t.mock.method(target.getCombat().getHitQueue(), 'addPendingDamage', parts => hits.push(...parts));
+  const fight = new Fight.Fight(arena, fakeNpc(5862, 1238, 1250, 300));
+  arena.fight = fight;
+  arena.testPlayers = [target, remaining];
+  fight.summonSouls(target);
+  const summoned = fight.souls.map(soul => soul.npc);
+  // One soul has launched; departure cancels its impact as well as future launches.
+  fight.tickCount = fight.souls[0].attackAt;
+  fight.tickSouls();
+  target.setLocation(location(3222, 3218));
+  fight.forget(target);
+  arena.testPlayers = [remaining];
+  for (let i = 0; i < 15; i++) fight.tick([remaining]);
+  assert.deepEqual(hits, []);
+  assert.ok(summoned.every(npc => npc.removed));
+  assert.equal(fight.souls.length, 0);
+  assert.equal(fight.target, remaining);
+  fight.stop();
+});
+
+test('souls also reject an out-of-arena target before the leave hook runs', () => {
+  const arena = westArena(), target = fakePlayer(1240, 1244);
+  const fight = new Fight.Fight(arena, fakeNpc(5862, 1238, 1250, 300));
+  fight.summonSouls(target);
+  const summoned = fight.souls.map(soul => soul.npc);
+  target.moveTo(location(3222, 3218));
+  for (let i = 0; i < 15; i++) { fight.tickCount++; fight.tickSouls(); }
+  assert.deepEqual(target.damage, []);
+  assert.equal(fight.souls.length, 0);
+  assert.ok(summoned.every(npc => npc.removed));
+});
+
 test('lava: 10 as a pool lands under the player, then 15 every 2 ticks on it, nothing off it', () => {
   const arena = westArena();
   const fight = new Fight.Fight(arena, fakeNpc(5862, 1238, 1250, 150));

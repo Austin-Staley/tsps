@@ -33,8 +33,8 @@ function fakePlayer({ fishing = 99 } = {}) {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getSkillManager: () => ({ getMaxLevel: () => fishing, getCurrentLevel: () => fishing }),
-    getInventory: () => ({ contains: () => false }),
-    getEquipment: () => ({ contains: () => false }),
+    getInventory: () => ({ contains: () => false, getAmount: () => 0 }),
+    getEquipment: () => ({ contains: () => false, getAmount: () => 0 }),
     getBank: () => ({ contains: () => false, getAmount: () => 0, getFreeSlots: () => 800 }),
     getCurrentBankTab: () => 0,
   };
@@ -276,13 +276,66 @@ test("the crates only answer for the trawler's own: other Hammers crates fall th
 test('a full bank keeps the rest of the catch in the net', () => {
   const player = fakePlayer();
   const banked = [];
-  player.getBank = () => ({ contains: () => false, getAmount: () => 0, getFreeSlots: () => 1, add: (item) => banked.push(item.getId()) });
+  player.getBank = () => ({ contains: () => false, getAmount: () => 0,
+    getFreeSlots: () => banked.length === 0 ? 1 : 0,
+    getAddableAmount: (item) => banked.length === 0 ? item.getAmount() : 0,
+    add: (item) => banked.push(item.getId()) });
   player.getSkillManager = () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99, addExperiences: () => {} });
   player.setAttribute(Shared.REWARD_ATTRIBUTE, { items: [[317, 3], [321, 2]], xp: 10 });
   Rewards.inspectNet({ player });
   assert.deepEqual(banked, [317]);
   assert.deepEqual(player.getAttribute(Shared.REWARD_ATTRIBUTE).items, [[321, 2]]);
   assert.equal(player.messages.at(-1), Shared.message('bankFull'));
+});
+
+test('real capped stacks retain the catch and only delivered fish earn XP', t => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const p = new Player(null), xp = [];
+  t.mock.method(p, 'sendMessage', () => {});
+  t.mock.method(p.getSkillManager(), 'addExperiences', (_skill, amount) => xp.push(amount));
+  const fish = Shared.ids().fish.find(fish => fish.id === 317), bank = p.getBank(0);
+  bank.add(new core.Item(fish.id, 2147483647), false);
+  p.setAttribute(Shared.REWARD_ATTRIBUTE, { items: [[fish.id, 3]], xp: 3 * fish.xp });
+  Rewards.inspectNet({ player: p });
+  assert.deepEqual(xp, []);
+  assert.equal(bank.getAmount(fish.id), 2147483647);
+  assert.deepEqual(p.getAttribute(Shared.REWARD_ATTRIBUTE).items, [[fish.id, 3]]);
+  bank.deleted(fish.id, 1, false);
+  Rewards.inspectNet({ player: p });
+  assert.equal(bank.getAmount(fish.id), 2147483647);
+  assert.deepEqual(xp, [fish.xp]);
+  assert.deepEqual(p.getAttribute(Shared.REWARD_ATTRIBUTE).items, [[fish.id, 2]]);
+  bank.deleted(fish.id, 2, false);
+  Rewards.inspectNet({ player: p });
+  assert.equal(p.getAttribute(Shared.REWARD_ATTRIBUTE), null);
+  assert.equal(xp.reduce((sum, amount) => sum + amount, 0), 3 * fish.xp);
+  Rewards.inspectNet({ player: p });
+  assert.equal(xp.length, 2, 'collected XP cannot be earned twice');
+});
+
+test('the catch uses free slots in another real bank tab', t => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const p = new Player(null), bank = p.getBank(0);
+  t.mock.method(p, 'sendMessage', () => {});
+  t.mock.method(p.getSkillManager(), 'addExperiences', () => {});
+  bank.setItems(Array.from({ length: bank.capacity() }, (_, i) => new core.Item(10000 + i, 1)));
+  p.setAttribute(Shared.REWARD_ATTRIBUTE, { items: [[317, 3]], xp: 10 });
+  Rewards.inspectNet({ player: p });
+  assert.equal(p.getBank(1).getAmount(317), 3);
+  assert.equal(p.getAttribute(Shared.REWARD_ATTRIBUTE), null);
+});
+
+test('angler rolls finish each of two sets before repeating any piece', () => {
+  const ids = Rewards.ANGLER_PIECES.map(piece => Shared.ids().items[piece]);
+  const amounts = new Map(ids.map(id => [id, 1]));
+  for (let i = 0; i < 4; i++) {
+    const result = Rewards.rollCatch(1, 99, () => 0, id => amounts.get(id));
+    assert.equal(result.angler.length, 1);
+    const id = result.angler[0];
+    assert.equal(amounts.get(id), 1, 'no repeated piece while the second set is incomplete');
+    amounts.set(id, 2);
+  }
+  assert.deepEqual(Rewards.rollCatch(1, 99, () => 0, id => amounts.get(id)).angler, []);
 });
 
 test('balance: an idle crew sinks before the end, a steady patcher lasts the whole trip', () => {

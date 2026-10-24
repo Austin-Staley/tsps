@@ -118,7 +118,7 @@ function walkAcross(player, run) {
   const steps = Math.max(Math.abs(dx), Math.abs(dy));
   const direction = dy > 0 ? 0 : dx > 0 ? 1 : dy < 0 ? 2 : 3;
   player.getMovementQueue().reset?.();
-  TaskManager.submit(new ForceMovementTask(player, 1,
+  TaskManager.submit(new ForceMovementTask(player, Math.max(1, steps),
     new ForceMovement(new Location(at.getX(), at.getY(), at.getZ()), new Location(dx, dy), 0, 30 * steps, direction, Common.ids().anim.walk)));
 }
 
@@ -199,7 +199,7 @@ function leaveNow(player) {
 
 function leaveTomb(event) {
   if (event.objectId === Common.ids().tombExit) {
-    if (event.option === "Quick-leave") leaveNow(event.player);
+    if (event.option?.toLowerCase() === "quick-leave") leaveNow(event.player);
     else confirmLeave(event.player, Common.MESSAGES.leaveTomb);
     return true;
   }

@@ -54,6 +54,8 @@ class Fight {
 
   forget(player) {
     if (this.target === player) this.target = null;
+    for (const soul of this.souls) if (soul.target === player) Common.api.removeNpc(soul.npc);
+    this.souls = this.souls.filter((soul) => soul.target !== player);
   }
 
   tick(players) {
@@ -133,6 +135,11 @@ class Fight {
     if (this.souls.length === 0) return;
     const now = this.tickCount;
     for (const soul of this.souls) {
+      if (!soul.target?.isRegistered?.() || soul.target.getHitpoints() <= 0 || !this.arena.contains(soul.target.getLocation())) {
+        Common.api.removeNpc(soul.npc);
+        soul.goneAt = now;
+        continue;
+      }
       if (!soul.attacked && now >= soul.attackAt) {
         soul.attacked = true;
         soulAttack(soul);

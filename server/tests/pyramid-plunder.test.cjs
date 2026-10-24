@@ -421,12 +421,14 @@ test("the speartrap is armed on entry; its disarm takes the captured six ticks, 
   assert.equal(p.messages.at(-1), C.MESSAGES.trapDisarmed);
   assert.equal(p.xp.THIEVING, T.Passages.TRAP_XP, "a click during the disarm is ignored");
   flush(1);
-  assert.deepEqual(p.at, { x: trap.x, y: trap.y - 1, z: 0 }, "walked across");
+  assert.deepEqual(p.at, { x: trap.x, y: trap.y + 2, z: 0 }, "the three-tile walk is still in progress");
   assert.equal(p.varbits.get(trapVarbit), 1, "the spears are still up as the player crosses");
   flush(1);
   assert.equal(p.varbits.get(trapVarbit), 0, "down two ticks after the disarm, for the rest of the room");
-  T.Passages.passTrap(event, never);
   flush(1);
+  assert.deepEqual(p.at, { x: trap.x, y: trap.y - 1, z: 0 }, "walked across in three ticks");
+  T.Passages.passTrap(event, never);
+  flush(3);
   assert.deepEqual(p.at, { x: trap.x, y: trap.y + 2, z: 0 }, "Pass on a disarmed trap just walks back across");
   assert.equal(p.hits.length, 1);
   C.endRun(p);
@@ -556,14 +558,32 @@ test("Leave Tomb asks first, Quick-leave doesn't; time running out has the live 
   T.Passages.leaveTomb({ player: p, objectId: ids().tombExit, option: "Leave Tomb" });
   assert.equal(prompts.at(-1).title, C.MESSAGES.leaveTomb);
   assert.ok(C.sessionOf(p), "nothing happens until the player answers");
-  T.Passages.leaveTomb({ player: p, objectId: ids().tombExit, option: "Quick-leave" });
+  const beforeQuickLeave = prompts.length;
+  // ObjectActionPacketListener supplies lowercase option text.
+  T.Passages.leaveTomb({ player: p, objectId: ids().tombExit, option: "quick-leave" });
   assert.equal(C.sessionOf(p) ?? null, null);
+  assert.equal(prompts.length, beforeQuickLeave);
 
   const q = player({ thieving: 21 });
   T.Entrance.tryStart(q, () => 0);
   C.endRun(q, { timedOut: true });
   assert.equal(q.messages.at(-1), C.MESSAGES.timeUp);
   assert.equal(q.dialogues.length, 1, "the Guardian mummy's line");
+});
+
+test("the forced trap walk lasts as long as its client movement", () => {
+  const trap = C.roomData(1).trap;
+  const at = trap.horizontal ? { x: trap.x - 1, y: trap.y, z: 0 } : { x: trap.x, y: trap.y - 1, z: 0 };
+  const p = player({ at });
+  const destination = T.Passages.crossingTile(trap, at);
+  T.Passages.walkAcross(p, { room: 1 });
+  assert.ok(p.forced);
+  flush(1);
+  assert.deepEqual(p.at, at, "one tick cannot complete a three-tile walk");
+  assert.ok(p.forced);
+  flush(2);
+  assert.deepEqual(p.at, { ...destination, z: 0 });
+  assert.equal(p.forced, null);
 });
 
 test("ending a run with a mummy or swarm out tells the player they go", () => {
