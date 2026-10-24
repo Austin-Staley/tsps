@@ -182,7 +182,8 @@ export class DamageFormulas {
         let maxHit = 0;
         const spell = spellOverride ?? c.getCombat().getSelectedSpell();
 
-        if (spell && spell.maximumHit() > 0) {
+        if (spell && Number.isFinite(spell.maximumHit()) && spell.maximumHit() >= 0) {
+            // An explicit zero is a real spell maximum, not a missing definition.
             maxHit = spell.maximumHit();
         } else if (c.isNpc()) {
             maxHit = c.getAsNpc().getCurrentMaxHit(CombatType.MAGIC);
