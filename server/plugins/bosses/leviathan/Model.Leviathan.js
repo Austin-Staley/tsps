@@ -1,11 +1,11 @@
 const TIERS = [
-  { interval: 3, styles: ["magic", "ranged"], flight: 4 },
-  { interval: 2, styles: ["magic", "ranged"], flight: 4 },
-  { interval: 2, styles: ["magic", "ranged", "melee"], flight: 4 },
-  { interval: 1, styles: ["magic", "ranged"], flight: 3 },
-  { interval: 1, styles: ["magic", "ranged", "melee"], flight: 3 },
-  { interval: 1, styles: ["magic", "ranged", "melee"], flight: 2 },
-  { interval: 1, styles: ["magic", "ranged", "melee"], flight: 1 },
+  { interval: 3, shots: 6, styles: ["magic", "ranged"], flight: 5 },
+  { interval: 2, shots: 8, styles: ["magic", "ranged"], flight: 5 },
+  { interval: 2, shots: 8, styles: ["magic", "ranged", "melee"], flight: 4 },
+  { interval: 1, shots: 12, styles: ["magic", "ranged"], flight: 3 },
+  { interval: 1, shots: 12, styles: ["magic", "ranged", "melee"], flight: 3 },
+  { interval: 1, shots: 12, styles: ["magic", "ranged", "melee"], flight: 2 },
+  { interval: 1, shots: 12, styles: ["magic", "ranged", "melee"], flight: 1 },
 ];
 const volley = tier => TIERS[Math.max(0, Math.min(6, tier))];
 const resetTier = stuns => Math.min(6, Math.max(1, stuns));

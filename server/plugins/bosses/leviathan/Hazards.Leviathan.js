@@ -99,15 +99,19 @@ class Hazards {
   }
   spawnPathfinder() {
     const corners = Common.data.arena.pathCorners;
-    this.pathIndex = corners.findIndex(tile => this.open(tile));
+    this.pathIndex = corners.findIndex(([cx, cy]) => {
+      for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++)
+        if (!this.open([x, y])) return false;
+      return true;
+    });
     if (this.pathIndex < 0) this.pathIndex = 0;
     this.pathCentre = [...corners[this.pathIndex]];
     this.pathfinder = this.session.spawn(Common.ids.npcs.pathfinder, [this.pathCentre[0] - 1, this.pathCentre[1] - 1]);
     this.pathfinder?.setScriptedMovement(true);
     this.pathfinder?.setFlag(Common.core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
-    this.pathNext = null;
+    this.pathNext = this.pathReady() ? this.fight.tick + Common.data.inferred.pathStartTicks : null;
     this.pathDestination = (this.pathIndex + 1) % corners.length;
-    this.pathfinder?.performGraphic(Common.graphic("aura"));
+    if (this.pathfinder) Common.animate(this.pathfinder, 'pathfinderSpawn');
   }
   pathReady() { return !!this.pathfinder?.isRegistered?.(); }
   inAura() { return this.pathReady() && Model.inAura(this.pathCentre, this.playerTile(), this.fight.awakened); }
@@ -147,15 +151,17 @@ class Hazards {
   process() {
     const fight = this.fight;
     if (this.pathReady()) {
-      if (this.pathNext === null) this.pathNext = fight.tick + Common.data.inferred.pathStepTicks;
+      if (this.pathNext === null) this.pathNext = fight.tick + Common.data.inferred.pathStartTicks;
       if (fight.tick >= this.pathNext) {
         const target = Common.data.arena.pathCorners[this.pathDestination];
-        this.pathCentre = this.stepToward(this.pathCentre, target);
+        // The ethereal NPC crosses existing debris in original normal recordings.
+        // Collision is relevant to selecting its initial footprint, not its route.
+        this.pathCentre = this.pathCentre.map((value, index) => value + Math.sign(target[index] - value));
         if (Model.key(this.pathCentre) === Model.key(target)) this.pathDestination = (this.pathDestination + 1) % 4;
         this.pathfinder.exactMove(this.session.tile([this.pathCentre[0] - 1, this.pathCentre[1] - 1]));
         this.pathNext = fight.tick + Common.data.inferred.pathStepTicks;
       }
-    }
+    } else this.pathNext = null;
     if (fight.awakened && fight.boss.getHitpoints() <= fight.stats.hitpoints / 2) this.spawnTornado();
     if (this.tornado && fight.tick >= this.tornadoNext) {
       this.tornadoTile = this.stepToward(this.tornadoTile, this.playerTile());

@@ -8,7 +8,7 @@ class Fight {
     this.session = session; this.player = session.player; this.awakened = session.awakened;
     this.stats = Common.data[this.awakened ? "awakened" : "normal"];
     this.normalKillsAtStart = Common.normalKills(this.player);
-    this.tick = 0; this.events = []; this.pendingDamage = new Set(); this.tier = 0; this.shots = 0; this.stuns = 0;
+    this.tick = 0; this.events = []; this.pendingDamage = new Set(); this.tier = 0; this.shots = 0; this.stuns = 0; this.volleyEpoch = 0;
     this.stunnedUntil = 0; this.special = null; this.nextSpecial = Common.pick(["lightning", "smoke"]);
     this.enraged = false; this.perfect = true; this.over = false; this.stopped = false;
     this.rewarded = false; this.nextAttack = Common.data.inferred.firstAttackTicks;
@@ -42,6 +42,10 @@ class Fight {
     this.boss.getCombat().getLastAttack().reset();
     if (!this.enraged && this.boss.getHitpoints() <= this.stats.hitpoints * 0.2) this.enterEnrage();
     this.hazards.process();
+    if (this.enraged && this.tick >= this.nextEnrageDebris) {
+      this.hazards.roar();
+      this.nextEnrageDebris = this.tick + 8;
+    }
     Common.api.emitCustomEvent("boss-hud:update", { player: this.player, current: this.boss.getHitpoints() });
     if (this.stunnedUntil) {
       if (this.tick < this.stunnedUntil) return;
@@ -56,21 +60,28 @@ class Fight {
       this.nextAttack = this.tick + (this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval);
       return;
     }
-    const pattern = this.enraged ? { interval: this.stats.enrageInterval, styles: ["magic", "ranged"], flight: 2 } : Model.volley(this.tier);
+    const pattern = this.enraged ? { interval: this.stats.enrageInterval, styles: ["magic", "ranged"], flight: 5 } : Model.volley(this.tier);
     this.orb(Common.pick(pattern.styles), pattern.flight);
     this.nextAttack = this.tick + pattern.interval;
-    if (++this.shots >= Common.data.inferred.volleyShots) {
+    if (!this.enraged && ++this.shots >= pattern.shots) {
       this.shots = 0;
-      this.roar();
-      if (!this.enraged) {
-        this.tier = Math.min(6, this.tier + 1);
-        this.nextAttack += Common.data.inferred.roarGapTicks;
-      }
+      const epoch = this.volleyEpoch;
+      this.at(pattern.interval, () => {
+        if (!this.alive() || this.volleyEpoch !== epoch || this.enraged || this.stunnedUntil || this.special) return;
+        this.roar(); this.tier = Math.min(6, this.tier + 1);
+      });
+      this.nextAttack += 5;
     }
   }
   orb(style, flight) {
     if (!this.alive()) return;
-    Common.animate(this.boss, "orb"); Common.projectile(this, style, flight);
+    const interval = this.enraged ? this.stats.enrageInterval : Model.volley(this.tier).interval;
+    Common.animate(this.boss, interval > 1 || !this.shots ? "orbStart" : "orbLoop");
+    Common.projectile(this, style, flight);
+    const epoch = this.volleyEpoch;
+    if (interval > 1) this.at(1, () => {
+      if (this.alive() && this.volleyEpoch === epoch && !this.stunnedUntil && !this.special) Common.animate(this.boss, "orb");
+    });
     this.at(flight, () => {
       if (!this.alive()) return;
       this.player.performGraphic(Common.graphic(`${style}Impact`));
@@ -80,13 +91,15 @@ class Fight {
   }
   roar() {
     if (!this.alive()) return;
+    this.volleyEpoch++;
     Common.animate(this.boss, "roar");
-    Common.damage(this, Common.random(0, Common.data.damage.roar), false);
+    this.at(1, () => { if (this.alive()) Common.damage(this, Common.random(0, Common.data.damage.roar), false); });
     this.hazards.roar();
   }
   stun() {
     if (!this.alive() || this.enraged || this.special || this.stunnedUntil > this.tick) return false;
     this.stuns++;
+    this.volleyEpoch++;
     this.stunFace = Model.facing(Common.data.arena.centre, this.hazards.playerTile());
     this.stunHealth = this.boss.getHitpoints();
     this.stunnedUntil = this.tick + this.stats.stunTicks;
@@ -106,11 +119,13 @@ class Fight {
   }
   enterEnrage() {
     this.enraged = true; this.stunnedUntil = 0; this.shots = 0;
+    this.volleyEpoch++;
     // Smoke already in progress must resolve. Other outstanding impacts remain in flight.
     if (this.special !== "smoke") this.special = null;
-    this.hazards.spawnPathfinder();
+    this.at(3, () => { if (this.alive()) this.hazards.spawnPathfinder(); });
     this.roar();
-    this.nextAttack = this.tick + this.stats.enrageInterval;
+    this.nextEnrageDebris = this.tick + 8;
+    this.nextAttack = this.tick + 5;
     this.player.sendMessage("The Leviathan focuses on you. Stay within the abyssal pathfinder's aura!");
   }
   afterDamage(taken, rear) {

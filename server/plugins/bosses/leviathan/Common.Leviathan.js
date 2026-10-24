@@ -71,9 +71,14 @@ function protectedFrom(player, style) {
 }
 function projectile(fight, style, flight) {
   const { Projectile } = core;
+  const [cx, cy] = data.arena.centre, [px, py] = fight.hazards.playerTile();
+  // Original NPC packets select a mouth on the side(s) outside the 7x7 body,
+  // rather than starting every orb at the NPC's ground-level centre.
+  const mouth = [cx + (Math.abs(px - cx) > 3 ? Math.sign(px - cx) * 2 : 0),
+    cy + (Math.abs(py - cy) > 3 ? Math.sign(py - cy) * 2 : 0)];
   fight.boss.performGraphic(graphic(`${style}Launch`));
-  new Projectile(Projectile.centreOf(fight.boss), Projectile.centreOf(fight.player), fight.player,
-    ids.gfx[style], 0, flight * 30, 60, 20, fight.session.area).withSource(fight.boss).sendProjectile();
+  new Projectile(fight.session.tile(mouth), Projectile.centreOf(fight.player), fight.player,
+    ids.gfx[style], 30, flight * 30, 137.5, 25, fight.session.area).withAngle(30).withProgress(124).sendProjectile();
 }
 function shadowSpell(spell) {
   return ["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"].some(name =>

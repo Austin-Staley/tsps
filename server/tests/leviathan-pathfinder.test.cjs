@@ -90,7 +90,7 @@ test('unregistered pathfinder grants no aura, preserves protection and does not 
   assert.equal(accurate(), true);
   h.step();
   assert.deepEqual(hazards.pathCentre, initial);
-  h.step(h.Common.data.inferred.pathStepTicks);
+  h.step(h.Common.data.inferred.pathStartTicks);
   assert.notDeepEqual(hazards.pathCentre, initial);
 });
 
@@ -103,7 +103,7 @@ test('registered movement retains clockwise corner order and authored step caden
   const interval = h.Common.data.inferred.pathStepTicks;
   h.step();
   assert.deepEqual(hazards.pathCentre, initial);
-  h.step(interval);
+  h.step(h.Common.data.inferred.pathStartTicks - 1);
   assert.notDeepEqual(hazards.pathCentre, initial);
   let previous = [...hazards.pathCentre], lastMove = fight.tick;
   for (let count = 0; count < 45 && hazards.pathDestination === 1; count++) {
@@ -115,4 +115,28 @@ test('registered movement retains clockwise corner order and authored step caden
   }
   assert.deepEqual(hazards.pathCentre, corners[1]);
   assert.equal(hazards.pathDestination, 2, 'north-east advances clockwise toward south-east');
+});
+
+test('recorded pathfinder bases, footprint-blocked spawn and three-tick first step match normal mode', t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  hazards.place([2076, 6378]);
+  hazards.spawnPathfinder();
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6377, 0]);
+  h.step(2);
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6377, 0]);
+  h.step();
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6376, 0]);
+  h.step();
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2086, 6375, 0]);
+});
+
+test('recorded ethereal pathfinder crosses debris in its route without a collision detour', t => {
+  const h = H.harness(t), hazards = h.fight.hazards;
+  h.fight.nextAttack = Infinity;
+  hazards.place([2077, 6378]);
+  hazards.spawnPathfinder();
+  assert.deepEqual(h.session.sourceTile(hazards.pathfinder.getLocation()), [2074, 6377, 0]);
+  h.step(4);
+  assert.deepEqual(hazards.pathCentre, [2077, 6378]);
 });

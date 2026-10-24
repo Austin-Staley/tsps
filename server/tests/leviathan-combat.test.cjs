@@ -35,7 +35,7 @@ test('roar chip does not spoil perfection; debris can be dodged and blocks its t
   h.fight.nextAttack = Infinity;
   t.mock.method(Math, 'random', () => 0.999);
   h.fight.roar();
-  h.apply();
+  h.step();
   assert.equal(h.p.getHitpoints(), 92);
   assert.equal(h.fight.perfect, true);
   const old = h.session.sourceTile(h.p.getLocation());
@@ -76,7 +76,7 @@ test('enrage has a moving 5x5 aura, impact prayer piercing outside and no shadow
   t.mock.method(Math, 'random', () => random);
   h.fight.nextAttack = Infinity;
   h.fight.boss.setHitpoints(180);
-  h.step();
+  h.step(4);
   h.fight.nextAttack = Infinity;
   assert.equal(h.fight.enraged, true);
   assert.ok(h.fight.hazards.pathfinder);
@@ -106,7 +106,7 @@ test('enrage maintains its two-tick cadence across debris volleys', t => {
   h.move([2074, 6379]);
   const launches = [];
   t.mock.method(h.fight, 'orb', () => launches.push(h.fight.tick));
-  h.step(22);
+  h.step(26);
   assert.ok(launches.length >= 10);
   for (let i = 1; i < launches.length; i++) assert.equal(launches[i] - launches[i - 1], 2);
 });
