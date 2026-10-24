@@ -88,6 +88,9 @@ export type WidgetOverlayDrawContext = {
     place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
 };
 
+/** A right-click entry on an overlay: "<option> <target>". */
+export type OverlayMenuEntry = { option: string; target: string; onClick(): void };
+
 /** An NPC model outline a plugin asks for: colour 0xRRGGBB, alpha 0-1, width in pixels. */
 export type NpcOutline = { ecsId: number; serverId: number; color: number; alpha: number; width: number };
 
@@ -110,6 +113,11 @@ export interface WidgetOverlay {
      * that interfaces should cover.
      */
     drawBelowWidgets?: boolean;
+    /**
+     * Right-click entries while the mouse is over this movable overlay (RuneLite's
+     * OverlayMenuEntry), e.g. "Configure XP Globes overlay".
+     */
+    menuEntries?(): OverlayMenuEntry[];
     /**
      * Makes it a RuneLite movable overlay: Alt-drag moves it, Alt + right-click resets it. The
      * name keys its saved position (RuneLite's overlay class name); position is its default
