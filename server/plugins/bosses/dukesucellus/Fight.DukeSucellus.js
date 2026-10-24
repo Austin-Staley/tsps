@@ -2,6 +2,8 @@
 const C=require('./Common.DukeSucellus');
 const M=require('./Model.DukeSucellus');
 const Records=require('./Records.DukeSucellus');
+const Hazards=require('./Hazards.DukeSucellus');
+const Preparation=require('./Preparation.DukeSucellus');
 class Fight {
   constructor(session,boss) {
     this.session=session; this.player=session.player; this.boss=boss;
@@ -16,9 +18,12 @@ class Fight {
   wake() {
     if(this.active || !this.valid()) return;
     this.active=true; this.started=C.core.World.getProcessCycle(); this.events=[];
+    Hazards.clear(this);
+    Preparation.refresh(this.session);
     this.boss.setNpcTransformationId(C.data.npcs.awake);
     this.boss.setCombatOverride({stats:C.data.normal.stats});
     this.boss.setMaxHitpoints(C.data.normal.hitpoints); this.boss.setHitpoints(C.data.normal.hitpoints);
+    this.boss.setDisplayedHealth(null);this.boss.removeHeadbar(C.data.meters.poison.id);
     this.boss.performAnimation(new C.core.Animation(C.data.animations.wake));
     this.boss.setAttribute(C.DEMONBANE,.7);
     this.nextAttack=this.session.tick+C.data.timing.wake;
@@ -39,8 +44,10 @@ class Fight {
     C.api.emitCustomEvent('boss-hud:update',{player:this.player,current:this.boss.getHitpoints()});
     if(this.session.tick<this.nextAttack) return;
     const action=this.clock.next(this.boss.getHitpoints());
+    const attackTicks=M.attackTicks(this.boss.getHitpoints());
     if(action==='gaze') this.gaze(); else if(action==='gas') this.gas(); else this.auto();
-    this.nextAttack=this.session.tick+(action==='gaze'?C.data.timing.gaze:M.attackTicks(this.boss.getHitpoints()));
+    const delay=action==='gaze'?C.data.timing.gaze:action==='gas'?(M.gasCount(this.boss.getHitpoints())-1)*C.data.timing.gasSpitInterval+attackTicks-1:attackTicks;
+    this.nextAttack=this.session.tick+delay;
   }
   auto() {
     this.lastAttackCycle=C.core.World.getProcessCycle();
@@ -49,13 +56,10 @@ class Fight {
     this.boss.setPositionToFace(this.player.getLocation());
     if(M.melee(target)) {
       this.boss.performAnimation(new C.core.Animation(a.melee));
-      this.at(t.chip,()=>{
-        if(!M.near(C.source(this.session,this.player.getLocation()),target)) return;
-        C.graphic(this.session,g.chip,target);
-        C.strike(this,'melee',C.protectedFrom(this.player,'PROTECT_FROM_MELEE')?n.protectedChip:n.chip,{accurate:false,avoidable:false});
-      });
+      this.boss.performGraphic(new C.core.Graphic(g.meleeBody));
+      g.meleeRow.forEach((id,index)=>C.graphic(this.session,id,[3036+index,6451]));
+      C.strike(this,'melee',C.protectedFrom(this.player,'PROTECT_FROM_MELEE')?n.protectedChip:n.chip,{accurate:false,avoidable:false});
       this.at(t.slam,()=>{
-        C.graphic(this.session,g.slam,target);
         // The damaging slam is the aimed tile, not the chip's surrounding 3x3.
         if(M.near(C.source(this.session,this.player.getLocation()),target,0) && !M.hidden(target))
           C.strike(this,'melee',C.protectedFrom(this.player,'PROTECT_FROM_MELEE')?n.protectedSlam:n.slam);
@@ -63,7 +67,7 @@ class Fight {
     } else {
       this.boss.performAnimation(new C.core.Animation(a.magic));
       const at=this.player.getLocation().clone();
-      this.player.getPacketSender().sendProjectile(this.boss.getLocation(),at,0,40,g.magicProjectile,36,20,this.player,0,32,64,this.boss);
+      this.player.getPacketSender().sendProjectile(this.session.tile([3039,6453]),at,0,120,g.magicProjectile,87.5,25,this.player,50,5,32,null);
       this.at(t.magic,()=>{
         this.player.performGraphic(new C.core.Graphic(g.magicImpact));
         C.strike(this,'magic',C.protectedFrom(this.player,'PROTECT_FROM_MAGIC')?n.protectedMagic:n.magic,{evenZero:true});
@@ -73,59 +77,39 @@ class Fight {
   gaze() {
     this.lastAttackCycle=C.core.World.getProcessCycle();
     this.boss.performAnimation(new C.core.Animation(C.data.animations.gaze));
+    const overlay=C.data.gazeOverlay;
+    this.player.getPacketSender().sendSubInterface((overlay.targetGroup<<16)|overlay.targetComponent,overlay.group,1);this.gazeVisible=true;
     this.player.sendMessage('Duke Sucellus turns his gaze upon you...');
     this.at(C.data.timing.gazeWarning,()=>{
+      this.hideGaze();
       if(M.hidden(C.source(this.session,this.player.getLocation()))) this.player.sendMessage("You manage to avoid Duke Sucellus' gaze.");
       else C.hurt(this,C.data.normal.gaze);
     });
   }
-  ignite(tile,delay=C.data.timing.gasWarning) {
-    C.graphic(this.session,C.data.graphics.gasSpawn,tile);
-    for(let tick=0;tick<C.data.timing.gasDuration;tick++) this.at(delay+tick,()=>{
-      C.graphic(this.session,C.data.graphics.gasIdle,tile);
-      if(M.near(C.source(this.session,this.player.getLocation()),tile)) {
-        C.hurt(this,C.faceCovered(this.player)?4:12);
-        C.drainPrayer(this.player,4);
-      }
-    });
-    this.at(delay+C.data.timing.gasDuration,()=>C.graphic(this.session,C.data.graphics.gasEnd,tile));
+  hideGaze() {
+    if(!this.gazeVisible)return;
+    this.gazeVisible=false;
+    const overlay=C.data.gazeOverlay,sender=this.player.getPacketSender();
+    if(sender.isSubInterfaceOpen(overlay.group)===true)sender.closeSubInterface((overlay.targetGroup<<16)|overlay.targetComponent);
+  }
+  ignite(tile) {
+    Hazards.gas(this,tile,false);
   }
   gas() {
     const amount=M.gasCount(this.boss.getHitpoints());
-    for(let i=0;i<amount;i++) this.at(i*2,()=>{
+    const spit=()=>{
       this.lastAttackCycle=C.core.World.getProcessCycle();
+      this.boss.performAnimation(new C.core.Animation(C.data.animations.gas));
       const here=C.source(this.session,this.player.getLocation());
       const vents=[...C.data.vents].sort((a,b)=>Math.hypot(a[0]-here[0],a[1]-here[1])-Math.hypot(b[0]-here[0],b[1]-here[1]));
+      this.player.getPacketSender().sendProjectile(this.session.tile([3039,6453]),this.session.tile(vents[0]),0,90,C.data.graphics.gasProjectile,87.5,0,null,20,5,32,null);
       this.ignite(vents[0]);
-    });
+    };
+    spit();
+    for(let i=1;i<amount;i++) this.at(i*C.data.timing.gasSpitInterval,spit);
   }
   preparationHazards() {
-    const {timing:t}=C.data, tick=this.session.tick;
-    if(tick===0 || tick%t.prepCycle!==0) return;
-    const column=(Math.floor(tick/t.prepCycle)-1)%3;
-    for(const vent of C.data.vents.filter(v=>v[0]===3036+3*column)) this.ignite(vent);
-    const ordinal=(Math.floor(tick/t.prepCycle)-1)%3;
-    for(const eye of [C.data.extremities[ordinal],C.data.extremities[ordinal+3]]) {
-      const object=this.session.place(eye.id+3,eye.tile,eye.face);
-      this.at(t.eyeWarning,()=>{
-        const [x,y]=C.source(this.session,this.player.getLocation());
-        const inFront=eye.face===3?x>=3030&&x<=3032:x>=3046&&x<=3048;
-        if(inFront && Math.abs(y-(eye.tile[1]+1))<=1) {
-          C.hurt(this,70); C.drainPrayer(this.player,Math.floor(this.player.getSkillManager().getCurrentLevel(C.core.Skill.PRAYER)/4));
-          this.player.getTimers().registers(C.core.TimerKey.FREEZE,5);
-        }
-        this.session.place(eye.id,eye.tile,eye.face);
-      });
-    }
-    const here=C.source(this.session,this.player.getLocation());
-    if((here[0]===3031||here[0]===3032||here[0]===3046||here[0]===3047) && here[1]>=6439 && here[1]<=6452) {
-      const aim=[...here];
-      // Duke's own icicle effect gives the marked tile a visible preparation warning.
-      C.graphic(this.session,C.data.graphics.chip,aim);
-      this.at(t.iceWarning,()=>{ if(M.near(C.source(this.session,this.player.getLocation()),aim,0)) {
-        C.hurt(this,18); this.player.getTimers().registers(C.core.TimerKey.FREEZE,2);
-      }});
-    }
+    Hazards.preparation(this);
   }
   fell() {
     if(this.over || this.stopped || !this.active) return;
@@ -133,6 +117,8 @@ class Fight {
     const task={player:this.player,npc:this.boss,onTask:false}; C.api.emitCustomEvent('slayer:on-task',task);
     this.completedOnSlayerTask=task.onTask;
     this.over=true; this.events=[]; C.cancelPending(this);
+    this.hideGaze();
+    Hazards.clear(this);
     this.coldFeetEligible=this.perfect && !this.session.ranSinceKill;
     this.session.ranSinceKill=false;
     this.finishedTicks=Math.max(1,C.core.World.getProcessCycle()-this.started);
@@ -160,11 +146,16 @@ class Fight {
     this.boss.setNpcTransformationId(C.data.npcs.dead);
     C.api.emitCustomEvent('boss-hud:hide',{player:this.player,fade:false,afterTicks:0});
   }
-  stop() { this.stopped=true; this.events=[]; C.cancelPending(this); }
+  stop() { this.stopped=true; this.events=[]; C.cancelPending(this);this.hideGaze(); }
 }
 const fightOf=npc=>npc?.__dukeSucellusFight;
 function beforeDeath({npc}) { fightOf(npc)?.fell(); }
-function death({npc,killer}) { fightOf(npc)?.won(killer); }
+function death(event) {
+  const f=fightOf(event.npc);
+  f?.won(event.killer);
+  if(f?.wonAlready && f.player===event.killer && !f.stopped && !f.session.ended)
+    event.remains={ticks:Math.max(1,f.respawnAt-f.session.tick),respawnTicks:0};
+}
 function playerAttack({attacker,target}) {
   const f=fightOf(target);
   if(f && f.boss===target && attacker===f.player && f.active && !f.over && !f.stopped && !f.session.ended && f.session.fight===f && f.lastAttackCycle!==C.core.World.getProcessCycle()) f.mirror=false;

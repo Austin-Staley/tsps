@@ -35,6 +35,7 @@ test('quest gate, real private area, owner-only combat and exit cleanup',t=>{
   h.add(h.C.data.items.awakenerOrb); h.add(h.C.data.items.poison,2);
   h.move([3039,6451]);
   h.Prep.feed({player:h.p,npc:s.boss});h.Prep.feed({player:h.p,npc:s.boss});
+  h.step();
   assert.equal(s.boss.getHitpoints(),485);assert.equal(s.area.canAttack(h.p,s.boss),true);
   assert.equal(s.area.canAttack({},s.boss),false);
   assert.equal(h.p.getInventory().getAmount(h.C.data.items.awakenerOrb),1);
@@ -69,6 +70,7 @@ test('powder yield, atomic vat fermentation and two doses wake exactly once',t=>
   h.Prep.collect(s,[3034,6438]);assert.equal(h.p.getInventory().getAmount(i.poison),1);
   h.add(i.poison,2);h.move([3039,6451]);
   for(let n=0;n<3;n++)h.Prep.feed({player:h.p,npc:s.boss});
+  h.step();
   assert.equal(h.p.getInventory().getAmount(i.poison),1);assert.equal(s.meter,200);
   assert.equal(s.fight.active,true);
 });
@@ -103,10 +105,11 @@ test('eight-pick patches reset on awakening, supplies survive kills and vanish b
   assert.equal(h.p.getInventory().getAmount(i.arder),8);
   h.add(i.poison,3);h.move([3039,6451]);
   h.Prep.feed({player:h.p,npc:s.boss});h.Prep.feed({player:h.p,npc:s.boss});
+  h.step();
   assert.equal(s.picks.arder,0);
   const first=s.fight;first.fell();first.won(h.p);
   assert.equal(h.p.getAttribute(h.C.KILLS),1);assert.equal(s.perfectKills,1);
-  h.step(20);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
+  h.step(24);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
   assert.equal(h.p.getInventory().getAmount(i.poison),1);
   assert.equal(h.p.getInventory().getAmount(i.arder),8);
   h.Site.beforePlayerDeath({player:h.p});assert.equal(h.p.getInventory().getAmount(i.poison),0);
@@ -143,7 +146,7 @@ test('actual NPC death task records once and respawns an asleep encounter',t=>{
   const first=s.fight;s.boss.getCombat().addDamage(h.p,1);s.boss.setHitpoints(0);
   h.step(10);assert.equal(first.over,true);assert.equal(first.wonAlready,true);
   assert.equal(h.p.getAttribute(h.C.KILLS),1);
-  h.step(11);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
+  h.step(15);assert.notEqual(s.fight,first);assert.equal(s.fight.active,false);
   assert.equal(s.boss.getContentId(h.p),12167);assert.equal(s.perfectKills,1);
 });
 test('source speed achievements use lethal time and are excluded on a Slayer task',t=>{

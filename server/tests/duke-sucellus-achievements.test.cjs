@@ -34,13 +34,13 @@ test('avoidable preparation damage fails Cold Feet, including with no running',t
 test('running after the kill but before respawn belongs to the following Cold Feet attempt',t=>{
   const h=H.harness(t),s=h.enter();finish(h);const before=awards(h).filter(x=>x==='Cold Feet').length;
   h.p.setRunningDirection(h.core.Direction.EAST);s.area.process(h.p);h.p.setRunningDirection(h.core.Direction.NONE);
-  h.step(20);finish(h);assert.equal(awards(h).filter(x=>x==='Cold Feet').length,before);
+  h.step(24);finish(h);assert.equal(awards(h).filter(x=>x==='Cold Feet').length,before);
 });
 test('Cold Feet freezes at lethal damage and running during the death animation affects only the next kill',t=>{
   const h=H.harness(t),s=h.enter();wake(h);const first=h.fight;first.fell();
   h.p.setRunningDirection(h.core.Direction.EAST);s.area.process(h.p);h.p.setRunningDirection(h.core.Direction.NONE);
   h.step(4);first.won(h.p);assert.equal(awards(h).filter(x=>x==='Cold Feet').length,1);
-  h.step(16);finish(h);assert.equal(awards(h).filter(x=>x==='Cold Feet').length,1);
+  h.step(20);finish(h);assert.equal(awards(h).filter(x=>x==='Cold Feet').length,1);
 });
 test('Mirror Image compares player attack launch with Duke launch, not a delayed impact',t=>{
   const h=H.harness(t);h.enter();wake(h);h.fight.auto();
@@ -58,7 +58,7 @@ test('a missed off-cycle attack fails Mirror Image; the next encounter starts cl
 test('gaze and actual scheduled gas launches are attack starts; impacts are not new attacks',t=>{
   const h=H.harness(t),s=h.enter();wake(h);h.fight.gaze();attack(h);finish(h);
   assert.ok(awards(h).includes('Mirror Image'));
-  const before=awards(h).filter(x=>x==='Mirror Image').length;s.reset();wake(h);h.fight.gas();h.step();attack(h);finish(h);
+  const before=awards(h).filter(x=>x==='Mirror Image').length;s.reset();wake(h);s.boss.setHitpoints(200);h.fight.gas();attack(h);h.step(3);attack(h);finish(h);
   assert.equal(awards(h).filter(x=>x==='Mirror Image').length,before+1);
 });
 test('NPC thrall attacks cannot fail the owner Mirror Image restriction',t=>{

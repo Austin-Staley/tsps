@@ -36,7 +36,7 @@ class Session {
   constructor(player) {
     this.player=player; this.area=new (areaClass())(); this.area.session=this;
     this.ended=false; this.tick=0; this.perfectKills=0; this.ranSinceKill=false; this.vats=new Map(); this.tools=new Set();
-    this.picks={arder:0,musca:0}; this.meter=0; this.action=null;
+    this.picks={arder:0,musca:0}; this.meter=0; this.action=null;this.passive=new Set();this.passiveExpiry=new Map();
     const i=C.data.instance;
     for(let x=0;x<i.width;x++) for(let y=0;y<i.height;y++) this.area.setChunk(0,x,y,{sourceChunkX:i.sourceChunkX+x,sourceChunkY:i.sourceChunkY+y,sourcePlane:0,rotation:0});
   }
@@ -44,6 +44,17 @@ class Session {
   place(id,at,rotation=0) {
     const object=new C.core.GameObject(id,this.tile(at),10,rotation,this.area);
     C.core.ObjectManager.register(object,true); return object;
+  }
+  spawnPassive(id,tile,face=0) {
+    const at=this.tile(tile),npc=C.api.spawnNpc({id,x:at.getX(),y:at.getY(),z:at.getZ(),owner:this.player,wanderRadius:0,face});
+    if(!npc)return null;
+    npc.__skipDefaultRespawn=true;npc.setScriptedMovement(true);npc.setUntargetable(true);npc.setFlag('combat:no-retaliate');
+    this.area.add(npc);this.passive.add(npc);return npc;
+  }
+  removePassive(npc) {
+    if(!npc||!this.passive.delete(npc))return;
+    this.passiveExpiry.delete(npc);
+    this.area.detach(npc);C.api.removeNpc(npc);
   }
   setExit(active) {
     const object=new C.core.GameObject(active?C.data.site.escape:C.data.site.leave,this.tile(C.data.site.gate),0,3,this.area);
@@ -60,14 +71,16 @@ class Session {
     this.boss.setScriptedMovement(true); this.boss.setNpcTransformationId(C.data.npcs.asleep);
     this.boss.setMaxHitpoints(C.data.normal.meter); this.boss.setHitpoints(C.data.normal.meter);
     this.area.add(this.boss);
-    this.meter=0; this.fight=new Fight(this,this.boss); this.boss.__dukeSucellusFight=this.fight;
+    this.meter=0;this.wakeAt=null; this.fight=new Fight(this,this.boss); this.boss.__dukeSucellusFight=this.fight;
     this.setExit(false); Preparation.refresh(this);
   }
   process() {
     if(this.ended) return;
     if(!this.player.isRegistered()) { this.end(); return; }
     if(this.player.getHitpoints()<=0) { this.fight?.stop(); return; }
-    this.tick++; Preparation.process(this); this.fight?.process();
+    this.tick++;
+    for(const [npc,due] of this.passiveExpiry)if(this.tick>=due)this.removePassive(npc);
+    Preparation.process(this); this.fight?.process();
   }
   end() {
     if(this.ended) return;
@@ -76,6 +89,7 @@ class Session {
     C.api.emitCustomEvent('boss-hud:hide',{player:this.player,fade:false,afterTicks:0});
     if(this.player.getPrivateArea()===this.area) this.area.remove(this.player);
     if(this.boss) { this.area.detach(this.boss); C.api.removeNpc(this.boss); }
+    for(const npc of [...this.passive])this.removePassive(npc);
     if(!this.area.isDestroyed()) this.area.destroy();
   }
 }

@@ -15,8 +15,14 @@ function harness(t) {
   const Site=require('../../plugins/bosses/dukesucellus/Site.DukeSucellus');
   const Prep=require('../../plugins/bosses/dukesucellus/Preparation.DukeSucellus');
   const hooks=new Map(), custom=new Map(), tasks=[], spawned=[], packets=[], messages=[], emitted=[];
-  const p=new Player(null); p.setUsername('duke-regression');
-  const sender=new Proxy({}, {get:(_,name)=>(...args)=>{packets.push([name,...args]); return sender;}});
+  const p=new Player(null); p.setUsername('duke-regression');p.setIndex(1);
+  const mounted=new Map();
+  const sender=new Proxy({}, {get:(_,name)=>(...args)=>{
+    if(name==='isSubInterfaceOpen')return [...mounted.values()].includes(args[0]);
+    if(name==='sendSubInterface')mounted.set(args[0],args[1]);
+    if(name==='closeSubInterface')mounted.delete(args[0]);
+    packets.push([name,...args]); return sender;
+  }});
   p.getPacketSender=()=>sender; p.sendMessage=text=>messages.push(text);
   p.isRegistered=()=>true; p.busy=()=>false; p.performAnimation=()=>{};
   p.performGraphic=()=>{}; p.performGraphicInSlot=()=>{}; p.addTickHit=()=>{};
@@ -35,6 +41,7 @@ function harness(t) {
   },{get:(api,name)=>api[name]??on(name)});
   t.mock.method(core.World,'getProcessCycle',()=>cycle);
   t.mock.method(core.TaskManager,'submit',task=>{task.setRunning(true);tasks.push(task);});
+  t.mock.method(core.TaskManager,'cancelTasks',key=>{for(const task of tasks)if(task.key===key)task.stop();});
   t.mock.method(PluginManager,'emitNpcBeforeDeath',event=>{dispatch('onNpcBeforeDeath',event);return event.preventDeath;});
   t.mock.method(PluginManager,'emitNpcDeath',event=>dispatch('onNpcDeath',event));
   t.mock.method(PluginManager,'emitCombatHitRoll',event=>dispatch('onCombatHitRoll',event));

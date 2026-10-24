@@ -47,4 +47,8 @@ function hidden([x,y]) {
 }
 function melee([x,y]) { return x>=3035 && x<=3043 && y>=6451 && y<=6459; }
 function near([x,y],[tx,ty],distance=1) { return Math.abs(x-tx)<=distance && Math.abs(y-ty)<=distance; }
-module.exports = { powderYield, saltYield, feed, gasCount, attackTicks, AttackClock, hidden, melee, near };
+function extremityHit(eye,[x,y]) {
+  const corridor=eye.face===3?x>=3030&&x<=3032:x>=3046&&x<=3048;
+  return corridor&&y===eye.tile[1]+1;
+}
+module.exports = { powderYield, saltYield, feed, gasCount, attackTicks, AttackClock, hidden, melee, near,extremityHit };
