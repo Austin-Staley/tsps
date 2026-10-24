@@ -10,7 +10,8 @@ const plugin = require("../plugins/treasuretrails/TreasureTrails.plugin");
 const Runtime = require("../plugins/treasuretrails/trails/Runtime.TreasureTrails");
 const Caskets = require("../plugins/treasuretrails/trails/Caskets.TreasureTrails");
 const Stash = require("../plugins/treasuretrails/trails/Stash.TreasureTrails");
-const { byName } = require("../plugins/treasuretrails/trails/Tiers.TreasureTrails");
+const Catalogue = require("../plugins/treasuretrails/trails/Catalogue.TreasureTrails");
+const { TIERS, byName } = require("../plugins/treasuretrails/trails/Tiers.TreasureTrails");
 const TABLES = require("../data/definitions/clue-caskets.json").tables;
 const EASY = byName.get("easy");
 const I = core.ItemIdentifiers;
@@ -59,6 +60,22 @@ function fixture() {
 
 const steps = () => Runtime.data(EASY).steps;
 const ofFamily = (family, target) => steps().filter(step => step.family === family && (!target || step.target === target));
+
+test("clue catalogues load during registration, before any player interaction", t => {
+  const load = t.mock.method(Catalogue, "load");
+  const f = fixture();
+  assert.deepEqual(load.mock.calls.map(call => call.arguments[1].name), TIERS.map(tier => tier.name));
+  load.mock.mockImplementation(() => { throw new Error("Catalogue loaded during gameplay"); });
+  f.items.fill(new core.Item(-1, 0));
+  const event = { player: f.player, objectId: -1, location: { x: 0, y: 0, z: 0 }, handled: false };
+  Runtime.search(event);
+  Stash.interact(event);
+  assert.equal(event.handled, false);
+  for (const tier of TIERS) {
+    f.items[0] = new core.Item(I[`CLUE_SCROLL_${tier.name.toUpperCase()}_`], 1);
+    assert.equal(f.actions.get(`Clue scroll (${tier.name})`).Read(f.event()), true);
+  }
+});
 
 test("conditional object interceptors run before earlier object handlers and can fall through", () => {
   const api = PluginManager.createApi("TreasureTrailsHookContract");
