@@ -122,3 +122,42 @@ test('lethal boss damage freezes grade; post-death impacts and stale fights cann
   assert.equal(h.fight.perfect, true);
   assert.equal(h.fight.hazards.blockers.size, 0);
 });
+
+test('already queued boss damage is cancelled on lethal transition or departure before draining', t => {
+  const h = H.harness(t);
+  h.Common.damage(h.fight, 30);
+  assert.equal(h.p.getCombat().getHitQueue().getQueuedDamage(), 30);
+  h.kill();
+  h.apply();
+  assert.equal(h.p.getHitpoints(), 99);
+});
+test('departure cancels already queued damage and detaches hazard NPCs', t => {
+  const h = H.harness(t);
+  h.fight.hazards.spawnPathfinder();
+  const pathfinder = h.fight.hazards.pathfinder;
+  h.Common.damage(h.fight, 30);
+  h.fight.stop(); h.apply();
+  assert.equal(h.p.getHitpoints(), 99);
+  assert.equal(pathfinder.getPrivateArea(), null);
+  assert.equal(h.area.entities.includes(pathfinder), false);
+});
+
+test('real PendingHit traverses NPC manipulation, rear accuracy and applied-damage stun break', t => {
+  const h = H.harness(t);
+  h.fight.stun();
+  h.step();
+  const method = new (class extends h.core.CombatMethod { type() { return h.core.CombatType.RANGED; } })();
+  const front = new h.core.PendingHit(h.p, h.fight.boss, method, { damage: 40, rollAccuracy: false, experience: false, handleAfterHitEffects: false });
+  h.core.CombatFactory.addPendingHit(front);
+  h.step(2);
+  assert.equal(h.fight.boss.getHitpoints(), 890);
+  h.move([2090, 6371]); h.step();
+  t.mock.method(h.core.DamageFormulas, 'sourceMaxHit', () => 40);
+  const rear = new h.core.PendingHit(h.p, h.fight.boss, method, { damage: 0, experience: false, handleAfterHitEffects: false });
+  assert.equal(rear.isAccurate(), true);
+  h.core.CombatFactory.addPendingHit(rear);
+  h.step(2);
+  assert.equal(h.fight.boss.getHitpoints(), 864);
+  assert.equal(h.fight.stunnedUntil, 0);
+  assert.ok(h.fight.special);
+});

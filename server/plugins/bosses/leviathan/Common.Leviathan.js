@@ -5,6 +5,7 @@ const KILLS_ATTRIBUTE = "leviathan:kills";
 const AWAKENED_KILLS_ATTRIBUTE = "leviathan:awakened-kills";
 const BEST_ATTRIBUTE = "leviathan:best-ticks";
 const AWAKENED_BEST_ATTRIBUTE = "leviathan:awakened-best-ticks";
+const MONSTER = "Leviathan, The";
 let api, core, data, ids;
 
 function init(pluginApi) {
@@ -30,6 +31,11 @@ function init(pluginApi) {
 const random = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 const pick = list => list[random(0, list.length - 1)];
 const count = (player, key) => Math.max(0, Math.trunc(Number(player.getAttribute(key)) || 0));
+function normalKills(player) {
+  const request = { player, monster: MONSTER, total: 0 };
+  api.emitCustomEvent('combat-achievements:count', request);
+  return Math.max(count(player, KILLS_ATTRIBUTE), Math.max(0, Math.trunc(Number(request.total) || 0)));
+}
 const location = ([x, y, z = 0]) => new core.Location(x, y, z);
 function tile(area, [x, y, z = 0]) {
   return area.tile(x - data.instance.sourceChunkX * 8, y - data.instance.sourceChunkY * 8, z);
@@ -52,7 +58,9 @@ function damage(fight, amount, avoidable = true) {
   if (fight.stopped || fight.over || fight.session.ended || fight.session.fight !== fight || fight.player.getHitpoints() <= 0) return;
   const hit = new core.HitDamage(Math.max(0, Math.floor(amount)), core.HitMask.RED);
   hit.setSource(fight.boss);
+  fight.pendingDamage.add(hit);
   hit.onApplied(taken => {
+    fight.pendingDamage.delete(hit);
     if (taken > 0 && avoidable && !fight.stopped && !fight.over && !fight.session.ended && fight.session.fight === fight) fight.perfect = false;
   });
   fight.player.getCombat().getHitQueue().addPendingDamage([hit]);
@@ -67,6 +75,6 @@ function projectile(fight, style, flight) {
   new Projectile(Projectile.centreOf(fight.boss), Projectile.centreOf(fight.player), fight.player,
     ids.gfx[style], 0, flight * 30, 60, 20, fight.session.area).withSource(fight.boss).sendProjectile();
 }
-module.exports = { init, random, pick, count, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, protectedFrom, projectile,
+module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, protectedFrom, projectile,
   INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, AWAKENED_BEST_ATTRIBUTE,
   get api() { return api; }, get core() { return core; }, get data() { return data; }, get ids() { return ids; } };

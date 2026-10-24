@@ -6,7 +6,8 @@ class Fight {
   constructor(session) {
     this.session = session; this.player = session.player; this.awakened = session.awakened;
     this.stats = Common.data[this.awakened ? "awakened" : "normal"];
-    this.tick = 0; this.events = []; this.tier = 0; this.shots = 0; this.stuns = 0;
+    this.normalKillsAtStart = Common.normalKills(this.player);
+    this.tick = 0; this.events = []; this.pendingDamage = new Set(); this.tier = 0; this.shots = 0; this.stuns = 0;
     this.stunnedUntil = 0; this.special = null; this.nextSpecial = Common.pick(["lightning", "smoke"]);
     this.enraged = false; this.perfect = true; this.over = false; this.stopped = false;
     this.rewarded = false; this.nextAttack = Common.data.inferred.firstAttackTicks;
@@ -120,14 +121,21 @@ class Fight {
   fell() {
     if (this.over || this.stopped) return;
     this.over = true; this.finishedTicks = Math.max(1, Common.core.World.getProcessCycle() - this.startCycle);
-    this.events = []; this.hazards.clear();
+    this.events = []; this.cancelDamage(); this.hazards.clear();
     Common.api.emitCustomEvent("boss-hud:hide", { player: this.player, fade: false, afterTicks: 0 });
   }
   stop() {
     if (this.stopped) return;
-    this.stopped = true; this.events = []; this.hazards.clear();
-    if (this.boss?.isRegistered()) Common.api.removeNpc(this.boss);
+    this.stopped = true; this.events = []; this.cancelDamage(); this.hazards.clear();
+    if (this.boss?.isRegistered()) {
+      if (this.boss.getPrivateArea() === this.session.area) this.session.area.remove(this.boss);
+      Common.api.removeNpc(this.boss);
+    }
     Common.api.emitCustomEvent("boss-hud:hide", { player: this.player, fade: false, afterTicks: 0 });
+  }
+  cancelDamage() {
+    for (const hit of this.pendingDamage) hit.setDamage(0);
+    this.pendingDamage.clear();
   }
 }
 const own = npc => npc?.__leviathanFight ?? null;

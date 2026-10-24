@@ -2,6 +2,45 @@ const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const H = require('./helpers/leviathan.cjs');
 before(H.initialize);
+for (const order of ['generic-first', 'encounter-first']) test(`real generic CA count increments exactly once (${order})`, t => {
+  const h = H.harness(t);
+  const Data = require('../plugins/achievements/combatachievements/Data.CombatAchievements');
+  const Progress = require('../plugins/achievements/combatachievements/Progress.CombatAchievements');
+  const Kills = require('../plugins/achievements/combatachievements/Kills.CombatAchievements');
+  Data(h.api); Progress(h.api);
+  const Rewards = require('../plugins/bosses/leviathan/Rewards.Leviathan');
+  if (order === 'generic-first') { Kills(h.api); Rewards.attach(h.api); }
+  else { Rewards.attach(h.api); Kills(h.api); }
+  h.p.setAttribute(Kills.KILLS_ATTRIBUTE, { 'Leviathan, The': 41 });
+  h.fight.normalKillsAtStart = h.Common.normalKills(h.p);
+  h.kill(); h.step(8);
+  const request = { player: h.p, monster: 'Leviathan, The', total: 0 };
+  h.api.emitCustomEvent('combat-achievements:count', request);
+  assert.equal(request.total, 42);
+  assert.equal(h.p.getAttribute(h.Common.KILLS_ATTRIBUTE), 42);
+  assert.equal(h.emitted.filter(([name]) => name === 'combat-achievements:kill').length, 0);
+  for (const [name, event] of h.emitted) if (name === 'combat-achievements:complete')
+    assert.ok(Data.taskNamed(event.task), `cache achievement exists: ${event.task}`);
+});
+test('canonical achievement name restores legacy counts and PB without incrementing read queries', t => {
+  const h = H.harness(t);
+  require('../plugins/bosses/leviathan/Rewards.Leviathan').attach(h.api);
+  let queries = 0;
+  h.api.onCustomEvent('combat-achievements:count', request => {
+    assert.equal(request.monster, 'Leviathan, The'); queries++; request.total = 42;
+  });
+  h.dispatch('onPlayerLogin', { player: h.p });
+  assert.equal(h.p.getAttribute(h.Common.KILLS_ATTRIBUTE), 42);
+  const counts = { player: h.p, counts: {} };
+  h.api.emitCustomEvent('combat-achievements:kill-count', counts);
+  assert.equal(counts.counts['Leviathan, The'], 42);
+  h.p.setAttribute(h.Common.BEST_ATTRIBUTE, 23);
+  const best = { player: h.p, monster: 'Leviathan, The', best: 0 };
+  h.api.emitCustomEvent('combat-achievements:personal-best', best);
+  assert.equal(best.best, 23);
+  assert.ok(queries > 0);
+  assert.equal(h.emitted.filter(([name]) => name === 'combat-achievements:kill').length, 0);
+});
 
 test('actual lethal transition freezes perfect loot context and death awards once', t => {
   const h = H.harness(t);

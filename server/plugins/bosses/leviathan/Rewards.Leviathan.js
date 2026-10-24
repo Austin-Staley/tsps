@@ -1,6 +1,6 @@
 const Common = require('./Common.Leviathan');
 const { own } = require('./Fight.Leviathan');
-const MONSTER = 'Leviathan';
+const MONSTER = Common.MONSTER;
 function current(npc, player = null) {
   const f = own(npc);
   return f && f.boss === npc && f.over && !f.stopped && !f.session.ended && f.session.fight === f &&
@@ -20,7 +20,7 @@ function died({ npc, killer }) {
   fight.rewarded = true;
   const { player, session, awakened } = fight;
   const key = awakened ? Common.AWAKENED_KILLS_ATTRIBUTE : Common.KILLS_ATTRIBUTE;
-  const kills = Common.count(player, key) + 1;
+  const kills = awakened ? Common.count(player, key) + 1 : Math.max(fight.normalKillsAtStart + 1, Common.normalKills(player));
   const announce = count => player.sendMessage(`Your ${awakened ? 'awakened ' : ''}Leviathan kill count is: <col=ff0000>${count}</col>.`);
   // The generic combat-achievement NPC-death hook owns kill-count achievements.
   announce(kills);
@@ -42,10 +42,16 @@ function died({ npc, killer }) {
   }
   session.scheduleRespawn?.(fight);
 }
-function counts(request) { const count = Common.count(request.player, Common.KILLS_ATTRIBUTE); if (count) request.counts[MONSTER] = count; }
-function best(request) { if (request.monster === MONSTER) request.best = Common.count(request.player, Common.BEST_ATTRIBUTE); }
+function counts(request) { const count = Common.count(request.player, Common.KILLS_ATTRIBUTE); if (count) request.counts[MONSTER] = Math.max(count, Number(request.counts[MONSTER]) || 0); }
+function best(request) {
+  if (request.monster !== MONSTER) return;
+  const own = Common.count(request.player, Common.BEST_ATTRIBUTE);
+  if (own > 0) request.best = request.best > 0 ? Math.min(request.best, own) : own;
+}
 function login({ player }) {
-  player.getPacketSender().sendConfig(Common.ids.varps.kills, Common.count(player, Common.KILLS_ATTRIBUTE));
+  const kills = Common.normalKills(player);
+  player.setAttribute(Common.KILLS_ATTRIBUTE, kills);
+  player.getPacketSender().sendConfig(Common.ids.varps.kills, kills);
   player.getPacketSender().sendConfig(Common.ids.varps.awakenedKills, Common.count(player, Common.AWAKENED_KILLS_ATTRIBUTE));
 }
 function attach(api) {

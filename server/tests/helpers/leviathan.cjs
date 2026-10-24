@@ -56,6 +56,7 @@ function harness(t, awakened = false) {
   t.mock.method(PluginManager, 'emitNpcBeforeDeath', event => { dispatch('onNpcBeforeDeath', event); return event.preventDeath; });
   t.mock.method(PluginManager, 'emitNpcDeath', event => dispatch('onNpcDeath', event));
   t.mock.method(PluginManager, 'emitNpcHitModify', (npc, hit) => { dispatch('onNpcHitModify', { npc, hit }); return hit; });
+  t.mock.method(PluginManager, 'emitCombatHitRoll', event => dispatch('onCombatHitRoll', event));
   Common.init(api);
   const area = new core.TemplatedInstanceArea(7, 8);
   for (const plane of [0, 1]) for (let x = 0; x < 7; x++) for (let y = 0; y < 8; y++)
@@ -86,6 +87,9 @@ function harness(t, awakened = false) {
   const step = (ticks = 1) => {
     for (let n = 0; n < ticks; n++) {
       cycle++;
+      p.setNeedsPlacement(false);
+      for (const npc of spawned) npc.setNeedsPlacement(false);
+      fight.boss.getCombat().getHitQueue().process(cycle);
       fight.process();
       p.getCombat().getHitQueue().process(cycle);
       for (const task of [...tasks]) if (task.isRunning()) task.tick();
@@ -107,8 +111,9 @@ function harness(t, awakened = false) {
   return { core, Common, api, hooks, custom, dispatch, p, fight, session, area, spawned, emitted, messages, step, move, prayer, hit,
     get cycle() { return cycle; },
     kill() { fight.boss.getCombat().addDamage(p, 1); fight.boss.setHitpoints(0); },
-    apply() { p.getCombat().getHitQueue().process(++cycle); },
+    apply() { p.setNeedsPlacement(false); p.getCombat().getHitQueue().process(++cycle); },
     applyBoss(hit) {
+      p.setNeedsPlacement(false); fight.boss.setNeedsPlacement(false);
       fight.boss.getCombat().getHitQueue().addPendingDamage(hit.getHits());
       fight.boss.getCombat().getHitQueue().process(++cycle);
     },

@@ -153,7 +153,10 @@ class Hazards {
       this.session.area.setClip(object.getLocation(), this.originalClip.get(key));
     }
     this.objects.clear(); this.originalClip.clear(); this.blockers.clear();
-    for (const npc of [this.pathfinder, this.tornado]) if (npc) Common.api.removeNpc(npc);
+    for (const npc of [this.pathfinder, this.tornado]) if (npc) {
+      if (npc.getPrivateArea() === this.session.area) this.session.area.remove(npc);
+      Common.api.removeNpc(npc);
+    }
     this.pathfinder = null; this.pathCentre = null; this.tornado = null;
   }
 }

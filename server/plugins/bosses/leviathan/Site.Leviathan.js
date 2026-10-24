@@ -58,6 +58,7 @@ class Session {
     if (this.ended) return;
     this.ended = true; sessions.delete(this.player); this.fight?.stop();
     this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
+    if (this.player.getPrivateArea() === this.area) this.area.remove(this.player);
     if (!this.area.isDestroyed()) this.area.destroy();
   }
 }
@@ -125,7 +126,7 @@ function grave(request) {
   if (!sessionOf(request.player)) return;
   const [x, y, z] = Common.data.site.campReturn;
   request.tile = { x, y, z };
-  if (Common.count(request.player, Common.KILLS_ATTRIBUTE) < 5) request.feeMultiplier = 0.25;
+  if (Common.normalKills(request.player) < 5) request.feeMultiplier = 0.25;
 }
 function death({ player }) {
   const session = sessionOf(player);

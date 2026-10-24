@@ -39,6 +39,7 @@ test('quest-complete player reaches island, climbs into private fight and leaves
   assert.equal(session.ended, true);
   assert.equal(session.fight.stopped, true);
   assert.equal(session.area.isDestroyed(), true);
+  assert.equal(h.p.getPrivateArea(), null);
   assert.equal(Site.sessionOf(h.p), null);
   assert.deepEqual([h.p.getLocation().getX(), h.p.getLocation().getY()], [2063, 6435]);
 });
