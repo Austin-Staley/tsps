@@ -433,3 +433,10 @@ stale callbacks, full bags, active clue capacity, two puzzles within one trail, 
 a box, and changing from combat gear before the required repeat emote. Existing medium
 Uri timing, transcript/item-box behavior, key drops and all cache-backed tier tests remain.
 No new live capture is claimed by these regression tests.
+
+Isolated own-server verification (revision241, slot2/MCP49802): a naturally rolled
+hard cipher for Otto Godblessed retained clue19900 alongside challenge19901.
+Answering3 and continuing the success dialogue replaced the clue with2739,
+removed the challenge and displayed the NPC's next-clue item box. Adding a coin
+then reused the freed slot without an inventory error. This is local runtime
+validation, not a new OSRS capture or a full visual replay of every puzzle.
