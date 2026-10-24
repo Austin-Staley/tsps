@@ -88,3 +88,38 @@ Review also caught stale compiled movement code after switching branches, so all
 subsequent guard comparisons rebuild first. No binding/pursuit constant is changed
 from those exploratory failures. Wake directions, optional-bind selection, natural
 expiry, melee distribution/recovery and other listed numerical gaps remain open.
+
+### Bind pursuit movement-pass alignment (24 October 2026)
+
+The intended five-tick first step was one tick late in the encounter. World processes
+NPC mechanics before player mechanics; the cathedral advances the fight from the
+owner's player-area pass. Queueing a route on cast+5 therefore cannot move the NPC
+until cast+6. The route is now prepared on+4 so the registered NPC first steps on+5.
+The authored pursuitTicks5 is retained, and an already-adjacent target is still not
+meleed before+5. No freeze, phase deadline, flight, damage or selection value changes.
+
+This audit selects actual binding projectiles2467, then checks each actor's current
+combat-level update. Across original [3281](https://rsprox.net/download/3281),
+[3285](https://rsprox.net/download/3285) and[3299](https://rsprox.net/download/3299),
+there are22normal791casts. Seventeen have a subsequent recorded walk, all first on
++5; five have no walk in the inspected14-tick window. The apparent+3cases instead
+belong to fiveAwakened1146casts and are excluded. Animation masks can be replayed
+when the player changes realm, so they are not treated as independent cast packets.
+These are altered-world normal actors; the result supports this already-intended
+first-step schedule, not all ordinary movement/counter timing or RNG.
+
+Examples:3281cast2710 firstwalk2715;3285cast21929 firstwalk21934;3285cast22106
+firstwalk22111;3299cast15300 firstwalk15305. The17movingcast ticks are
+3281:2710/2844/2897/3057/3811/4482/5577/5812;
+3285:21405/21484/21929/22106/22553/22603/22776/23058;
+3299:15300. Excluded1146examples include3285:23306/23403 and3299:15652/15801/15943.
+No sample-derived optional-bind probability is introduced.
+
+Regressions run real NPC queues before player timers and fight processing, matching
+World order. The first-step test failed on the old implementation (still stationary
+at+5), then passed after correction. Adjacent melee remains+5. A real
+CombatFactory.freezeTicks counter after route preparation cancels the queue, keeps
+the NPC stationary and suppresses the in-flight player bind. Existing impact/phase
+assertions remain; the old mock-route test now distinguishes queue preparation+4
+from actual movement+5. Natural player expiry8versus9, optional binding selection,
+post-melee recovery and the remaining ordinary numerical gaps remain unresolved.
