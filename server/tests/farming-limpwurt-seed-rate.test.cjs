@@ -47,4 +47,3 @@ test('ordinary flowers, the barley exceptions and sweetcorn retain their seed-ra
         assert.equal(reward(t, { crop, seeds: true, roll: 1 / denominator }).seeds, 0, crop);
     }
 });
-

@@ -87,14 +87,14 @@ node --test tests/farming-redwood.test.cjs tests/woodcutting-guild.test.cjs
 node --test tests/bologa-blessing.test.cjs tests/belladonna-harvest.test.cjs
 node --test tests/farming-coral-yields.test.cjs
 node --test tests/farming-herb-sack-withdraw-order.test.cjs tests/herblore.test.cjs
+node --test tests/farming-falador-diary-xp.test.cjs
+node --test tests/farming-hespori-recoil.test.cjs tests/ring-of-recoil.test.cjs tests/ring-of-suffering.test.cjs
 ```
 
 Herb-sack Empty uses the canonical Herblore cleaning levels through `herblore:clean`,
 so limited inventory space is filled from the lowest-level herb first (including
 Huasca before Snapdragon). Regression checks cover both sack variants, partial/repeated
 withdrawals and full inventories. Source: [Herb sack](https://oldschool.runescape.wiki/w/Herb_sack).
-node --test tests/farming-falador-diary-xp.test.cjs
-```
 
 The four South Falador allotment/flower/herb patches award 10% extra Farming XP
 after the Medium Falador Diary, queried through canonical diary progress. The
@@ -102,8 +102,6 @@ bonus follows the acted-on patch; it does not apply to Falador Park trees,
 other planes/patches or unrelated Farming awards. Tests cover composting,
 planting, harvesting, deferred herb planting XP and incomplete/easy-only diaries.
 Source: [South Falador Farm](https://oldschool.runescape.wiki/w/South_Falador_Farm).
-node --test tests/farming-hespori-recoil.test.cjs tests/ring-of-recoil.test.cjs tests/ring-of-suffering.test.cjs
-```
 
 The grown Farming Hespori is immune to ordinary-ring and Ring of Suffering recoil.
 Its content sets the generic `combat:recoil-immune` policy used by both recoil paths;
