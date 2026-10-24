@@ -51,5 +51,7 @@
 ### Completion
 
 - [x] TypeScript build and all Leviathan regressions pass; run relevant collision/combat regressions.
-- [ ] Independent source-worker review, address findings, then fresh checks.
-- [ ] Commit/push feature-only changes, create ready follow-up PR with dependency #892, attach it, and report hashes to root for local integration.
+- [x] Independent source-worker review, address findings, then fresh checks.
+- [x] Commit/push feature-only changes, create ready follow-up PR with dependency #892, attach it, and report hashes to root for local integration.
+
+Validation: all seven new checks failed on the old implementation, then passed. TypeScript build, 62 unique focused/combat/template regressions and all 4,987 server tests pass with zero failures/skips. Independent source-worker review is clear. Ready PR: https://github.com/RSPSApp/tsps/pull/894 (depends on #892).
