@@ -157,12 +157,12 @@ test('scythe cleaves three forward tiles across NPCs and players in multi with a
   const Scythe = require('../plugins/items/ScytheOfVitur.plugin');
   let resolver, multi = true;
   Scythe.register({ core: { ...core,
-    AreaManager: { inMulti: () => multi }, World: { getNpcs: () => npcs, getPlayers: () => players },
+    World: { getNpcs: () => npcs, getPlayers: () => players },
     CombatFactory: { canAttackSecondaryTarget: (_a, _b, c) => c.attackable !== false,
       applyStyleDamage: (hit, max) => { hit.max = max; hit.damage = max; } },
     DamageFormulas: { calculateMaxMeleeHit: () => 48 },
     PendingHit: class { constructor(a, target) { this.target = target; this.damage = 48; } getTotalDamage() { return this.damage ?? 0; } setTotalDamage(value) { this.damage = value; } },
-  }, onServerStartup: (fn) => fn(), onItemAction() {}, onItemOnItem() {},
+  }, getAreaManager: () => ({ inMulti: () => multi }), onServerStartup: (fn) => fn(), onItemAction() {}, onItemOnItem() {},
     registerCombatMethodResolver: (value) => { resolver = value; } });
   const actor = (x, y, player = false, size = 1) => {
     const value = { getLocation: () => loc(x, y), isNpc: () => !player, isPlayer: () => player,
@@ -207,7 +207,7 @@ test('scythe queue caps a corrupted victim across every hit before awarding XP',
     PluginManager.emitPlayerDealtDamage = options.damageHook;
     let resolver;
     delete require.cache[require.resolve('../plugins/items/ScytheOfVitur.plugin')];
-    require('../plugins/items/ScytheOfVitur.plugin').register({ core: { ...core, AreaManager: { inMulti: () => false } },
+    require('../plugins/items/ScytheOfVitur.plugin').register({ core, getAreaManager: () => ({ inMulti: () => false }),
       onServerStartup: (handler) => handler(), onItemAction() {}, onItemOnItem() {},
       registerCombatMethodResolver: (value) => { resolver = value; } });
     const hits = resolver.resolve(source).hits(source, victim);

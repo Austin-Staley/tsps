@@ -67,6 +67,51 @@ test('non-damaging curse spells explicitly declare zero direct magic damage',t=>
   for(const [name] of cases) assert.equal(core.DamageFormulas.getMagicMaxhit(attacker,core.CombatSpells[name]),0,name);
 });
 
+test('Count Draynor garlic cannot turn any nondamaging curse into a damaging impact', t => {
+  new (require('../dist/game/definition/loader/impl/NpcDefinitionLoader').NpcDefinitionLoader)().load();
+  const attacker = player(t), tasks = [], spawned = [];
+  attacker.getInventory().setItem(0, new core.Item(core.ItemIdentifiers.GARLIC));
+  let openCoffin;
+  const api = PluginManager.createApi('CountCurseTest');
+  require('../plugins/bosses/CountDraynor.plugin').register({ ...api,
+    core: { ...core, TaskManager: { submit: task => tasks.push(task) } },
+    onObjectFirstClick: (_id, handler) => { openCoffin = handler; },
+    emitCustomEvent: (name, event) => {
+      if (name === 'quest:is-started') event.started = true;
+      if (name === 'quest:is-complete') event.complete = false;
+    },
+    spawnNpc: row => {
+      const value = new NPC(row.id, new core.Location(row.x, row.y, row.z));
+      value.setRegistered(true);
+      spawned.push(value);
+      return value;
+    },
+    removeNpc: () => {},
+  });
+  openCoffin({ player: attacker, object: new core.GameObject(core.ObjectIdentifiers.COFFIN_46,
+    new core.Location(3077, 9775, 0), 10, 3, null) });
+  tasks.find(task => task.getDelay() === 9).execute();
+  const target = spawned.at(-1);
+  assert.equal(target.getId(), core.NpcIdentifiers.COUNT_DRAYNOR);
+  attacker.getCombat().setTarget(target);
+  t.mock.method(Math, 'random', () => 0.999);
+  const { PendingHit } = require('../dist/game/content/combat/hit/PendingHit');
+  const { MagicCombatMethod } = require('../dist/game/content/combat/method/impl/MagicCombatMethod');
+  for (const [name] of [...cases, ['BIND']]) {
+    const spell = core.CombatSpells[name];
+    attacker.getCombat().setCastSpell(spell);
+    assert.deepEqual(core.DamageFormulas.getMagicHitBounds(attacker, spell, target), { minimum: 0, maximum: 0 }, name);
+    assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, spell), 0, name);
+    const hit = new PendingHit(attacker, target, new MagicCombatMethod(), { rollAccuracy: false });
+    assert.equal(hit.isAccurate(), true, name);
+    assert.equal(hit.getTotalDamage(), 0, name);
+  }
+  assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, core.CombatSpells.FIRE_STRIKE), 9,
+    'garlic still adds one to damaging spells');
+  assert.equal(core.DamageFormulas.getMagicMaxhit(attacker, core.CombatSpells.TELEBLOCK), 2,
+    'unspecified negative utility maximum retains its existing fallback');
+});
+
 test('curses cannot stack on an already drained relevant level',t=>{
   const attacker=player(t),{value}=npc(t),target=player(t);
   value.setCurrentLevels(core.Skill.DEFENCE,95);target.getSkillManager().setCurrentLevel(core.Skill.DEFENCE,95,false);
