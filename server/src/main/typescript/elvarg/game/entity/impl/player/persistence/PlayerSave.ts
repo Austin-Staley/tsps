@@ -151,6 +151,7 @@ export class PlayerSave {
     private venomed: boolean;
     private lastVenomDamage?: number;
     private poisonImmunityTimer: number;
+    private poisonClock?: import("../../../../content/combat/PoisonClock").PoisonClockState;
     private fireImmunityTimer: number;
     private teleblockTimer: number;
     private specialAttackRestoreTimer: number;
@@ -595,7 +596,7 @@ export class PlayerSave {
         player.setVenomed(this.venomed);
         player.setLastVenomDamage(this.lastVenomDamage);
 
-        player.getCombat().getPoisonImmunityTimer().start(this.poisonImmunityTimer);
+        player.getCombat().getPoisonClock().restore(this.poisonClock, this.poisonImmunityTimer);
         player.getCombat().getFireImmunityTimer().start(this.fireImmunityTimer);
         player.getCombat().getTeleblockTimer().start(this.teleblockTimer);
         player.getSpecialAttackRestore().start(this.specialAttackRestoreTimer);
@@ -699,6 +700,9 @@ export class PlayerSave {
         playerSave.lastVenomDamage = player.isVenomed() ? player.getLastVenomDamage() : undefined;
 
         playerSave.poisonImmunityTimer = player.getCombat().getPoisonImmunityTimer().secondsRemaining();
+        const poisonClock = player.getCombat().getPoisonClock();
+        playerSave.poisonClock = player.isPoisoned() || !poisonClock.finished()
+            ? poisonClock.snapshot() : undefined;
         playerSave.fireImmunityTimer = player.getCombat().getFireImmunityTimer().secondsRemaining();
 
         playerSave.teleblockTimer = player.getCombat().getTeleblockTimer().secondsRemaining();

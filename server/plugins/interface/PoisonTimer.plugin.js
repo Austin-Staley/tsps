@@ -26,14 +26,7 @@ function sync(player, force = false) {
   sender.sendConfig(POISON_TIMER_TYPE_VARP, state[1]);
 }
 
-function reconcileImmunityClock({ player }) {
-  const timer = player.getCombat().getPoisonImmunityTimer();
-  if (player.getInterfaceId() > 0) timer.pause();
-  else timer.resume();
-}
-
 function onLogin(event) {
-  reconcileImmunityClock(event);
   sync(event.player, true);
 }
 
@@ -51,6 +44,5 @@ module.exports = {
     api.onPlayerLogin(onLogin);
     api.onPlayerProcess(onProcess);
     api.onPlayerLogout(onLogout);
-    api.onCustomEvent("interface:changed", reconcileImmunityClock);
   },
 };

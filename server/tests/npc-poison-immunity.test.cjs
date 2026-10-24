@@ -16,7 +16,8 @@ function victim(t, {poison=false, venom=false, severity=0, venomed=false, player
     isPlayer:()=>player,isNpc:()=>!player,getAsNpc:()=>entity,getCurrentDefinition:()=>definition,
     isVenomed:()=>venomed&&severity>0,isPoisoned:()=>severity>0,getPoisonDamage:()=>severity,
     setPoisonDamage:n=>severity=n,setVenomed:b=>venomed=b,
-    getCombat:()=>({getPoisonImmunityTimer:()=>({finished:()=>!immunity})}),
+    getCombat:()=>({getPoisonImmunityTimer:()=>({finished:()=>!immunity}),
+      getPoisonClock:()=>({finished:()=>!immunity,isVenomImmune:()=>immunity,clearCounter(){}})}),
     sendMessage:text=>messages.push(text),
   };
   return {entity,definition,tasks,messages};

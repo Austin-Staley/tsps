@@ -992,9 +992,12 @@ export class CombatFactory {
         const alreadyPoisoned = entity.isPoisoned();
         if (entity.isPlayer()) {
             let player = (entity as Player);
-            if (!player.getCombat().getPoisonImmunityTimer().finished()) {
+            const protection = player.getCombat().getPoisonClock();
+            if (isVenom ? protection.isVenomImmune() : !protection.finished()) {
                 return;
             }
+            // An accepted venom replaces the ordinary negative poison counter.
+            if (isVenom) protection.clearCounter();
             if (!alreadyPoisoned) {
                 player.sendMessage("You have been poisoned!");
             }

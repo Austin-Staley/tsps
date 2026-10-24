@@ -58,6 +58,13 @@ test('barbarian mixes retain their treatment strength and least-dose selection',
   const f = fixture(t, ['ANTIPOISON_1_', 'ANTIDOTE_MIX_2_', 'ANTIDOTE_MIX_1_']); f.cure();
   assert.equal(f.changes[0].slot, 2);
 });
+
+test('extended anti-venom and supermix join the ordinary orb dose-selection rules', t => {
+  const extended = fixture(t, ['ANTI_VENOM_1__3', 'EXTENDED_ANTI_VENOM_4_', 'EXTENDED_ANTI_VENOM_1_'], true);
+  extended.cure(); assert.equal(extended.changes[0].slot, 2);
+  const mix = fixture(t, ['ANTIPOISON_1_', 'ANTI_POISON_SUPERMIX_2_', 'ANTI_POISON_SUPERMIX_1_']);
+  mix.cure(); assert.equal(mix.changes[0].slot, 2);
+});
 test('different equal-strength potion families retain their existing inventory precedence', t => {
   for (const keys of [['SANFEW_SERUM_4_', 'SUPERANTIPOISON_1_', 'SANFEW_SERUM_2_'],
     ['SUPERANTIPOISON_4_', 'SANFEW_SERUM_1_', 'SUPERANTIPOISON_2_']]) {
