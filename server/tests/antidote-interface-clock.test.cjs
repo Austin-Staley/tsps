@@ -110,4 +110,3 @@ test('player save/load keeps the held remainder without persisting an interface 
   loaded.setInterfaceId(-1); f.hooks.login({ player: loaded }); f.advance(1000);
   assert.equal(loaded.getCombat().getPoisonImmunityTimer().secondsRemaining(), 87);
 });
-
