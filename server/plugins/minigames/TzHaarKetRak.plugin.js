@@ -14,7 +14,7 @@ module.exports = {
   register(api) {
     Common.init(api);
     Dialogue.attach(api, { start: Challenge.start });
-    Challenge.attach(api, { completed: Rewards.completed, failed: Rewards.failed, refused: Rewards.refused });
+    Challenge.attach(api, { lastJadDown: Rewards.lastJadDown, completed: Rewards.completed, failed: Rewards.failed, refused: Rewards.refused });
     Rewards.attach(api);
   },
 };

@@ -63,6 +63,35 @@ function later(ticks, action) {
 }
 
 const cycle = () => core.World.getProcessCycle();
+
+const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
+const FADE_OVERLAY = 174;
+const FADE_SCRIPT = 948;
+const FADE_CYCLES = 50;
+
+/** The screen fading to black (`out`) or back (rsprox: fade_overlay script 948, 50 cycles). */
+function fade(player, out) {
+  const args = out ? [0, 255, 0, 0, FADE_CYCLES] : [0, 0, 0, 255, FADE_CYCLES];
+  player.getPacketSender().sendSubInterface(OVERLAY_ATMOSPHERE_UID, FADE_OVERLAY, 1, { postScripts: [{ scriptId: FADE_SCRIPT, args }] });
+}
+
+function closeFade(player) {
+  player.getPacketSender().closeSubInterface(OVERLAY_ATMOSPHERE_UID);
+}
+
+/** "M:SS.t" for a duration in game ticks (0.6 s each), as the challenge lines print it. */
+function formatTicks(ticks) {
+  const tenths = Math.max(0, Math.round(ticks * 6));
+  const minutes = Math.floor(tenths / 600);
+  const seconds = Math.floor((tenths % 600) / 10);
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${tenths % 10}`;
+}
+
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six"];
+
+function message(key, values = {}) {
+  return data.messages[key].replace(/{(\w+)}/g, (_, name) => String(values[name] ?? ""));
+}
 const toLocation = ([x, y, z]) => new core.Location(x, y, z ?? 0);
 const randomInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 
@@ -114,7 +143,7 @@ function honorific(player) {
 }
 
 module.exports = {
-  init, later, cycle, toLocation, randomInt, inBox, completions, completedAllSix, defeatedZuk, caste, honorific,
+  init, later, cycle, toLocation, fade, closeFade, formatTicks, message, NUMBER_WORDS, randomInt, inBox, completions, completedAllSix, defeatedZuk, caste, honorific,
   completionsAttribute, PET_UNLOCK_ATTRIBUTE, MET_ATTRIBUTE, BEST_TIMES_ATTRIBUTE, LAST_COMPLETED_ATTRIBUTE, SIX,
   get api() { return api; },
   get core() { return core; },

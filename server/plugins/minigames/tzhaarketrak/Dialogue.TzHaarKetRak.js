@@ -6,7 +6,9 @@
  * - "completed all six challenges", and the player's TzHaar name ("JalYt-[caste]-Xo-...");
  * - "Challenge interface opens." and the Challenge option open the challenge menu, the cache's
  *   generic option menu, with the transcript's titles;
- * - the minigame lines (completion, failure, refusals) with their numbers.
+ * - the minigame lines (completion, failure, refusals) with their numbers. As recorded (rsprox),
+ *   "Now, a new challenge awaits." is said only when a challenge was just unlocked, and a failure
+ *   with kills is answered "Not bad for a JalYt. Have some TokKul." before the same reward line.
  */
 const Common = require("./Common.TzHaarKetRak");
 
@@ -30,11 +32,13 @@ const VARIANT = {
   needZuk: "attempting-to-enter-the-third-challenge-without-having-completed-the-inferno",
 };
 const MENU_TITLE = "Which challenge would you like?";
+const COMPLETED_LINE = "Challenge complete. Have some TokKul. Now, a new challenge awaits.";
+const NEW_CHALLENGE = " Now, a new challenge awaits.";
 const MENU_SCRIPT = 217;
 const MENU_OPTIONS_CHILD = 3;
 const PAUSE_BUTTON_EVENTS = 1;
 
-/** What the next minigame line fills in: { challenge, tokkul }. */
+/** What the next minigame line fills in: { challenge, tokkul, unlocked, npcLine }. */
 const pendingLines = new WeakMap();
 const pendingMenus = new WeakMap();
 let startChallenge = () => {};
@@ -68,6 +72,11 @@ function answerCondition({ player, definition, text }) {
 /** "JalYt-[caste]-Xo-[player name]": the caste and honorific are the player's own (Wiki TzHaar). */
 function fillLine(request) {
   if (!isKetRak(request.definition) || typeof request.text !== "string") return;
+  if (request.text === COMPLETED_LINE) {
+    const pending = pendingLines.get(request.player);
+    request.text = pending?.npcLine ?? (pending?.unlocked ? COMPLETED_LINE : COMPLETED_LINE.replace(NEW_CHALLENGE, ""));
+    return;
+  }
   request.text = request.text.replace(/JalYt-\[caste\]-(?:Xo|Kal)-/g,
     `JalYt-${Common.caste(request.player)}-${Common.honorific(request.player)}-`);
 }
@@ -120,7 +129,7 @@ function say(player, variant, fill = {}) {
 /** The cache's generic option menu ("menu", script 217): title, "a|b|c", numbered. */
 function openMenu(player) {
   const labels = Common.data.ordinals.map((ordinal) => `${NAME}'s ${ordinal} Challenge`);
-  labels.push("Cancel");
+  labels.push("(Cancel)");
   const sender = player.getPacketSender();
   const menu = Common.ids.menu;
   sender.sendInterfaceRemoval();

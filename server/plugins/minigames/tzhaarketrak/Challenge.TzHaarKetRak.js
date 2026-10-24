@@ -3,19 +3,23 @@
  * JalTok-Jads as the challenge's number, fought alone.
  * - Challenges 1 and 2 are open to anyone; 3 and up need TzKal-Zuk beaten, and each needs the one
  *   before it completed.
+ * - The entry is staged as recorded (rsprox, data/tzhaar-ket-rak.json): the screen fades as the
+ *   challenge is picked, the player lands in the arena 3 ticks later, the screen clears at 6 and
+ *   the Jads come at 18, each challenge's on its own tiles.
  * - The Jads fight as the Inferno's (Monsters.Inferno.js), their first attacks a few ticks apart.
- *   Each brings Yt-HurKot at half health (Wiki Yt-HurKot): they walk to it and heal it until drawn
- *   off, and do not come again.
- * - Killing every Jad completes it: the player is back by TzHaar-Ket-Rak for the reward
- *   (Rewards.TzHaarKetRak.js). Dying, the cave exit, teleporting or logging out fails it. It is a
- *   safe activity: nothing is lost on death.
+ *   Each brings five Yt-HurKot at half health: they walk to it and heal it until drawn off, do
+ *   not come again, and go when it dies.
+ * - The last Jad down completes it: the completion lines at once, the player back by
+ *   TzHaar-Ket-Rak a few ticks later for the reward (Rewards.TzHaarKetRak.js). Dying, the cave
+ *   exit or logging out first fails it, with TokKul for any Jads killed. It is a safe activity:
+ *   nothing is lost on death.
  */
 const Common = require("./Common.TzHaarKetRak");
 
 const CHALLENGE_ATTRIBUTE = "tzhaar-ket-rak:challenge";
 
 let ChallengeArea = null;
-let hooks = { completed() {}, failed() {}, refused() {} };
+let hooks = { lastJadDown() {}, completed() {}, failed() {}, refused() {} };
 
 class Challenge {
   constructor(player, number) {
@@ -24,8 +28,12 @@ class Challenge {
     this.area = new ChallengeArea(this);
     this.jads = [];
     this.spawned = [];
-    this.startTick = Common.cycle();
+    /** The duration counts from the Jads' arrival, as the recorded durations do. */
+    this.startTick = -1;
+    this.kills = 0;
     this.endAt = -1;
+    /** Set with the completion lines at the last Jad's death; the reward follows on the way out. */
+    this.result = null;
     this.over = false;
     /** For Combat Achievements: styles dealt, per Jad and overall, and the inventory kept empty. */
     this.styles = new Map();
@@ -35,9 +43,11 @@ class Challenge {
 
   spawnJads() {
     const { api, data, ids } = Common;
-    for (let index = 0; index < this.number; index++) {
-      const [x, y] = data.arena.jads[index];
-      const npc = api.spawnNpc({ id: ids.npcs.jad, x, y, z: 0, owner: this.player, wanderRadius: 0 });
+    this.startTick = Common.cycle();
+    const layout = data.arena.layouts[this.number - 1];
+    for (let index = 0; index < layout.length; index++) {
+      const [x, y, face] = layout[index];
+      const npc = api.spawnNpc({ id: ids.npcs.jad, x, y, z: 0, owner: this.player, wanderRadius: 0, face });
       if (!npc) continue;
       npc.__skipDefaultRespawn = true;
       npc.__tkrChallenge = this;
@@ -94,26 +104,31 @@ class Challenge {
   }
 
   tick() {
-    if (this.over) return;
+    if (this.over || this.startTick === -1) return;
     const player = this.player;
     if (!inventoryEmpty(player)) this.emptyInventory = false;
     for (const entry of [...this.jads]) {
       if (entry.npc.getHitpoints() <= 0 || !entry.npc.isRegistered()) {
         entry.healers.forEach((healer) => removeNpc(healer));
         this.jads = this.jads.filter((other) => other !== entry);
+        this.kills++;
         continue;
       }
       if (entry.npc.getCombat().getTarget() !== player) entry.npc.getCombat().attack(player);
       this.tendHealers(entry);
     }
-    if (this.jads.length === 0 && this.endAt === -1) this.endAt = Common.cycle() + Common.data.endTicks;
+    if (this.jads.length === 0 && this.endAt === -1) {
+      this.endAt = Common.cycle() + Common.data.endTicks;
+      hooks.lastJadDown(player, this);
+    }
     // A player going down to a last hit in flight is left to the death path, which counts the win.
     if (dying(player)) return;
     if (this.endAt !== -1 && Common.cycle() >= this.endAt) complete(player);
   }
 
-  /** Ticks from the start to the last Jad's death. */
+  /** Ticks from the Jads' arrival to the last one's death (or to now). */
   elapsedTicks() {
+    if (this.startTick === -1) return 0;
     return (this.endAt === -1 ? Common.cycle() : this.endAt - Common.data.endTicks) - this.startTick;
   }
 
@@ -220,19 +235,26 @@ function end(player) {
     if (player.getArea?.() === challenge.area) player.setArea(null);
   }
   challenge.destroy();
+  release(player, challenge);
+  Common.closeFade(player);
   player.getCombat?.().reset?.();
   player.moveTo(Common.toLocation(Common.data.outside));
   return challenge;
 }
 
-function complete(player) {
+function complete(player, { logout = false } = {}) {
   const challenge = end(player);
-  if (challenge) hooks.completed(player, challenge);
+  if (!challenge) return;
+  if (challenge.result) hooks.completed(player, challenge, { logout });
+  else hooks.failed(player, challenge, { logout });
 }
 
-function fail(player, { logout = false } = {}) {
+/** Out early - unless the last Jad was already down, which still counts as the win. */
+function fail(player, { logout = false, died = false } = {}) {
   const challenge = end(player);
-  if (challenge) hooks.failed(player, challenge, { logout });
+  if (!challenge) return;
+  if (challenge.result) hooks.completed(player, challenge, { logout });
+  else hooks.failed(player, challenge, { logout, died });
 }
 
 /** Why the player can't take on challenge n, or null. */
@@ -244,20 +266,55 @@ function refusal(player, number) {
 
 function start(player, number) {
   if (challengeOf(player)) return null;
+  if (player.getMovementQueue?.()?.isMovementBlocked?.()) return null;
   const reason = refusal(player, number);
   if (reason) {
     hooks.refused(player, number, reason);
     return null;
   }
+  const { data } = Common;
   const challenge = new Challenge(player, number);
   player.setAttribute(CHALLENGE_ATTRIBUTE, challenge);
-  player.moveTo(Common.toLocation(Common.data.arena.player));
+  player.sendMessage(Common.message("enter", { ordinal: data.ordinals[number - 1] }));
+  Common.fade(player, true);
+  // Held still through the fade, as the Catacombs' fades hold the player.
+  player.getMovementQueue?.()?.setBlockMovement(true).reset();
+  challenge.staging = true;
+  const live = () => challengeOf(player) === challenge;
+  Common.later(data.arena.landTicks, () => {
+    if (live()) land(player, challenge);
+  });
+  Common.later(data.arena.fadeInTicks, () => {
+    if (!live()) return;
+    Common.fade(player, false);
+    release(player, challenge);
+  });
+  Common.later(data.arena.fadeInTicks + data.arena.fadeCloseTicks, () => {
+    if (live()) Common.closeFade(player);
+  });
+  Common.later(data.arena.jadTicks, () => {
+    if (live()) challenge.spawnJads();
+  });
+  return challenge;
+}
+
+function release(player, challenge) {
+  if (!challenge.staging) return;
+  challenge.staging = false;
+  player.getMovementQueue?.()?.setBlockMovement(false);
+}
+
+/** Into the arena copy, facing south with the landing animation, as recorded. */
+function land(player, challenge) {
+  const { core, data } = Common;
+  const [x, y] = data.arena.player;
+  player.moveTo(new core.Location(x, y, 0));
   const current = player.getArea?.();
   if (current && current !== challenge.area) current.leave(player, false);
   challenge.area.enter(player);
   challenge.clearSupports();
-  challenge.spawnJads();
-  return challenge;
+  player.setPositionToFace?.(new core.Location(x, y - 1, 0));
+  player.performAnimation?.(new core.Animation(data.arena.landSeq));
 }
 
 // --- Hooks ---------------------------------------------------------------------------------------
@@ -270,8 +327,7 @@ function onDeath(event) {
   const challenge = challengeOf(event.player);
   if (!challenge) return;
   event.handled = true;
-  if (challenge.jads.length === 0 && challenge.endAt !== -1) complete(event.player);
-  else fail(event.player);
+  fail(event.player, { died: true });
 }
 
 function keepItems(event) {

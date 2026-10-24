@@ -1,10 +1,14 @@
 /**
- * After a challenge (Wiki: TzHaar-Ket-Rak's_Challenges, Transcript:TzHaar-Ket-Rak):
- * - a completion pays its TokKul (inventory, or the floor when it can't hold it), counts on the
- *   challenge's varp, and the first sixth unlocks the JalRek-Jad metamorphosis (Pets.plugin.js
- *   reads the flag);
- * - TzHaar-Ket-Rak says the transcript's line for it, or "Failure..." for a failed one (not to a
- *   player who logged out);
+ * After a challenge (Wiki: TzHaar-Ket-Rak's_Challenges, Transcript:TzHaar-Ket-Rak; the lines and
+ * their order are rsprox recordings, data/tzhaar-ket-rak.json):
+ * - the last Jad's death counts the completion on the challenge's varp and prints the count, the
+ *   duration and, the first time, the next challenge unlocked (or the Inferno it needs); the first
+ *   sixth unlocks the JalRek-Jad metamorphosis (Pets.plugin.js reads the flag);
+ * - back outside, the TokKul (inventory, or the floor when it can't hold it), and the tick after
+ *   TzHaar-Ket-Rak's transcript line - "Now, a new challenge awaits." only when one was unlocked;
+ * - a failure prints how long the player survived and how many Jads fell. Any kills pay the
+ *   TokKul of the challenge with that many Jads, with "Not bad for a JalYt."; none get
+ *   "Failure..." (no line to a player who logged out);
  * - Combat Achievements: the tasks the completion meets, by name. Its kill-count tasks ("Complete
  *   TzHaar-Ket-Rak's second challenge.") name a challenge, not a count, so no count is reported:
  *   Data.CombatAchievements would read each as "once". Best times are kept for the scoreboard.
@@ -61,32 +65,76 @@ function tasksFor(player, challenge) {
   return tasks;
 }
 
-function completed(player, challenge) {
-  const { api, data, ids } = Common;
+/** The last Jad down: the completion counted and its lines, the reward kept for the way out. */
+function lastJadDown(player, challenge) {
+  const { api, data } = Common;
   const number = challenge.number;
   const tasks = tasksFor(player, challenge);
   const firstSixth = number === Common.SIX && player.getAttribute(Common.PET_UNLOCK_ATTRIBUTE) !== true;
-  const tokkul = data.rewards[number - 1];
-  give(player, ids.objs.tokkul, tokkul);
-  player.setAttribute(Common.completionsAttribute(number), Common.completions(player, number) + 1);
+  const count = Common.completions(player, number) + 1;
+  player.setAttribute(Common.completionsAttribute(number), count);
   if (firstSixth) player.setAttribute(Common.PET_UNLOCK_ATTRIBUTE, true);
   player.setAttribute(Common.LAST_COMPLETED_ATTRIBUTE, number);
   const times = bestTimes(player);
   const ticks = challenge.elapsedTicks();
-  if (!(Number(times[number]) > 0) || ticks < Number(times[number])) {
+  const best = !(Number(times[number]) > 0) || ticks < Number(times[number]);
+  if (best) {
     times[number] = ticks;
     player.setAttribute(Common.BEST_TIMES_ATTRIBUTE, times);
   }
   sendCounts(player);
-  for (const task of tasks) api.emitCustomEvent("combat-achievements:complete", { player, task });
+  const ordinal = data.ordinals[number - 1];
+  const time = Common.formatTicks(ticks);
+  player.sendMessage(Common.message("completionCount", { ordinal, count }));
+  player.sendMessage(best ? Common.message("durationBest", { time })
+    : Common.message("duration", { time, best: Common.formatTicks(Number(times[number])) }));
+  let unlocked = false;
+  if (count === 1 && number < Common.SIX) {
+    const next = data.ordinals[number];
+    unlocked = number + 1 < data.infernoChallenge || Common.defeatedZuk(player);
+    player.sendMessage(Common.message(unlocked ? "unlocked" : "needInferno", { next }));
+  }
   const variant = number !== Common.SIX ? Dialogue.VARIANT.completed
     : firstSixth ? Dialogue.VARIANT.sixthFirst : Dialogue.VARIANT.sixthAgain;
-  Dialogue.say(player, variant, { challenge: number, tokkul });
+  challenge.result = { tokkul: data.rewards[number - 1], unlocked, variant };
+  // After the challenge's own lines, and once the reward is safe.
+  for (const task of tasks) api.emitCustomEvent("combat-achievements:complete", { player, task });
 }
 
-function failed(player, challenge, { logout = false } = {}) {
+/** Back outside after a completion: the TokKul, and his line the tick after. */
+function completed(player, challenge, { logout = false } = {}) {
+  const { tokkul, unlocked, variant } = challenge.result;
+  give(player, Common.ids.objs.tokkul, tokkul);
+  if (logout) return;
+  Common.later(1, () => {
+    if (player.isRegistered?.() !== false) Dialogue.say(player, variant, { challenge: challenge.number, tokkul, unlocked });
+  });
+}
+
+/** How long the player lasted and the Jads killed; any kills pay that many Jads' challenge. */
+function failed(player, challenge, { logout = false, died = false } = {}) {
+  const { data } = Common;
   player.setAttribute(Common.LAST_COMPLETED_ATTRIBUTE, 0);
-  if (!logout) Dialogue.say(player, Dialogue.VARIANT.failed, { challenge: challenge.number });
+  const kills = challenge.kills;
+  if (challenge.startTick !== -1) {
+    const values = { time: Common.formatTicks(challenge.elapsedTicks()), end: died ? data.messages.perishing : "." };
+    if (kills > 0) {
+      player.sendMessage(Common.message("survivedKilled", {
+        ...values, count: Common.NUMBER_WORDS[kills], jads: kills === 1 ? "JalTok-Jad" : "JalTok-Jads",
+      }));
+    } else {
+      player.sendMessage(Common.message(challenge.number === 1 ? "survivedNone" : "survivedNoneMulti", values));
+    }
+  }
+  if (kills > 0) {
+    const tokkul = data.rewards[kills - 1];
+    give(player, Common.ids.objs.tokkul, tokkul);
+    if (!logout) {
+      Dialogue.say(player, Dialogue.VARIANT.completed, { challenge: challenge.number, tokkul, npcLine: data.messages.notBad });
+    }
+  } else if (!logout) {
+    Dialogue.say(player, Dialogue.VARIANT.failed, { challenge: challenge.number });
+  }
 }
 
 function refused(player, number, reason) {
@@ -105,4 +153,4 @@ function attach(api) {
   api.onPlayerLogin(onLogin);
 }
 
-module.exports = { attach, completed, failed, refused, tasksFor, give };
+module.exports = { attach, lastJadDown, completed, failed, refused, tasksFor, give };
