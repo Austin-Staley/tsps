@@ -120,9 +120,10 @@ const half = () => 0.5;
 
 test('fill delay follows volume and quantity', () => {
   assert.equal(fillDelayMs({ itemId: HIGH_VOLUME, quantity: 1 }, half), 5_000);
-  assert.equal(fillDelayMs({ itemId: SLOW, quantity: 150 }, half), 10 * 60_000);
+  assert.equal(fillDelayMs({ itemId: SLOW, quantity: 150 }, half), 27 * 60_000);
+  assert.equal(fillDelayMs({ itemId: SLOW, quantity: 1_000 }, half), 60 * 60_000);
   const single = fillDelayMs({ itemId: SLOW, quantity: 1 }, half);
-  assert.ok(single > 0 && single < 10 * 60_000);
+  assert.ok(single > 0 && single < 60 * 60_000);
 
   let previous = 0;
   for (const quantity of [1, 10, 100, 1_000, 100_000]) {
@@ -137,13 +138,18 @@ test('crossing the guide fills fast, resting away from it waits', () => {
   const over = fillDelayMs({ itemId: PRICED, quantity: 1, price: 110 }, half);
   const under = fillDelayMs({ itemId: PRICED, quantity: 1, price: 90 }, half);
   assert.ok(over <= 5_000, `overpaying took ${over}ms`);
-  assert.ok(under === 10 * 60_000, `resting buy took ${under}ms`);
+  assert.ok(under > 10 * 60_000 && under < 60 * 60_000, `resting buy took ${under}ms`);
   assert.ok(atGuide > 5_000 && atGuide < 60_000, `guide took ${atGuide}ms`);
 
   const sellUnder = fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 81 }, half);
   const sellAbove = fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 99 }, half);
   assert.ok(sellUnder <= 5_000, `undercutting sell took ${sellUnder}ms`);
-  assert.ok(sellAbove === 10 * 60_000, `resting sell took ${sellAbove}ms`);
+  assert.ok(sellAbove > 10 * 60_000 && sellAbove < 60 * 60_000, `resting sell took ${sellAbove}ms`);
+});
+
+test('successful buys and sells wait at most one hour', () => {
+  assert.equal(fillDelayMs({ itemId: PRICED, quantity: 1, price: 50 }, () => 0.49), 60 * 60_000);
+  assert.equal(fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 180 }, () => 0.49), 60 * 60_000);
 });
 
 test('selling the same quantity takes longer at lower market volume', () => {

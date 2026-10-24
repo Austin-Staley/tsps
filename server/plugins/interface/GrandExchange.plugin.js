@@ -38,7 +38,7 @@ const OFFERS_ATTRIBUTE = "grand-exchange-offers";
 const LIMITS_ATTRIBUTE = "grand-exchange-limits";
 const LIMIT_WINDOW_MS = 4 * 60 * 60 * 1000;
 const OFFER_MIN_DELAY_MS = 5_000;
-const OFFER_MAX_DELAY_MS = 10 * 60_000;
+const OFFER_MAX_DELAY_MS = 60 * 60_000;
 const OFFER_ILLIQUID_MIN_MS = 60_000;
 const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
 // At the guide price an offer has a tenth of the volume wait; crossing it by a
