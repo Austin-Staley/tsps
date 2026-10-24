@@ -132,3 +132,21 @@ test('a short chatbox preserves the deadline and sidebar overlays never hold dam
     assert.equal(h.hits.length, 2, 'the remaining type-1 sidebar is not a modal');
   }
 });
+
+test('the captured continuous modal timeline holds a due pulse until close, then resumes thirty ticks later', t => {
+  const capture = require('./fixtures/poison-protection-clock-1637.json');
+  const h = nativeModalFixture(t, false), hitTicks = [];
+  // Replay the modal schedule using this cache's chatbox mount. The capture's
+  // negative protection counter is not being asserted as implemented here.
+  const start = 5147, end = 5214;
+  for (let tick = start + 1; tick <= end; tick++) {
+    for (const event of capture.events.filter(e => e.tick === tick)) {
+      if (event.event === 'openInterface') h.sender.sendChatboxInterface(event.group);
+      if (event.event === 'closeInterface') h.sender.closeInterface(h.sender.getChatboxGroupId());
+    }
+    const previous = h.hits.length;
+    h.step();
+    if (h.hits.length !== previous) hitTicks.push(tick);
+  }
+  assert.deepEqual(hitTicks, [5184, 5214]);
+});
