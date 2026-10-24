@@ -68,6 +68,61 @@ function startSpecial(fight,kind) {
     const preparation={seeds:6,screech:5,souls:4}[kind];
     for(let tick=0;tick<preparation;tick++) Specials.process(fight);
 }
+
+function pursuitWorldPasses(t,f) {
+    let cycle=0;
+    t.mock.method(core.World,'getProcessCycle',()=>cycle);
+    f.player.setNeedsPlacement(false);
+    f.boss.setNeedsPlacement(false);
+    f.boss.setScriptedMovement(true);
+    return () => {
+        cycle++;
+        // World.process runs NPC mechanics before player timers and area.
+        f.boss.getTimers().process();
+        f.boss.getMovementQueue().beginCycle();
+        f.boss.getMovementQueue().process();
+        f.player.getTimers().process();
+        f.fight.process();
+    };
+}
+
+test('normal binding takes its first actual pursuit step at cast plus five, not one movement pass later',t=>{
+    const f=fixture(),step=pursuitWorldPasses(t,f);
+    const origin=f.boss.getLocation().clone();
+    f.fight.bind();
+    for(let n=0;n<4;n++)step();
+    assert.ok(f.boss.getLocation().equals(origin),'no first step through cast+4');
+    step();
+    assert.equal(f.fight.tick,5);
+    assert.equal(f.boss.getLocation().equals(origin),false,'recorded NPC firstWALK+5 must reach the movement queue in time');
+});
+
+test('preparing pursuit a movement pass earlier does not advance already-adjacent melee',t=>{
+    const f=fixture(),step=pursuitWorldPasses(t,f),melee=[];
+    f.player.setLocation(new core.Location(2656,6372,0));
+    const original=f.fight.melee.bind(f.fight);
+    t.mock.method(f.fight,'melee',()=>{melee.push(f.fight.tick);original();});
+    f.fight.bind();
+    for(let n=0;n<4;n++)step();
+    assert.deepEqual(melee,[]);
+    step();
+    assert.deepEqual(melee,[5]);
+});
+
+test('a real counter between pursuit route preparation and the NPC pass prevents the first step',t=>{
+    const f=fixture(),step=pursuitWorldPasses(t,f);
+    f.boss.setFlag('combat:freezable',true);
+    const origin=f.boss.getLocation().clone();
+    f.fight.bind();
+    for(let n=0;n<4;n++)step();
+    assert.ok(f.boss.getMovementQueue().hasPendingWork(),'next NPC pass has a prepared pursuit route');
+    core.CombatFactory.freezeTicks(f.boss,20);
+    step();
+    step();
+    assert.ok(f.boss.getLocation().equals(origin),'the counter cancels prepared movement');
+    assert.equal(f.fight.boundUntil,0);
+    assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false,'the counter also suppresses the in-flight player bind');
+});
 test('cache identities distinguish spawn, boss, soul, effect and animation', () => {
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.boss).name, 'The Whisperer');
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.figure).name, 'Odd Figure');
@@ -819,7 +874,7 @@ test('wake holds the Odd Figure for four ticks and launches the first shot at wa
 });
 
 
-test('binding uses captured packet constants and a provisional six-tick impact with pursuit beginning at five', t => {
+test('binding retains captured packet constants and prepares its route before the fifth-tick NPC movement pass', t => {
     const f=fixture(), packets=[], steps=[];
     const sender=new Proxy({}, {get:(_,key)=>key==='sendProjectile'?((...args)=>packets.push(args)):(()=>sender)});
     f.player.getPacketSender=()=>sender;
@@ -832,11 +887,13 @@ test('binding uses captured packet constants and a provisional six-tick impact w
     assert.deepEqual([packet[0].getX(),packet[0].getY(),packet[1].getX(),packet[1].getY()],[2656,6370,2659,6378]);
     f.player.moveTo(new core.Location(2660,6379,0));
     assert.equal(packet[1].getX(),2659,'flight endpoint is the cast-time snapshot');
-    for(let i=0;i<4;i++)f.fight.process();
+    for(let i=0;i<3;i++)f.fight.process();
     assert.deepEqual(steps,[]);
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
     f.fight.process();
-    assert.deepEqual(steps,[5]);
+    assert.deepEqual(steps,[4]);
+    f.fight.process();
+    assert.deepEqual(steps,[4,5]);
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),false);
     f.fight.process();
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE),true);
