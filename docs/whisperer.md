@@ -60,3 +60,9 @@ The observations used here are independently identified as **normal**, not infer
 Focused tests use real rev241 cache configs, Player/NPC instances, equipment/inventory, HitDamage/HitQueue, skill levels, private areas and source hooks. Rendering/scheduling and deterministic accuracy are doubled only where the unit under test requires it. Build with `node node_modules/typescript/bin/tsc --build` and run `node --test tests/whisperer.test.cjs` from `server/`.
 
 The full sandbox suite completed with 4,962/4,970 passing. Eight failures were a bot-index check, a localhost WebSocket connection denied by the sandbox, and JSON/IndexedDB atomic temp-file rename restrictions. All eight, plus the three matching SQLite persistence checks, passed in a targeted unsandboxed rerun (11/11). The final postquest-access changes were then checked with the focused suite rather than repeating the full suite.
+
+### Additional normal capture checkpoint
+
+Normal level791 actors show shots one tick apart, handed animations10237/10238 and10243/10244, fixed three-tick impacts, projectile client-cycle offsets30/90 and raw heights350/100. The owner-only packet uses existing PacketSender height conversion, preserving angle254 and progress128. Normal tentacle waves launch four ticks after the first shot; enrage launches one with every shot. Soul groups are shuffled across twelve fixed tiles. Tests verify packet geometry, impacts, coordinates, role counts and both realm renders.
+
+Phase delays, fragment window, wake knockback, static tentacle rays and melee distribution remain implementation work. This checkpoint does not claim complete normal fidelity. Fresh server build and all41 focused tests pass; no full-suite or client-smoke claim for this checkpoint.
