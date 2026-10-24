@@ -1,6 +1,7 @@
 const {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByCurrent,
   lowerSkillByMax,
@@ -240,9 +241,12 @@ function applyZamorakBrew(player) {
 }
 
 function applyGuthixRest(player) {
-  heal(player, 5);
+  const current = getCurrentLevel(player, Skill.HITPOINTS);
+  const base = getMaxLevel(player, Skill.HITPOINTS);
+  const extraCap = current >= base ? 5 : 0;
+  if (current < base + extraCap) heal(player, 5, extraCap);
   restoreRunEnergy(player, 5);
-  curePoisonAndVenom(player);
+  curePoison(player, 1);
 }
 
 /** Prayer restore that may over-heal by up to `overPercent` above base (ancient/forgotten brew). */

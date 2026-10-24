@@ -44,8 +44,38 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 | `leaves` | The item left after the last bite (`Pie dish`, `Bowl`). |
 | `boost`, `drain`, `restore` | Skills by name and amount: a boost to base + amount, a drain from it, a restore up to base. Restore amounts may be `{ "flat", "percent" }` of the base level. |
 | `stamina`, `area`, `option` | Apply the shared stamina effect, require a `food:area` scene check, or consume via a cache action other than Eat. |
-| `runEnergy`, `curePoison`, `poisonImmunity` | Run energy restored, poison and venom cured, seconds of poison immunity. |
+| `runEnergy`, `curePoison`, `cureVenom`, `poisonImmunity` | Run energy restored; ordinary poison cured/venom converted to poison; explicit full poison-and-venom cure; seconds of poison immunity. |
 | `then` | A second heal `ticks` later, with its own effects (hunter meats, 7 ticks). A newer one replaces a pending one. |
+
+## Poison treatments
+
+Checked 24 October 2026 against [Guthix rest](https://oldschool.runescape.wiki/w/Guthix_rest),
+[cooked moonlight antelope](https://oldschool.runescape.wiki/w/Cooked_moonlight_antelope),
+and [Venom](https://oldschool.runescape.wiki/w/Venom):
+
+- Guthix rest converts venom to ordinary poison at the same damage, or reduces
+  existing poison damage by one. A conversion does not also reduce damage on
+  that dose. It restores 5 run energy and heals 5 HP, allowing a boost up to
+  base +5 when already at full HP; it never lowers a higher existing overheal.
+- Moonlight antelope's secondary heal, seven task ticks after eating, removes
+  poison or converts venom at matching damage. Neither treatment grants or
+  replaces immunity. Another hunter meat replaces the pending heal/cure;
+  ordinary food and potion effects do not replace it.
+- Strange fruit explicitly requests the full venom cure and retains its existing
+  short protection and energy restoration.
+
+The shared `ConsumableEffects.curePoison(player, damageReduction)` defaults to
+removing ordinary poison, with an optional reduction in displayed hit damage.
+The server represents poison as five severity points per starting damage and
+venom as direct damage. Conversion preserves damage through that representation
+without submitting or restarting a poison task. The existing explicit
+`curePoisonAndVenom` remains a full purge for callers that need it.
+
+Regressions in `tests/food-poison-treatments.test.cjs` use real Player poison
+fields and CountdownTask ticks, covering treatment stages, expiry timing,
+replacement, death, overheal boundaries and existing immunity. Potion intake,
+quest unlocks, broader antidote/anti-venom tiers and orb remedy selection remain
+separate audits; this correction does not establish complete food/potion parity.
 | `outcomes` | A table of results by `weight`, each with its heal, boosts, drains, `drainRandom` (a random skill but Hitpoints) and messages (kebabs). |
 | `special` | `anglerfish`: its heal from the eater's Hitpoints level (the level levelled up to, not the health left) and its overheal (not in combat in a PvP area). |
 | `wildernessOnly` | Can only be eaten in the Wilderness (blighted food). |
