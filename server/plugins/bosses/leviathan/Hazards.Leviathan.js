@@ -8,6 +8,7 @@ class Hazards {
     this.fight = fight;
     this.session = fight.session;
     this.blockers = new Set();
+    this.smokeCover = new Set();
     this.objects = new Map();
     this.originalClip = new Map();
     this.floor = new Set();
@@ -31,7 +32,7 @@ class Hazards {
   graphic(tile, name) { Common.tileGraphic(this.fight.player, this.session.area, tile, name); }
   place(tile, rotation = 0) {
     const key = Model.key(tile);
-    if (!this.floor.has(key) || this.blockers.has(key)) return;
+    if (!this.floor.has(key) || this.blockers.has(key)) return false;
     const { GameObject, ObjectManager, RegionManager } = Common.core;
     const at = this.session.tile(tile);
     const before = this.session.area.getClip(at);
@@ -41,6 +42,7 @@ class Hazards {
     RegionManager.addClipping(at.getX(), at.getY(), at.getZ(), RegionManager.BLOCKED_TILE, this.session.area);
     this.objects.set(key, object);
     this.blockers.add(key);
+    return true;
   }
   drop(tile, permanent = true, delay = Common.data.inferred.debrisFlightTicks) {
     if (!this.floor.has(Model.key(tile))) return;
@@ -50,7 +52,7 @@ class Hazards {
       if (!this.fight.alive()) return;
       this.graphic(target, "debrisImpact");
       if (Model.key(this.playerTile()) === Model.key(target)) Common.damage(this.fight, Common.random(0, Common.data.damage.debris));
-      if (permanent) this.place(target);
+      if (permanent && this.place(target)) this.smokeCover.add(Model.key(target));
     });
   }
   dropRoar(tile) {
@@ -112,6 +114,9 @@ class Hazards {
   }
   smoke() {
     const fight = this.fight;
+    // Only rocks landed during this rain shelter the subsequent blast. Roar
+    // rubble and previous smoke waves remain collision blockers, not cover.
+    this.smokeCover.clear();
     const schedule = fight.awakened ? {
       startTicks: 0, firstThrowTicks: 1, chargeTicks: 13, blastTicks: 13, endTicks: 13,
     } : Common.data.normalSmoke;
@@ -133,7 +138,7 @@ class Hazards {
     fight.at(schedule.blastTicks, () => {
       if (!fight.alive() || fight.special !== 'smoke') return;
       this.graphic(Common.data.arena.centre, "smoke");
-      if (!Model.covered(Common.data.arena.centre, this.playerTile(), this.blockers))
+      if (!Model.covered(Common.data.arena.centre, this.playerTile(), fight.awakened ? this.blockers : this.smokeCover))
         Common.damage(fight, Common.random(0, fight.stats.smokeMax));
     });
     fight.at(schedule.endTicks, () => {
@@ -216,7 +221,7 @@ class Hazards {
       Common.core.ObjectManager.deregister(object, true);
       this.session.area.setClip(object.getLocation(), this.originalClip.get(key));
     }
-    this.objects.clear(); this.originalClip.clear(); this.blockers.clear();
+    this.objects.clear(); this.originalClip.clear(); this.blockers.clear(); this.smokeCover.clear();
     for (const npc of [this.pathfinder, this.tornado]) if (npc) {
       if (npc.getPrivateArea() === this.session.area) this.session.area.remove(npc);
       Common.api.removeNpc(npc);

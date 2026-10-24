@@ -44,22 +44,52 @@ test('first-roar lightning tells use the recorded west/east regions and preserve
   h.move([2076, 6378]); h.step(7);
   assert.deepEqual([...h.fight.hazards.objects.values()].map(o => o.getFace()), [3,3,3]);
 });
-test('smoke throws ten real blockers and ray cover blocks its final blast', t => {
+test('a landed boulder from the current smoke wave blocks its final blast', t => {
   const h = H.harness(t);
   let random = 0;
   t.mock.method(Math, 'random', () => random);
+  h.move([2075, 6371]);
   h.fight.nextSpecial = 'smoke';
   h.fight.beginSpecial();
+  h.step(4);
   h.move([2074, 6379]);
-  h.step(13);
+  h.step(9);
   h.move([2074, 6371]);
-  h.fight.hazards.place([2075, 6371]);
   random = 0.999;
   h.step(6);
   assert.equal(h.fight.special, null);
   assert.equal(h.p.getHitpoints(), 99);
   assert.ok(h.fight.hazards.blockers.has('2075,6371'));
   assert.equal(h.fight.perfect, true);
+});
+
+test('roar rubble remains a movement blocker but does not shelter the player from smoke', t => {
+  const h = H.harness(t);
+  let random = 0;
+  t.mock.method(Math, 'random', () => random);
+  h.fight.hazards.dropRoar([2075, 6371]);
+  h.fight.nextSpecial = 'smoke'; h.fight.beginSpecial();
+  h.move([2074, 6379]); h.step(13);
+  assert.ok(h.fight.hazards.blockers.has('2075,6371'));
+  assert.ok(h.area.getClip(h.session.tile([2075,6371])) & h.core.RegionManager.BLOCKED_TILE);
+  h.move([2074, 6371]); random = 0.999; h.step(6);
+  assert.equal(h.p.getHitpoints(), 40);
+  assert.equal(h.fight.perfect, false);
+});
+
+test('a previous smoke wave cannot shelter the player from a later smoke blast', t => {
+  const h = H.harness(t);
+  let random = 0;
+  t.mock.method(Math, 'random', () => random);
+  h.move([2075, 6371]);
+  h.fight.nextSpecial = 'smoke'; h.fight.beginSpecial(); h.step(4);
+  h.move([2074, 6379]); h.step(15);
+  assert.ok(h.fight.hazards.blockers.has('2075,6371'));
+  h.move([2088, 6378]);
+  h.fight.nextSpecial = 'smoke'; h.fight.beginSpecial(); h.step(13);
+  h.move([2074, 6371]); random = 0.999; h.step(6);
+  assert.equal(h.p.getHitpoints(), 40);
+  assert.ok(h.fight.hazards.blockers.has('2075,6371'), 'old smoke rocks still block movement');
 });
 test('uncovered smoke applies damage and is not cancelled by entering enrage', t => {
   const h = H.harness(t);
