@@ -236,3 +236,296 @@
 .rl-sidebar-scrollable::-webkit-scrollbar-thumb:hover {
     background: var(--rl-scroll-thumb-hover);
 }
+
+/* ---------------------------------------------------------------- Quest Helper
+   QuestHelperPanel, QuestOverviewPanel and QuestStepPanel: DARK_GRAY panel, DARKER_GRAY rows,
+   section headers DARKER_GRAY darkened, or BRAND_ORANGE with black text while current. */
+.rl-qh-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+    box-sizing: border-box;
+    font-family: var(--rl-font);
+    color: var(--rl-text);
+}
+
+.rl-qh-title,
+.rl-qh-quest-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-family: var(--rl-font-bold);
+}
+
+.rl-qh-quest-header h3 {
+    margin: 4px 0;
+}
+
+.rl-qh-status {
+    margin: 0;
+    font-family: var(--rl-font-small);
+    color: #e4c27a;
+}
+
+.rl-qh-icon-button {
+    display: flex;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.rl-qh-icon-button:hover,
+.rl-qh-icon-button[aria-pressed="true"] {
+    background: var(--rl-hover);
+}
+
+.rl-qh-button {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--rl-medium-gray);
+    background: var(--rl-darker-gray);
+    color: var(--rl-text);
+    font-family: var(--rl-font);
+    cursor: pointer;
+}
+
+.rl-qh-button:hover {
+    background: var(--rl-hover);
+}
+
+.rl-qh-button-active {
+    border-color: var(--rl-orange);
+    color: var(--rl-orange);
+}
+
+.rl-qh-search {
+    flex: 0 0 auto;
+}
+
+.rl-qh-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rl-qh-dropdown {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.rl-qh-dropdown select {
+    width: 140px;
+}
+
+.rl-qh-skills {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+}
+
+.rl-qh-skill {
+    display: flex;
+    justify-content: center;
+    padding: 3px 0;
+    border: none;
+    background: var(--rl-darker-gray);
+    cursor: pointer;
+}
+
+.rl-qh-skill img {
+    image-rendering: pixelated;
+}
+
+/* SkillIconButton: a filtered-out skill is dimmed. */
+.rl-qh-skill-off img {
+    opacity: 0.3;
+}
+
+.rl-qh-section-title {
+    margin: 6px 0 2px;
+    padding: 4px 6px;
+    background: var(--rl-darker-gray);
+    font-family: var(--rl-font-bold);
+}
+
+/* QuestSelectPanel: the name in its state colour beside the start button. */
+.rl-qh-quest {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0 6px;
+    width: 100%;
+    margin-bottom: 2px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--rl-text);
+    font-family: var(--rl-font);
+    text-align: left;
+    cursor: pointer;
+}
+
+.rl-qh-quest:hover {
+    background: var(--rl-darker-gray);
+}
+
+.rl-qh-quest[aria-pressed="true"] {
+    border-color: var(--rl-orange);
+}
+
+.rl-qh-quest-detail {
+    grid-column: 1 / -1;
+    color: var(--rl-light-gray);
+}
+
+.rl-qh-warn {
+    color: #edb86d;
+}
+
+.rl-qh-accent {
+    color: #e4c27a;
+}
+
+.rl-qh-wrap {
+    overflow-wrap: anywhere;
+}
+
+.rl-qh-complete {
+    font-family: var(--rl-font-bold);
+    color: #8ade8a;
+}
+
+.rl-qh-direction {
+    padding: 8px;
+    border: 1px solid #6d704b;
+}
+
+.rl-qh-direction-arrow {
+    display: inline-block;
+    font-size: 24px;
+    color: #00ffff;
+}
+
+.rl-qh-current {
+    padding: 6px;
+    background: var(--rl-darker-gray);
+}
+
+.rl-qh-step-text {
+    white-space: pre-line;
+    line-height: 1.4;
+}
+
+.rl-qh-collapsible {
+    background: var(--rl-darker-gray);
+}
+
+.rl-qh-collapsible-header {
+    display: flex;
+    align-items: center;
+    background: #151515;
+}
+
+.rl-qh-collapsible-toggle {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px;
+    border: none;
+    background: transparent;
+    color: var(--rl-text);
+    font-family: var(--rl-font-bold);
+    text-align: left;
+    cursor: pointer;
+}
+
+.rl-qh-active > .rl-qh-collapsible-header {
+    background: var(--rl-orange);
+}
+
+.rl-qh-active > .rl-qh-collapsible-header .rl-qh-collapsible-toggle {
+    color: #000;
+}
+
+.rl-qh-lock {
+    margin: 0 8px;
+    accent-color: var(--rl-orange);
+}
+
+.rl-qh-collapsible-body {
+    padding: 6px 7px;
+}
+
+.rl-qh-collapsible-body h4 {
+    margin: 6px 0 2px;
+}
+
+.rl-qh-reqs,
+.rl-qh-plain {
+    margin: 0 0 6px;
+    padding-left: 0;
+    list-style: none;
+}
+
+.rl-qh-check {
+    display: inline-block;
+    width: 14px;
+}
+
+.rl-qh-none {
+    color: var(--rl-light-gray);
+}
+
+.rl-qh-note {
+    color: var(--rl-light-gray);
+}
+
+.rl-qh-link {
+    color: var(--rl-text);
+}
+
+.rl-qh-link:hover {
+    color: #00b3b3;
+    text-decoration: underline;
+}
+
+/* QuestStepPanel: steps LIGHT_GRAY, the current one BRAND_ORANGE, faded ones DARK_GRAY. */
+.rl-qh-steps {
+    margin: 0;
+    padding-left: 18px;
+    color: #c0c0c0;
+    white-space: pre-line;
+}
+
+.rl-qh-steps li {
+    margin-bottom: 6px;
+}
+
+.rl-qh-step-active {
+    color: var(--rl-orange);
+}
+
+.rl-qh-step-faded {
+    color: #404040;
+}
+
+.rl-qh-assist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px;
+    background: var(--rl-darker-gray);
+}
+
+/* The search field's magnifier, as RuneLite's IconTextField draws it. */
+.rl-qh-search img {
+    flex: 0 0 auto;
+    image-rendering: pixelated;
+}
