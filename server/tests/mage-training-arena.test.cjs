@@ -12,7 +12,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Guardians, Lobby, Enchanting, events;
+let Common, Guardians, Lobby, Enchanting, Alchemists, events, ironmanMode;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -20,13 +20,16 @@ before(async () => {
   Guardians = require('../plugins/minigames/magetrainingarena/Guardians.MageTrainingArena');
   Lobby = require('../plugins/minigames/magetrainingarena/Lobby.MageTrainingArena');
   Enchanting = require('../plugins/minigames/magetrainingarena/Enchanting.MageTrainingArena');
+  Alchemists = require('../plugins/minigames/magetrainingarena/Alchemists.MageTrainingArena');
+  ironmanMode = 'none';
   events = [];
   const api = new Proxy({
-    core: { ...core, TaskManager: { submit() {} } },
+    core: { ...core, TaskManager: { submit() {} }, Bank: { ...core.Bank, getTabForItem: () => 0 } },
     persistAttribute: () => {},
     emitCustomEvent(name, event) {
       events.push([name, event]);
       if (name === 'npc-dialogue:start') event.handled = true;
+      if (name === 'ironman:mode') event.mode = ironmanMode;
     },
   }, { get: (target, key) => target[key] ?? (() => {}) });
   Common.init(api);
@@ -65,6 +68,7 @@ function fakePlayer(x = 3363, y = 9644, z = 0) {
     }),
     getEquipment: () => ({ get: () => null }),
     getBanks: () => [],
+    getCurrentBankTab: () => 0,
     performAnimation: () => { player.anims += 1; },
     performGraphic() {},
     setFree: (n) => { free = n; },
@@ -263,6 +267,165 @@ test('the jewellery enchant spells offer other items to the arena before refusin
   assert.match(source, /emitCustomEvent\("magic:enchant-item"/);
 });
 
+// --- The Alchemists' Playground
+
+const playgroundTile = () => Common.data.alchemists.arrive;
+
+test('the cupboards hold the five items and an empty one in a fixed order, turning between cupboards', () => {
+  Alchemists.playground.offset = 0;
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(Alchemists.cupboardItem), ['boots', 'kiteshield', 'helm', 'emerald', 'longsword', null]);
+  Alchemists.playground.offset = 2;
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(Alchemists.cupboardItem), ['longsword', null, 'boots', 'kiteshield', 'helm', 'emerald']);
+});
+
+test('every change gives the five items the values 1, 5, 8, 15 and 30, and sometimes a free one', () => {
+  let seed = 7;
+  const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  let frees = 0;
+  for (let i = 0; i < 30; i++) {
+    Alchemists.change(random);
+    assert.deepEqual(Object.values(Alchemists.playground.values).sort((a, b) => a - b), [1, 5, 8, 15, 30]);
+    if (Alchemists.playground.free) frees += 1;
+  }
+  assert.ok(frees > 0 && frees < 30);
+});
+
+test('Search takes one, Take-5 up to five as room allows; the empty cupboard says so; other cupboards are left alone', () => {
+  const [x, y, z] = playgroundTile();
+  const player = fakePlayer(x, y, z);
+  const { locs, items } = Common.ids;
+  Alchemists.playground.offset = 0;
+  Alchemists.takeFrom(player, locs.cupboard0, false);
+  assert.equal(player.items.get(items.boots), 1);
+  player.setFree(3);
+  Alchemists.takeFrom(player, locs.cupboard4, true);
+  assert.equal(player.items.get(items.longsword), 3);
+  Alchemists.takeFrom(player, locs.cupboard5, true);
+  assert.equal(player.messages.at(-1), Common.message('cupboardEmpty'));
+  assert.equal(Alchemists.takeFrom(player, 1, true), false);
+});
+
+test("alching the room's items pays this turn's value in arena coins; the free one takes no runes", () => {
+  const [x, y, z] = playgroundTile();
+  const player = fakePlayer(x, y, z);
+  const { items } = Common.ids;
+  Alchemists.playground.values = { boots: 30, kiteshield: 1, helm: 5, emerald: 8, longsword: 15 };
+  Alchemists.playground.free = 'boots';
+  const policy = { player, itemId: items.boots, spellId: 55, allowed: false, coins: 12 };
+  Alchemists.alchemyPolicy(policy);
+  assert.equal(policy.allowed, true);
+  assert.equal(policy.coins, 0, 'no real coins');
+  const bypass = { player, spellId: 55, runeId: 561, bypass: null };
+  Alchemists.runeBypass(bypass);
+  assert.equal(bypass.bypass, true);
+  const otherSpell = { player, spellId: 14, runeId: 561, bypass: null };
+  Alchemists.runeBypass(otherSpell);
+  assert.equal(otherSpell.bypass, null, 'only the alchemy just allowed');
+  Alchemists.alchemyCompleted({ player, itemId: items.boots });
+  assert.equal(player.items.get(items.arenaCoins), 30);
+  const again = { player, spellId: 55, runeId: 561, bypass: null };
+  Alchemists.runeBypass(again);
+  assert.equal(again.bypass, null, 'and only once');
+
+  const paid = { player, itemId: items.helm, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(paid);
+  const runes = { player, spellId: 55, runeId: 561, bypass: null };
+  Alchemists.runeBypass(runes);
+  assert.equal(runes.bypass, null);
+
+  const outside = fakePlayer(3200, 3200, 0);
+  const elsewhere = { player: outside, itemId: items.boots, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(elsewhere);
+  assert.equal(elsewhere.allowed, false);
+});
+
+test('the Coin Collector: a point per 100 (the rest a chance of one more), 10 real coins per 100, 2 XP a coin', () => {
+  const [x, y, z] = playgroundTile();
+  const { items } = Common.ids;
+  const banked = [];
+  const player = fakePlayer(x, y, z);
+  player.getBank = () => ({ contains: () => false, getAddableAmount: (item) => item.getAmount(), add: (item) => banked.push([item.getId(), item.getAmount()]) });
+  player.items.set(items.arenaCoins, 250);
+  assert.equal(Alchemists.depositCoins(player, () => 0.4), 3, '50% chance taken');
+  assert.equal(player.items.get(items.arenaCoins), 0);
+  assert.deepEqual(banked, [[items.coins, 20]]);
+  assert.deepEqual(player.xp, [500]);
+  assert.equal(Common.points(player, 'alchemist'), 3);
+  player.items.set(items.arenaCoins, 250);
+  assert.equal(Alchemists.depositCoins(player, () => 0.6), 2);
+  ironmanMode = 'ultimate';
+  const uim = fakePlayer(x, y, z);
+  uim.items.set(items.arenaCoins, 100);
+  Alchemists.depositCoins(uim, () => 0.9);
+  assert.equal(uim.items.get(items.coins), 10, 'an Ultimate Ironman gets them in the pack');
+  ironmanMode = 'none';
+});
+
+test('the Alchemists Teleport needs Magic 21 and no coins', () => {
+  const player = fakePlayer(3363, 3319, 0);
+  const { locs, items } = Common.ids;
+  player.magic = 20;
+  Alchemists.enter({ player, objectId: locs.alchemistsPortal });
+  assert.equal(player.messages.at(-1), Common.message('level', { level: 21, room: "Alchemists' Playground" }));
+  player.magic = 21;
+  player.items.set(items.coins, 5);
+  Alchemists.enter({ player, objectId: locs.alchemistsPortal });
+  assert.equal(player.messages.at(-1), Common.message('noCoins'));
+  player.items.set(items.coins, 0);
+  Alchemists.enter({ player, objectId: locs.alchemistsPortal });
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], playgroundTile());
+});
+
+test("leaving pays the arena coins in first, then the room's items and coins are gone", () => {
+  const Area = Alchemists.defineArea();
+  const area = new Area();
+  const [x, y, z] = playgroundTile();
+  const player = fakePlayer(x, y, z);
+  player.isPlayer = () => true;
+  player.getAsPlayer = () => player;
+  player.getBank = () => ({ contains: () => false, getAddableAmount: (item) => item.getAmount(), add() {} });
+  const { items } = Common.ids;
+  player.items.set(items.arenaCoins, 300);
+  player.items.set(items.emerald, 4);
+  const before = Common.points(player, 'alchemist');
+  area.postLeave(player, true);
+  assert.equal(player.items.get(items.arenaCoins), 300, 'logging out keeps them');
+  area.postLeave(player, false);
+  assert.equal(Common.points(player, 'alchemist') - before, 3);
+  assert.equal(player.items.get(items.arenaCoins), 0);
+  assert.equal(player.items.get(items.emerald), 0);
+});
+
+test("a full bank can't swallow the Coin Collector's real coins: they go to the pack", () => {
+  const [x, y, z] = playgroundTile();
+  const { items } = Common.ids;
+  const player = fakePlayer(x, y, z);
+  player.getBank = () => ({ contains: () => false, getAddableAmount: () => 0, add() { throw new Error('nothing fits'); } });
+  player.items.set(items.arenaCoins, 300);
+  Alchemists.depositCoins(player, () => 0.9);
+  assert.equal(player.items.get(items.coins), 30);
+  assert.ok(!player.messages.some((m) => /added to your bank/.test(m)));
+});
+
+test('in the room an alchemy takes 5 ticks: a cast before then is refused', () => {
+  const [x, y, z] = playgroundTile();
+  const player = fakePlayer(x, y, z);
+  const { items } = Common.ids;
+  Alchemists.playground.values = { boots: 30, kiteshield: 1, helm: 5, emerald: 8, longsword: 15 };
+  Alchemists.playground.free = null;
+  const first = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(first);
+  assert.equal(first.allowed, true);
+  Alchemists.alchemyCompleted({ player, itemId: items.emerald });
+  const second = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(second);
+  assert.equal(second.allowed, false);
+  player.__mtaNextAlch = -1;
+  const later = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  Alchemists.alchemyPolicy(later);
+  assert.equal(later.allowed, true);
+});
+
 test('training-room deaths keep real gear and Hardcore status, clean room items and respawn in the hall', async (t) => {
   const { Player } = require('../dist/game/entity/impl/player/Player');
   const { PlayerDeathTask } = require('../dist/game/task/impl/PlayerDeath');
@@ -289,7 +452,7 @@ test('training-room deaths keep real gear and Hardcore status, clean room items 
     const player = new Player(null, Common.toLocation(room.arrive));
     player.setUsername('mta_safe_death');
     player.setRegistered(true);
-    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true }));
+    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
     t.mock.method(player, 'sendMessage', () => {});
     t.after(() => player.setRegistered(false));
     player.setAttribute('ironman:mode', 'hardcore');
