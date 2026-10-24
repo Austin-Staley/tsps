@@ -33,11 +33,8 @@ export class CombatPoisonEffect extends Task {
     }
 
     if (this.entity.isPlayer() && this.entity.getAsPlayer().getInterfaceId() > 0) {
-      // Poison pauses while interfaces are open and should hit immediately
-      // after the interface closes if it was already due.
-      if (this.ticksUntilHit < 0) {
-        this.ticksUntilHit = 0;
-      }
+      // Withhold damage/decay, but retain one due hit when elapsed time expires.
+      this.ticksUntilHit = Math.max(0, this.ticksUntilHit - 1);
       return;
     }
 

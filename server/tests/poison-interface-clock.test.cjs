@@ -1,0 +1,88 @@
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const { Server } = require('../dist/Server');
+Server.installProductionPathResolver();
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { CombatPoisonEffect } = require('../dist/game/task/impl/CombatPoisonEffect');
+
+function fixture(t, venom = false) {
+  const player = new Player(null), hits = [];
+  player.setRegistered(true);
+  player.setPoisonDamage(venom ? 6 : 30);
+  player.setVenomed(venom);
+  let open = true;
+  t.mock.method(player, 'getInterfaceId', () => open ? 1 : -1);
+  t.mock.method(player.getCombat().getHitQueue(), 'addPendingDamage', values => hits.push(...values));
+  const task = new CombatPoisonEffect(player);
+  task.setRunning(true);
+  t.after(() => task.stop());
+  return { player, task, hits, setOpen(value) { open = value; },
+    step(count = 1) { for (let i = 0; i < count; i++) task.tick(); } };
+}
+
+test('a long interface holds poison/venom without decay, then releases only one due hit', t => {
+  for (const venom of [false, true]) {
+    const h = fixture(t, venom);
+    h.step(200);
+    assert.equal(h.hits.length, 0);
+    assert.equal(h.player.getPoisonDamage(), venom ? 6 : 30);
+    h.setOpen(false); h.step();
+    assert.deepEqual(h.hits.map(hit => hit.getDamage()), [6]);
+    assert.equal(h.player.getPoisonDamage(), venom ? 8 : 29);
+    h.step(2);
+    assert.equal(h.hits.length, 1, 'elapsed interface time cannot queue a catch-up burst');
+    h.setOpen(true); h.step(200);
+    assert.equal(h.hits.length, 1);
+    assert.equal(h.player.getPoisonDamage(), venom ? 8 : 29);
+    h.setOpen(false); h.step();
+    assert.deepEqual(h.hits.map(hit => hit.getDamage()), venom ? [6, 8] : [6, 6]);
+  }
+});
+
+test('closing early does not invent a hit, while elapsed time across interfaces still counts', t => {
+  for (const venom of [false, true]) {
+    const h = fixture(t, venom);
+    h.step(5); h.setOpen(false); h.step(2);
+    assert.equal(h.hits.length, 0);
+    assert.equal(h.player.getPoisonDamage(), venom ? 6 : 30);
+    h.setOpen(true); h.step(35);
+    assert.equal(h.hits.length, 0);
+    h.setOpen(false); h.step();
+    assert.deepEqual(h.hits.map(hit => hit.getDamage()), [6]);
+  }
+});
+
+test('repeated short open/close cycles cannot postpone an otherwise due affliction', t => {
+  for (const venom of [false, true]) {
+    const h = fixture(t, venom);
+    for (let tick = 0; tick < 40; tick++) {
+      const open = tick % 2 === 0, before = h.hits.length, severity = h.player.getPoisonDamage();
+      h.setOpen(open); h.step();
+      if (open) { assert.equal(h.hits.length, before); assert.equal(h.player.getPoisonDamage(), severity); }
+    }
+    assert.deepEqual(h.hits.map(hit => hit.getDamage()), [6]);
+  }
+});
+
+test('curing or gaining immunity during the interface cancels the withheld hit', t => {
+  for (const venom of [false, true]) for (const immunity of [false, true]) {
+    const h = fixture(t, venom); h.step(50);
+    if (immunity) h.player.getCombat().getPoisonImmunityTimer().start(60);
+    else { h.player.setPoisonDamage(0); h.player.setVenomed(false); }
+    h.step(); h.setOpen(false); h.step(40);
+    assert.equal(h.hits.length, 0); assert.equal(h.task.isRunning(), false);
+  }
+});
+
+test('NPC poison does not enter a player-only interface gate', () => {
+  let severity = 30;
+  const hits = [], entity = { isRegistered: () => true, getHitpoints: () => 99,
+    isPlayer: () => false, getAsPlayer() { throw new Error('NPC has no player interface'); },
+    isPoisoned: () => severity > 0, isVenomed: () => false, setVenomed() {},
+    getPoisonDamage: () => severity, setPoisonDamage: value => { severity = value; },
+    getCombat: () => ({ getPoisonImmunityTimer: () => ({ finished: () => true }),
+      getHitQueue: () => ({ addPendingDamage: values => hits.push(...values) }) }) };
+  const task = new CombatPoisonEffect(entity); task.setRunning(true);
+  try { for (let i = 0; i < 35; i++) task.tick(); assert.deepEqual(hits.map(hit => hit.getDamage()), [6]); }
+  finally { task.stop(); }
+});
