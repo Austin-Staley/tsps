@@ -501,12 +501,11 @@ test("a gargoyle waits at 0 hitpoints for the rock hammer", () => {
   assert.equal(auto.preventDeath, false, "Gargoyle Smasher with a hammer finishes it");
 });
 
-test("the rock hammer also finishes the Grotesque Guardians, keeping their own message", () => {
+test("the rock hammer also finishes the Grotesque Guardians, each with its own line ('Dusk cracks apart.')", () => {
   const player = createPlayer();
   player.inventory.push([4162, 1]);
   player.performAnimation = () => {};
   const finishers = require("../plugins/skills/data/slayer-finishers.json").finishers;
-  const guardians = finishers.find((f) => f.names.includes("Dusk"));
   for (const name of ["Dusk", "Dawn"]) {
     const guardian = npcNamed(name);
     let hitpoints = 6;
@@ -518,7 +517,8 @@ test("the rock hammer also finishes the Grotesque Guardians, keeping their own m
     const event = { player, target: guardian, itemId: 4162, handled: false };
     Finishers.itemOnNpc(event);
     assert.equal(event.handled, true, name);
-    assert.equal(player.messages.at(-1), guardians.finished, name);
+    assert.equal(player.messages.at(-1), finishers.find((f) => f.names.includes(name)).finished, name);
+    assert.equal(player.messages.at(-1), `${name} cracks apart.`, name);
   }
 });
 
