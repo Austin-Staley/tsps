@@ -10,7 +10,7 @@ const core = PluginManager.getCoreApi();
 const O = core.ObjectIdentifiers;
 const I = core.ItemIdentifiers;
 const hooks = new Map();
-let tick, tasks, npcs, objects, events;
+let tick, tasks, npcs, objects, events, realObjects = false;
 core.ItemDefinition.forId = (id) => ({ getName: () => `item ${id}` });
 Thieving.register({
     core: {
@@ -19,8 +19,8 @@ Thieving.register({
         RegionManager: { canProjectileAttackBounds: (at) => npcs.find((npc) => npc.getLocation() === at).visible },
         TaskManager: { submit: (task) => { task.setRunning(true); tasks.push(task); } },
         ObjectManager: {
-            register: (object) => objects.push(['add', object]),
-            deregister: (object) => objects.push(['remove', object]),
+            register: (object) => { objects.push(['add', object]); if (realObjects) core.ObjectManager.register(object, false); },
+            deregister: (object) => { objects.push(['remove', object]); if (realObjects) core.ObjectManager.deregister(object, false); },
         },
     },
     onCustomEvent() {}, onNpcsInteraction() {}, onNpcInteraction() {}, onItemAction() {}, log() {},
@@ -197,6 +197,30 @@ test('destroying a private area before restock never resurrects its objects', ()
     advance(9);
     assert.equal(objects.length, 0);
     assert.ok(!depleted.has(stall));
+});
+
+test('a depleted private stall remains resolvable and is removed when its instance is destroyed', () => {
+    const area = new core.PrivateArea();
+    const stall = object(O.SPICE_STALL_3, area);
+    area.add(stall);
+    core.ObjectManager.register(stall, false);
+    realObjects = true;
+    try {
+        click(player({ area }), stall);
+        advance();
+        const empty = area.getObjects()[0];
+        assert.ok(empty, 'the replacement belongs to the instance');
+        assert.equal(empty.getId(), emptyStallId(stall));
+        assert.equal(core.MapObjects.get(empty.getId(), empty.getLocation(), area), empty);
+        area.destroy();
+        advance(9);
+        assert.equal(core.ObjectManager.objectsAt(stall.getLocation()).some((o) => o.getPrivateArea() === area), false);
+        assert.equal(core.World.getRemovedObjects().some((o) => o.getPrivateArea() === area), false);
+        assert.equal(area.getObjects().length, 0);
+    } finally {
+        area.destroy();
+        realObjects = false;
+    }
 });
 
 test('Port Roberts stalls keep their stock instead of acquiring classic stall depletion', () => {
