@@ -309,6 +309,27 @@ test('login and bootstrap replay the canonical wire value without changing the d
   assert.equal(wireValue(p), 13, 'bootstrap-complete resends varbit 6037 = 13');
 });
 
+test('login and bootstrap replay the completed reward bit from the durable quest stage', () => {
+  const p = makePlayer();
+  h.quest.setStage(p, 11);
+  p.log.length = 0;
+
+  h.logins.forEach(handler => handler({ player: p, username: p.getUsername() }));
+  assert.equal(wireValue(p, 6038), 1, 'completed quest restores piscquest_reward on login');
+
+  p.getPacketSender().sendVarbit(6038, 0);
+  p.log.length = 0;
+  h.events['player:bootstrap-complete'].forEach(handler => handler({ player: p }));
+  assert.equal(wireValue(p, 6038), 1, 'bootstrap restores piscquest_reward after varp initialization');
+  assert.equal(h.quest.getStage(p), 11, 'replay does not alter the durable quest stage');
+
+  const incomplete = makePlayer();
+  h.quest.setStage(incomplete, 10);
+  incomplete.log.length = 0;
+  h.logins.forEach(handler => handler({ player: incomplete, username: incomplete.getUsername() }));
+  assert.equal(wireValue(incomplete, 6038), null, 'an incomplete quest does not claim the reward');
+});
+
 test('a destroyed letter can be searched again before hand-in but not after', () => {
   const p = makePlayer();
   h.players.length = 0;

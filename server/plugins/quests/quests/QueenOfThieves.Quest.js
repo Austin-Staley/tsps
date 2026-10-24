@@ -652,12 +652,20 @@ module.exports = function registerQueenOfThievesQuest(api) {
     }
   }
 
+  function syncRewardFlag(player) {
+    const sender = player.getPacketSender();
+    if (quest.isComplete(player) && sender.getVarbit(VARBIT_PISCQUEST_REWARD) !== 1) {
+      sender.sendVarbit(VARBIT_PISCQUEST_REWARD, 1);
+    }
+  }
+
   function handleAppearanceStageChanged({ player, key }) {
     if (key === "the_queen_of_thieves" || key === "a_kingdom_divided") syncAppearance(player);
   }
 
   function handleAppearanceBootstrap({ player }) {
     syncAppearance(player);
+    syncRewardFlag(player);
   }
 
   function grantReward(player) {
@@ -668,6 +676,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
 
   function handleLogin({ player }) {
     syncAppearance(player);
+    syncRewardFlag(player);
     refreshQuestList(player);
     dressChest(player);
   }

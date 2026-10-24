@@ -1560,3 +1560,56 @@ test('Rehnison door opens a real path past the entrance chair to the hidden bed'
     assert.equal(route.success, true, 'the entrance must connect to the clear tile south-west of the bed');
   } finally { area.destroy(); h.restore(); }
 });
+
+test('Murder Mystery mansion Large doors 25748/25750 open their real north threshold together', async () => {
+  await initializeMapCollisionOnce();
+  RegionManager.loadMapFiles(2740, 3572, true);
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  assert.deepEqual([O.LARGE_DOOR_79, O.LARGE_DOOR_80], [25748, 25750]);
+  const definitions = new Map([25748, 25749, 25750, 25751].map(id => [id, CacheDefinitions.getObject(id)]));
+  for (const id of [25749, 25751]) {
+    assert.equal(definitions.get(id).name, 'null');
+    assert.equal(definitions.get(id).actions[0], 'Close');
+    assert.deepEqual(definitions.get(id).models, definitions.get(id - 1).models);
+  }
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const at = (id, x, y) => MapObjects.get(id, new Location(x, y, 0), null);
+  const crosses = (x, northward) => RegionManager.canMove(x, northward ? 3572 : 3573,
+    x, northward ? 3573 : 3572, 0, 1, 1, null);
+  try {
+    const west = at(25748, 2740, 3572), east = at(25750, 2741, 3572);
+    assert.ok(west && east, 'actual cache places both closed mansion leaves');
+    assert.deepEqual([west.getType(), east.getType(), west.getFace(), east.getFace()], [0, 0, 1, 1]);
+    for (const x of [2740, 2741]) assert.equal(crosses(x, true), false, 'closed wall blocks the threshold');
+
+    h.click(25748, 2740, 3572, 1, 'Open', 'Large door');
+    assert.equal(at(25748, 2740, 3572), null);
+    assert.equal(at(25750, 2741, 3572), null);
+    const openWest = at(25749, 2740, 3573), openEast = at(25751, 2741, 3573);
+    assert.ok(openWest && openEast, 'ordinary Open swings both leaves onto their north hinge tiles');
+    assert.deepEqual([openWest.getFace(), openEast.getFace()], [0, 2]);
+    for (const x of [2740, 2741]) {
+      assert.equal(crosses(x, true), true, 'normal collision permits entry');
+      assert.equal(crosses(x, false), true, 'normal collision permits exit');
+      for (const [srcY, destY] of [[3571, 3574], [3574, 3571]]) {
+        const route = new RsmodRouteFinding().findRoute({ level: 0, srcX: x, srcY, srcSize: 1,
+          destX: x, destY, privateArea: null, moveNear: false });
+        assert.equal(route.success, true, 'ordinary RSMOD reaches the opposite side of the mansion threshold');
+      }
+    }
+
+    h.submitted.at(-1).execute();
+    assert.ok(at(25748, 2740, 3572) && at(25750, 2741, 3572), 'auto-close restores both closed leaves');
+    for (const x of [2740, 2741]) assert.equal(crosses(x, true), false);
+    h.click(25750, 2741, 3572, 1, 'Open', 'Large door');
+    assert.ok(at(25749, 2740, 3573) && at(25751, 2741, 3573), 'the other leaf can reopen the pair');
+  } finally {
+    for (const [id, x, y] of [[25748, 2740, 3572], [25750, 2741, 3572],
+      [25749, 2740, 3573], [25751, 2741, 3573]]) {
+      const object = at(id, x, y);if (object) ObjectManager.deregister(object, true);
+    }
+    ObjectManager.register(new GameObject(25748, new Location(2740, 3572, 0), 0, 1, null), true);
+    ObjectManager.register(new GameObject(25750, new Location(2741, 3572, 0), 0, 1, null), true);
+    h.restore();
+  }
+});
