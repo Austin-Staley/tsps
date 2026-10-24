@@ -66,4 +66,3 @@ Final build and all 27 Duke tests pass. The broad server run passed 4,959 of 4,9
 The normal achievement follow-up adds ten regressions using actual MovementQueue, PendingHit and hit queues, including teleport/run state and death-animation eligibility. Fresh build and 61 Duke/Combat Achievement/hit-queue checks pass. The original combined local server installation separately passed all 4,961 server tests before these follow-ups.
 
 This branch depends on TSPS #882 for conditional drop quantities and applied-damage observers. It includes generic per-NPC stat-drain immunity and grave-fee foundations also used by the other normal-mode boss branches. No live game restart, account edit or Claude-owned client/clue deployment is performed here.
-
