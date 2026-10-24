@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
-const { test, before } = require('node:test');
+const { test, before, beforeEach } = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
@@ -10,6 +12,14 @@ const { Fight, beforeDeath, modifyHit, dropContext, bindingCounter } = require('
 const Specials = require('../plugins/bosses/whisperer/Specials.Whisperer');
 const Site = require('../plugins/bosses/whisperer/Site.Whisperer');
 let core;
+const scoreboardFile = path.resolve(__dirname,'../data/saves/whisperer-scoreboard.json');
+beforeEach(t => {
+    const read = fs.readFileSync, write = fs.writeFileSync, mkdir = fs.mkdirSync;
+    const owns = file => typeof file === 'string' && path.resolve(file) === scoreboardFile;
+    t.mock.method(fs,'readFileSync',(file,...args)=>owns(file)?'{}':read(file,...args));
+    t.mock.method(fs,'writeFileSync',(file,...args)=>{if(!owns(file))return write(file,...args);});
+    t.mock.method(fs,'mkdirSync',(directory,...args)=>{if(path.resolve(directory)!==path.dirname(scoreboardFile))return mkdir(directory,...args);});
+});
 before(async () => {
     await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
     core = PluginManager.getCoreApi();
@@ -968,4 +978,162 @@ test('shadow columns use clean native forty-pixel health bars and remove them ou
         assert.deepEqual(column.npc.getTickHits(),[]);
         assert.deepEqual(column.npc.getHeadbars(),[{id:2,remove:true}]);
     }
+});
+
+test('normal north and south wake approaches use the native three-tile two-tick flyback', t => {
+    const tasks = [];
+    t.mock.method(core.TaskManager,'submit',task=>{task.setRunning(true);tasks.push(task);});
+    for (const [y,dy,direction] of [[6371,3,2],[6367,-3,0]]) {
+        const f = fixture();
+        f.boss.moveTo(new core.Location(2655,6368,0));
+        f.player.moveTo(new core.Location(2656,y,0));
+        f.fight.wake();
+        const movement = f.player.getForceMovement();
+        assert.ok(movement,'wake immediately starts the native flyback');
+        assert.deepEqual([movement.getStart().getX(),movement.getStart().getY(),movement.getEnd().getX(),movement.getEnd().getY()],[2656,y,0,dy]);
+        assert.deepEqual([movement.getSpeed(),movement.getReverseSpeed(),movement.getDirection(),movement.getAnimation()],[0,60,direction,9799]);
+        const task = tasks.at(-1);
+        task.tick();
+        assert.equal(f.player.getLocation().getY(),y);
+        task.tick();
+        assert.equal(f.player.getLocation().getY(),y+dy);
+        assert.equal(f.player.getForceMovement(),null);
+        f.fight.stop();
+    }
+});
+
+test('leaving during wake cancels its flyback task instead of returning the player to the cathedral', t => {
+    let task;
+    t.mock.method(core.TaskManager,'submit',value=>{task=value;task.setRunning(true);});
+    const f = fixture();
+    f.boss.moveTo(new core.Location(2655,6368,0));
+    f.player.moveTo(new core.Location(2656,6371,0));
+    f.fight.wake();
+    assert.ok(f.player.getForceMovement());
+    f.player.moveTo(new core.Location(2656,6386,0));
+    f.fight.stop();
+    assert.equal(f.player.getForceMovement(),null);
+    task.tick();task.tick();
+    assert.equal(f.player.getLocation().getY(),6386);
+});
+
+function recordBoard() {
+    const f=fixture(), hooks={before:[],death:[],npcDeath:[],objects:new Map(),attributes:[]}, interfaces=[], strings=new Map();
+    let complete=true,canonical=0;
+    const sender=new Proxy({}, {get:(_,name)=>name==='sendInterface'?id=>interfaces.push(id):name==='sendString'?(text,uid)=>strings.set(uid&65535,text):()=>sender});
+    f.player.getPacketSender=()=>sender;
+    const api=new Proxy({core,
+        persistAttribute:(...args)=>hooks.attributes.push(args),
+        onBeforeObjectInteraction:fn=>hooks.before.push(fn),
+        onPlayerDeath:fn=>hooks.death.push(fn),
+        onNpcDeath:fn=>hooks.npcDeath.push(fn),
+        onObjectInteraction:(name,actions)=>hooks.objects.set(name,actions),
+        emitCustomEvent(name,event){if(name==='quest:is-complete')event.complete=complete;if(name==='combat-achievements:count')event.total=canonical;},
+        spawnNpc({id,x,y,z,owner}){const npc=core.NPC.create(id,new core.Location(x,y,z));npc.setOwner(owner);return npc;},
+    },{get:(object,key)=>object[key]??(()=>{})});
+    Common.init(api);Site.attach(api);
+    return {...f,hooks,interfaces,strings,api,setComplete:value=>complete=value,setCanonical:value=>canonical=value};
+}
+
+test('normal and shadow Whisperer scoreboard parents Read the native statistics interface and existing personal records', () => {
+    const h=recordBoard(), read=h.hooks.objects.get('Scoreboard')?.Read;
+    assert.equal(typeof read,'function');
+    h.player.setAttribute(Common.KILLS_ATTRIBUTE,12);h.player.setAttribute(Common.BEST_ATTRIBUTE,123);h.setCanonical(25);
+    for(const id of [46092,49474]){
+        const event={player:h.player,objectId:id,clickType:1,handled:false};
+        for(const hook of h.hooks.before)hook(event);
+        assert.equal(event.handled,true);
+    }
+    assert.deepEqual(h.interfaces,[830,830]);
+    assert.equal(h.strings.get(9),'25');
+    assert.equal(h.strings.get(11),'0 (recorded)');
+    assert.equal(h.strings.get(13),'1:13.80');
+    for(const id of [47580,47581,47582,47583])assert.equal(read({player:h.player,objectId:id}),true);
+    assert.equal(read({player:h.player,objectId:47588}),false,'other bosses are not handled');
+    assert.equal(read({player:h.player,objectId:48174}),false,'the broken normal transform has no Read action');
+    const nonRead={player:h.player,objectId:46092,clickType:2,handled:false};
+    for(const hook of h.hooks.before)hook(nonRead);
+    assert.equal(nonRead.handled,false);
+    h.setComplete(false);
+    assert.equal(read({player:h.player,objectId:47582}),false);
+});
+
+test('Whisperer records only active fight deaths once and completed kills once', () => {
+    const h=recordBoard();
+    require('../plugins/bosses/whisperer/Fight.Whisperer').attach(h.api);
+    const read=()=>h.hooks.objects.get('Scoreboard').Read({player:h.player,objectId:47582});
+    read();
+    const beforeKills=Number(h.strings.get(15).replace(/[^0-9]/g,''));
+    assert.equal(h.hooks.death.length,1);
+    const death=()=>h.hooks.death[0]({player:h.player});
+    death();
+    assert.equal(Number(h.player.getAttribute(Common.DEATHS_ATTRIBUTE))||0,0,'staging is excluded');
+    h.player.moveTo(new core.Location(2656,6371,0));
+    h.player.getInventory().adds(core.ItemIdentifiers.BLACKSTONE_FRAGMENT_2,1);
+    Site.disturb({player:h.player,npc:core.NPC.create(12203,new core.Location(2655,6368,0))});
+    const session=Site.sessionOf(h.player), fight=session.fight;
+    death();death();
+    assert.equal(h.player.getAttribute(Common.DEATHS_ATTRIBUTE),1);
+    assert.equal(session.ended,false,'recording does not interfere with the existing death/gravestone cleanup');
+    Site.leave({player:h.player});death();
+    assert.equal(h.player.getAttribute(Common.DEATHS_ATTRIBUTE),1,'departure is excluded');
+    h.fight.elapsedTicks=100;
+    for(const hook of h.hooks.npcDeath)hook({npc:h.boss});
+    assert.equal(Number(h.player.getAttribute(Common.KILLS_ATTRIBUTE))||0,0,'non-final death is excluded');
+    h.fight.finish();
+    for(let repeat=0;repeat<2;repeat++)for(const hook of h.hooks.npcDeath)hook({npc:h.boss});
+    assert.equal(h.player.getAttribute(Common.KILLS_ATTRIBUTE),1);
+    read();assert.equal(Number(h.strings.get(15).replace(/[^0-9]/g,'')),beforeKills+1,'the world kill also counts once');
+    const completed=recordBoard();
+    completed.player.moveTo(new core.Location(2656,6371,0));
+    completed.player.getInventory().adds(core.ItemIdentifiers.BLACKSTONE_FRAGMENT_2,1);
+    Site.disturb({player:completed.player,npc:core.NPC.create(12203,new core.Location(2655,6368,0))});
+    Site.sessionOf(completed.player).fight.finish();
+    completed.hooks.death[0]({player:completed.player});
+    assert.equal(Number(completed.player.getAttribute(Common.DEATHS_ATTRIBUTE))||0,0,'completed fights are excluded');
+    Site.leave({player:completed.player});
+});
+
+test('Whisperer recorded world totals and best survive a memory-only save reload without historical backfill', t => {
+    const filename=require.resolve('../plugins/bosses/whisperer/Records.Whisperer');
+    const previous=require.cache[filename];
+    let saved=JSON.stringify({kills:7,deaths:3,bestTicks:80}), writes=0;
+    const read=fs.readFileSync,write=fs.writeFileSync;
+    t.mock.method(fs,'readFileSync',(file,...args)=>typeof file==='string'&&path.resolve(file)===scoreboardFile?saved:read(file,...args));
+    t.mock.method(fs,'writeFileSync',(file,value,...args)=>{if(typeof file==='string'&&path.resolve(file)===scoreboardFile){saved=String(value);writes++;return;}return write(file,value,...args);});
+    try {
+        delete require.cache[filename];
+        let records=require(filename);
+        const h=recordBoard();h.player.setAttribute(Common.KILLS_ATTRIBUTE,999);
+        records.won({elapsedTicks:100});records.won({elapsedTicks:40});records.died(h.player);
+        assert.equal(writes,3);
+        assert.deepEqual(JSON.parse(saved),{kills:9,deaths:4,bestTicks:40});
+        delete require.cache[filename];records=require(filename);
+        records.read({player:h.player,objectId:47582});
+        assert.equal(h.strings.get(9),'999','existing personal KC remains canonical');
+        assert.equal(h.strings.get(15),'9 (recorded)');assert.equal(h.strings.get(17),'4 (recorded)');assert.equal(h.strings.get(19),'0:24.00');
+        assert.equal(h.player.getAttribute(Common.DEATHS_ATTRIBUTE),1);
+    } finally {delete require.cache[filename];if(previous)require.cache[filename]=previous;}
+});
+
+test('Whisperer statistics write failures retain memory totals without interrupting final rewards', t => {
+    const h=recordBoard(),messages=[],logs=[];
+    const read=()=>h.hooks.objects.get('Scoreboard').Read({player:h.player,objectId:47582});
+    read();const beforeKills=Number(h.strings.get(15).replace(/[^0-9]/g,'')),beforeDeaths=Number(h.strings.get(17).replace(/[^0-9]/g,''));
+    h.player.sendMessage=message=>messages.push(message);
+    h.api.log=(...args)=>logs.push(args);
+    require('../plugins/bosses/whisperer/Fight.Whisperer').attach(h.api);
+    const write=fs.writeFileSync;
+    t.mock.method(fs,'writeFileSync',(file,...args)=>{if(typeof file==='string'&&path.resolve(file)===scoreboardFile)throw new Error('controlled statistics failure');return write(file,...args);});
+    h.fight.finish();
+    assert.doesNotThrow(()=>{for(const hook of h.hooks.npcDeath)hook({npc:h.boss});});
+    assert.ok(messages.some(message=>message.startsWith('Fight duration:')),'completion continues after recording');
+    assert.equal(h.player.getAttribute(Common.KILLS_ATTRIBUTE),1);
+    assert.equal(h.session.perfectKills,1,'the final reward callback still executes');
+    assert.doesNotThrow(()=>require('../plugins/bosses/whisperer/Records.Whisperer').died(h.player));
+    assert.equal(h.player.getAttribute(Common.DEATHS_ATTRIBUTE),1);
+    read();
+    assert.equal(Number(h.strings.get(15).replace(/[^0-9]/g,'')),beforeKills+1);
+    assert.equal(Number(h.strings.get(17).replace(/[^0-9]/g,'')),beforeDeaths+1);
+    assert.equal(logs.length,2);
 });

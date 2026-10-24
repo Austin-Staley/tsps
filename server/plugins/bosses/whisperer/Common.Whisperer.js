@@ -2,6 +2,7 @@ const data = require('../data/whisperer.json');
 const INSIDE_ATTRIBUTE = 'whisperer:inside';
 const KILLS_ATTRIBUTE = 'whisperer:kills';
 const BEST_ATTRIBUTE = 'whisperer:best-ticks';
+const DEATHS_ATTRIBUTE = 'whisperer:deaths';
 const MONSTER = 'Whisperer, The';
 let api;
 function init(value) { api = value; }
@@ -68,4 +69,4 @@ function fragment(fight, glowing) {
         fight.player.getInventory().refreshItems();
     sync(fight);
 }
-module.exports = { data, init, get api() { return api; }, get core() { return api.core; }, later, location, random, protectedFrom, damage, cancelDamage, remove, sync, fragment, INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, BEST_ATTRIBUTE, MONSTER };
+module.exports = { data, init, get api() { return api; }, get core() { return api.core; }, later, location, random, protectedFrom, damage, cancelDamage, remove, sync, fragment, INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, BEST_ATTRIBUTE, DEATHS_ATTRIBUTE, MONSTER };

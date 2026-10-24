@@ -1,8 +1,10 @@
 {
   "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Independently normal level791 actors in Grid Master recording3285 corroborate seed grids/anchors and column coordinates against ordinary Wiki diagrams. Remaining evidence audit: docs/whisperer.md.",
   "quest": "desert_treasure_ii",
+  "scoreboard": { "interface": 830, "close": 2, "parents": [46092,49474], "readable": [47580,47581,47582,47583], "components": { "kills": 9, "deaths": 11, "best": 13, "worldKills": 15, "worldDeaths": 17, "worldBest": 19 } },
   "npcs": { "figure": 12203, "boss": 12204, "melee": 12205, "tentacle": 12208, "columnShadow": 12209, "column": 12210, "soul": 12211, "soulShadow": 12212 },
-  "animations": { "spawn": 10227, "melee": 10234, "ranged": 10237, "rangedAlt": 10238, "magic": 10243, "magicAlt": 10244, "teleport": 10247, "appear": 10248, "screech": 10250, "screechHold": 10251, "screechBlast": 10252, "seeds": 10254, "binding": 10254, "souls": 10256, "soulChant": 10257, "soulResolve": 10259, "death": 10260, "tentacleSpawn": 10263, "tentacleAttack": 10266 },
+  "animations": { "spawn": 10227, "wakeKnockback": 9799, "melee": 10234, "ranged": 10237, "rangedAlt": 10238, "magic": 10243, "magicAlt": 10244, "teleport": 10247, "appear": 10248, "screech": 10250, "screechHold": 10251, "screechBlast": 10252, "seeds": 10254, "binding": 10254, "souls": 10256, "soulChant": 10257, "soulResolve": 10259, "death": 10260, "tentacleSpawn": 10263, "tentacleAttack": 10266 },
+  "wakeKnockback": { "tiles": 3, "cycles": 60, "ticks": 2 },
   "projectiles": { "ranged": 2444, "magic": 2445, "bind": 2467 },
   "graphics": { "bindingImpact": 2466 },
   "volley": { "launchDelay": 30, "arrivalCycles": 90, "startHeight": 87.5, "endHeight": 25, "angle": 254, "progress": 128, "impactTicks": 3 },

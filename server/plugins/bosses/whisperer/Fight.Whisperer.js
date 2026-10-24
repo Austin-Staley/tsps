@@ -25,6 +25,8 @@ class Fight {
         this.startCycle = Common.core.World.getProcessCycle();
         this.boundUntil = 0;
         this.bindingFormUntil = 0;
+        this.wakeMovementTask = null;
+        this.deathRecorded = false;
         Rewards.begin(this);
     }
     wake() {
@@ -32,6 +34,23 @@ class Fight {
         this.nextAttack = this.tick + 7;
         this.boss.setNpcTransformationId(Common.data.npcs.figure);
         this.boss.performAnimation(new Common.core.Animation(Common.data.animations.spawn));
+        const from = this.player.getLocation(), origin = this.boss.getLocation(), size = this.boss.getSize();
+        const geometry = Common.data.wakeKnockback;
+        const dy = from.getY() === origin.getY() + size ? geometry.tiles : from.getY() === origin.getY() - 1 ? -geometry.tiles : 0;
+        // The captured north approach and ordinary south approach corroborate
+        // these faces only. Do not infer diagonal or east/west destinations.
+        if (dy && from.getX() >= origin.getX() && from.getX() < origin.getX() + size) {
+            const { ForceMovement, ForceMovementTask, Location, TaskManager } = Common.core;
+            const fight = this;
+            const movement = new ForceMovement(from.clone(),new Location(0,dy),0,geometry.cycles,dy > 0 ? 2 : 0,Common.data.animations.wakeKnockback);
+            this.wakeMovementTask = new (class extends ForceMovementTask {
+                execute() {
+                    if (!fight.alive()) { this.stop(); return; }
+                    super.execute();
+                }
+            })(this.player,geometry.ticks,movement);
+            TaskManager.submit(this.wakeMovementTask);
+        }
         this.at(4, () => {
             this.waking = false;
             this.boss.setNpcTransformationId(Common.data.npcs.boss);
@@ -327,7 +346,7 @@ class Fight {
             this.setShadow(false);
         Common.sync(this);
     }
-    stop() { this.stopped = true; this.events = []; Common.cancelDamage(this); this.clearTentacles(); Specials.clear(this); }
+    stop() { this.stopped = true; this.wakeMovementTask?.stop(); this.wakeMovementTask = null; this.events = []; Common.cancelDamage(this); this.clearTentacles(); Specials.clear(this); }
 }
 function fightOf(npc) { return npc?.__whispererFight; }
 function beforeDeath(event) {
@@ -417,6 +436,7 @@ function onDeath({ npc }) {
     const best = Number(player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
     if (!best || ticks < best)
         player.setAttribute(Common.BEST_ATTRIBUTE, ticks);
+    require('./Records.Whisperer').won(fight);
     player.sendMessage(`Fight duration: ${Math.floor(ticks * .6 / 60)}:${String(Math.floor(ticks * .6) % 60).padStart(2, '0')}${!best || ticks < best ? ' (new personal best)' : ''}.`);
     Rewards.complete(fight);
     Common.later(30, () => {

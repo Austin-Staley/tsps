@@ -180,12 +180,19 @@ function suppressSpawn(event) {
 }
 function startup() { const [x, y, z] = Common.data.site.boss; Common.api.spawnNpc({ id: Common.data.npcs.figure, x, y, z, wanderRadius: 0 }); }
 function counts({ player, counts }) { counts[Common.MONSTER] = Number(player.getAttribute(Common.KILLS_ATTRIBUTE)) || 0; }
+function recordDeath({player}) {
+    const fight=sessionOf(player)?.fight;
+    if(!fight?.alive() || fight.deathRecorded)return;
+    fight.deathRecorded=true;
+    require('./Records.Whisperer').died(player);
+}
 function best(request) {
     if (request.monster === Common.MONSTER)
         request.best = Number(request.player.getAttribute(Common.BEST_ATTRIBUTE)) || 0;
 }
 function attach(api) {
     require('./Travel.Whisperer').attach(api);
+    require('./Records.Whisperer').attach(api);
     api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
     api.persistAttribute(Common.KILLS_ATTRIBUTE, 0);
     api.persistAttribute(Common.BEST_ATTRIBUTE, 0);
@@ -196,6 +203,7 @@ function attach(api) {
     api.onObjectInteraction('Tentacle', { Escape: leave, 'Quick-escape': leave, Leave: leave });
     api.onItemAction(fragmentAction);
     api.onPlayerLogin(recover);
+    api.onPlayerDeath(recordDeath);
     api.onCustomEvent('gravestones:grave-location', grave);
     api.onCustomEvent('combat-achievements:kill-count', counts);
     api.onCustomEvent('combat-achievements:personal-best', best);
