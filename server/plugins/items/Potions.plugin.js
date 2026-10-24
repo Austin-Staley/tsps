@@ -1425,28 +1425,39 @@ function componentIds(api, names) {
   return names.map((name) => api.core.CacheDefinitions.getComponentId(name)).filter(Number.isInteger);
 }
 
-/** The potions it can drink: those that cure poison or venom. */
-const CURE_POTIONS = new Set([
-  "Antipoison", "Superantipoison", "Antidote+", "Antidote++", "Sanfew serum",
-  "Anti-venom", "Anti-venom+", "Antipoison mix", "Antidote+ mix",
+/** Wiki Poison/Venom: prefer stronger treatment, including partial Guthix rest. */
+const CURE_POTIONS = new Map([
+  ["Guthix rest", 0],
+  ["Antipoison", 1], ["Antipoison mix", 1],
+  ["Superantipoison", 2], ["Sanfew serum", 2],
+  ["Antidote+", 3], ["Antidote+ mix", 3],
+  ["Antidote++", 4], ["Anti-venom", 5], ["Anti-venom+", 6],
 ]);
 
 /**
- * "Cure" on the hitpoints orb drinks the first such potion in the inventory, as drinking it
- * does (rsprox captures: the drink's animation, sound and messages); with none, "You haven't
- * got anything capable of curing your poison.".
+ * Prefer the strongest potion, then the least-dosed vessel of that family,
+ * keeping the first slot for a dose tie. Different equally strong families
+ * retain their existing inventory order pending captured priority evidence.
+ * Consumption still uses the ordinary drink handler and its restrictions.
  */
 function cureFromHealthOrb({ player }) {
   if (!player || (!player.isPoisoned?.() && !player.isVenomed?.())) return;
   const items = player.getInventory().getItems();
+  let selected = null;
   for (let slot = 0; slot < items.length; slot++) {
     const itemId = items[slot]?.getId?.() ?? -1;
     if (itemId <= 0) continue;
     const entry = POTION_BY_ITEM_ID.get(itemId);
-    if (entry && CURE_POTIONS.has(entry.potion.name)) {
-      handlePotionDrink(player, itemId, slot);
-      return;
+    const strength = entry && CURE_POTIONS.get(entry.potion.name);
+    if (strength === undefined || !entry) continue;
+    if (!selected || strength > selected.strength ||
+        (entry.potion === selected.entry.potion && entry.doses < selected.entry.doses)) {
+      selected = { entry, strength, itemId, slot };
     }
+  }
+  if (selected) {
+    handlePotionDrink(player, selected.itemId, selected.slot);
+    return;
   }
   player.sendMessage("You haven't got anything capable of curing your poison.");
 }
