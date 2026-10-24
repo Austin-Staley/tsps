@@ -45,8 +45,11 @@ This is **not a verified 1:1 implementation**. In particular:
 - Unpublished disease/watering probabilities, some yield endpoints, Kronos
   skip probability, barbarian training failure probability, and Hespori's
   special/poison scheduling use estimates marked `ponytail:` in the code.
-- Tree chopping uses the existing Woodcutting plugin's rates/depletion model.
-  Redwood branch depletion does not yet reproduce OSRS's independent timers.
+- Tree chopping uses the existing Woodcutting plugin's axe and success-rate model.
+  Player-grown redwoods have four private chopping spots: each depletes with a
+  1/11 roll per successful log and regrows independently after 200 game ticks
+  (120 seconds), including time offline. Woodcutting Guild redwoods retain
+  Forestry's 440-tick depletion timer and 199-tick respawn.
 - Geomancy, storage, contracts, and Tithe rewards use existing dialogue menus;
   the original dedicated interfaces and Tithe overlay are not reproduced.
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
@@ -66,6 +69,7 @@ From `server/`:
 ```powershell
 npx.cmd tsc --noEmit
 node --test tests/farming-model.test.cjs
+node --test tests/farming-redwood.test.cjs tests/woodcutting-guild.test.cjs
 ```
 
 The second command checks the state machine and mocked hooks without server startup
@@ -74,6 +78,19 @@ disease/death, mature immunity, private stump regrowth, herb formulas, critical
 cache states, Tithe growth/scoring, null bank tabs, growth cadence, seedling deadlines
 and nearby patch selection across region boundaries. Cache-only audits also checked crop item
 resolution and growing, diseased, dead, and mature visual values.
+
+Redwood regressions cover independent spots/players, exact tick deadlines between
+minute sweeps, saved offline deadlines, old whole-tree stump saves, all sixteen
+private branch combinations, upper-floor geometry and a complete Woodcutting
+request/log/depletion cycle. Cache revision 241 region 4922 contains four Cut
+multilocs named `farming_redwood_tree_patch_1_{2,4,6,8}`, controlled by varbit
+7907: healthy value 18 and depleted-spot masks 41–55. Ground and first-floor locs
+are refreshed privately when that value changes. The timer uses the ordinary
+600 ms server tick; raw packet-capture verification remains outstanding.
+
+An old redwood whole-tree stump save has no branch identity. Its remaining
+deadline is preserved for all four spots once, after which they regrow independently.
+New planting/clearing starts without old branch deadlines.
 
 To regenerate `plugins/skills/data/farming-data.json` (one crop, patch type, patch or loc per line):
 

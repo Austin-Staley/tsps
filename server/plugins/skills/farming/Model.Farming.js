@@ -1,4 +1,5 @@
 const Data = require("./Data.Farming");
+const Redwood = require("./Redwood.Farming");
 
 const MINUTE = 60_000;
 function advanceTithe(plant, now) {
@@ -122,12 +123,14 @@ function weeding(farm, patch, state) {
 function nextDue(farm) {
     let due = Infinity;
     for (const { patch, state } of patchStates(farm)) {
+        if (state.crop === "REDWOOD") due = Math.min(due, Redwood.nextDue(state));
         if (growing(state) || weeding(farm, patch, state)) due = Math.min(due, state.nextAt);
     }
     return due;
 }
 
 function advanceFarm(farm, now, random = Math.random) {
+    for (const { state } of patchStates(farm)) if (state.crop === "REDWOOD") Redwood.advance(state, now);
     const kronos = new Map();
     const planted = [];
     for (const entry of patchStates(farm)) if (growing(entry.state)) planted.push(entry);
@@ -200,6 +203,7 @@ function patchValue(patch, state) {
     // The cache distinguishes these actions even though RuneLite coalesces their timer states.
     if (crop.type === "SPIRIT_TREE" && state.status === "grown") return state.checked ? 20 : 44;
     if (crop.type === "GRAPES" && state.status === "grown" && state.checked) return 15 - Math.max(1, Math.min(5, state.lives));
+    if (crop.type === "REDWOOD" && state.status === "grown" && state.checked) return Redwood.value(state);
     if (state.stump) return visual.STUMP?.[0] ?? visual.HARVESTABLE?.[0];
     if (crop.type === "GRAPES" && state.status === "dead") return 15;
     if (state.status === "dead") return (visual.DEAD ?? states.ANYHERB?.DEAD)?.[Math.max(1, state.stage)] ?? visual.GROWING[crop.stages];
