@@ -971,7 +971,19 @@ export class CombatFactory {
             return;
         }
 
-        const isVenom = poisonOrbType === 2;
+        let isVenom = poisonOrbType === 2;
+        if (entity.isNpc()) {
+            const definition = entity.getAsNpc().getCurrentDefinition();
+            if (isVenom && definition.isVenomImmune()) {
+                isVenom = false;
+                // Venom stores damage; ordinary poison stores five severity
+                // points per starting damage. Keep the converted poison's hit.
+                poisonSeverity *= 5;
+            }
+            if (!isVenom && definition.isPoisonImmune()) {
+                return;
+            }
+        }
 
         // If the entity is a player, we check for poison immunity. If they have
         // no immunity then we send them a message telling them that they are
