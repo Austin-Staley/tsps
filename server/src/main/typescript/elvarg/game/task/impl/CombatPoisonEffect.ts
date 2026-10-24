@@ -5,24 +5,53 @@ import { Mobile } from "../../entity/impl/Mobile";
 import { Item } from "../../model/Item";
 import { HitDamage } from "../../content/combat/hit/HitDamage";
 import { HitMask } from "../../content/combat/hit/HitMask";
+import { TaskManager } from "../TaskManager";
 
 export class CombatPoisonEffect extends Task {
+  private static readonly active = new WeakMap<Mobile, CombatPoisonEffect>();
   private entity: Mobile;
   private ticksUntilHit: number;
 
   constructor(entity: Mobile) {
-    super(1, entity, false);
+    // Activity cancellation must not stop an actor's ongoing affliction.
+    super(1, {}, false);
     this.entity = entity;
     this.ticksUntilHit = 30;
+    CombatPoisonEffect.active.get(entity)?.stop();
+    CombatPoisonEffect.active.set(entity, this);
+  }
+
+  /** Resume saved affliction without reapplying or changing its damage. */
+  public static resume(entity: Mobile): void {
+    if (!entity.isRegistered() || !entity.isPoisoned() || entity.getHitpoints() <= 0) return;
+    if (this.active.get(entity)?.isRunning()) return;
+    TaskManager.submit(new CombatPoisonEffect(entity));
+  }
+
+  /** Stop callbacks before saving/removing an actor, retaining saved affliction. */
+  public static suspend(entity: Mobile): void {
+    this.active.get(entity)?.stop();
   }
 
   public execute() {
+    if (CombatPoisonEffect.active.get(this.entity) !== this) {
+      super.stop();
+      return;
+    }
     if (!this.entity.isRegistered()) {
       this.stop();
       return;
     }
 
+    if (this.entity.getHitpoints() <= 0) {
+      this.entity.setPoisonDamage(0);
+      this.entity.setVenomed(false);
+      this.stop();
+      return;
+    }
+
     if (!this.entity.isPoisoned()) {
+      this.entity.setVenomed(false);
       this.stop();
       return;
     }
@@ -75,9 +104,10 @@ export class CombatPoisonEffect extends Task {
   }
 
   public stop() {
-    this.entity.setPoisonDamage(0);
-    this.entity.setVenomed(false);
-
+    // Cancelling a callback (notably before the logout save) is not a cure.
+    if (CombatPoisonEffect.active.get(this.entity) === this) {
+      CombatPoisonEffect.active.delete(this.entity);
+    }
     super.stop();
   }
 
