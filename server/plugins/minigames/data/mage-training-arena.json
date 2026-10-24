@@ -6,7 +6,8 @@
       "enchantmentGuardian": "magictraining_guard_encha",
       "hat": "magictraining_pizazz_hat",
       "alchemyGuardian": "magictraining_guard_alchem",
-      "graveyardGuardian": "magictraining_guard_grave"
+      "graveyardGuardian": "magictraining_guard_grave",
+      "rewardsGuardian": "magictraining_guard_rewards"
     },
     "locs": {
       "enchantPortal": "magictraining_enchantdoor",
@@ -61,13 +62,16 @@
       "bigBones": "big_bones",
       "water": "waterrune",
       "earth": "earthrune",
-      "nature": "naturerune"
+      "nature": "naturerune",
+      "peachSpell": "magictraining_peachspell",
+      "runePouch": "bh_rune_pouch"
     },
     "interfaces": {
       "lobby": "magictraining_main",
       "enchanting": "magictraining_encha",
       "alchemists": "magictraining_alchem",
-      "graveyard": "magictraining_grave"
+      "graveyard": "magictraining_grave",
+      "shop": "magictraining_shop"
     },
     "components": {
       "lobbyTelekinetic": "magictraining_main:magictrain_tele_points",
@@ -90,7 +94,13 @@
       "free3": "magictraining_alchem:magictrain_lay3",
       "free4": "magictraining_alchem:magictrain_lay4",
       "free5": "magictraining_alchem:magictrain_lay5",
-      "graveyardPoints": "magictraining_grave:magictrain_grave_pts"
+      "graveyardPoints": "magictraining_grave:magictrain_grave_pts",
+      "shopRewards": "magictraining_shop:rewards",
+      "shopConfirm": "magictraining_shop:confirm",
+      "shopMake1": "magictraining_shop:make1",
+      "shopMake5": "magictraining_shop:make5",
+      "shopMake10": "magictraining_shop:make10",
+      "shopMakeAll": "magictraining_shop:makeall"
     }
   },
   "lobby": {
@@ -160,7 +170,17 @@
     "runesForFruit": "You receive {amount} {rune} for the fruit you deposited.",
     "noRunes": "You do not have enough runes to cast this spell.",
     "noFruitIn": "You can't take fruit or bones into the Creature Graveyard.",
-    "_graveyard": "noBones and peachesLocked are the Wiki's; the rest have no capture"
+    "_graveyard": "noBones and peachesLocked are the Wiki's; the rest have no capture",
+    "rewardsNoHat": "Well, you need to talk to him first.",
+    "shopNothingSelected": "Select a reward first.",
+    "shopTooPoor": "You don't have enough Pizazz Points to buy that.",
+    "shopNeedWand": "You need a {wand} to upgrade.",
+    "shopUnlocked": "You have unlocked the Bones to Peaches spell.",
+    "shopAlreadyUnlocked": "You have already unlocked Bones to Peaches.",
+    "shopPeachesLevel": "You need a Magic level of 60 to learn Bones to Peaches.",
+    "shopHavePouch": "You already have a rune pouch.",
+    "shopNoRoom": "You don't have enough inventory space.",
+    "_shop": "rewardsNoHat is the Wiki's transcript line; the shop's own messages have no capture"
   },
   "alchemists": {
     "_bounds": "plane 2 of the arena's basement (the Enchanting Chamber is plane 0, the Graveyard plane 1)",
@@ -225,5 +245,25 @@
     "bananaXp": 5,
     "peachXp": 10,
     "rewardRunes": ["water", "earth", "nature", "death", "blood"]
+  },
+  "shop": {
+    "_enums": "the shop's own clientscripts read these (3255: the stock; 3260: one price enum per type and the wands' previous tier); they have no gameval names",
+    "stockEnum": 2753,
+    "priceEnums": {
+      "telekinetic": 2755,
+      "graveyard": 2756,
+      "enchantment": 2757,
+      "alchemist": 2758
+    },
+    "previousWandEnum": 2759,
+    "_varps": "the points the shop shows (3260 reads 261 as Telekinetic, 262 Alchemist, 263 Enchantment, 264 Graveyard) and the selected quantity (2224)",
+    "pointVarps": {
+      "telekinetic": 261,
+      "alchemist": 262,
+      "enchantment": 263,
+      "graveyard": 264
+    },
+    "quantityVarp": 2224,
+    "peachesLevel": 60
   }
 }

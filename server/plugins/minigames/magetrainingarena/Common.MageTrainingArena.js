@@ -9,6 +9,8 @@ const path = require("path");
 const POINT_TYPES = ["telekinetic", "alchemist", "enchantment", "graveyard"];
 const POINTS_ATTRIBUTE = (type) => `mage-training-arena:${type}-points`;
 const HAT_GIVEN_ATTRIBUTE = "mage-training-arena:hat-given";
+/** Bones to Peaches bought from the Rewards Guardian: the Graveyard lets it be cast. */
+const PEACHES_UNLOCKED_ATTRIBUTE = "mage-training-arena:bones-to-peaches";
 /** (161 << 16) | 8: the toplevel's overlay slot, as other minigame HUDs. */
 const OVERLAY_HUD_UID = (161 << 16) | 8;
 
@@ -141,7 +143,7 @@ function closeOverlay(player) {
 
 module.exports = {
   init, later, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
-  POINT_TYPES, POINTS_ATTRIBUTE, HAT_GIVEN_ATTRIBUTE,
+  POINT_TYPES, POINTS_ATTRIBUTE, HAT_GIVEN_ATTRIBUTE, PEACHES_UNLOCKED_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },
   get data() { return data; },

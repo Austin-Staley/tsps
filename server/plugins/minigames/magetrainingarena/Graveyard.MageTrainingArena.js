@@ -15,7 +15,7 @@
  */
 const Common = require("./Common.MageTrainingArena");
 
-const PEACHES_UNLOCKED_ATTRIBUTE = "mage-training-arena:bones-to-peaches";
+const { PEACHES_UNLOCKED_ATTRIBUTE } = Common;
 const PILE_COUNT_ATTRIBUTE = (pile) => `mage-training-arena:bone-pile-${pile}`;
 const RUNES_OWED_ATTRIBUTE = "mage-training-arena:graveyard-runes";
 const BONES = ["bones1", "bones2", "bones3", "bones4"];

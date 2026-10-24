@@ -12,7 +12,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Guardians, Lobby, Enchanting, Alchemists, Graveyard, events, ironmanMode;
+let Common, Guardians, Lobby, Enchanting, Alchemists, Graveyard, Rewards, events, ironmanMode;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -22,6 +22,7 @@ before(async () => {
   Enchanting = require('../plugins/minigames/magetrainingarena/Enchanting.MageTrainingArena');
   Alchemists = require('../plugins/minigames/magetrainingarena/Alchemists.MageTrainingArena');
   Graveyard = require('../plugins/minigames/magetrainingarena/Graveyard.MageTrainingArena');
+  Rewards = require('../plugins/minigames/magetrainingarena/Rewards.MageTrainingArena');
   ironmanMode = 'none';
   events = [];
   const api = new Proxy({
@@ -537,4 +538,99 @@ test('the Graveyard Teleport needs Magic 15, and no fruit or bones', () => {
   }
   Graveyard.enter({ player, objectId: Common.ids.locs.graveyardPortal });
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], graveyardTile());
+});
+
+// --- The Rewards Guardian's shop
+
+function shopPlayer() {
+  const player = fakePlayer(3362, 3318, 1);
+  player.getEquipment = () => ({ get: () => null, set() {}, refreshItems() {} });
+  player.getPacketSender = () => ({ sendConfig() {}, sendSubInterface() {}, sendInterfaceFlagsRange() {}, sendString() {}, sendInterfaceDisplayState() {} });
+  player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, true);
+  return player;
+}
+
+const slotOf = (itemId) => Rewards.stock().indexOf(itemId);
+
+test("the shop's stock and prices come from the cache, matching the Wiki's table", () => {
+  const stock = Rewards.stock();
+  assert.equal(stock.length, 25);
+  assert.deepEqual(stock.slice(0, 11), [6908, 6910, 6912, 6914, 6916, 6918, 6920, 6922, 6924, 6889, 6926]);
+  assert.deepEqual(Rewards.price(6918), { telekinetic: 350, graveyard: 350, enchantment: 3000, alchemist: 400 }, 'Infinity hat');
+  assert.deepEqual(Rewards.price(6889), { telekinetic: 500, graveyard: 500, enchantment: 6000, alchemist: 550 }, "Mage's book");
+  assert.deepEqual(Rewards.price(6926), { telekinetic: 200, graveyard: 200, enchantment: 2000, alchemist: 300 }, 'Bones to Peaches');
+  assert.deepEqual(Rewards.price(560), { telekinetic: 2, graveyard: 1, enchantment: 20, alchemist: 1 }, 'death rune');
+  assert.equal(Rewards.previousWand(6914), 6912, 'master needs teacher');
+  assert.equal(Rewards.previousWand(6908), null);
+});
+
+test('runes: as many as every type pays for, and the points go down by the price', () => {
+  const player = shopPlayer();
+  Common.addPoints(player, 'telekinetic', 20);
+  Common.addPoints(player, 'alchemist', 20);
+  Common.addPoints(player, 'enchantment', 100);
+  Common.addPoints(player, 'graveyard', 20);
+  assert.equal(Rewards.buy(player, slotOf(560), 10), 5, 'enchantment 20 each allows 5');
+  assert.equal(player.items.get(560), 5);
+  assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), [10, 15, 0, 15]);
+  assert.equal(Rewards.buy(player, slotOf(6918), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopTooPoor'));
+});
+
+test('wands are upgrades: each takes the tier before it', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  assert.equal(Rewards.buy(player, slotOf(6910), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopNeedWand', { wand: 'Beginner wand' }));
+  assert.equal(Rewards.buy(player, slotOf(6908), 1), 1);
+  assert.equal(Rewards.buy(player, slotOf(6910), 1), 1);
+  assert.equal(player.items.get(6908), 0, 'the beginner wand is handed in');
+  assert.equal(player.items.get(6910), 1);
+});
+
+test('Bones to Peaches is a one-time unlock needing Magic 60, read by the Graveyard', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  player.magic = 59;
+  assert.equal(Rewards.buy(player, slotOf(6926), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopPeachesLevel'));
+  player.magic = 60;
+  assert.equal(Rewards.buy(player, slotOf(6926), 5), 1);
+  assert.equal(player.getAttribute(Common.PEACHES_UNLOCKED_ATTRIBUTE), true);
+  assert.equal(player.items.get(6926) ?? 0, 0, 'no item, an unlock');
+  assert.equal(Rewards.buy(player, slotOf(6926), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopAlreadyUnlocked'));
+});
+
+test('the rune pouch only for a player without one', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  const pouch = Common.ids.items.runePouch;
+  assert.equal(Rewards.buy(player, slotOf(pouch), 3), 1);
+  assert.equal(Rewards.buy(player, slotOf(pouch), 1), 0);
+  assert.equal(player.messages.at(-1), Common.message('shopHavePouch'));
+});
+
+test('the guardian sends players without a hat to the Entrance Guardian', () => {
+  const player = shopPlayer();
+  const npcId = Common.ids.npcs.rewardsGuardian;
+  assert.equal(Rewards.variant({ player, npcId }), null);
+  player.setAttribute(Common.HAT_GIVEN_ATTRIBUTE, false);
+  assert.equal(Rewards.variant({ player, npcId }), Rewards.NO_HAT_VARIANT);
+  Rewards.tradeWith({ player, npc: { getId: () => npcId } });
+  assert.equal(player.messages.at(-1), Common.message('rewardsNoHat'));
+});
+
+test('Select, a quantity and Confirm buy through the interface', () => {
+  const player = shopPlayer();
+  for (const type of Common.POINT_TYPES) Common.addPoints(player, type, 5000);
+  Rewards.open(player);
+  Rewards.rewardClicked({ player, slot: slotOf(565), opId: 1 });
+  Rewards.quantity(10)({ player });
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(565), 10);
+  Rewards.quantity('all')({ player });
+  Rewards.rewardClicked({ player, slot: slotOf(564), opId: 1 });
+  Rewards.confirm({ player });
+  assert.equal(player.items.get(564), 950, 'cosmic: 5 enchantment each, with the 4,750 the blood runes left');
 });
