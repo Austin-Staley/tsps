@@ -26,6 +26,17 @@ class Fight {
         this.boundUntil = 0;
         Rewards.begin(this);
     }
+    wake() {
+        this.waking = true;
+        this.nextAttack = this.tick + 7;
+        this.boss.setNpcTransformationId(Common.data.npcs.figure);
+        this.boss.performAnimation(new Common.core.Animation(Common.data.animations.spawn));
+        this.at(4, () => {
+            this.waking = false;
+            this.boss.setNpcTransformationId(Common.data.npcs.boss);
+            this.boss.performAnimation(Common.core.Animation.DEFAULT_RESET_ANIMATION);
+        });
+    }
     alive() { return !this.over && !this.stopped && !this.session.ended && this.session.fight === this; }
     pattern(base = 'ranged') {
         if (this.enraged)
@@ -33,7 +44,7 @@ class Fight {
         const other = base === 'magic' ? 'ranged' : 'magic';
         return this.completed >= 3 ? [base, other, base] : this.completed > 0 ? [base, base, other] : [base, base, base];
     }
-    at(delay, action) { this.events.push({ due: this.tick + delay, action }); }
+    at(delay, action, launched = false) { this.events.push({ due: this.tick + delay, action, launched }); }
     changeSanity(amount) { this.sanity = Math.max(0, Math.min(100, this.sanity + amount)); Common.sync(this); }
     sanityTick() {
         if (this.sanity <= 0) {
@@ -85,6 +96,8 @@ class Fight {
             if (this.alive())
                 event.action();
         this.processTentacles();
+        if (this.waking || this.transitionUntil > this.tick)
+            return;
         if (this.special) {
             Specials.process(this);
             return;
@@ -136,7 +149,7 @@ class Fight {
             this.player.getPacketSender().sendProjectile(Projectile.centreOf(this.boss), this.player.getLocation(), 0,
                 geometry.arrivalCycles, Common.data.projectiles[style], geometry.startHeight, geometry.endHeight,
                 this.player, geometry.launchDelay, geometry.angle, geometry.progress);
-            this.at(geometry.impactTicks, () => this.impact(style));
+            this.at(geometry.impactTicks, () => this.impact(style), true);
             if (this.enraged)
                 this.spawnTentacles();
         }));
@@ -302,7 +315,9 @@ function beforeDeath(event) {
     if (!fight.enraged) {
         event.preventDeath = true;
         fight.enraged = true;
-        fight.events = [];
+        fight.events = fight.events.filter(event => event.launched);
+        fight.boundUntil = 0;
+        fight.boss.getMovementQueue().reset();
         fight.clearTentacles();
         Specials.clear(fight);
         fight.boss.setMaxHitpoints(140);
@@ -311,8 +326,13 @@ function beforeDeath(event) {
         for (const skill of [Common.core.Skill.ATTACK, Common.core.Skill.STRENGTH, Common.core.Skill.DEFENCE, Common.core.Skill.MAGIC, Common.core.Skill.RANGED])
             fight.boss.setCurrentLevels(skill, fight.boss.getMaxLevel(skill));
         fight.attacks = 0;
-        fight.nextAttack = fight.tick + 3;
-        fight.setShadow(true);
+        // Normal capture: HP restore, appearance +4, realm +5, first shot +7.
+        fight.transitionUntil = fight.tick + 6;
+        fight.nextAttack = fight.transitionUntil;
+        if (!fight.shadow) {
+            fight.at(4, () => fight.boss.performAnimation(new Common.core.Animation(Common.data.animations.appear)));
+            fight.at(5, () => fight.setShadow(true));
+        }
     }
     else
         fight.finish();

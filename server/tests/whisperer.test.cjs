@@ -146,7 +146,7 @@ test('normal lethal blow enters 140 HP enrage and only final lethal damage ends 
     assert.equal(event.preventDeath, true);
     assert.equal(f.boss.getHitpoints(), 140);
     assert.equal(f.fight.enraged, true);
-    assert.equal(f.fight.shadow, true);
+    assert.equal(f.fight.shadow, false, 'realm transfer waits for the phase transition');
     const end = { npc: f.boss, preventDeath: false };
     beforeDeath(end);
     assert.equal(end.preventDeath, false);
@@ -342,6 +342,8 @@ test('postquest entry needs a fragment, owns both realms and cleans actors and U
     const fight = session.fight;
     assert.equal(f.player.getInventory().contains(28357), true, 'entry normalizes a stale glowing fragment from the earlier implementation');
     assert.equal(f.player.getInventory().contains(28356), false);
+    assert.equal(session.area.canAttack(f.player, fight.boss), false, 'waking Odd Figure is not attackable');
+    for(let i=0;i<4;i++)fight.process();
     assert.equal(session.area.canAttack(f.player, fight.boss), true);
     assert.equal(session.area.canAttack(new Player(null), fight.boss), false);
     startSpecial(fight, 'seeds');
@@ -725,4 +727,53 @@ test('special preparation and screech fragment window follow normal packet phase
             Specials.process(f.fight);assert.equal(f.fight.special,null);
         }
     }
+});
+
+
+test('normal lethal damage delays enrage appearance, realm transfer and first shot while retaining launched impacts', t => {
+    const f = fixture(), animations = [], impacts = [];
+    f.player.moveTo(new core.Location(2656,6378,0));
+    t.mock.method(Math,'random',()=>0);
+    t.mock.method(f.boss,'performAnimation',a=>animations.push([f.fight.tick,a.getId()]));
+    t.mock.method(f.fight,'impact',style=>impacts.push([f.fight.tick,style]));
+    f.fight.volley();
+    f.fight.process();
+    beforeDeath({npc:f.boss,preventDeath:false});
+    assert.equal(f.fight.shadow,false);
+    for(let i=0;i<4;i++)f.fight.process();
+    assert.deepEqual(animations,[[1,10237],[5,10248]]);
+    assert.deepEqual(impacts,[[4,'ranged']]);
+    assert.equal(f.fight.shadow,false);
+    f.fight.process();
+    assert.equal(f.fight.shadow,true);
+    f.fight.process();f.fight.process();
+    assert.deepEqual(animations,[[1,10237],[5,10248],[8,10237]]);
+});
+
+test('enrage entered in the Shadow Realm retains the realm without an appearance animation', t => {
+    const f=fixture(), animations=[];
+    f.player.moveTo(new core.Location(2656,6378,0));f.fight.setShadow(true);
+    t.mock.method(f.boss,'performAnimation',a=>animations.push([f.fight.tick,a.getId()]));
+    beforeDeath({npc:f.boss,preventDeath:false});
+    for(let i=0;i<7;i++)f.fight.process();
+    assert.equal(f.fight.shadow,true);
+    assert.deepEqual(animations,[[7,10237]]);
+});
+
+
+test('wake holds the Odd Figure for four ticks and launches the first shot at wake plus eight', t => {
+    const f=fixture(), animations=[], forms=[];
+    f.player.moveTo(new core.Location(2656,6378,0));
+    t.mock.method(f.boss,'performAnimation',a=>animations.push([f.fight.tick,a.getId()]));
+    t.mock.method(f.boss,'setNpcTransformationId',id=>forms.push([f.fight.tick,id]));
+    f.fight.wake();
+    assert.equal(f.fight.waking,true);
+    for(let i=0;i<3;i++)f.fight.process();
+    assert.equal(f.fight.waking,true);
+    assert.deepEqual(forms,[[0,12203]]);
+    f.fight.process();
+    assert.equal(f.fight.waking,false);
+    assert.deepEqual(forms,[[0,12203],[4,12204]]);
+    for(let i=0;i<4;i++)f.fight.process();
+    assert.deepEqual(animations.map(([tick,id])=>[tick,id]),[[0,10227],[4,65535],[8,10237]]);
 });

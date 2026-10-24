@@ -14,7 +14,7 @@ function areaClass() {
         canAttack(attacker, target) {
             const { player, fight } = this.session;
             if (attacker === player)
-                return target === fight?.boss || (target?.__whispererFight === fight && target.__whispererSoul != null && fight.shadow);
+                return (!fight?.waking && target === fight?.boss) || (target?.__whispererFight === fight && target.__whispererSoul != null && fight.shadow);
             return target === player && attacker === fight?.boss;
         }
         process(mobile) {
@@ -60,7 +60,7 @@ class Session {
         Common.api.emitCustomEvent('combat-achievements:count',known);
         if(Number(known.total)>(Number(this.player.getAttribute(Common.KILLS_ATTRIBUTE))||0))this.player.setAttribute(Common.KILLS_ATTRIBUTE,known.total);
         npc.__whispererFight = this.fight;
-        npc.performAnimation(new Common.core.Animation(Common.data.animations.spawn));
+        this.fight.wake();
         this.player.getPacketSender().sendSubInterface(Common.data.sanity.helper, Common.data.sanity.interface, 1);
         Common.fragment(this.fight, false);
         Common.api.emitCustomEvent('boss-hud:show', { player: this.player, npcId: Common.data.npcs.boss, current: 900, maximum: 900 });
