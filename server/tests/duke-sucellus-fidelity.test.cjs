@@ -201,3 +201,34 @@ test('gaze cleanup does not close an atmosphere overlay subsequently owned by a 
   h.p.getPacketSender().sendSubInterface((161<<16)|1,174,1);h.fight.stop();
   assert.equal(h.p.getPacketSender().isSubInterfaceOpen(174),true);
 });
+
+test('vats accept partial ingredients, including one-for-one hand-crushed mushrooms',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3034,6437]);h.add(i.muscaPowder,6);h.add(i.salt,6);h.add(i.arder,3);
+  h.Prep.fill(s,[3034,6438]);const vat=s.vats.get('3034,6438');
+  assert.deepEqual(vat.amounts,{[i.muscaPowder]:6,[i.arderPowder]:3,[i.salt]:6});
+  assert.equal(vat.readyAt,null);h.step(7);assert.equal(vat.ready,false);
+  h.add(i.arderPowder,3);h.Prep.fill(s,[3034,6438]);h.step(6);assert.equal(vat.ready,true);
+  h.Prep.collect(s,[3034,6438]);assert.equal(h.p.getInventory().getAmount(i.poison),1);
+});
+
+test('emptying a partially filled vat refunds exactly its ingredients once',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3034,6437]);h.add(i.muscaPowder,3);h.add(i.salt,4);
+  h.Prep.fill(s,[3034,6438]);h.Prep.empty(s,[3034,6438]);h.Prep.empty(s,[3034,6438]);
+  assert.equal(h.p.getInventory().getAmount(i.muscaPowder),3);assert.equal(h.p.getInventory().getAmount(i.salt),4);assert.equal(s.vats.size,0);
+});
+
+test('a full inventory cannot lose or partially duplicate a vat refund',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3034,6437]);h.add(i.muscaPowder,3);h.add(i.salt,4);
+  h.Prep.fill(s,[3034,6438]);for(let n=0;n<27;n++)h.add(526);
+  h.Prep.empty(s,[3034,6438]);assert.equal(s.vats.size,1);assert.equal(h.p.getInventory().getAmount(i.muscaPowder),0);
+  h.p.getInventory().deleteNumber(526,1);h.Prep.empty(s,[3034,6438]);assert.equal(s.vats.size,0);
+  assert.equal(h.p.getInventory().getAmount(i.muscaPowder),3);assert.equal(h.p.getInventory().getAmount(i.salt),4);
+});
+
+test('picking mushrooms continues every three ticks and respects the eight-pick cap',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3031,6453]);t.mock.method(Math,'random',()=>.5);
+  h.Prep.pick(s,'arder');assert.equal(h.p.getInventory().getAmount(i.arder),1);
+  h.step(3);assert.equal(h.p.getInventory().getAmount(i.arder),2);
+  h.step(24);assert.equal(h.p.getInventory().getAmount(i.arder),8);
+  h.core.TaskManager.cancelTasks(h.p.getIndex());h.step(3);assert.equal(h.p.getInventory().getAmount(i.arder),8);
+});

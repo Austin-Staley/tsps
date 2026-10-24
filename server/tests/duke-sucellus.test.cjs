@@ -62,7 +62,8 @@ test('powder yield, atomic vat fermentation and two doses wake exactly once',t=>
   for(const id of [i.arder,i.musca]) h.Prep.grind({player:h.p,usedItemId:i.pestle,usedWithItemId:id});
   assert.equal(h.p.getInventory().getAmount(i.arderPowder),6);
   h.move([3034,6437]);assert.equal(h.Prep.fill(s,[3034,6438]),true);
-  assert.equal(s.vats.size,0);
+  assert.equal(s.vats.size,1);
+  assert.equal(s.vats.values().next().value.readyAt,null);
   h.add(i.salt,6);h.Prep.fill(s,[3034,6438]);assert.equal(s.vats.size,1);
   assert.equal(h.p.getInventory().getAmount(i.arderPowder),0);
   h.step(5);assert.equal(s.vats.values().next().value.ready,false);
