@@ -99,7 +99,7 @@ class ArceuusTeleportSpell extends Spell {
 const rune = (id: number, amount = 1) => new Item(id, amount);
 const teleport = (level: number, experience: number, runes: Item[], x: number, y: number, z = 0, cooldown?: TeleportSpell["cooldown"]) =>
     new ArceuusTeleportSpell({ level, experience, runes, destination: new Location(x, y, z), cooldown });
-const THRALL_COOLDOWN = { attribute: "arceuus:thrall-until", duration: 30_000 };
+const THRALL_COOLDOWN = { attribute: "arceuus:thrall-until", duration: 10_000 };
 
 /** Self-cast Arceuus spells. Targeted spells remain in their respective packet handlers. */
 export class ArceuusSpells {
