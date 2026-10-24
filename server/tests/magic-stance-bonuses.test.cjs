@@ -22,7 +22,7 @@ function caster(fightType, { autocasting = false } = {}) {
         getPrayerActive: () => new Array(40).fill(false),
         getSkillManager: () => ({ getCurrentLevel: () => 99 }),
         getFightType: () => fightType,
-        getCombat: () => ({ getAutocastSpell: () => (autocasting ? {} : null), getSelectedSpell: () => null }),
+        getCombat: () => ({ getAutocastSpell: () => (autocasting ? {} : null), getSelectedSpell: () => null, getTarget: () => null }),
         getEquipment: () => ({ getItems: () => new Array(14).fill({ getId: () => -1 }) }),
         getBonusManager: () => ({
             getAttackBonus: () => [0, 0, 0, 0, 0],

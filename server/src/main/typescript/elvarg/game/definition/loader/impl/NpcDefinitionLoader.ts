@@ -23,6 +23,8 @@ type CombatStats = {
     demon?: boolean;
     attributes?: string[];
     members?: boolean;
+    elementalWeaknessType?: number;
+    elementalWeaknessPercent?: number;
     attackType?: CombatType;
     slayerLevel?: number;
     attackBonuses?: {
@@ -181,6 +183,10 @@ export class NpcDefinitionLoader extends DefinitionLoader {
      * own default alone.
      */
     public static fromMonsterDump(monster: any): CombatStats {
+        const weaknessType = Number.isInteger(monster.elemental_weakness_type) && monster.elemental_weakness_type >= 1 && monster.elemental_weakness_type <= 4
+            ? monster.elemental_weakness_type : 0;
+        const weaknessPercent = Number.isFinite(monster.elemental_weakness_percent) && monster.elemental_weakness_percent >= 0
+            ? Math.floor(monster.elemental_weakness_percent) : 0;
         return {
             name: monster.name,
             // The cache has no NPC examine text (OSRS sends it from the server),
@@ -201,6 +207,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             demon: Array.isArray(monster.attributes) && monster.attributes.includes("demon"),
             attributes: Array.isArray(monster.attributes) ? monster.attributes.map(String) : undefined,
             members: monster.members === true,
+            elementalWeaknessType: weaknessType,
+            elementalWeaknessPercent: weaknessType ? weaknessPercent : 0,
             attackType: NpcDefinitionLoader.resolveAttackType(monster.attack_type),
             slayerLevel:
                 monster.slayer_monster === true && monster.slayer_level > 0
@@ -395,6 +403,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
                 Object.assign(definition, {
                     stats: levels,
                     rangedDefenceBonuses: { light: stat.defenceBonuses?.light, heavy: stat.defenceBonuses?.heavy },
+                      elementalWeaknessType: stat.elementalWeaknessType ?? 0,
+                      elementalWeaknessPercent: stat.elementalWeaknessPercent ?? 0,
                     // getExamine() falls back to a generic line, so keep the raw field here.
                     examine: stat.examine ?? definition.examine,
                     hitpoints: stat.hitpoints ?? definition.getHitpoints(),

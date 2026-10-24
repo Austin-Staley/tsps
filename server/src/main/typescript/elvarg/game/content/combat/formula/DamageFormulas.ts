@@ -10,6 +10,7 @@ import type { CombatSpell } from "../magic/CombatSpell";
 import { applyCombatEffectiveLevelModifiers, applyMagicDamageBonusModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
 import { CombatSpecial } from "../CombatSpecial";
 import { SpecialAttackMaximumHitSource, WeaponSpecialTraits } from "../WeaponSpecialTraits";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 const getPlayerCombatSpecial = (player: Player): any | null => {
     const accessor = (player as any)?.getCombatSpecial;
@@ -189,8 +190,15 @@ export class DamageFormulas {
             maxHit = 1;
         }
 
+        // Generic stages retain the actual spell override and original base.
+        // Gameplay additions/multipliers belong to registered plugin handlers.
+        const target = c.getCombat().getTarget();
+        const baseRequest = { attacker: c, target, spell, originalMaxHit: maxHit, maxHit };
+        PluginManager.emitCustomEvent("combat:magic-base-max-hit", baseRequest);
+        if (Number.isFinite(baseRequest.maxHit) && baseRequest.maxHit >= 0) maxHit = Math.floor(baseRequest.maxHit);
         const { CombatSpells } = require("../magic/CombatSpells") as typeof import("../magic/CombatSpells");
         maxHit = CombatSpells.applyChargeMaxHit(c, maxHit, spell);
+        const baseMaxHit = maxHit;
 
         maxHit = DamageFormulas.applyMagicDamageBonus(c, maxHit);
 
@@ -199,7 +207,10 @@ export class DamageFormulas {
             maxHit = DamageFormulas.scaleSpecial(maxHit, demonbaneMultiplier);
         }
 
-        return Math.floor(applyMagicHitModifiers(c, maxHit));
+        maxHit = Math.floor(applyMagicHitModifiers(c, maxHit));
+        const request = { attacker: c, target, spell, baseMaxHit, maxHit };
+        PluginManager.emitCustomEvent("combat:magic-max-hit", request);
+        return Number.isFinite(request.maxHit) && request.maxHit >= 0 ? Math.floor(request.maxHit) : maxHit;
     }
 
     public static getVolatileNightmareStaffBaseMaxHit(player: Player): number {

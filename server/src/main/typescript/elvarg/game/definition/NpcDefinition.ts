@@ -52,6 +52,13 @@ export class NpcDefinition {
     private combatLevel: number = 0;
     private stats: number[] = [...NpcDefinition.DEFAULT_STATS];
     private rangedDefenceBonuses: Partial<Record<"light" | "heavy", number>> = {};
+    private elementalWeaknessType = 0;
+    private elementalWeaknessPercent = 0;
+
+    public getElementalWeakness(): { type: number; percent: number } | null {
+        return this.elementalWeaknessType >= 1 && this.elementalWeaknessType <= 4 && this.elementalWeaknessPercent > 0
+            ? { type: this.elementalWeaknessType, percent: this.elementalWeaknessPercent } : null;
+    }
 
     public getRangedDefenceBonus(type: "light" | "standard" | "heavy"): number {
         return (type === "standard" ? undefined : this.rangedDefenceBonuses[type]) ?? this.stats[14] ?? 0;
