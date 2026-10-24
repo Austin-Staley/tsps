@@ -162,4 +162,4 @@ module.exports = function attachEntry(pluginApi, state) {
   api.onCustomEvent("bounty-hunter:arena-refusal", answerArenaRefusal);
 };
 
-Object.assign(module.exports, { spawnTile, _test: { portalRefusal, arenaRefusal, spawnTile, RULES_ATTRIBUTE } });
+Object.assign(module.exports, { spawnTile, exitArena, _test: { portalRefusal, arenaRefusal, spawnTile, RULES_ATTRIBUTE } });

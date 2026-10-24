@@ -77,6 +77,11 @@ function rogueKilled({ killer }) {
   store(killer, ROGUE_KILLS_ATTRIBUTE, VARP_ROGUE_KILLS, count(killer, ROGUE_KILLS_ATTRIBUTE) + 1);
 }
 
+function showBalance({ player }) {
+  if (player.isPlayerBot?.() === true) return;
+  player.sendMessage(`You currently have ${getPoints(player).toLocaleString()} Bounty Hunter points.`);
+}
+
 function syncVarps({ player }) {
   player.getPacketSender()
     .sendConfig(varp(VARP_POINTS), getPoints(player))
@@ -99,6 +104,8 @@ module.exports = function attachBountyHunterPoints(api) {
   // Replaces Shopkeepers' generic attribute-backed handler: the plugin must load after it.
   api.registerShopCurrency(STORE_CURRENCY, storeCurrency);
   api.onPlayerLogin(syncVarps);
+  api.onCustomEvent("bounty-hunter:entered-arena", showBalance);
+  api.onCustomEvent("bounty-hunter:left-arena", showBalance);
   api.onCustomEvent("bounty-hunter:target-killed", targetKilled);
   api.onCustomEvent("bounty-hunter:rogue-killed", rogueKilled);
 };

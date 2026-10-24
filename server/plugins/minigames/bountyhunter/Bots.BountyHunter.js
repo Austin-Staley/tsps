@@ -18,6 +18,9 @@
 const { getActiveBotRuntime } = require("../../bots/runtime/RuntimeRegistry.PlayerBots");
 const { startActivity } = require("../../bots/brain/BrainActivities.PlayerBots");
 const { setModePvp } = require("../../bots/behaviours/state/State.PlayerBots");
+const { clearMovementRequest, queueRouteAndFlagAppearance } = require("../../bots/behaviours/navigation/Navigation.PlayerBots");
+const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry.PlayerBots");
+const { isFoodItem } = require("../../items/Food.plugin");
 const Entry = require("./Entry.BountyHunter");
 const Coffer = require("./Coffer.BountyHunter");
 
@@ -31,6 +34,7 @@ const DECIDE_MS = 1800;
 const ENGAGE_DISTANCE = 12; // closer than this, the engine's own combat pathing takes over
 const CHASE_STEP = 20; // tiles per walk order towards a far quarry
 const WANDER_RADIUS = 8;
+const RETREAT_FOOD_RESERVE = 6;
 
 let api;
 let core;
@@ -41,6 +45,8 @@ const bots = new Set();
 /** Numbers each spawn: bots despawned a moment ago may still be online under their names. */
 let spawnedBots = 0;
 const nextDecisionAt = new WeakMap();
+/** One fight-or-flee decision for each low-food episode; a committed flee lasts until logout. */
+const retreatDecisions = new WeakMap();
 
 function isBot(player) {
   return player?.getAttribute?.(BOT_ATTRIBUTE) === true;
@@ -99,7 +105,7 @@ function despawnAll() {
 function huntTarget({ player, target }) {
   if (!isBot(player) || fighting(player)) return;
   const state = stateOf(player);
-  if (!state?.pvp) return;
+  if (!state?.pvp || state.pvp.retreat) return;
   const { behaviorMode } = getActiveBotRuntime();
   setModePvp(player, state, target, Date.now(), TARGET_HOLD_MS, behaviorMode, { allowInCombatTransition: true });
 }
@@ -108,7 +114,7 @@ function huntTarget({ player, target }) {
 function dropTarget({ player }) {
   if (!isBot(player) || fighting(player)) return;
   const pvp = stateOf(player)?.pvp;
-  if (!pvp) return;
+  if (!pvp || pvp.retreat) return;
   pvp.targetUsername = null;
   pvp.targetPlayer = null;
 }
@@ -178,9 +184,9 @@ function wander(bot) {
  * attacks, specs, eats and switches once it is in reach.
  */
 function hunt(bot, nowMs) {
-  if (nowMs < (nextDecisionAt.get(bot) ?? 0) || fighting(bot)) return;
-  nextDecisionAt.set(bot, nowMs + DECIDE_MS);
   const state = stateOf(bot);
+  if (state?.pvp?.retreat || nowMs < (nextDecisionAt.get(bot) ?? 0) || fighting(bot)) return;
+  nextDecisionAt.set(bot, nowMs + DECIDE_MS);
   const quarry = quarryOf(bot);
   if (!state?.pvp || !quarry) {
     if (bot.getMovementQueue().size() === 0) wander(bot);
@@ -199,6 +205,72 @@ function onCraterTile(bot) {
   return bh.isArenaTile(location) || bh.isLobbyTile(location);
 }
 
+/** Bounty Hunter escape replaces the Wilderness teleport/refit with a walk through a real gate. */
+function defensiveAction(request) {
+  const { player, state, nowMs } = request;
+  if (!isBot(player) || !onCraterTile(player)) return;
+  const pvp = state.pvp;
+  if (pvp.retreat && !pvp.retreat.exit) return;
+  // A fresh spawn or death with no kit still uses the PvP engine's existing regear.
+  if (!pvp.retreat && !retreatDecisions.has(player) &&
+      !player.getInventory().getItems().some((item) => item?.getId?.() > 0) &&
+      !player.getEquipment().getItems().some((item) => item?.getId?.() > 0)) return;
+  request.result = { handled: false, status: "running" };
+  if (!pvp.retreat) {
+    const food = player.getInventory().getItems().filter((item) => isFoodItem(item?.getId?.())).length;
+    if (food > RETREAT_FOOD_RESERVE) {
+      retreatDecisions.delete(player);
+      return;
+    }
+    if (!retreatDecisions.has(player)) {
+      retreatDecisions.set(player, Math.random() >= getPvpProfile(pvp.profileId).riskTolerance);
+    }
+    if (!retreatDecisions.get(player)) return;
+    const here = player.getLocation();
+    const distanceTo = (exit) => Math.max(Math.abs(here.getX() - exit.x), Math.abs(here.getY() - exit.y));
+    const exit = bh.CRATER.exits.reduce((best, next) => distanceTo(next) < distanceTo(best) ? next : best);
+    pvp.retreat = { autoRetaliate: player.autoRetaliateReturn(), exit };
+    player.setAutoRetaliate(false);
+    player.getCombat().reset();
+    clearMovementRequest(player);
+  }
+  request.result.handled = true;
+  pvp.phase = "retreating";
+  player.setFollowing(null);
+  player.setCombatFollowing(null);
+  if (player.getCombat().getTarget()) player.getCombat().reset();
+  const retreat = pvp.retreat;
+  if (bh.isLobbyTile(player.getLocation())) {
+    clearMovementRequest(player);
+    if (!retreat.logoutRequested) {
+      retreat.logoutRequested = true;
+      player.requestLogout();
+    }
+    return;
+  }
+  const gateAt = new core.Location(retreat.exit.x, retreat.exit.y, 0);
+  const gate = core.MapObjects.get(core.ObjectIdentifiers.ARENA_13, gateAt, player.getPrivateArea());
+  const definition = gate?.getDefinition();
+  if (gate && core.PathFinder.reachedObject(player, retreat.exit.x, retreat.exit.y,
+      definition.getSizeX(), definition.getSizeY(), gate.getFace(), gate.getType(), definition.getBlockingMask())) {
+    clearMovementRequest(player);
+    Entry.exitArena({ player, location: gateAt });
+    return;
+  }
+  player.setRunning(player.getRunEnergy() > 0);
+  queueRouteAndFlagAppearance(player, retreat.exit.x, retreat.exit.y, { state, nowMs, basicPather: true, reason: "bounty_hunter_retreat" });
+}
+
+function clearRetreat({ player }) {
+  if (!isBot(player)) return;
+  retreatDecisions.delete(player);
+  const pvp = stateOf(player)?.pvp;
+  if (!pvp?.retreat) return;
+  player.setAutoRetaliate(pvp.retreat.autoRetaliate);
+  pvp.retreat = null;
+  clearMovementRequest(player);
+}
+
 function tick() {
   if (bots.size === 0) return;
   if (realPlayersInCrater().length === 0) {
@@ -215,6 +287,7 @@ function tick() {
 }
 
 function forgetBot({ player }) {
+  clearRetreat({ player });
   bots.delete(player);
 }
 
@@ -231,6 +304,8 @@ module.exports = function attachBots(pluginApi, state) {
   api.onCustomEvent("bounty-hunter:entered-lobby", populate);
   api.onCustomEvent("bounty-hunter:target-assigned", huntTarget);
   api.onCustomEvent("bounty-hunter:target-cleared", dropTarget);
+  api.onCustomEvent("player-bots:pvp-defensive-action", defensiveAction);
+  api.onPlayerBeforeDeath(clearRetreat);
   api.onPlayerLogout(forgetBot);
   api.onServerStartup(startTask);
 };
