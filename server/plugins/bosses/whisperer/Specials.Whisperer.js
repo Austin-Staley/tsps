@@ -22,10 +22,13 @@ function seedLayout(pattern) {
 }
 function start(fight, kind) {
     clear(fight);
+    fight.special = {kind,age:0,active:false,switchAllowed:false};
+    fight.boss.performAnimation(new Common.core.Animation(Common.data.animations.teleport));
+    Common.fragment(fight,false);
+}
+function activate(fight, kind) {
     const [x, y] = centre(fight);
-    fight.boss.moveTo(new Common.core.Location(x, kind === 'screech' ? Common.data.specials.screechY : y, 0));
-    fight.boss.performAnimation(new Common.core.Animation(Common.data.animations[kind]));
-    fight.special = { kind, left: kind === 'souls' ? 20 : kind === 'seeds' ? 50 : 5 };
+    Object.assign(fight.special, { active: true, switchAllowed: true, left: kind === 'souls' ? 17 : kind === 'seeds' ? 40 : 12 });
     if (kind === 'seeds') {
         const pattern = Common.random(0, 3);
         fight.special.seeds = seedLayout(pattern).map(({ dx, dy, light }) => ({ x: x + 1 + dx, y: y + 1 + dy, light, active: true, object: null }));
@@ -73,7 +76,7 @@ function start(fight, kind) {
 }
 function render(fight) {
     const special = fight.special;
-    if (!special)
+    if (!special?.active)
         return;
     if (special.kind === 'seeds')
         for (const seed of special.seeds) {
@@ -120,6 +123,28 @@ function process(fight) {
     const special = fight.special;
     if (!special)
         return;
+    special.age++;
+    const animate = id => fight.boss.performAnimation(new Common.core.Animation(id));
+    if (special.age === 1) {
+        const [x,y] = centre(fight);
+        fight.boss.moveTo(new Common.core.Location(x,special.kind === 'screech' ? Common.data.specials.screechY : y,0));
+        animate(special.kind === 'souls' ? Common.data.animations.souls : Common.data.animations.appear);
+    }
+    if (special.age === 3) animate(special.kind === 'souls' ? Common.data.animations.soulChant : special.kind === 'seeds' ? Common.data.animations.seeds : Common.data.animations.screech);
+    if (special.kind === 'seeds' && special.age === 8) animate(Common.data.animations.screech);
+    if (special.kind === 'seeds' && special.age === 10) animate(Common.data.animations.screechHold);
+    if (!special.active) {
+        if (special.age === {seeds:6,screech:5,souls:4}[special.kind]) {
+            activate(fight,special.kind);
+            if (special.kind === 'screech') animate(Common.data.animations.screechHold);
+        }
+        return;
+    }
+    if (special.kind === 'screech' && special.age === 14) {
+        special.switchAllowed = false;
+        Common.fragment(fight,false);
+    }
+    if (special.kind === 'screech' && [21,27].includes(special.age)) animate(Common.data.animations.screech);
     special.left--;
     if (special.kind === 'seeds') {
         const p = fight.player.getLocation();
@@ -148,6 +173,7 @@ function process(fight) {
         }
     }
     else if (special.kind === 'screech' && special.left <= 0) {
+        animate(Common.data.animations.screechBlast);
         const p = fight.player.getLocation();
         // Boss is south: cover consists of the 2x2 immediately north of a 2x2 column.
         const cover = special.columns.find(c => c.active && p.getX() >= c.x && p.getX() < c.x + 2 && p.getY() >= c.y + 2 && p.getY() < c.y + 4);
@@ -166,7 +192,7 @@ function process(fight) {
         if (--special.blasts <= 0)
             finish(fight);
         else
-            special.left = 5;
+            special.left = 6;
     }
     else if (special.kind === 'souls') {
         if (fight.shadow && special.left % 4 === 0)
@@ -174,6 +200,7 @@ function process(fight) {
                 if (!soul.dead)
                     soul.npc.forceChat(Common.data.soulSets[soul.group].phrase);
         if (special.left <= 0) {
+            animate(Common.data.animations.soulResolve);
             if (special.rewarded.size === 0) {
                 Common.damage(fight, 50);
                 fight.boss.heal(100);
@@ -184,7 +211,7 @@ function process(fight) {
 }
 function soulDied(fight, npc) {
     const special = fight.special;
-    if (special?.kind !== 'souls')
+    if (!special?.active || special.kind !== 'souls')
         return;
     const soul = special.souls.find(s => s.npc === npc);
     if (!soul || soul.dead)

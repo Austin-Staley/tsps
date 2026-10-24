@@ -53,10 +53,17 @@ function fixture(spellbook) {
     const apply = () => player.getCombat().getHitQueue().process(++cycle);
     return { player, session, boss, fight, apply };
 }
+function startSpecial(fight,kind) {
+    Specials.start(fight,kind);
+    const preparation={seeds:6,screech:5,souls:4}[kind];
+    for(let tick=0;tick<preparation;tick++) Specials.process(fight);
+}
 test('cache identities distinguish spawn, boss, soul, effect and animation', () => {
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.boss).name, 'The Whisperer');
     assert.equal(core.CacheDefinitions.getNpc(Common.data.npcs.figure).name, 'Odd Figure');
     assert.equal(core.CacheDefinitions.getSeqName(Common.data.animations.tentacleSpawn), 'npc_whisperer_tentacle_01_spawn_01');
+    for (const name of ['appear','screech','screechHold','screechBlast','seeds','souls','soulChant','soulResolve'])
+        assert.match(core.CacheDefinitions.getSeqName(Common.data.animations[name]), /whisperer/, name);
     assert.equal(core.CacheDefinitions.getInterfaceId('sanity'), 834);
     assert.equal(core.CacheDefinitions.getVarbitId('sanity'), 15064);
 });
@@ -159,7 +166,7 @@ test('special incoming damage reduction uses current realm and soul vulnerabilit
 });
 test('seeds finish on all light tiles; dark tile hurts and timeout deals 75', () => {
     const f = fixture();
-    Specials.start(f.fight, 'seeds');
+    startSpecial(f.fight, 'seeds');
     const seeds = [...f.fight.special.seeds];
     const dark = seeds.find(seed => !seed.light);
     f.player.moveTo(new core.Location(dark.x, dark.y, 0));
@@ -173,7 +180,7 @@ test('seeds finish on all light tiles; dark tile hurts and timeout deals 75', ()
     assert.equal(f.fight.special, null);
     assert.equal(f.fight.completed, 1);
     const late = fixture();
-    Specials.start(late.fight, 'seeds');
+    startSpecial(late.fight, 'seeds');
     late.fight.special.left = 1;
     Specials.process(late.fight);
     late.apply();
@@ -181,7 +188,7 @@ test('seeds finish on all light tiles; dark tile hurts and timeout deals 75', ()
 });
 test('screech cover is exactly the 2x2 behind a column and each blast weakens all columns', () => {
     const f = fixture();
-    Specials.start(f.fight, 'screech');
+    startSpecial(f.fight, 'screech');
     assert.equal(f.fight.special.columns.length, 8);
     const column = f.fight.special.columns.find(c => c.hp === 20);
     f.player.moveTo(new core.Location(column.x, column.y + 2, 0));
@@ -215,10 +222,10 @@ test('the first two seed layouts use the ordinary-game tile grid rather than the
 
 test('normal seed centre and all eight screech columns occupy the captured cathedral tiles in both realms', t => {
     const f = fixture(); t.mock.method(Math, 'random', () => 0);
-    Specials.start(f.fight, 'seeds');
+    startSpecial(f.fight, 'seeds');
     assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()], [2655,6368]);
     assert.ok(f.fight.special.seeds.some(s => s.light && s.x === 2654 && s.y === 6369));
-    Specials.start(f.fight, 'screech');
+    startSpecial(f.fight, 'screech');
     assert.deepEqual([f.boss.getLocation().getX(),f.boss.getLocation().getY()], [2655,6356]);
     const expected = [[2646,6365],[2648,6361],[2651,6363],[2654,6364],[2657,6364],[2660,6363],[2663,6361],[2665,6365]];
     assert.deepEqual(f.fight.special.columns.map(c => [c.x,c.y]), expected);
@@ -231,7 +238,7 @@ test('normal souls occupy twelve fixed cathedral tiles with independently shuffl
     const assignments = [];
     for (const random of [0, .99]) {
         const f = fixture(); t.mock.method(Math, 'random', () => random);
-        Specials.start(f.fight, 'souls');
+        startSpecial(f.fight, 'souls');
         assert.deepEqual(f.fight.special.souls.map(s => [s.npc.getLocation().getX(),s.npc.getLocation().getY()]), expected);
         assert.deepEqual([0,1,2,3].map(group => f.fight.special.souls.filter(s => s.group === group).length), [2,3,3,4]);
         assignments.push(f.fight.special.souls.map(s => s.group));
@@ -242,7 +249,7 @@ test('normal souls occupy twelve fixed cathedral tiles with independently shuffl
 });
 test('soul sets remain attackable only in shadow and timeout with no full set damages and heals', () => {
     const f = fixture();
-    Specials.start(f.fight, 'souls');
+    startSpecial(f.fight, 'souls');
     assert.equal(f.fight.special.souls.length, 12);
     const hit = { parts: [new core.HitDamage(10, core.HitMask.RED)], getHits() { return this.parts; }, updateTotalDamage() { } };
     modifyHit({ npc: f.fight.special.souls[0].npc, hit });
@@ -303,7 +310,7 @@ test('tentacles remain at their three-tile origins and strike static four-tile r
 });
 test('soul rewards count a lethal hit before its delayed death event', () => {
     const f = fixture();
-    Specials.start(f.fight, 'souls');
+    startSpecial(f.fight, 'souls');
     const vita = f.fight.special.souls.filter(s => s.group === 0);
     f.player.setHitpoints(50);
     for (const soul of vita)
@@ -337,11 +344,17 @@ test('postquest entry needs a fragment, owns both realms and cleans actors and U
     assert.equal(f.player.getInventory().contains(28356), false);
     assert.equal(session.area.canAttack(f.player, fight.boss), true);
     assert.equal(session.area.canAttack(new Player(null), fight.boss), false);
-    Specials.start(fight, 'seeds');
+    startSpecial(fight, 'seeds');
     const event = { player: f.player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT_2, option: 'Activate' };
     assert.equal(Site.fragmentAction(event), true);
     assert.equal(event.handled, true);
     assert.equal(f.player.getLocation().getX(), 2400);
+    startSpecial(fight,'screech');
+    assert.equal(fight.shadow,true);
+    for(let tick=6;tick<=14;tick++)Specials.process(fight);
+    assert.equal(f.player.getInventory().contains(28357),true,'screech window normalizes fragment');
+    Site.fragmentAction(event);
+    assert.equal(fight.shadow,true,'deactivated fragment cannot exit Shadow Realm mid-screech');
     const grave = { player: f.player };
     Site.grave(grave);
     assert.deepEqual(grave.tile, { x: 2922, y: 5826, z: 0 });
@@ -362,7 +375,7 @@ test('the placeholder fragment is not accepted and a real fragment glows only du
     assert.equal(core.ItemDefinition.forId(28356).getExamine(), "It's vibrating with energy!");
     assert.equal(core.ItemDefinition.forId(28357).getExamine(), 'A strange shard of dark stone with various modifications.');
     f.player.getInventory().adds(28357, 1);
-    Specials.start(f.fight, 'seeds');
+    startSpecial(f.fight, 'seeds');
     assert.equal(f.player.getInventory().contains(28356), true);
     Specials.clear(f.fight);
     assert.equal(f.player.getInventory().contains(28357), true);
@@ -503,7 +516,7 @@ test('low-health pursuit cancellation preserves the launched bind and a later fr
     assert.equal(f.player.getTimers().has(core.TimerKey.FREEZE), false);
 });
 test('running across a seed consumes the intermediate tile as well as the destination', () => {
-    const f=fixture();Specials.start(f.fight,'seeds');
+    const f=fixture();startSpecial(f.fight,'seeds');
     const seed=f.fight.special.seeds.find(s=>s.light);
     f.player.moveTo(new core.Location(seed.x+1,seed.y,0));
     f.player.setRunningDirection(core.Direction.EAST);
@@ -684,5 +697,32 @@ test('enrage tentacles choose all eight cardinal and diagonal origins', t => {
         const random=t.mock.method(Common,'random',()=>index);
         f.fight.spawnTentacles(); const tentacle=f.fight.tentacles.at(-1);
         assert.deepEqual([tentacle.x-2656,tentacle.y-6376],expected[index]);random.mock.restore();
+    }
+});
+
+test('special preparation and screech fragment window follow normal packet phases',()=>{
+    for(const [kind,delay] of [['seeds',6],['screech',5],['souls',4]]){
+        const f=fixture();Specials.start(f.fight,kind);
+        assert.equal(f.fight.special.active,false);assert.equal(f.fight.special.switchAllowed,false);
+        for(let tick=1;tick<delay;tick++){Specials.process(f.fight);assert.equal(f.fight.special.active,false);}
+        Specials.process(f.fight);assert.equal(f.fight.special.active,true);assert.equal(f.fight.special.switchAllowed,true);
+        if(kind==='screech'){
+            for(let tick=6;tick<=14;tick++)Specials.process(f.fight);
+            assert.equal(f.fight.special.switchAllowed,false);assert.equal(f.fight.special.blasts,3);
+            for(let tick=15;tick<=17;tick++)Specials.process(f.fight);
+            assert.equal(f.fight.special.blasts,2);
+            for(let tick=18;tick<=23;tick++)Specials.process(f.fight);
+            assert.equal(f.fight.special.blasts,1);
+            for(let tick=24;tick<29;tick++)Specials.process(f.fight);
+            assert.equal(f.fight.special.blasts,1);
+            Specials.process(f.fight);assert.equal(f.fight.special,null);
+        }
+        if(kind==='seeds'||kind==='souls'){
+            const remaining=kind==='seeds'?40:17;
+            assert.equal(f.fight.special.left,remaining);
+            for(let tick=1;tick<remaining;tick++)Specials.process(f.fight);
+            assert.ok(f.fight.special,'special remains active until its deadline');
+            Specials.process(f.fight);assert.equal(f.fight.special,null);
+        }
     }
 });

@@ -130,7 +130,7 @@ function fragmentAction(event) {
         event.player.sendMessage('You cannot leave the Shadow Realm during the Whisperer\'s final stand.');
         return true;
     }
-    if (!fight.special && !fight.shadow) {
+    if (!fight.special?.switchAllowed) {
         event.player.sendMessage('The fragment is not responding.');
         return true;
     }

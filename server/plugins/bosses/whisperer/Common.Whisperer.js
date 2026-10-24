@@ -51,7 +51,7 @@ function sync(fight) {
     const sender = player.getPacketSender();
     sender.sendVarbit(data.sanity.varbit, fight.sanity);
     sender.sendVarbit(data.sanity.realmVarbit, fight.shadow ? 1 : 0);
-    sender.sendVarbit(15067, fight.special ? 1 : 0);
+    sender.sendVarbit(15067, fight.special?.switchAllowed ? 1 : 0);
 }
 function fragment(fight, glowing) {
     const { ItemIdentifiers: I } = api.core;

@@ -24,7 +24,7 @@ Rev241 cache gamevals/configs were inspected directly: NPCs 12203–12212, seque
 
 ## Verification limits
 
-This is not a verified 1:1 implementation. Seed/column geometry is now corroborated by normal-fight packet observations and ordinary-game diagrams, while the column-health distribution beyond published guarantees remains unresolved. Special animation timings, seed duration and binding flight timing are under capture analysis. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Realm switching is permitted during specials; the exact fragment deactivation window is under capture analysis. No in-game client smoke run has been performed.
+This is not a verified 1:1 implementation. Seed/column geometry is now corroborated by normal-fight packet observations and ordinary-game diagrams, while the column-health distribution beyond published guarantees remains unresolved. Special animation timings and deadlines now follow the independently classified normal capture; binding flight timing remains under analysis. Normal melee's 28–42 roll and 75% protected share are provisional; the obtained source confirms max 42, mirrored double hits and partial protection but does not establish the complete distribution. Realm switching begins when special actors materialize; screech disables the fragment at teleport+14 until the special ends. No in-game client smoke run has been performed.
 
 Awakened geometry, timing, full five-projectile patterns, stat/slayer immunity integration, prayer/sanity changes, special rotations and final-phase mechanics are not implemented. No Awakened CA is awarded.
 
@@ -35,17 +35,17 @@ All eight normal achievement paths are supplied: the generic CA handler owns Ade
 | Mechanic | Current evidence/status | Work still required |
 | --- | --- | --- |
 | Entry/wake | Cache Odd Figure/spawn sequence and clear entry tiles verified; Wiki describes knockback | Establish knockback destination and first-attack tick |
-| Normal volleys | Wiki patterns, impact prayer and ten-tick cycle verified | Ordered sequence variants, exact launch/impact timings |
-| Tentacles | Four-tile origin, X/plus progression, one hit per wave verified | Spawn/attack phase timing and complete traversed path |
-| Seeds | Every tile/color of all four patterns and centre (2656,6369) corroborated by capture and ordinary tile diagram | Activation/deadline timings (current 50 ticks provisional) |
-| Screech | Eight exact column positions, three blasts and cover rule corroborated | Health-distribution discrepancy and phase timings (current five-tick spacing provisional) |
-| Souls | Twelve souls and 20-tick chant, group effects verified | Exact positions, phase animations and cast deadline relative to teleport |
+| Normal volleys | Wiki patterns, impact prayer and ten-tick cycle verified | Remaining sequence-variant selection probabilities |
+| Tentacles | Four-tile origin, X/plus progression, one hit per wave verified | Static four-tile rays and spawn+1/+2/+3/+4 phases implemented |
+| Seeds | Every tile/color of all four patterns and centre (2656,6369) corroborated by capture and ordinary tile diagram | Teleport+6 activation and 40-tick deadline implemented |
+| Screech | Eight exact column positions, three blasts and cover rule corroborated | Health-distribution discrepancy remains; blasts +17/+23/+29 implemented |
+| Souls | Twelve souls and 20-tick chant, group effects verified | Fixed positions, shuffled roles and teleport+21 deadline implemented |
 | Binding | Existing freeze counters and low-health pursuit cancellation verified | Flight/pursuit timing and optional-bind selection |
-| Fragment | Correct real/cache state identities and realm mirror verified | Screech deactivation/return window; unlimited toggling is still provisional |
+| Fragment | Correct real/cache state identities and realm mirror verified | Screech teleport+14 deactivation implemented; other selection rules remain under audit |
 | Melee | Max 42, mirrored guaranteed hits and partial prayer verified | Exact roll distribution and protected amount; Tentacular page describes roughly 33% mitigation, conflicting with provisional 25% |
 | Enrage/death | Wiki 140 HP, stat restore, two-tick paired styles, cancelled damage and 30-tick respawn verified | Exact phase animation/transition offsets and tentacle phase timing |
 
-The local captured-animation aggregate confirms sequence families but lacks ordered ticks. New shared RSProx decoding is being checked against original OSRS video and official event modifiers before event-world observations are used. Modified stats and reward rates cannot establish ordinary-world values. This audit remains open; achievement coverage does not establish full encounter parity.
+Ordered RSProx decoding establishes the implemented packet phases for independently classified normal actors. Modified stats and reward rates cannot establish ordinary-world values. This audit remains open; achievement coverage does not establish full encounter parity.
 
 ### Normal capture geometry evidence
 
@@ -65,6 +65,10 @@ The full sandbox suite completed with 4,962/4,970 passing. Eight failures were a
 
 Normal level791 actors show shots one tick apart, handed animations10237/10238 and10243/10244, fixed three-tick impacts, projectile client-cycle offsets30/90 and raw heights350/100. The owner-only packet uses existing PacketSender height conversion, preserving angle254 and progress128. Normal tentacle waves launch four ticks after the first shot; enrage launches one with every shot. Soul groups are shuffled across twelve fixed tiles. Tests verify packet geometry, impacts, coordinates, role counts and both realm renders.
 
-Phase delays, fragment window, wake knockback, static tentacle rays and melee distribution remain implementation work. This checkpoint does not claim complete normal fidelity. Fresh server build and all41 focused tests pass; no full-suite or client-smoke claim for this checkpoint.
+At that checkpoint phase delays, fragment window, wake knockback, static tentacle rays and melee distribution remained implementation work; the subsequent sections record the implemented timing/ray work. This checkpoint does not claim complete normal fidelity. Fresh server build and all41 focused tests pass; no full-suite or client-smoke claim for this checkpoint.
 
 Static tentacle rays now use three-tile NPC southwest anchors (centre minus1), retaining the NPC until spawn+4. Normal capture20914 spawn,20915 attack,20916 path graphics (2447..2450 with5/10/15/20 client-cycle delays),20917 damage and20918 removal establish the sequence. Enrage chooses one of eight cardinal/diagonal four-tile origins. Hit detection covers the complete four-tile ray at spawn+3, once per wave, including realm transfer. Bounds include captured southern centre y6353 while preserving cache clipping and the boss footprint. Ordinary damage20 is retained; event-world reductions are not imported.
+
+Specials now begin with teleport preparation, appearing at+1 and materializing seed/column/soul actors at+6/+5/+4. Seeds have40ticks after materialization; souls resolve at teleport+21, retaining the20tick chant from appearance. Screech blasts at+17/+23/+29 and closes the fragment window at+14; a player who has not returned remains in that realm until the special ends. Animation phases follow the independently identified normal capture actors; existing ordinary damage values are preserved. Tests drive preparation and verify fragment deactivation through the actual session item handler.
+
+Source and reproducibility: [RSProx database](https://rsprox.net/database), [recording3285 download](https://rsprox.net/download/3285). The manifest records official ServerTickEnd boundaries, capture revision234, runtime1.0.5, inspected source d997d071bc2783664d1658a80f4d1f881b355119 and helper SHA256 e55de54f1ac6564e626f799de0cdffdd5492c3b4cafd924b8b290ad6adc6b2db. Re-decode that capture with those versions and select normal boss actors47055 through50801; exclude the later awakened actor57079. For example actor47055 teleports at20971, appears20972, charges20974, materializes columns20976 and blasts20988/20994/21000. Capture/decoder manifests and raw account-bearing logs stay private. Event-world observations establish packet geometry and phase ordering here; they do not establish ordinary damage, healing, prayer, player attack rates or exact RNG distributions. Current focused verification: fresh server build and43 Whisperer plus5 HitQueue tests pass; no new full-suite or client smoke claim.
