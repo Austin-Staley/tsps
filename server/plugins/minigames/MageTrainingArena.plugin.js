@@ -16,6 +16,7 @@ module.exports = {
   members: true,
   register(api) {
     Common.init(api);
+    Common.attach(api);
     Guardians.attach(api);
     Lobby.attach(api);
     Enchanting.attach(api);

@@ -288,7 +288,7 @@ function defineArea() {
 
 function attach(api) {
   playground.area = new (defineArea())();
-  api.registerArea(playground.area);
+  Common.registerRoom("alchemists", playground.area);
   api.onObjectInteraction("Alchemists Teleport", { Enter: enter });
   api.onObjectInteraction("Cupboard", { Search: search, "Take-5": takeFive });
   api.onObjectInteraction("Coin Collector", { Deposit: collector });

@@ -241,7 +241,7 @@ function attach(api) {
   api.persistAttribute(RUNES_OWED_ATTRIBUTE, 0);
   for (let pile = 1; pile <= BONES.length; pile++) api.persistAttribute(PILE_COUNT_ATTRIBUTE(pile), 0);
   graveyard.area = new (defineArea())();
-  api.registerArea(graveyard.area);
+  Common.registerRoom("graveyard", graveyard.area);
   api.onObjectInteraction("Graveyard Teleport", { Enter: enter });
   api.onObjectInteraction("Bones", { Grab: grab });
   api.onObjectInteraction("Food chute", { Deposit: chute });
