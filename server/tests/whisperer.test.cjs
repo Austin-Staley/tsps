@@ -281,24 +281,25 @@ test('projectile prayer is checked at scheduled impact and correct protection pr
     assert.equal(f.player.getHitpoints(), 79);
     assert.equal(f.fight.perfectKill, false);
 });
-test('a tentacle wave can damage once along its moving path and transfers across realms', () => {
-    const f = fixture();
-    f.player.moveTo(new core.Location(2656, 6380, 0));
+test('tentacles remain at their three-tile origins and strike static four-tile rays after three ticks', t => {
+    const f = fixture(), graphics = [];
+    f.player.moveTo(new core.Location(2656,6376,0));
+    t.mock.method(Math,'random',()=>0);
+    t.mock.method(f.fight,'validTentacleTile',()=>true);
+    const sender = new Proxy({}, {get:(_,key)=>key==='sendGraphic' ? (g,p)=>graphics.push([g.getId(),g.getDelay(),p.getX(),p.getY()]) : ()=>sender});
+    f.player.getPacketSender=()=>sender;
     f.fight.spawnTentacles();
-    assert.ok(f.fight.tentacles.length > 0);
-    const t = f.fight.tentacles[0];
-    t.wait = 0;
-    f.player.moveTo(new core.Location(t.x + Math.sign(t.targetX - t.x), t.y + Math.sign(t.targetY - t.y), 0));
-    f.fight.processTentacles();
-    f.apply();
-    assert.equal(f.player.getHitpoints(), 79);
+    assert.deepEqual(f.fight.tentacles.map(t=>[t.npc.getLocation().getX(),t.npc.getLocation().getY()]),[[2651,6371],[2659,6371],[2659,6379],[2651,6379]]);
+    const origin=f.fight.tentacles[0].npc.getLocation();
+    const originTile=[origin.getX(),origin.getY()];
+    f.player.moveTo(new core.Location(2653,6373,0));
+    for(let tick=1;tick<=2;tick++){f.fight.tick=tick;f.fight.processTentacles();f.apply();assert.equal(f.player.getHitpoints(),99);}
+    assert.deepEqual(graphics.slice(0,4),[[2447,5,2653,6373],[2448,10,2654,6374],[2449,15,2655,6375],[2450,20,2656,6376]]);
+    assert.deepEqual([origin.getX(),origin.getY()],originTile);
     f.fight.setShadow(true);
-    assert.equal(f.player.getLocation().getX(), 2656 - 3 - 256);
-    const next = f.fight.tentacles[0];
-    f.player.moveTo(new core.Location(next.x + Math.sign(next.targetX - next.x), next.y + Math.sign(next.targetY - next.y), 0));
-    f.fight.processTentacles();
-    f.apply();
-    assert.equal(f.player.getHitpoints(), 79, 'the same wave cannot hit twice');
+    f.fight.tick=3;f.fight.processTentacles();f.apply();assert.equal(f.player.getHitpoints(),79);
+    f.fight.processTentacles();f.apply();assert.equal(f.player.getHitpoints(),79,'one hit per wave');
+    f.fight.tick=4;f.fight.processTentacles();assert.equal(f.fight.tentacles.length,0);
 });
 test('soul rewards count a lethal hit before its delayed death event', () => {
     const f = fixture();
@@ -673,4 +674,15 @@ test('five perfect kills can include an imperfect kill, count once and never car
     const before = f.awards.length; f.death(); assert.equal(f.awards.length, before);
     const fresh = achievementFixture(t); fresh.kill();
     assert.equal(fresh.awards.includes('Perfect Whisperer'), false);
+});
+
+test('enrage tentacles choose all eight cardinal and diagonal origins', t => {
+    const f=fixture();f.fight.enraged=true;f.player.moveTo(new core.Location(2656,6376,0));
+    t.mock.method(f.fight,'validTentacleTile',()=>true);
+    const expected=[[-4,-4],[0,-4],[4,-4],[4,0],[4,4],[0,4],[-4,4],[-4,0]];
+    for(let index=0;index<8;index++){
+        const random=t.mock.method(Common,'random',()=>index);
+        f.fight.spawnTentacles(); const tentacle=f.fight.tentacles.at(-1);
+        assert.deepEqual([tentacle.x-2656,tentacle.y-6376],expected[index]);random.mock.restore();
+    }
 });

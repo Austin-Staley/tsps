@@ -218,40 +218,53 @@ class Fight {
         const p = this.player.getLocation();
         const x = p.getX(), y = p.getY();
         const plus = this.completed >= 2 && Common.random(0, 1);
-        const offsets = this.enraged ? [[0, y > 6370 ? -4 : 4]] : plus ? [[0, -4], [4, 0], [0, 4], [-4, 0]] : [[-4, -4], [4, -4], [4, 4], [-4, 4]];
+        const directions = [[-4,-4],[0,-4],[4,-4],[4,0],[4,4],[0,4],[-4,4],[-4,0]];
+        const offsets = this.enraged ? [directions[Common.random(0,7)]] : plus ? [[0, -4], [4, 0], [0, 4], [-4, 0]] : [[-4, -4], [4, -4], [4, 4], [-4, 4]];
         const wave = { hit: false };
         for (const [dx, dy] of offsets) {
             const sx = x + dx, sy = y + dy;
             if (!this.validTentacleTile(sx, sy))
                 continue;
-            const npc = this.session.spawn(Common.data.npcs.tentacle, sx, sy);
+            const npc = this.session.spawn(Common.data.npcs.tentacle, sx - 1, sy - 1);
             if (!npc)
                 continue;
             npc.performAnimation(new Common.core.Animation(Common.data.animations.tentacleSpawn));
-            this.tentacles.push({ npc, x: sx, y: sy, targetX: x, targetY: y, wait: 1, wave });
+            npc.performGraphic(new Common.core.Graphic(2452));
+            this.tentacles.push({ npc, x: sx, y: sy, targetX: x, targetY: y, spawned: this.tick, wave });
         }
     }
     validTentacleTile(x, y) {
         const shift = this.shadow ? 256 : 0, b = this.boss.getLocation();
-        return x >= 2644 - shift && x <= 2668 - shift && y >= 6356 && y <= 6384 &&
+        return x >= 2641 - shift && x <= 2675 - shift && y >= 6353 && y <= 6384 &&
             !(x >= b.getX() && x < b.getX() + 3 && y >= b.getY() && y < b.getY() + 3) &&
             !Common.core.RegionManager.blocked(new Common.core.Location(x,y,0),this.session.area);
     }
     processTentacles() {
-        let struck = false;
         for (const t of [...this.tentacles]) {
-            if (t.wait-- > 0)
-                continue;
-            t.x += Math.sign(t.targetX - t.x);
-            t.y += Math.sign(t.targetY - t.y);
-            t.npc.moveTo(new Common.core.Location(t.x, t.y, 0));
-            const p = this.player.getLocation();
-            if (!struck && !t.wave.hit && p.getX() === t.x && p.getY() === t.y) {
-                Common.damage(this, 20, 20);
-                struck = true;
-                t.wave.hit = true;
+            const age = this.tick - t.spawned;
+            if (age === 1 && !t.attacked) {
+                t.attacked = true;
+                t.npc.performAnimation(new Common.core.Animation(Common.data.animations.tentacleAttack));
+                t.npc.performGraphic(new Common.core.Graphic(2454));
             }
-            if (t.x === t.targetX && t.y === t.targetY) {
+            const dx = Math.sign(t.targetX - t.x), dy = Math.sign(t.targetY - t.y);
+            if (age === 2 && !t.rendered) {
+                t.rendered = true;
+                for (let step = 1; step <= 4; step++)
+                    this.player.getPacketSender().sendGraphic(new Common.core.Graphic(2446 + step, step * 5),
+                        new Common.core.Location(t.x + dx * step, t.y + dy * step, 0));
+            }
+            if (age === 3 && !t.wave.hit) {
+                const p = this.player.getLocation();
+                for (let step = 1; step <= 4; step++) {
+                    if (p.getX() === t.x + dx * step && p.getY() === t.y + dy * step) {
+                        t.wave.hit = true;
+                        Common.damage(this, 20, 20);
+                        break;
+                    }
+                }
+            }
+            if (age >= 4) {
                 Common.remove(t.npc);
                 this.tentacles.splice(this.tentacles.indexOf(t), 1);
             }
