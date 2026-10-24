@@ -21,6 +21,15 @@ function refresh(session) {
   for(const eye of C.data.extremities)session.place(awake?eye.id+3:eye.id,eye.tile,eye.face);
 }
 function near(session,at,range=1) { return M.near(C.source(session,session.player.getLocation()),at,range); }
+function nearObject(session,at,id,rotation=0) {
+  const definition=C.core.CacheDefinitions.getObject(id);
+  const width=rotation%2?definition.sizeY:definition.sizeX;
+  const height=rotation%2?definition.sizeX:definition.sizeY;
+  const [x,y]=C.source(session,session.player.getLocation());
+  return M.near([x,y],[Math.max(at[0],Math.min(x,at[0]+width-1)),Math.max(at[1],Math.min(y,at[1]+height-1))]);
+}
+const nearVat=(session,at)=>nearObject(session,at,C.data.objects.vat,vatRotation(at));
+const nearSalt=(session,at)=>nearObject(session,at,C.data.objects.salt,at[0]<3039?2:0);
 function pick(session,type) {
   C.core.TaskManager.cancelTasks(session.player.getIndex());
   if(!pickOne(session,type))return true;
@@ -46,7 +55,7 @@ function pickOne(session,type) {
   return false;
 }
 function mine(session,at) {
-  if(!C.data.resources.salts.some(tile=>M.near(tile,at,0)) || !near(session,at)) return false;
+  if(!C.data.resources.salts.some(tile=>M.near(tile,at,0)) || !nearSalt(session,at)) return false;
   const request={player:session.player,pickaxe:null};
   C.api.emitCustomEvent('mining:best-pickaxe',request);
   if(!request.pickaxe) { session.player.sendMessage('You need a pickaxe you can use to mine the salt.'); return true; }
@@ -108,7 +117,7 @@ function grindOne(session,raw) {
   return true;
 }
 function fill(session,at) {
-  if(!near(session,at)) return false;
+  if(!nearVat(session,at)) return false;
   C.core.TaskManager.cancelTasks(session.player.getIndex());
   const key=vatKey(at), {resources:r,items}=C.data, p=session.player;
   const vat=session.vats.get(key)||{readyAt:null,ready:false,tile:at,timer:null,amounts:{}};
@@ -132,7 +141,7 @@ function fill(session,at) {
   return true;
 }
 function empty(session,at){
-  if(!near(session,at))return false;
+  if(!nearVat(session,at))return false;
   C.core.TaskManager.cancelTasks(session.player.getIndex());
   const key=vatKey(at),vat=session.vats.get(key);if(!vat)return true;
   const inventory=session.player.getInventory(),before=inventory.getCopiedItems();
@@ -146,14 +155,14 @@ function empty(session,at){
   sound(session.player,2431);session.player.sendMessage('You empty all of the ingredients from the vat.');return true;
 }
 function check(session,at){
-  if(!near(session,at))return false;
+  if(!nearVat(session,at))return false;
   const vat=session.vats.get(vatKey(at));
   const text=ingredientRows().map(row=>`${row.name}: ${vat?.amounts[row.id]||0} / ${C.data.resources.ingredients}`).join('<br>');
   const {DialogueChainBuilder,StatementDialogue}=C.core;
   session.player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0,text)));return true;
 }
 function collect(session,at) {
-  if(!near(session,at)) return false;
+  if(!nearVat(session,at)) return false;
   C.core.TaskManager.cancelTasks(session.player.getIndex());
   const key=vatKey(at), vat=session.vats.get(key);
   if(!vat?.ready) { session.player.sendMessage('The poison is not ready yet.'); return true; }
@@ -196,7 +205,7 @@ function process(session) {
 }
 function mineStep(session,a) {
   const p=session.player, here=C.source(session,p.getLocation());
-  if(session.fight.active||session.fight.over||session.tick>=a.until || !M.near(here,a.start,0) || !near(session,a.at)) return false;
+  if(session.fight.active||session.fight.over||session.tick>=a.until || !M.near(here,a.start,0) || !nearSalt(session,a.at)) return false;
   if(session.tick<a.next) return true;
   a.next=session.tick+a.interval;
   const amount=M.saltYield(p.getSkillManager().getCurrentLevel(C.core.Skill.MINING));

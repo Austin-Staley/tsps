@@ -3,6 +3,27 @@ const {test,before}=require('node:test');
 const H=require('./helpers/duke-sucellus.cjs');
 before(H.initialize);
 
+test('vat interactions reach every cache footprint edge, without reaching past it',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items,at=h.C.data.resources.vats[0];
+  h.move([3036,6438]);h.add(i.arder,3);
+  assert.equal(h.Prep.fill(s,at),true);
+  assert.equal(h.p.getInventory().getAmount(i.arder),0);
+  for(const tile of [[3033,6438],[3034,6437],[3034,6440],[3036,6438]]){
+    h.move(tile);assert.equal(h.Prep.check(s,at),true);
+  }
+  h.move([3037,6438]);assert.equal(h.Prep.empty(s,at),false);
+  h.move([3036,6438]);assert.equal(h.Prep.empty(s,at),true);
+  assert.equal(h.p.getInventory().getAmount(i.arderPowder),3);
+});
+
+test('salt mining reaches the far edge of its three-tile cache footprint',t=>{
+  const h=H.harness(t),s=h.enter(),i=h.C.data.items;
+  h.move([3036,6448]);h.add(i.ironPickaxe);
+  h.api.onCustomEvent('mining:best-pickaxe',e=>{e.pickaxe={animation:625,attemptIntervalTicks:4};});
+  assert.equal(h.Prep.mine(s,[3033,6448]),true);h.step();
+  assert.ok(h.p.getInventory().getAmount(i.salt)>0);
+});
+
 test('left-click Feed falls back to mushroom powder after poisons, never raw mushrooms',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items;h.move([3039,6451]);
   h.add(i.arder,2);h.add(i.muscaPowder,40);
