@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/bounty-hunter-bots.test.cjs
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { before, test } = require('node:test');
 
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
@@ -11,6 +11,17 @@ const { pickTierChoice, TIER_BANDS } = require('../plugins/bots/behaviours/pvp/P
 const Entry = require('../plugins/minigames/bountyhunter/Entry.BountyHunter');
 const Coffer = require('../plugins/minigames/bountyhunter/Coffer.BountyHunter');
 const { setActiveBotRuntime } = require('../plugins/bots/runtime/RuntimeRegistry.PlayerBots');
+const { PluginManager } = require('../dist/plugins/PluginManager');
+const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const core = PluginManager.getCoreApi();
+
+before(async () => {
+  await CachePipeline.initialize();
+  require('../plugins/items/Food.plugin').register({
+    core, persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
+  });
+});
 
 test('lobby entry spawns funded, skulled PK bots and restores their entry fee after death', (t) => {
   const hooks = new Map();
@@ -67,6 +78,7 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
     },
     onCustomEvent: (name, fn) => hooks.set(name, fn),
     onPlayerLogout: (fn) => hooks.set('logout', fn),
+    onPlayerBeforeDeath: (fn) => hooks.set('before-death', fn),
     onServerStartup: (fn) => hooks.set('startup', fn),
     getTaskManager: () => ({ submit: (task) => tasks.push(task) }),
   };
@@ -154,4 +166,165 @@ test('members-only picks never draw a free-to-play preset', () => {
       assert.ok(!choice || !choice.tags.includes('f2p'), `${tier} ${choice?.loadoutId}`);
     }
   }
+});
+
+test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs out without refitting', async (t) => {
+  const { PvpDefensiveActionNode } = require('../plugins/bots/behaviours/nodes/pvp/PvpDefensiveActionNode.PlayerBots');
+  const { PvpController } = require('../plugins/bots/brain/pvp/PvpController.PlayerBots');
+  const { EatFoodActionNode } = require('../plugins/bots/behaviours/nodes/actions/EatFoodActionNode.PlayerBots');
+  const { peekMovementRequest, clearMovementRequest } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
+  const bh = require('../plugins/minigames/bountyhunter/State.BountyHunter');
+  const runtime = { botStatesByName: new Map() };
+  const api = PluginManager.createApi('BountyHunterRetreatRegression');
+  Entry(api, bh);
+  Bots(api, bh);
+  setActiveBotRuntime(runtime, { PVP: 'pvp' });
+  t.after(() => setActiveBotRuntime(null, null));
+
+  function fixture(t, name) {
+    const player = new Player(null, new core.Location(3363, 4037));
+    player.setUsername(name);
+    player.setRegistered(true);
+    player.setPlayerBot(true);
+    player.setAttribute('bounty-hunter:bot', true);
+    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+    t.mock.method(player, 'sendMessage', () => {});
+    let logouts = 0;
+    t.mock.method(player, 'requestLogout', () => { logouts++; });
+    player.setAutoRetaliate(true);
+    player.getInventory().adds(core.ItemIdentifiers.SHARK, 5);
+    const state = { mode: 'pvp', home: { x: 3363, y: 4037, z: 0 }, pvp: { profileId: 'standard', riskTolerance: 0.3 } };
+    runtime.botStatesByName.set(name, state);
+    bh.arena.add(player);
+    t.after(() => { player.setRegistered(false); bh.arena.delete(player); bh.lobby.delete(player); clearMovementRequest(player); });
+    const node = new PvpDefensiveActionNode({
+      api, setPhase: (state, phase) => { state.pvp.phase = phase; }, stopPvp: () => { state.recoveries = (state.recoveries ?? 0) + 1; },
+    });
+    return { player, state, node, logouts: () => logouts, tick: (nowMs = 1000) => node.tick({ player, state, nowMs, target: null }) };
+  }
+
+  await t.test('early retreat stays committed, eats while running and respects the real gate before logout', (t) => {
+    const f = fixture(t, 'bh_flee');
+    t.mock.method(Math, 'random', () => 0.99);
+    assert.equal(f.tick().handled, true);
+    const retreat = f.state.pvp.retreat;
+    assert.ok(retreat, 'a low-food bot can leave before its last meal');
+    assert.equal(f.player.autoRetaliateReturn(), false);
+    let request = peekMovementRequest(f.player);
+    const exit = bh.CRATER.exits.find((exit) => exit.x === request?.x && exit.y === request?.y);
+    assert.ok(exit, 'the pending long walk targets an actual arena exit');
+    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 5, 'standing at its spawn never refits the bot');
+
+    const quarry = new Player(null);
+    quarry.setUsername('new_quarry');
+    quarry.setRegistered(true);
+    Bots._test.huntTarget({ player: f.player, target: quarry });
+    Bots._test.dropTarget({ player: f.player });
+    assert.equal(f.state.pvp.retreat, retreat, 'matchmaking cannot reset a committed escape');
+
+    f.player.getSkillManager().setMaxLevel(core.Skill.HITPOINTS, 99);
+    f.player.setHitpoints(20);
+    const support = {
+      maintainCombatBoostsActionNode: { tick: () => 'failure' }, defensiveActionNode: f.node,
+      eatFoodActionNode: new EatFoodActionNode(runtime.botStatesByName, api),
+      botStatesByName: runtime.botStatesByName, behaviorMode: { PVP: 'pvp' }, resolveTargetPlayer: () => null,
+    };
+    assert.equal(PvpController.prototype.tickSupport.call(support, { player: f.player, state: f.state, nowMs: 1600 }).skip, true);
+    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 4, 'normal support still consumes real food while fleeing');
+    assert.ok(f.player.getHitpoints() > 20);
+    f.player.getInventory().deleteNumber(core.ItemIdentifiers.SHARK, 4);
+    f.tick(60000);
+    assert.equal(f.state.pvp.retreat, retreat, 'running out does not restart or reverse the escape');
+    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 0);
+    request = peekMovementRequest(f.player);
+    assert.deepEqual([request.x, request.y], [exit.x, exit.y]);
+
+    let cycle = 100;
+    t.mock.method(core.World, 'getProcessCycle', () => cycle);
+    bh.lastSpecialAt.set(f.player, cycle);
+    f.player.moveTo(new core.Location(exit.x, exit.y));
+    f.tick(60600);
+    assert.equal(bh.isArenaTile(f.player.getLocation()), true, 'the real recent-special restriction still applies');
+    assert.equal(f.logouts(), 0, 'no logout while still vulnerable');
+    cycle += 6;
+    f.tick(64200);
+    assert.equal(bh.isLobbyTile(f.player.getLocation()), true, 'the gate, rather than a teleport, enters the fort');
+    f.tick(64800);
+    f.tick(65400);
+    assert.equal(f.logouts(), 1);
+    assert.equal(peekMovementRequest(f.player), null);
+    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 0, 'escaping never regenerates supplies');
+    assert.equal(f.state.recoveries ?? 0, 0);
+    quarry.setRegistered(false);
+  });
+
+  await t.test('a bot that chooses to fight is not rerolled into retreat or refitted when empty', (t) => {
+    const f = fixture(t, 'bh_stay');
+    let rolls = 0;
+    t.mock.method(Math, 'random', () => { rolls++; return 0; });
+    for (const count of [5, 4, 1, 0]) {
+      f.player.getInventory().deleteNumber(core.ItemIdentifiers.SHARK, 5);
+      if (count) f.player.getInventory().adds(core.ItemIdentifiers.SHARK, count);
+      assert.equal(f.tick().handled, false);
+      assert.equal(f.state.pvp.retreat ?? null, null);
+    }
+    assert.equal(rolls, 1, 'one personality decision for the whole low-food episode');
+    assert.equal(peekMovementRequest(f.player), null);
+    assert.equal(f.logouts(), 0);
+    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 0);
+    f.player.getInventory().adds(core.ItemIdentifiers.SHARK, 7);
+    f.tick();
+    f.player.getInventory().deleteNumber(core.ItemIdentifiers.SHARK, 1);
+    f.tick();
+    assert.equal(rolls, 2, 'only a new supply episode permits another decision, including at six meals');
+  });
+
+  await t.test('death clears the escape and the next life can make a new decision', (t) => {
+    const f = fixture(t, 'bh_death');
+    t.mock.method(Math, 'random', () => 0.99);
+    t.mock.method(core.TaskManager, 'submit', () => {});
+    f.tick();
+    assert.ok(f.state.pvp.retreat);
+    f.player.setHitpoints(0);
+    assert.equal(f.state.pvp.retreat, null);
+    assert.equal(f.player.autoRetaliateReturn(), true);
+    assert.equal(f.tick().handled, true);
+    assert.equal(f.logouts(), 0);
+    assert.equal(peekMovementRequest(f.player), null);
+    f.player.resetAttributes();
+    f.tick(2000);
+    assert.ok(f.state.pvp.retreat, 'respawning does not inherit the previous retreat decision');
+  });
+
+  await t.test('a bare new life retains the actual PvP kit recovery before deciding whether to flee', (t) => {
+    const f = fixture(t, 'bh_regear');
+    f.player.getInventory().resetItems();
+    assert.equal(f.tick().status, 'success');
+    assert.equal(f.state.recoveries, 1);
+    assert.equal(f.state.pvp.retreat, null);
+    assert.ok(f.player.getInventory().getValidItems().length > 6);
+    assert.ok(f.player.getEquipment().getValidItems().length > 0);
+    assert.equal(f.logouts(), 0);
+  });
+
+  await t.test('a transiently failed shared regear keeps owning its retreat until it finishes', (t) => {
+    const f = fixture(t, 'bh_pending');
+    const errors = [];
+    t.mock.method(console, 'error', (...args) => errors.push(args));
+    f.player.getInventory().resetItems();
+    const classification = t.mock.method(f.player, 'isPlayerBot', () => false);
+    assert.equal(f.tick().status, 'running');
+    const recovery = f.state.pvp.retreat;
+    assert.ok(recovery);
+    assert.equal(recovery.exit, undefined);
+    assert.equal(f.tick(1600).status, 'running');
+    assert.equal(f.state.pvp.retreat, recovery);
+    classification.mock.restore();
+    assert.equal(f.tick(2200).status, 'success');
+    assert.equal(f.state.pvp.retreat, null);
+    assert.equal(f.state.recoveries, 1);
+    assert.ok(f.player.getEquipment().getValidItems().length > 0);
+    assert.equal(f.logouts(), 0);
+    assert.deepEqual(errors, [], 'the custom hook never claims a pending shared recovery');
+  });
 });
