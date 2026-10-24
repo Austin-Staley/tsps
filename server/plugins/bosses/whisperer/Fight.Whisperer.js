@@ -295,9 +295,13 @@ class Fight {
       this.nextAttack = this.tick + 1;
       return;
     }
-    if (this.tick < this.pursuitAt)
+    // NPCs move before the owner's player-area pass. Prepare a distant
+    // route one pass before the recorded first step, without advancing melee.
+    if (this.tick + 1 < this.pursuitAt)
       return;
     if (this.inMelee()) {
+      if (this.tick < this.pursuitAt)
+        return;
       this.boundUntil = 0;
       this.melee();
       return;
