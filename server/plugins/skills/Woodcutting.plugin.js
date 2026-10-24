@@ -1143,7 +1143,8 @@ function requestedChop(event) {
 }
 
 function requestedAxe(event) {
-  event.axe = findBestUsableAxe(event.player);
+  const candidate = event.itemId == null ? null : AXES.find((axe) => axe.id === event.itemId);
+  event.axe = event.itemId == null ? findBestUsableAxe(event.player) : candidate && canUseAxe(event.player, candidate) ? candidate : null;
 }
 
 module.exports = {
