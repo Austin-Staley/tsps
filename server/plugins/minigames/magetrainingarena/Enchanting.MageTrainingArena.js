@@ -233,7 +233,7 @@ function attach(api) {
   api.persistAttribute(ENCHANTED_ATTRIBUTE, 0);
   api.persistAttribute(ORBS_ATTRIBUTE, 0);
   chamber.area = new (defineArea())();
-  api.registerArea(chamber.area);
+  Common.registerRoom("enchanting", chamber.area);
   api.onObjectInteraction("Cube Pile", { "Take-from": takeFromPile });
   api.onObjectInteraction("Cylinder Pile", { "Take-from": takeFromPile });
   api.onObjectInteraction("Icosahedron Pile", { "Take-from": takeFromPile });
