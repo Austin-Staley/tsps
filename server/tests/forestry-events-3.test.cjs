@@ -270,6 +270,19 @@ test('the beehive: Build adds a log every two ticks; five logs make a hive, its 
   assert.ok(bark(p) - before >= 25 && bark(p) - before <= 30, 'the hive lump');
 });
 
+test('clicking Build every tick adds no faster than one log every two ticks', () => {
+  const p = fakePlayer();
+  p.inventory.add(new core.Item(1513, 6));
+  const event = startEvent('beehive', [p]);
+  const box = event.box;
+  for (let i = 0; i < 5; i++) {
+    buildOn(p, event);
+    ticks(1);
+  }
+  assert.equal(box.logs, 3, 'ticks 1, 3 and 5');
+  assert.equal(box.done, false);
+});
+
 test('no logs: refused; at 250 the keeper leaves', () => {
   const p = fakePlayer();
   const event = startEvent('beehive', [p]);
@@ -321,7 +334,7 @@ test("a new beehive goes where the last stood when there's no room; clicking els
   assert.notEqual(event.box, first);
   assert.ok(event.box.npc.getLocation().equals(first.npc.getLocation()));
   buildOn(p, event);
-  ticks(1);
+  ticks(2);
   assert.equal(event.box.logs, 1);
   for (const fn of hooks.anyNpc) fn({ player: p, npc: event.keeper });
   ticks(4);

@@ -23,6 +23,8 @@ const events = new Set();
 const sessions = new Map();
 
 let cycle = 0;
+/** When each player may next add a log, so clicking Build again can't hurry it. */
+const nextLog = new WeakMap();
 
 function start(site) {
   const beehive = B();
@@ -92,7 +94,9 @@ function build({ player, npc }) {
     return true;
   }
   player.setPositionToFace?.(npc.getLocation());
-  sessions.set(player, { event, box: event.box, next: cycle, from: player.getLocation().clone() });
+  const current = sessions.get(player);
+  if (current?.box === event.box && player.getLocation().equals(current.from)) return true;
+  sessions.set(player, { event, box: event.box, next: Math.max(cycle, nextLog.get(player) ?? 0), from: player.getLocation().clone() });
   return true;
 }
 
@@ -156,6 +160,7 @@ function buildTick() {
     }
     if (cycle < session.next) continue;
     session.next = cycle + B().logTicks;
+    nextLog.set(player, session.next);
     if (!addLog(player, session)) sessions.delete(player);
   }
 }
