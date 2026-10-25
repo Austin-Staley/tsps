@@ -40,8 +40,9 @@ export type PluginSocialPacketEvent = {
     | { type: "friends_chat_action"; action: FriendsChatAction }
     | { type: "private_message"; recipient: string; text: string }
     | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
+    | { type: "report_abuse"; name: string; ruleId: number; mute: boolean }
     | { type: "chat"; text: string; messageType: "friends_chat" }
-    | { type: "public_chat"; text: string };
+    | { type: "public_chat"; text: string; autoChat: boolean };
 };
 
 export interface PluginServerLifecycleEvent {
@@ -136,6 +137,8 @@ export interface PluginNpcInteractionEvent {
 
 export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
+  /** Inventory item used when the route was requested by item-on-NPC. */
+  itemId?: number;
   /** A plugin-owned interaction that ignores the normal projectile clip within `range`. */
   ignoreProjectileClip?: boolean;
 }
@@ -219,6 +222,12 @@ export interface PluginNpcHitModifyEvent {
   hit: any;
 }
 
+/** A hit about to land on a player; handlers may change `hit` (e.g. setTotalDamage) as for NPCs. */
+export interface PluginPlayerHitModifyEvent {
+  player: any;
+  hit: any;
+}
+
 /** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
 export interface PluginZone {
   minX: number;
@@ -243,6 +252,11 @@ export interface PluginNpcSpawnDefinition {
   owner?: any;
   /** Hide the NPC from everyone except `owner` (quest instances). */
   ownerOnly?: boolean;
+  /**
+   * A key only one live NPC may hold (a shared or instanced boss): while one holding it is
+   * in the world, queued to join it or dying, spawning another returns null.
+   */
+  unique?: string;
 }
 
 export interface PluginCanAttackEvent {
@@ -296,6 +310,13 @@ export interface PluginCanStockItemEvent {
 export interface PluginPrayerDisabledEvent {
   player: any;
   prayer: any;
+  disabled: boolean | null;
+  /** Shown to the player when disabled is true. */
+  message?: string;
+}
+
+export interface PluginSpecialAttackDisabledEvent {
+  player: any;
   disabled: boolean | null;
   /** Shown to the player when disabled is true. */
   message?: string;
@@ -368,6 +389,8 @@ export interface PluginPlayerAttackEvent {
 export interface PluginCanBankEvent {
   player: any;
   allow: boolean | null;
+  /** Who asks: "open" (Bank.open), "deposit-box", or undefined for any other check. */
+  source?: string;
 }
 
 /** Called immediately before one item is deposited into a bank. */
@@ -399,6 +422,8 @@ export interface PluginPlayerDeathItemDropEvent {
   player: any;
   killer: any;
   item: any;
+  /** Whether the item is one the death keeps (protected), rather than one it loses. */
+  kept: boolean;
   location: any;
   shouldDropItems: boolean;
   /** Whether core would create a normal floor item for this item. */
@@ -596,6 +621,12 @@ export interface PluginItemOnPlayerEvent {
 export interface PluginItemOnNpcEvent {
   player: any;
   target: any;
+  /**
+   * The definition this player sees (the transform-resolved form, as NPC options get).
+   * Match names on this: `target.getDefinition()` is the spawned parent, nameless for many
+   * revision 241 NPCs such as the second Lumbridge banker.
+   */
+  definition?: any;
   /** The target NPC's content id (its varbit-resolved cache variant), for quest id sets. */
   npcId: number;
   targetIndex: number;
@@ -615,6 +646,20 @@ export interface PluginSpellOnObjectEvent {
   spellItemId: number;
   spellId: number;
   location: { x: number; y: number; z: number };
+  handled: boolean;
+}
+
+/** A combat spell aimed at a non-attackable NPC for a scripted interaction. */
+export interface PluginSpellOnNpcEvent {
+  player: any;
+  npc: any;
+  npcId: number;
+  npcIndex: number;
+  spell: any;
+  spellId: number;
+  location: { x: number; y: number; z: number };
+  /** Consume validated runes/cooldown and play the accepted cast once. */
+  consumeRunes: () => boolean;
   handled: boolean;
 }
 
@@ -817,6 +862,8 @@ export interface PluginRangedCombatModifier {
 }
 
 export interface PluginApi {
+  /** Attributes registered hook/area timings to this label while retaining plugin ownership. */
+  withProfileLabel(label: string): PluginApi;
   onPlayerLogin(handler: (event: PluginPlayerLoginEvent) => void): void;
   /** Fires per map square crossed, not per tile: content spread over the map (patches, bird
    * houses) syncs here instead of checking every player every tick. */
@@ -835,7 +882,8 @@ export interface PluginApi {
   onZoneExit(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
   /**
    * Spawns an NPC from a plugin. `ownerOnly` keeps it visible (and aggressive)
-   * only for `owner`, for instanced/quest spawns. Returns the NPC or null.
+   * only for `owner`, for instanced/quest spawns; `unique` keeps a boss single. The NPC
+   * remembers the plugin that spawned it. Returns the NPC or null.
    */
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
@@ -857,7 +905,11 @@ export interface PluginApi {
     objectName: string,
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
+  /** Conditional interaction ownership before normal object handlers. Leave unclaimed events untouched. */
+  onBeforeObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** Conditional interaction ownership before normal NPC handlers. Leave unclaimed events untouched. */
+  onBeforeNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
   /** World entity (static ship/boat) options, by op number (1-6). */
   onWorldEntityInteraction(handler: (event: PluginWorldEntityInteractionEvent) => void): void;
   /** Set a non-combat NPC option's approach range before movement starts. */
@@ -901,6 +953,7 @@ export interface PluginApi {
   onNpcDeath(handler: (event: PluginNpcDeathEvent) => void): void;
   onNpcBeforeDeath(handler: (event: PluginNpcBeforeDeathEvent) => void): void;
   onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
+  onPlayerHitModify(handler: (event: PluginPlayerHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
   onCanLogout(handler: (event: PluginCanLogoutEvent) => void): void;
@@ -933,6 +986,8 @@ export interface PluginApi {
   onCanSpawnNpc(handler: (event: PluginCanSpawnNpcEvent) => void): void;
   onCanStockItem(handler: (event: PluginCanStockItemEvent) => void): void;
   onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
+  /** Refuse turning the special attack bar on (a duel or minigame rule); set `disabled` and a `message`. */
+  onSpecialAttackDisabled(handler: (event: PluginSpecialAttackDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
   onPlayerBeforeDeath(handler: (event: PluginPlayerBeforeDeathEvent) => void): void;
@@ -994,6 +1049,7 @@ export interface PluginApi {
   onItemOnNpc(handler: (event: PluginItemOnNpcEvent) => void, filter?: PluginItemUseFilter): void;
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
+  onSpellOnNpc(handler: (event: PluginSpellOnNpcEvent) => void): void;
   onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
   /** A spellbook spell cast on nothing, before the core spellbooks handle it. Set `handled` to own it. */
   onSpellCast(handler: (event: PluginSpellCastEvent) => void): void;
@@ -1150,7 +1206,7 @@ export interface PluginApi {
    */
   emitCanEat(player: any, itemId: number): boolean | null;
   emitCanDrink(player: any, itemId: number): boolean | null;
-  emitCanBank(player: any): boolean | null;
+  emitCanBank(player: any, source?: string): boolean | null;
   emitCanBankItem(player: any, item: any): boolean | null;
   emitShouldKeepItemOnDeath(player: any, item: any): boolean | null;
   emitFiremakingBlocked(event: PluginFiremakingBlockedEvent): boolean;
@@ -1277,6 +1333,8 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  BonusManager: any;
+  WeaponInterfaces: any;
   Barrows: any;
   applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
   CombatEquipment: any;
@@ -1309,6 +1367,8 @@ export interface PluginCoreApi {
   Direction: any;
   Equipment: any;
   Bank: any;
+  Inventory: any;
+  PlayerStatus: any;
   Task: any;
   CountdownTask: any;
   ForceMovement: any;
@@ -1357,12 +1417,16 @@ export interface PluginCoreApi {
   PlayerDeathTask: any;
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
+  CombatPoisonEffect: any;
   CacheDefinitions: any;
+  CacheMaps: any;
+  MapRegionReplacementManager: any;
   readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
   Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
+  NpcSpawnDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;

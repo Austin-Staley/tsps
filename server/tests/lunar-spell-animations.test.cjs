@@ -11,6 +11,8 @@ const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { LunarSpells } = require("../dist/game/content/combat/magic/LunarSpells");
 const { Spell } = require("../dist/game/content/combat/magic/Spell");
 const { TeleportHandler } = require("../dist/game/model/teleportation/TeleportHandler");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const LunarCures = require("../plugins/combat/LunarCures.plugin");
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -57,7 +59,6 @@ const castable = (run) => withStub(Spell.prototype, "canCast", () => true, run);
 test("each captured Lunar spell names its cache animation and graphic", () => {
   const expected = {
     "bake pie": ["lunar_human_magic_summon2", "quest_lunar_bakepie_spotanim"],
-    "cure me": ["quest_lunar_pushing_magic_animation", "quest_lunar_cure_me_spot"],
     humidify: ["dream_player_humidify_spell", "dream_humidify_spell_spotanim"],
     "hunter kit": ["dream_player_hunter_box_spell", "dream_hunter_spell_spotanim"],
     "plank make": ["dream_player_make_plank_spell", "dream_plank_make_spell_spotanim"],
@@ -72,9 +73,17 @@ test("each captured Lunar spell names its cache animation and graphic", () => {
   }
 });
 
-test("Cure Me casts with its own animation and graphic, not the teleport's", () => {
-  const player = caster();
-  castable(() => LunarSpells.handleSelf(player, "Cure Me"));
+test("the registered Cure Me handler casts with its own animation and graphic", () => {
+  let castSelf;
+  LunarCures.register({
+    core: PluginManager.getCoreApi(),
+    onSpellCast: (handler) => { castSelf = handler; },
+    onCustomEvent() {},
+  });
+  const player = caster({ isVenomed: () => false });
+  const event = { player, spellName: "Cure Me", opId: 1, handled: false };
+  castable(() => castSelf(event));
+  assert.equal(event.handled, true);
   assert.deepEqual(player.animations, [seq("quest_lunar_pushing_magic_animation")]);
   assert.deepEqual(player.graphics, [spotanim("quest_lunar_cure_me_spot")]);
 });

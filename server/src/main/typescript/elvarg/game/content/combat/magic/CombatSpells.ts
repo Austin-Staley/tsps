@@ -20,6 +20,7 @@ import { CombatEffectSpell } from "./CombatEffectSpell";
 import { CombatNormalSpell, CombatNormalSpellOptions } from "./CombatNormalSpell";
 import { CombatSpell } from "./CombatSpell";
 import { Spell } from "./Spell";
+import { World } from "../../../World";
 
 /**
  * Charge-based combat spell for the powered staves (tridents). OSRS charges
@@ -86,7 +87,7 @@ class ChargeSpell extends Spell {
             return true;
         }
         player.getSkillManager().addExperiences(Skill.MAGIC, this.baseExperience());
-        player.setAttribute(CombatSpells.CHARGE_UNTIL, Date.now() + 420_000);
+        player.setAttribute(CombatSpells.CHARGE_UNTIL, World.getProcessCycle() + 700);
         player.sendMessage("You feel charged with magical power.");
         return true;
     }
@@ -202,9 +203,9 @@ class DarkLureSpell extends CombatArceuusEffectSpell {
 const ARCEUUS_MARK_UNTIL = "arceuus:mark-until";
 
 const hasArceuusMark = (target: Mobile): boolean =>
-    Number(target.getAttribute(ARCEUUS_MARK_UNTIL) ?? 0) > Date.now();
+    Number(target.getAttribute(ARCEUUS_MARK_UNTIL) ?? 0) > World.getProcessCycle();
 const hasArceuusWard = (target: Mobile): boolean =>
-    Number(target.getAttribute("arceuus:ward-until") ?? 0) > Date.now();
+    Number(target.getAttribute("arceuus:ward-until") ?? 0) > World.getProcessCycle();
 /**
  * A demon's demonbane vulnerability other than 100% (Wiki: Yama 120%, his void flares 200%), set by
  * the content that spawns it on the NPC's DEMONBANE_VULNERABILITY_ATTRIBUTE: the bonus scales with it.
@@ -281,8 +282,8 @@ export class CombatAncientSpellExtend extends CombatSpell {
         return this.endGraphicFunction();
     }
 
-    public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number): void {
-        this.spellEffectOnHitCalcFunction(cast, castOn, damage);
+    public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number, effectMultiplier = 1): void {
+        this.spellEffectOnHitCalcFunction(cast, castOn, damage, effectMultiplier);
     }
 
     public impactSound(): Sound {
@@ -322,7 +323,7 @@ export class CombatSpells {
     }
 
     public static applyChargeMaxHit(caster: Mobile, maxHit: number, spell?: CombatSpell | null): number {
-        if (!caster.isPlayer() || Number(caster.getAttribute(this.CHARGE_UNTIL) ?? 0) <= Date.now()) {
+        if (!caster.isPlayer() || Number(caster.getAttribute(this.CHARGE_UNTIL) ?? 0) <= World.getProcessCycle()) {
             return maxHit;
         }
         const player = caster.getAsPlayer();
@@ -364,26 +365,12 @@ export class CombatSpells {
     });
 
     public static CONFUSE = new CombatEffectSpell({
+        maximumHit: () => 0,
         castAnimation() {
             return new Animation(716);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 103, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            if (castOn.isPlayer()) {
-                const player = castOn as Player;
-                if (player.getSkillManager().getCurrentLevel(Skill.ATTACK) < player.getSkillManager().getMaxLevel(Skill.ATTACK)) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage("The spell has no effect because the player has already been weakened.");
-                    }
-                    return;
-                }
-                const decrease = Math.floor(0.05 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
-                player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
-                player.getSkillManager().updateSkill(Skill.ATTACK);
-                player.sendMessage("You feel slightly weakened.");
-            }
         },
         endGraphic() {
             return new Graphic(104, GraphicHeight.HIGH);
@@ -472,47 +459,13 @@ export class CombatSpells {
     });
 
     public static WEAKEN = new CombatEffectSpell({
+        maximumHit: () => 0,
         castAnimation() {
             return new Animation(717);
         },
 
         castProjectile(cast: Mobile, castOn: Mobile) {
             return Projectile.createProjectile(cast, castOn, 106, 0, 20, 43, 31);
-        },
-
-        spellEffect(cast: Mobile, castOn: Mobile) {
-            if (castOn.isPlayer()) {
-                let player = castOn as Player;
-
-                if (player.getSkillManager().getCurrentLevel(Skill.STRENGTH) < player.getSkillManager().getMaxLevel(Skill.STRENGTH)) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage(
-                            "The spell has no effect because the player has already been weakened."
-                        );
-                    }
-                    return;
-                }
-
-                let decrease = Math.floor(0.05 * player.getSkillManager().getCurrentLevel(Skill.STRENGTH));
-                player.getSkillManager().setCurrentLevelCombat(Skill.STRENGTH, player.getSkillManager().getCurrentLevel(Skill.STRENGTH) - decrease);
-                player.getSkillManager().updateSkill(Skill.STRENGTH);
-                player.sendMessage(
-                    "You feel slightly weakened."
-                );
-            } /*else if (castOn.isNpc()) {
-                    let npc = castOn as NPC;
-        
-                    if (npc.getDefenceWeakened()[1] || npc.getStrengthWeakened()[1]) {
-                        if (cast.isPlayer()) {
-                            (cast as Player).sendMessage(
-                                "The spell has no effect because the NPC has already been weakened."
-                            );
-                        }
-                        return;
-                    }
-        
-                    npc.getDefenceWeakened()[1] = true;
-                }*/
         },
 
         endGraphic() {
@@ -630,42 +583,13 @@ export class CombatSpells {
     });
 
     public static CURSE = new CombatEffectSpell({
+        maximumHit: () => 0,
         castAnimation() {
             return new Animation(718);
         },
 
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 109, 0, 20, 43, 31);
-        },
-
-        spellEffect(cast, castOn) {
-            if (castOn.isPlayer()) {
-                const player = castOn as Player;
-
-                if (player.getSkillManager().getCurrentLevel(Skill.DEFENCE) < player.getSkillManager().getMaxLevel(Skill.DEFENCE)) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage("The spell has no effect because the player has already been weakened.");
-                    }
-                    return;
-                }
-
-                const decrease = Math.floor(0.05 * player.getSkillManager().getCurrentLevel(Skill.DEFENCE));
-                player.getSkillManager().setCurrentLevelCombat(Skill.DEFENCE, player.getSkillManager().getCurrentLevel(Skill.DEFENCE) - decrease);
-                player.getSkillManager().updateSkill(Skill.DEFENCE);
-
-                player.sendMessage("You feel slightly weakened.");
-            }/* else if (castOn.isNpc()) {
-                const npc = castOn as NPC;
-        
-                if (npc.getDefenceWeakened()[2] || npc.getStrengthWeakened()[2]) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage("The spell has no effect because the NPC has already been weakened.");
-                    }
-                    return;
-                }
-        
-                npc.getDefenceWeakened()[2] = true;
-            }*/
         },
 
         endGraphic() {
@@ -694,16 +618,13 @@ export class CombatSpells {
     });
 
     public static BIND = new CombatEffectSpell({
+        maximumHit: () => 0,
         castAnimation: () => {
             return new Animation(710);
         },
 
         castProjectile: (cast, castOn) => {
             return Projectile.createProjectile(cast, castOn, 178, 0, 20, 43, 31);
-        },
-
-        spellEffect: (cast, castOn) => {
-            getCombatFactory().freeze(castOn, 5);
         },
 
         endGraphic: () => {
@@ -977,15 +898,12 @@ export class CombatSpells {
     });
 
     public static SNARE = new CombatEffectSpell({
-        members: true,
+        maximumHit: () => 2,
         castAnimation() {
             return new Animation(710);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 178, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            getCombatFactory().freeze(castOn, 10);
         },
         endGraphic() {
             return new Graphic(180, GraphicHeight.HIGH);
@@ -998,7 +916,7 @@ export class CombatSpells {
         },
         splashExperience: () => 60,
         itemsRequired(player) {
-            return [new Item(555, 3), new Item(557, 4), new Item(561, 3)];
+            return [new Item(555, 4), new Item(557, 4), new Item(561, 3)];
         },
         levelRequired() {
             return 50;
@@ -1279,41 +1197,13 @@ export class CombatSpells {
     });
 
     public static VULNERABILITY = new CombatEffectSpell({
+        maximumHit: () => 0,
         members: true,
         castAnimation() {
             return new Animation(718);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 168, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            if (castOn.isPlayer()) {
-                let player = castOn as Player;
-
-
-                if (player.getSkillManager().getCurrentLevel(Skill.DEFENCE) < player.getSkillManager().getMaxLevel(Skill.DEFENCE)) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage("The spell has no effect because the player is already weakened.");
-                    }
-                    return;
-                }
-
-                let decrease = Math.floor(0.10 * player.getSkillManager().getCurrentLevel(Skill.DEFENCE));
-                player.getSkillManager().setCurrentLevelCombat(Skill.DEFENCE, player.getSkillManager().getCurrentLevel(Skill.DEFENCE) - decrease);
-                player.getSkillManager().updateSkill(Skill.DEFENCE);
-                player.sendMessage("You feel slightly weakened.");
-            }/* else if (castOn.isNpc()) {
-                let npc = castOn as NPC;
-        
-                if (npc.getDefenceWeakened()[2] || npc.getStrengthWeakened()[2]) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage("The spell has no effect because the NPC is already weakened.");
-                    }
-                    return;
-                }
-        
-                npc.getStrengthWeakened()[2] = true;
-            }*/
         },
         endGraphic() {
             return new Graphic(169);
@@ -1370,37 +1260,13 @@ export class CombatSpells {
     });
 
     public static ENFEEBLE = new CombatEffectSpell({
+        maximumHit: () => 0,
         members: true,
         castAnimation: function () {
             return new Animation(728);
         },
         castProjectile: function (cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 171, 0, 20, 43, 31);
-        },
-        spellEffect: function (cast, castOn) {
-            if (castOn.isPlayer()) {
-                let player = castOn as Player;
-                if (player.getSkillManager().getCurrentLevel(Skill.STRENGTH) < player.getSkillManager().getMaxLevel(Skill.STRENGTH)) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage("The spell has no effect because the player is already weakened.");
-                    }
-                    return;
-                }
-                let decrease = Math.floor(0.10 * (player.getSkillManager().getCurrentLevel(Skill.STRENGTH)));
-                player.getSkillManager().setCurrentLevelCombat(Skill.STRENGTH, player.getSkillManager().getCurrentLevel(Skill.STRENGTH) - decrease);
-                player.getSkillManager().updateSkill(Skill.STRENGTH);
-                player.sendMessage("You feel slightly weakened.");
-            }
-            /* else if (castOn.isNpc()) {
-            let npc = castOn as NPC;
-            if (npc.getDefenceWeakened()[1] || npc.getStrengthWeakened()[1]) {
-            if (cast.isPlayer()) {
-            (cast as Player).sendMessage("The spell has no effect because the NPC is already weakened.");
-            }
-            return;
-            }
-            npc.getStrengthWeakened()[1] = true;
-            } */
         },
         endGraphic: function () {
             return new Graphic(172);
@@ -1602,7 +1468,7 @@ export class CombatSpells {
         spellEffect: (cast, target) => {
             if (!cast.isPlayer()) return;
             const magicLevel = cast.getAsPlayer().getSkillManager().getCurrentLevel(Skill.MAGIC);
-            cast.setAttribute(ARCEUUS_MARK_UNTIL, Date.now() + magicLevel * 600);
+            cast.setAttribute(ARCEUUS_MARK_UNTIL, World.getProcessCycle() + magicLevel);
         },
     });
 
@@ -1647,21 +1513,19 @@ export class CombatSpells {
         spellEffect: (_cast, target) => {
             if (!target.isNpc()) return;
             target.getMovementQueue().reset();
-            target.setAttribute("arceuus:dark-lure-until", Date.now() + 20_000);
+            target.setAttribute("arceuus:dark-lure-until", World.getProcessCycle() + 34);
             target.getCombat().attack(_cast);
         },
     });
 
     public static ENTANGLE = new CombatEffectSpell({
+        maximumHit: () => 5,
         members: true,
         castAnimation() {
             return new Animation(710);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 178, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            getCombatFactory().freeze(castOn, 15);
         },
         endGraphic() {
             return new Graphic(179, GraphicHeight.HIGH);
@@ -1685,43 +1549,13 @@ export class CombatSpells {
     });
 
     public static STUN = new CombatEffectSpell({
+        maximumHit: () => 0,
         members: true,
         castAnimation() {
             return new Animation(729);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 174, 0, 20, 43, 31);
-        },
-        spellEffect(cast, castOn) {
-            if (castOn.isPlayer()) {
-                const player = castOn as Player;
-
-                if (player.getSkillManager().getCurrentLevel(Skill.ATTACK) < player.getSkillManager().getMaxLevel(Skill.ATTACK)) {
-                    if (cast.isPlayer()) {
-                        (cast as Player).sendMessage(
-                            "The spell has no effect because the player is already weakened.");
-                    }
-                    return;
-                }
-
-                const decrease = Math.floor(0.10 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
-                player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
-                player.getSkillManager().updateSkill(Skill.ATTACK);
-                player.sendMessage(
-                    "You feel slightly weakened.");
-            }/* else if (castOn.isNpc()) {
-                    const npc = castOn as NPC;
-        
-                    if (npc.getDefenceWeakened()[0] || npc.getStrengthWeakened()[0]) {
-                        if (cast.isPlayer()) {
-                            (cast as Player).sendMessage(
-                                "The spell has no effect because the NPC is already weakened.");
-                        }
-                        return;
-                    }
-        
-                    npc.getStrengthWeakened()[0] = true;
-                }*/
         },
         endGraphic() {
             return new Graphic(107);
@@ -1794,10 +1628,12 @@ export class CombatSpells {
         }
     });
 
+    // Base effects: https://oldschool.runescape.wiki/w/Ancient_Magicks#Combat_spells
+    // Ice durations are ticks, rounded down after modifiers: https://oldschool.runescape.wiki/w/Ice_spells
     public static SMOKE_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 10); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(10 * multiplier)); } },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 384, 0, 20, 43, 31); },
         () => { return new Graphic(385); },
@@ -1811,13 +1647,13 @@ export class CombatSpells {
     public static SHADOW_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player = castOn as Player;
                 if (player.getSkillManager().getCurrentLevel(Skill.ATTACK) < player.getSkillManager().getMaxLevel(Skill.ATTACK)) {
                     return;
                 }
-                const decrease = Math.floor(0.1 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
+                const decrease = Math.floor(0.1 * multiplier * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -1839,7 +1675,7 @@ export class CombatSpells {
     public static BLOOD_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 372, 0, 20, 43, 31); },
         () => { return new Graphic(373); },
@@ -1860,7 +1696,7 @@ export class CombatSpells {
     public static ICE_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 5); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(8 * multiplier)); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 360, 0, 20, 43, 31); },
         () => { return new Graphic(361); },
@@ -1880,7 +1716,7 @@ export class CombatSpells {
     public static SMOKE_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 10); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(10 * multiplier)); } },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(389); },
@@ -1895,7 +1731,7 @@ export class CombatSpells {
     public static SHADOW_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player = castOn as Player;
 
@@ -1904,7 +1740,7 @@ export class CombatSpells {
                     return;
                 }
 
-                const decrease = Math.floor(0.1 * player.getSkillManager().getCurrentLevel(Skill.ATTACK));
+                const decrease = Math.floor(0.1 * multiplier * player.getSkillManager().getCurrentLevel(Skill.ATTACK));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -1924,7 +1760,7 @@ export class CombatSpells {
     public static BLOOD_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(376); },
@@ -1940,7 +1776,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 10); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(16 * multiplier)); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(363) },
@@ -1962,7 +1798,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 20); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(20 * multiplier)); } },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 386, 0, 20, 43, 31); },
         () => { return new Graphic(387) },
@@ -1978,7 +1814,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player = castOn as Player;
 
@@ -1986,7 +1822,7 @@ export class CombatSpells {
                     return;
                 }
 
-                const decrease = Math.floor(0.15 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
+                const decrease = Math.floor(0.15 * multiplier * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -2006,7 +1842,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 374, 0, 20, 43, 31); },
         () => { return new Graphic(375) },
@@ -2022,7 +1858,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return new Graphic(366, 6553600); },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 15); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(24 * multiplier)); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(367) },
@@ -2038,7 +1874,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 20); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(20 * multiplier)); } },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(391) },
@@ -2054,7 +1890,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player: Player = castOn as Player;
 
@@ -2063,7 +1899,7 @@ export class CombatSpells {
                     return;
                 }
 
-                const decrease: number = Math.floor(0.15 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
+                const decrease: number = Math.floor(0.15 * multiplier * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -2083,7 +1919,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(377) },
@@ -2100,7 +1936,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 20); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(32 * multiplier)); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(369) },
