@@ -24,6 +24,14 @@ const api = new Proxy({
   onPlayerLogin(handler) { loginHandlers.push(handler); },
   onCustomEvent(name, handler) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
   emitCustomEvent(name, request) {
+    if (name === 'quest:is-started' && request.key === 'fremennik_trials') {
+      request.started = request.player.trialsStarted === true;
+      return;
+    }
+    if (name === 'quest:is-complete' && request.key === 'fremennik_trials') {
+      request.complete = request.player.trialsComplete === true;
+      return;
+    }
     if (name === 'quest-cape:can-use') {
       if (questAnswer !== undefined) request.canUse = questAnswer;
       return;
@@ -34,6 +42,7 @@ const api = new Proxy({
     }
     for (const handler of handlers.get(name) ?? []) handler(request);
   },
+  sendMultiChatboxPrompt(player, title, ...options) { player.prompts.push({ title, options }); },
 }, { get: (target, key) => key in target ? target[key] : () => {} });
 
 function setup() {
@@ -72,6 +81,7 @@ function makePlayer({ tracks = [], coins = 0, freeSlots = 28, chatboxTransparent
   };
   const equipment = { contains() { return false; }, refreshItems() {}, getItems() { return []; }, forSlot() { return { getId: () => -1 }; } };
   return {
+    prompts: [],
     attrs, configs, scripts, flags, varbits, messages, items, inventory,
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
@@ -102,6 +112,20 @@ test('music unlocks pack complete cache bitfields and restore from persisted tra
   player.configs.length = 0;
   loginHandlers[0]({ player });
   assert.deepEqual(player.configs.find(([id]) => id === 20), [20, (1 << firstBit) | (1 << secondBit)]);
+});
+
+test('Olaf keeps his Trials dialogue reachable while the quest is active', async () => {
+  await setup();
+  const player = makePlayer();
+  player.trialsStarted = true;
+  assert.equal(MusicPlugin._test.talkToOlaf({ player }), false);
+  assert.deepEqual(player.prompts, []);
+  player.trialsComplete = true;
+  assert.equal(MusicPlugin._test.talkToOlaf({ player }), true);
+  assert.equal(player.prompts.at(-1).title, 'Music cape');
+  player.trialsStarted = false;
+  player.trialsComplete = false;
+  assert.equal(MusicPlugin._test.talkToOlaf({ player }), true);
 });
 
 test('an unlock names the track in the chatbox-transparency colour, unclosed and without a full stop', async () => {
