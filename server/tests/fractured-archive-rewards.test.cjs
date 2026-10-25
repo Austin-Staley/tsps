@@ -12,6 +12,7 @@ const { Skill } = require("../dist/game/model/Skill");
 
 const rewards = require("../plugins/minigames/tfa/Rewards.FracturedArchive");
 const rondache = require("../plugins/combat/effects/Rondache.EquipmentEffects");
+rondache._test.bind({ Equipment, ItemIdentifiers: ItemIds });
 
 rewards({
   core: { PrayerData, Skill, ItemIdentifiers: ItemIds, Area: class {}, Boundary: class {} },
@@ -26,6 +27,7 @@ function player(levels = {}, attributes = {}, shield = 0) {
     isPlayer: () => true,
     getAsPlayer() { return this; },
     getPacketSender: () => ({ sendVarbit() {} }),
+    getCombatSpecial: () => null,
     sendMessage() {},
     getInventory: () => ({ contains: (id) => attrs.get("horn") && id === ItemIds.HORN_OF_BRAN, deleteNumber() { attrs.set("horn", false); } }),
     getAttribute: (key) => attrs.get(key),

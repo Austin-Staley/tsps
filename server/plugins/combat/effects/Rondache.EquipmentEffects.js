@@ -1,6 +1,3 @@
-const { Equipment } = require("../../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
-const { ItemIdentifiers } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
-
 // Wiki: Rondache (The Fractured Archive). Passive: +2 flat armour and magic resistance. Its
 // charges come from the damage it mitigates with either, are added on the tick damage is
 // calculated, and stop at 20. Shield Slam spends them (specials/Rondache.SpecialAttack.js).
@@ -11,7 +8,8 @@ const CHARGES_ATTRIBUTE = "rondache:charges";
 const CHARGES_VARBIT = 16438; // rondache_charges (gameval)
 const MAX_CHARGES = 20;
 const FLAT_ARMOUR = 2;
-const RONDACHE = new Set([ItemIdentifiers.RONDACHE, ItemIdentifiers.RONDACHE_2, ItemIdentifiers.RONDACHE_3]);
+const SPECIAL_ID = "rondache";
+let core = null;
 
 const charges = (player) => Number(player.getAttribute(CHARGES_ATTRIBUTE)) || 0;
 
@@ -22,7 +20,9 @@ function setCharges(player, count) {
 }
 
 function wearsRondache(player) {
-  return RONDACHE.has(player.getEquipment().getItems()[Equipment.SHIELD_SLOT]?.getId?.());
+  const { Equipment, ItemIdentifiers } = core;
+  const id = player.getEquipment().getItems()[Equipment.SHIELD_SLOT]?.getId?.();
+  return id === ItemIdentifiers.RONDACHE || id === ItemIdentifiers.RONDACHE_2 || id === ItemIdentifiers.RONDACHE_3;
 }
 
 function applyRondache(entity, hitDamage) {
@@ -35,10 +35,22 @@ function applyRondache(entity, hitDamage) {
   setCharges(player, charges(player) + mitigated);
 }
 
+/** The shield's special follows what is worn, whichever path changed it (equip, death, banking...). */
+function refreshShieldSpecial({ player }) {
+  const hasSpecial = player.getCombatSpecial?.()?.getId?.() === SPECIAL_ID;
+  if (hasSpecial === wearsRondache(player)) return;
+  core.CombatSpecial.assign(player);
+  core.CombatSpecial.updateBar(player);
+}
+
 module.exports = function registerRondacheEffects(api) {
+  core = api.core;
+  api.onCustomEvent?.("equipment:changed", refreshShieldSpecial);
   api.persistAttribute?.(CHARGES_ATTRIBUTE, 0);
   api.registerIncomingDamageModifier(applyRondache);
   api.onPlayerLogin?.(({ player }) => setCharges(player, charges(player)));
 };
 
-module.exports._test = { applyRondache, setCharges, charges, wearsRondache, CHARGES_ATTRIBUTE, MAX_CHARGES };
+module.exports.charges = charges;
+module.exports.setCharges = setCharges;
+module.exports._test = { applyRondache, CHARGES_ATTRIBUTE, MAX_CHARGES, bind: (value) => { core = value; } };
