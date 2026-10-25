@@ -499,6 +499,13 @@ From the captures of three kills, the Wiki's Ocellus and strategy pages, and the
 - The spectator follows the party between rooms. The HUD's leave (974:1, `[2]`), a wipe or the party leaving sends them back beside the board.
 - *Difference:* live closes side tabs 0-6; here the inventory and combat tabs close, as for the dead, because those are what the server can put back.
 
+## Reward items
+
+`tfa/Rewards.FracturedArchive.js` and `combat/effects/Rondache.EquipmentEffects.js`.
+- **Horn of Bran / Zeal.** Using the horn on King Arthur unlocks Zeal (`prayer:zeal-unlocked`, varbit `prayer_zeal_unlocked` 16578, sent at login) and spends the horn. *Estimate:* the Wiki's Camelot cutscene is not built. Zeal is `PrayerData.ZEAL` (id 29, varbit `prayer_zeal` 16577): Prayer 84, plus Attack 75, Strength 75 and Defence 70 (dbrow 17168), drain as Piety (40 points a minute), +25% Attack, +28% Strength, +25% Defence. It takes Piety's place in the book (cache table `alternate_prayers`), so Piety's button toggles it once unlocked. *Not done:* quick prayers.
+- **Archivist's folio.** Read teleports to the lobby (4127,5508), spending a charge; Charge or ascension shards on it add 5 charges per shard; Check. At 0 charges it is the inert folio. *Estimates:* no charge cap, 20 Wilderness limit, the normal teleport animation.
+- **Rondache.** *Estimate* (the Wiki page is incomplete): the "+2 flat armour" removes 2 damage from each landing hit, and the damage removed is added to `rondache:charges`. *Not done:* Shield Slam, because the special bar belongs to the weapon.
+
 ## Not done yet
 
 What is left, and what a capture needs to show (as a fighter this time):
