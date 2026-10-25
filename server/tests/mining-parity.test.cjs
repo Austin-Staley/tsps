@@ -279,6 +279,7 @@ test("quarry rocks (Wiki): sandstone 35 and granite 45; bigger pieces get likeli
   const sandstone = byName.get("Sandstone rocks");
   const granite = byName.get("Granite rocks");
   assert.deepEqual([sandstone.level, granite.level], [35, 45]);
+  assert.deepEqual([sandstone.petBase, granite.petBase], [741600, 741600], 'Wiki: rock golem and clue geode base for both');
   assert.deepEqual(sandstone.outcomes.map((o) => o.xp), [30, 40, 50, 60]);
   assert.deepEqual(granite.outcomes.map((o) => o.xp), [50, 60, 75]);
   // The 256 roll at the Wiki's chart points: 56.5% at 35 and 92.7% at 99; granite 42.0% at 45, 68.2% at 99.

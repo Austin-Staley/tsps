@@ -40,7 +40,8 @@ function choose(player, title, ...options) {
 }
 
 function askAmount(player, prompt, then) {
-  player.setEnteredAmountAction({ execute: (count) => then(Math.max(0, Math.floor(Number(count) || 0))) });
+  // acceptsZero: Drew has his own line for 0, which the client's amount packet would otherwise drop.
+  player.setEnteredAmountAction({ acceptsZero: true, execute: (count) => then(Math.max(0, Math.floor(Number(count) || 0))) });
   player.getPacketSender().sendEnterAmountPrompt(prompt);
 }
 
@@ -96,6 +97,17 @@ function check(player) {
     [text("no"), () => talk(player, [["neutral", text("goodbye")]])]));
 }
 
+/**
+ * How many of `wanted` noted sand the inventory takes. Only those are paid for, so a stack near its
+ * cap (or one with other metadata) never costs buckets, sand or coins that bring nothing. Paying every
+ * coin frees the coins' slot, which a full inventory without a sand stack can then use.
+ */
+function deliverable(inventory, note, wanted, coins) {
+  const addable = inventory.getAddableAmount(new (core().Item)(note, wanted));
+  if (addable > 0 || coins !== wanted * DATA.sandPrice) return addable;
+  return inventory.getAmount(note) > 0 ? 0 : wanted;
+}
+
 /** Buckets of sand, noted, 50 coins each: as many as the sand, the buckets and the coins allow. */
 function claimSand(player) {
   const inventory = player.getInventory();
@@ -106,11 +118,10 @@ function claimSand(player) {
     if (count <= 0) return talk(player, [["angry2", text("zeroSand")]]);
     const note = objId(DATA.sandNote);
     const coins = inventory.getAmount(DATA.coins);
-    const given = Math.min(count, buckets(player), sand(player), Math.floor(coins / DATA.sandPrice));
-    if (given <= 0) return talk(player, [["neutral3", text("poor")]]);
-    const coinsLeft = coins - given * DATA.sandPrice;
-    const room = inventory.getAmount(note) > 0 || inventory.getFreeSlots() > 0 || coinsLeft === 0;
-    if (!room) return talk(player, [["neutral3", text("noRoom")]]);
+    const wanted = Math.min(count, buckets(player), sand(player), Math.floor(coins / DATA.sandPrice));
+    if (wanted <= 0) return talk(player, [["neutral3", text("poor")]]);
+    const given = deliverable(inventory, note, wanted, coins);
+    if (given <= 0) return talk(player, [["neutral3", text("noRoom")]]);
     inventory.deleteNumber(DATA.coins, given * DATA.sandPrice);
     inventory.add(new (core().Item)(note, given));
     inventory.refreshItems();
@@ -122,18 +133,23 @@ function claimSand(player) {
 
 // ---------------------------------------------------------------- the grinder
 
-/** Every unnoted sandstone in the inventory goes in at once (recorded: no animation, no sound). */
+/**
+ * Every unnoted sandstone in the inventory goes in at once (recorded: no animation, no sound), up to the
+ * 25,000 buckets' worth Sandstorm holds (Wiki): pieces that would go over it stay in the inventory.
+ */
 function grind(player) {
   const inventory = player.getInventory();
+  const held = Object.keys(DATA.sandstone).some((name) => inventory.getAmount(objId(name)) > 0);
+  if (!held) return void player.sendMessage(text("noSandstone"));
   let ground = 0;
   for (const [name, per] of Object.entries(DATA.sandstone)) {
     const id = objId(name);
-    const count = inventory.getAmount(id);
+    const fits = Math.floor((DATA.maxSand - sand(player) - ground) / per);
+    const count = Math.min(inventory.getAmount(id), Math.max(0, fits));
     if (count <= 0) continue;
     inventory.deleteNumber(id, count);
     ground += count * per;
   }
-  if (ground <= 0) return void player.sendMessage(text("noSandstone"));
   inventory.refreshItems();
   setSand(player, sand(player) + ground);
   player.sendMessage(text("ground", { sand: amount(sand(player)) }));

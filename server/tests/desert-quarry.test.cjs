@@ -38,6 +38,7 @@ function container() {
     add(item) { stacks.set(item.getId(), (stacks.get(item.getId()) ?? 0) + item.getAmount()); },
     deleteNumber(id, amount) { stacks.set(id, (stacks.get(id) ?? 0) - amount); },
     getFreeSlots: () => 28 - [...stacks.values()].filter((n) => n > 0).length,
+    getAddableAmount: (item) => ((stacks.get(item.getId()) ?? 0) > 0 || 28 - [...stacks.values()].filter((n) => n > 0).length > 0 ? item.getAmount() : 0),
     refreshItems() {},
   };
 }
@@ -166,4 +167,94 @@ test('Check, and Talk-to: the recorded lines, the menu, and Yes leading to the c
   assert.equal(p.pages.at(-1), "Anyway, that's all in the past. Can I help ya with anything else?");
   p.choose('Nothing.');
   assert.deepEqual(p.pages.slice(-2), ['Nothing sorry. I have to be going now.', 'Oh, bye then.']);
+});
+
+// ---------------------------------------------------------------- with a real Player and Inventory
+
+function realPlayer(t) {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const p = new Player(null);
+  p.pages = [];
+  t.mock.method(p, 'getDialogueManager', () => ({
+    startDialogues(builder) {
+      for (const page of builder.getDialogues().values()) {
+        if (page.getText) p.pages.push(page.getText());
+        else if (page.action?.execute) page.action.execute();
+      }
+    },
+  }));
+  t.mock.method(p.getPacketSender(), 'sendEnterAmountPrompt', () => {});
+  t.mock.method(p.getInventory(), 'refreshItems', () => p.getInventory());
+  return p;
+}
+
+/** As the client's amount packet does it (NetworkBuilder "dialogue_amount"): 0 only reaches a prompt that takes it. */
+function dispatchAmount(p, amount) {
+  const action = p.getEnteredAmountAction();
+  if (action && (amount > 0 || (amount === 0 && action.acceptsZero === true))) action.execute(amount);
+}
+
+test("entering 0 reaches Drew's own zero lines through the client's amount dispatch", (t) => {
+  const p = realPlayer(t);
+  p.getInventory().add(new core.Item(obj('cert_bucket_empty'), 5));
+  op(p, 'Deposit buckets');
+  dispatchAmount(p, 0);
+  assert.equal(p.pages.at(-1), "You can't deposit zero buckets.");
+  p.setAttribute(Quarry.BUCKETS_KEY, 10);
+  p.setAttribute(Quarry.SAND_KEY, 10);
+  p.getInventory().add(new core.Item(995, 1000));
+  op(p, 'Claim Sand');
+  dispatchAmount(p, 0);
+  assert.equal(p.pages.at(-1), 'Come back when ya actually want some buckets of sand.');
+});
+
+test('Claim Sand pays only for the sand that fits: a stack near its cap, and a full pack whose last coins free a slot', (t) => {
+  const note = obj('cert_bucket_sand');
+  const p = realPlayer(t);
+  p.getInventory().add(new core.Item(note, 2147483645));
+  p.getInventory().add(new core.Item(995, 1000));
+  p.setAttribute(Quarry.BUCKETS_KEY, 10);
+  p.setAttribute(Quarry.SAND_KEY, 10);
+  op(p, 'Claim Sand');
+  dispatchAmount(p, 10);
+  assert.equal(p.getInventory().getAmount(note), 2147483647);
+  assert.equal(p.getInventory().getAmount(995), 900, 'two buckets of sand, 100 coins');
+  assert.equal(p.getAttribute(Quarry.BUCKETS_KEY), 8);
+  assert.equal(p.getAttribute(Quarry.SAND_KEY), 8);
+  // A full pack: 27 logs and exactly 50 coins. Paying them frees the slot the sand goes into.
+  const full = realPlayer(t);
+  for (let i = 0; i < 27; i++) full.getInventory().add(new core.Item(1511, 1));
+  full.getInventory().add(new core.Item(995, 50));
+  full.setAttribute(Quarry.BUCKETS_KEY, 5);
+  full.setAttribute(Quarry.SAND_KEY, 5);
+  op(full, 'Claim Sand');
+  dispatchAmount(full, 1);
+  assert.equal(full.getInventory().getAmount(note), 1);
+  assert.equal(full.getInventory().getAmount(995), 0);
+  // The same full pack with 100 coins: nothing fits, so nothing is spent.
+  const stuck = realPlayer(t);
+  for (let i = 0; i < 27; i++) stuck.getInventory().add(new core.Item(1511, 1));
+  stuck.getInventory().add(new core.Item(995, 100));
+  stuck.setAttribute(Quarry.BUCKETS_KEY, 5);
+  stuck.setAttribute(Quarry.SAND_KEY, 5);
+  op(stuck, 'Claim Sand');
+  dispatchAmount(stuck, 1);
+  assert.equal(stuck.pages.at(-1), "Ya don't have room in your pack for the sand.");
+  assert.equal(stuck.getInventory().getAmount(995), 100);
+  assert.equal(stuck.getAttribute(Quarry.BUCKETS_KEY), 5);
+});
+
+test('the grinder holds 25,000 buckets of sand (Wiki): a piece that would go over stays in the pack', (t) => {
+  const p = realPlayer(t);
+  p.setAttribute(Quarry.SAND_KEY, 24995);
+  p.getInventory().add(new core.Item(obj('enakh_sandstone_large'), 1));
+  p.getInventory().add(new core.Item(obj('enakh_sandstone_medium'), 2));
+  p.getInventory().add(new core.Item(obj('enakh_sandstone_tiny'), 1));
+  t.mock.method(p, 'sendMessage', (m) => p.pages.push(m));
+  hooks.objects.Grinder.Deposit({ player: p, object: grinder() });
+  assert.equal(p.getAttribute(Quarry.SAND_KEY), 25000, '1 tiny + 1 medium fit; the 10kg and one 5kg do not');
+  assert.equal(p.pages.at(-1), 'The grinder is holding enough sandstone for 25,000 buckets of sand.');
+  assert.equal(p.getInventory().getAmount(obj('enakh_sandstone_large')), 1);
+  assert.equal(p.getInventory().getAmount(obj('enakh_sandstone_medium')), 1);
+  assert.equal(p.getInventory().getAmount(obj('enakh_sandstone_tiny')), 0);
 });

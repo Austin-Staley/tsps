@@ -72,7 +72,7 @@ const ROCKS = [
   {
     objectName: "Sandstone rocks",
     objectIds: [11386],
-    level: 35, xp: 30, oreId: 6971,
+    level: 35, xp: 30, oreId: 6971, petBase: 741600, // Wiki (Rock golem, Clue geode)
     successLow: 95, successHigh: 237, respawnTicks: 9,
     outcomes: [
       { itemId: 6971, min: 1, max: 1, weight: 39.6, weightHigh: 28.9, xp: 30, message: "You manage to quarry some sandstone." },
@@ -85,7 +85,7 @@ const ROCKS = [
     objectName: "Granite rocks",
     objectIds: [11387],
     depletedRock: "rocks2", // recorded (227/01757, 234/03285)
-    level: 45, xp: 50, oreId: 6979,
+    level: 45, xp: 50, oreId: 6979, petBase: 741600,
     successLow: 53, successHigh: 175, respawnTicks: 9,
     outcomes: [
       { itemId: 6979, min: 1, max: 1, weight: 37.8, weightHigh: 30.4, xp: 50, message: "You manage to quarry some granite." },

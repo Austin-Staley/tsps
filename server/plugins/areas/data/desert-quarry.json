@@ -1,8 +1,10 @@
 {
-  "_source": "rsprox 232/03162 and 232/03165 (Drew, the grinder) and the Wiki (Drew: 25,000 buckets, 50 coins a bucket of sand). Chathead animations are the recorded ones.",
+  "_source": "rsprox 232/03162 and 232/03165 (Drew, the grinder) and the Wiki (Drew: 25,000 buckets, 50 coins a bucket of sand; Sandstorm: 25,000 sand). Chathead animations are the recorded ones.",
   "drew": "grinder_drew",
   "grinder": "Grinder",
   "maxBuckets": 25000,
+  "_maxSand": "Wiki (Sandstorm; the release notes): the grinder holds 25,000 buckets of sand.",
+  "maxSand": 25000,
   "manyBuckets": 20001,
   "sandPrice": 50,
   "coins": 995,
