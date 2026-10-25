@@ -46,7 +46,7 @@ function setup() {
   return setupPromise;
 }
 
-function makePlayer({ tracks = [], coins = 0, freeSlots = 28 } = {}) {
+function makePlayer({ tracks = [], coins = 0, freeSlots = 28, chatboxTransparent = false } = {}) {
   const attrs = new Map([[Progress.UNLOCKED_TRACKS_ATTRIBUTE, tracks]]);
   const configs = [];
   const scripts = [];
@@ -66,6 +66,7 @@ function makePlayer({ tracks = [], coins = 0, freeSlots = 28 } = {}) {
   const sender = {
     sendConfig(id, value) { configs.push([id, value]); return sender; },
     sendVarbit(id, value) { varbits.push([id, value]); return sender; },
+    getVarbit(id) { return id === 4608 && chatboxTransparent ? 1 : 0; },
     sendInterfaceFlagsRange(...args) { flags.push(args); return sender; },
     sendClientScript(id, ...args) { scripts.push([id, ...args]); return sender; },
   };
@@ -101,6 +102,22 @@ test('music unlocks pack complete cache bitfields and restore from persisted tra
   player.configs.length = 0;
   loginHandlers[0]({ player });
   assert.deepEqual(player.configs.find(([id]) => id === 20), [20, (1 << firstBit) | (1 << secondBit)]);
+});
+
+test('an unlock names the track in the chatbox-transparency colour, unclosed and without a full stop', async () => {
+  await setup();
+  // rsprox 224/01437 (transparent chatbox) and 234/03275 (opaque until transparency is turned on).
+  const EVERYWHERE = 268;
+  assert.equal(trackNames[EVERYWHERE], 'Everywhere');
+  const transparent = makePlayer({ chatboxTransparent: true });
+  handlers.get('music:unlock-track')[0]({ player: transparent, trackId: EVERYWHERE });
+  assert.deepEqual(transparent.messages, ['You have unlocked a new music track: <col=ff3045>Everywhere']);
+  const opaque = makePlayer();
+  handlers.get('music:unlock-track')[0]({ player: opaque, trackId: EVERYWHERE });
+  assert.deepEqual(opaque.messages, ['You have unlocked a new music track: <col=e00a19>Everywhere']);
+  // Live sends only the unlock varp and the message, no jingle (this sender has no jingle method).
+  assert.equal(opaque.configs.length, 1);
+  assert.deepEqual(opaque.scripts, []);
 });
 
 test('music cape trim fails closed when quest or diary eligibility is unanswered', async () => {

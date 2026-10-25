@@ -701,28 +701,32 @@ test("as captured: a combat level gained waits behind the skill's pop-up", () =>
   } finally { core.TaskManager.submit = submit; }
 });
 
-test("burying resolves inventory and XP together on tick two; movement, logout and cancellation preserve the bone", () => {
+test("burying resolves inventory and XP on click; movement, logout and cancellation cannot repeat or refund it", () => {
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi(), tasks = [];
   const hooks = registerFeedbackPlugin("skills/Prayer", core, {
     getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   });
-  for (const mode of ["complete", "walk-before-resolve", "logout", "cancel"]) {
+  for (const mode of ["complete", "walk-before-message", "logout", "cancel"]) {
     const p = feedbackPlayer(core);
-    p.counts.set(core.ItemIdentifiers.BONES, 1);
+    p.counts.set(core.ItemIdentifiers.BONES, 2);
     let xp = 0;
     p.skills = { stopSkillable() {}, addExperiences(s, n) { assert.equal(s, Skill.PRAYER); xp += n; } };
     assert.equal(hooks.onItemFirstAction({ player: p, itemId: core.ItemIdentifiers.BONES, slot: 0 }), true);
     const task = tasks.pop();
     assert.equal(task.key, p, "logout cancels tasks by player identity");
     assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1);
-    task.tick();
-    if (mode === "walk-before-resolve") p.moveTo(new core.Location(3001, 3000, 0));
+    assert.equal(xp, 5, "the clicked bone awards XP immediately");
+    if (mode === "walk-before-message") p.moveTo(new core.Location(3001, 3000, 0));
     if (mode === "logout") p.isRegistered = () => false;
     if (mode === "cancel") task.stop();
     task.tick();
-    assert.equal(xp > 0, mode === "complete", mode);
-    assert.equal(p.counts.has(core.ItemIdentifiers.BONES), mode !== "complete", mode);
+    task.tick();
+    assert.equal(xp, 5, mode);
+    assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1, mode);
+    assert.deepEqual(p.messages, mode === "logout" || mode === "cancel"
+      ? ["You dig a hole in the ground..."]
+      : ["You dig a hole in the ground...", "You bury the bones."], mode);
     assert.equal(task.isRunning(), false);
   }
 });

@@ -13,6 +13,13 @@ const MUSIC_NOW_PLAYING_REFRESH_SCRIPT = 3936;
 const MUSIC_JUKEBOX_ROW_FLAGS = 62;
 const MUSIC_NOW_PLAYING_FLAGS = 60;
 const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
+/**
+ * chatbox_transparency: live colours an unlocked track's name by it, with no closing tag or
+ * full stop (rsprox 224/01437: "<col=ff3045>Everywhere" on a transparent chatbox; 234/03275
+ * sends "<col=e00a19>" until the player turns transparency on, then "<col=ff3045>").
+ */
+const CHATBOX_TRANSPARENCY_VARBIT = 4608;
+const UNLOCK_NAME_COLOUR = { opaque: "e00a19", transparent: "ff3045" };
 const HOLIDAY_TRACKS = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, "data", "music-holiday-tracks.json"), "utf8")));
 let core;
 let pluginApi;
@@ -79,6 +86,11 @@ function removeInvalidEquippedCape(player) {
   player.getUpdateFlag().flag(core.Flag.APPEARANCE);
 }
 
+function unlockNameColour(player) {
+  const transparent = player.getPacketSender().getVarbit(CHATBOX_TRANSPARENCY_VARBIT) === 1;
+  return UNLOCK_NAME_COLOUR[transparent ? "transparent" : "opaque"];
+}
+
 function unlockTrack({ player, trackId }) {
   trackId = Number(trackId);
   const name = trackNames?.[trackId];
@@ -86,7 +98,7 @@ function unlockTrack({ player, trackId }) {
   if (!player || !name || !slot || !Progress.unlock(player, canonicalTrackBySlot[slot.key])) return;
   const fullVarps = Progress.varpsFor(Progress.unlockedTracks(player), slotByTrackId);
   player.getPacketSender().sendConfig(slot.varp, fullVarps[slot.varp]);
-  player.sendMessage(`You have unlocked a new music track: ${name}.`);
+  player.sendMessage(`You have unlocked a new music track: <col=${unlockNameColour(player)}>${name}`);
   Progress.refreshCapeUnlock(player, nonHolidayTrackIds);
 }
 
