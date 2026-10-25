@@ -181,7 +181,8 @@ function handleStealFromStall(event) {
   if (reward.getAmount() > request.stored) player.getInventory().addItem(new core.Item(reward.getId(), reward.getAmount() - request.stored));
   player.getSkillManager().addExperiences(core.Skill.THIEVING, stall.xp);
   player.sendMessage(`You steal ${reward.getAmount()} x ${reward.getDefinition().getName()}.`);
-  pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: stall.petBase });
+  pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: stall.petBase, method: "stall",
+    stall: event.definition.getName(), itemId: reward.getId(), location: event.object.getLocation() });
   const ticks = event.object.getId() === core.ObjectIdentifiers.BAKERY_STALL_2 ? 16 : stall.respawnTicks;
   depleteStall(event.object, ticks);
   event.handled = true;

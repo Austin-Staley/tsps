@@ -164,6 +164,7 @@ export class UseItemPacketListener {
       npcId: target.getContentId(player),
       npcIndex: targetIndex,
       clickType: 0,
+      itemId,
       location: {
         x: target.getLocation().getX(),
         y: target.getLocation().getY(),
@@ -171,8 +172,10 @@ export class UseItemPacketListener {
       },
       handled: false,
       range: 1,
+      ignoreProjectileClip: false,
     };
     PluginManager.emitNpcRoute(routeEvent);
+    // Item use can target an NPC occupying the player's tile; route geometry governs approach.
     player.getMovementQueue().walkToEntity(target, () => {
       // Inventory rearrangement and NPC removal can happen while walking to the target.
       if (player.getInventory().getItems()[slot] !== item || item.getId() !== itemId ||
@@ -190,7 +193,7 @@ export class UseItemPacketListener {
         slot,
         handled: false,
       });
-    }, routeEvent.range);
+    }, routeEvent.range, routeEvent.ignoreProjectileClip === true, true);
   }
 
   public static spellOnObject(

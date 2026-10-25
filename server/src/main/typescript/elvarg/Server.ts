@@ -175,6 +175,12 @@ export class Server {
       console.error("[shutdown] Removing plugin objects failed", err);
     }
 
+    try {
+      console.info(`[shutdown] Removed ${PluginManager.removeUnownedPluginNpcs()} plugin NPCs.`);
+    } catch (err) {
+      console.error("[shutdown] Removing plugin NPCs failed", err);
+    }
+
     if (mode === "restart") {
       console.info("[shutdown] Continuing nodemon restart (SIGUSR2).");
       process.kill(process.pid, "SIGUSR2");

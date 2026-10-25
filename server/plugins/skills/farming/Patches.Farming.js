@@ -222,6 +222,7 @@ function plant(player, patch, id) {
     if (crop.type !== "HERB") award(player, crop.plant, patch);
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
+    core.PluginManager.emitCustomEvent("farming:planted", { player, crop: crop.key, seedId: id, patch });
 }
 function water(player, id, slot) {
     const inventory = player.getInventory();

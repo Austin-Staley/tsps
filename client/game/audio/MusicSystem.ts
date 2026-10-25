@@ -100,6 +100,9 @@ export class MusicSystem {
     private osrsRequestedTrackIds: number[] = [];
     private osrsQueuedAreaTracks: number[] | null = null;
     private osrsQueuedAreaFade: OsrsFadeParams | null = null;
+    /** The songs of the request the task queue is working on, so a failed one can be dropped without touching what already plays. */
+    private osrsCurrentRequest: OsrsMusicSong[] = [];
+    private osrsCurrentRequestKind: OsrsSongKind = "music";
     private readonly osrsSynthRefCount = new Map<RealtimeMidiSynth, number>();
 
     // Login screen music - "Scape Main"
@@ -507,6 +510,11 @@ export class MusicSystem {
      * @param jingleId - The jingle track ID (from musicJingles index 11)
      * @param _delay - Jingle delay param from SOUND_JINGLE / server packet. Present for parity;
      * OSRS ignores it at playback time.
+     *
+     * Live (rsprox revs 236-239, 1,584 jingles) sends the current track with zero fades on the
+     * same tick as the jingle and then, usually, nothing until the jingle ends: the client cuts
+     * the track, plays the jingle, and resumes the track itself (processOsrsJingleQueueTick).
+     * A song packet that arrives during the jingle only replaces the track to resume.
      */
     public async playJingle(jingleId: number, _delay: number): Promise<boolean> {
         if (jingleId < 0 || !(this.volume > 0)) return false;
@@ -999,6 +1007,58 @@ export class MusicSystem {
         this.clearOsrsPlaybackImmediate();
     }
 
+    /**
+     * A task of the current request failed (a track that cannot be loaded or started). Drop that
+     * request's songs and the rest of its queue, but leave the songs that were already playing as
+     * they were: a missing replacement track must not silence the area music, and a failed jingle
+     * gives the area track back at once.
+     */
+    private abandonOsrsRequest(): void {
+        const kind = this.osrsCurrentRequestKind;
+        this.osrsTaskQueue.length = 0;
+        for (const req of this.osrsRequests) {
+            this.stopAndResetOsrsSong(req);
+        }
+        this.osrsRequests.length = 0;
+        for (const song of this.osrsCurrentRequest) {
+            const index = this.osrsSongs.indexOf(song);
+            if (index !== -1) this.osrsSongs.splice(index, 1);
+            this.stopAndResetOsrsSong(song);
+        }
+        this.osrsCurrentRequest = [];
+        for (let i = 0; i < this.osrsSongs.length; i++) {
+            const song = this.osrsSongs[i];
+            if (!song) continue;
+            // A jingle that has finished was only waiting for its replacement to clear it.
+            if (song.kind === "jingle" && song.synth?.playing !== true) {
+                this.osrsSongs.splice(i, 1);
+                i--;
+                this.stopAndResetOsrsSong(song);
+                continue;
+            }
+            song.markedForRemoval = false;
+            if (!song.synth || !song.loaded || !song.started) continue;
+            // Whatever the replacement had muted or started fading comes back to full volume.
+            song.isFading = false;
+            song.pcmVolume = song.musicTrackVolumeInt;
+            try {
+                song.synth.setOutputGain(song.musicTrackVolumeInt > 0 ? 1 : 0);
+            } catch {}
+        }
+        this.osrsRequestedTrackIds = this.osrsSongs.map((song) => song.trackId | 0);
+        if (kind === "music") {
+            // The track a later jingle gives back is the one still playing, not the one that failed.
+            const playing = this.osrsSongs
+                .filter((song) => song.kind === "music" && song.started)
+                .map((song) => song.trackId | 0);
+            this.osrsQueuedAreaTracks = playing.length > 0 ? playing : null;
+            if (playing.length === 0) this.osrsQueuedAreaFade = null;
+        }
+        if (kind === "jingle" && this._playingJingle) {
+            this.finishJingle();
+        }
+    }
+
     private clearOsrsPlaybackImmediate(): void {
         this.osrsTaskQueue.length = 0;
         for (const req of this.osrsRequests) {
@@ -1056,8 +1116,8 @@ export class MusicSystem {
         const finished = task.run();
         if (finished) {
             if (task.error) {
-                console.log(`[MusicSystem] Error in midimanager.service: ${task.error}`);
-                this.stopOsrsMusicImmediate();
+                console.warn(`[MusicSystem] Error in midimanager.service: ${task.error}`);
+                this.abandonOsrsRequest();
                 return;
             }
             if (task.next) {
@@ -1082,6 +1142,11 @@ export class MusicSystem {
             return;
         }
 
+        this.finishJingle();
+    }
+
+    /** The jingle is over (or could not play): give the area track back, as the native client does. */
+    private finishJingle(): void {
         this._playingJingle = false;
         console.log("[MusicSystem] Jingle ended");
 
@@ -1261,6 +1326,8 @@ export class MusicSystem {
 
         this.osrsRequestedTrackIds = entries.map((song) => song.trackId | 0);
         this.osrsRequests.push(...entries);
+        this.osrsCurrentRequest = entries.slice();
+        this.osrsCurrentRequestKind = entries[0]?.kind ?? "music";
 
         const oldSongs = this.osrsSongs.slice();
         const oldPrimary = this.selectOsrsFadeOutSong(oldSongs);
@@ -1458,10 +1525,22 @@ export class MusicSystem {
                 }
             }
 
-            const failed = this.osrsSongs.find((s) => s && s.failed);
-            if (failed) {
-                task.error = `Failed to load track ${failed.trackId}`;
-                return true;
+            // A song that cannot be loaded is dropped; only the request's primary failing fails
+            // the request (and then only the request: what already plays is left alone).
+            const primary = this.osrsCurrentRequest[0] ?? null;
+            for (let i = 0; i < this.osrsSongs.length; i++) {
+                const song = this.osrsSongs[i];
+                if (!song || !song.failed) continue;
+                if (song === primary) {
+                    task.error = `Failed to load track ${song.trackId}`;
+                    return true;
+                }
+                console.warn(`[MusicSystem] Track ${song.trackId} could not be loaded; skipping it`);
+                this.osrsSongs.splice(i, 1);
+                i--;
+                const requested = this.osrsCurrentRequest.indexOf(song);
+                if (requested !== -1) this.osrsCurrentRequest.splice(requested, 1);
+                this.stopAndResetOsrsSong(song);
             }
 
             const allLoaded = this.osrsSongs.every((s) => !s || s.loaded);
