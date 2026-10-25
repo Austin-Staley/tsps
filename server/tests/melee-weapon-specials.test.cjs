@@ -50,7 +50,7 @@ function skills(levelsByName) {
 }
 
 function fakePlayer({ weaponId, energy = 100, levels = {} }) {
-  const calls = { orb: 0, state: [], animations: [], graphics: [], chat: [], messages: [] };
+  const calls = { orb: 0, state: [], animations: [], graphics: [], chat: [], messages: [], sounds: [] };
   const player = {
     calls,
     skillManager: skills(levels),
@@ -58,6 +58,7 @@ function fakePlayer({ weaponId, energy = 100, levels = {} }) {
     activated: false,
     energy,
     isPlayer: () => true,
+    isPlayerBot: () => false,
     getAsPlayer() { return this; },
     getCombatSpecial() { return this.special; },
     isSpecialActivated() { return this.activated; },
@@ -69,6 +70,7 @@ function fakePlayer({ weaponId, energy = 100, levels = {} }) {
     getEquipment: () => ({ get: () => ({ getId: () => weaponId }) }),
     getWeapon: () => ({ getSpecialBar: () => -1, getSpecialMeter: () => -1 }),
     getPacketSender: () => ({
+      sendSoundEffect: (...args) => calls.sounds.push(args),
       updateSpecialAttackOrb: () => { calls.orb++; },
       sendSpecialAttackState: (on) => { calls.state.push(on); },
     }),
@@ -172,6 +174,40 @@ test("activating Rampage drains energy once, updates the bar and applies the sta
   assert.deepEqual(player.calls.chat, ["Raarrrrrgggggghhhhhhh!"]);
   assert.equal(player.calls.animations[0].getId(), 1056);
   assert.equal(player.calls.graphics[0].getId(), 246);
+  assert.deepEqual(player.calls.sounds, [[2538, 1, 0, 1]], "rsprox recording 1023: immediate activation sound");
+});
+
+test("Rampage refreshes its base Strength boost without stacking repeated uses", () => {
+  const player = fakePlayer({ weaponId: ItemIdentifiers.DRAGON_BATTLEAXE,
+    levels: { ATTACK: 99, DEFENCE: 99, RANGED: 99, MAGIC: 99, STRENGTH: 99 } });
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("STRENGTH"), 118);
+  player.energy = 100;
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("STRENGTH"), 118, "keep the larger first boost; do not add another 19");
+  assert.equal(player.skillManager.level("ATTACK"), 81, "drain the visible level again");
+});
+
+test("Rampage preserves a stronger existing boost and replaces a weaker one", () => {
+  for (const [current, expected] of [[110, 118], [120, 120], [118, 118]]) {
+    const player = fakePlayer({ weaponId: ItemIdentifiers.DRAGON_BATTLEAXE,
+      levels: { ATTACK: 99, DEFENCE: 99, RANGED: 99, MAGIC: 99, STRENGTH: 99 } });
+    player.skillManager.setLevel("STRENGTH", current);
+    CombatSpecial.activate(player);
+    assert.equal(player.skillManager.level("STRENGTH"), expected);
+    assert.equal(player.energy, 0);
+  }
+});
+
+test("Rampage calculates its boost from the floored drains of visible combat levels", () => {
+  const player = fakePlayer({ weaponId: ItemIdentifiers.DRAGON_BATTLEAXE,
+    levels: { ATTACK: 99, DEFENCE: 99, RANGED: 99, MAGIC: 99, STRENGTH: 99 } });
+  for (const [name, level] of [["ATTACK", 118], ["DEFENCE", 118], ["RANGED", 112], ["MAGIC", 103]]) {
+    player.skillManager.setLevel(name, level);
+  }
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("STRENGTH"), 119, "43 drained levels give +20; total 119");
+  assert.deepEqual(["ATTACK", "DEFENCE", "RANGED", "MAGIC"].map(name => player.skillManager.level(name)), [107, 107, 101, 93]);
 });
 
 test("an instant special without enough energy changes nothing", () => {
