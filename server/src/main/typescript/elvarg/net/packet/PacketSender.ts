@@ -1176,6 +1176,7 @@ export class PacketSender {
       x: position.getX(),
       y: position.getY(),
       level: position.getZ(),
+      ...item.getTiming?.(),
       ownerId: mine ? this.player.getIndex() : -1,
       isPrivate: item.getState?.() === 0,
       ownership: owner == null ? 0 : mine ? 1 : 2,
