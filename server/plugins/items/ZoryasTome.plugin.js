@@ -11,10 +11,10 @@
  * through weapon switches. The Wiki leaves "increased" ambiguous; read here as x2.5 and x1.6
  * (estimate), and the five-attack rule as "used while the buff is active" (estimate).
  *
- * Ids from the cache gamevals: tfa_human_zorya_tome_attack_female (15146) / _special_attack_female
- * (15147), vfx_zorya_tome_proj (4427) / _special_proj (4428), _impact (4429) / _special_impact
- * (4430), caster spotanims _standard_spotanim (4433) / _spec_spotanim (4432, the male pair; the
- * female ones are 4435/4434). The Wiki gives no projectile timings, so Sanguinesti's are reused (estimate).
+ * Ids from the cache gamevals: tfa_human_zorya_tome_attack (15139) / _special_attack (15140), with
+ * _female versions (15146 / 15147), vfx_zorya_tome_proj (4427) / _special_proj (4428), _impact (4429) /
+ * _special_impact (4430), caster spotanims _standard_spotanim (4433) / _spec_spotanim (4432), with
+ * _female versions (4435 / 4434). The Wiki gives no projectile timings, so Sanguinesti's are reused (estimate).
  */
 const MAX_CHARGES = 20000;
 const ASTRAL_PER_CHARGE = 3;
@@ -31,10 +31,8 @@ const DAMAGE_MULTIPLIER = 1.6;
 const BUFF_ATTACKS = 3;
 const BUFF_ATTACKS_REPEATED = 5;
 const BUFF_DURATION_MS = 30000;
-const ATTACK_ANIMATION = 15146;
-const SPECIAL_ANIMATION = 15147;
-const STANDARD = { START: 4433, PROJECTILE: 4427, END: 4429 };
-const SPECIAL = { START: 4432, PROJECTILE: 4428, END: 4430 };
+const STANDARD = { ANIMATION: 15139, FEMALE_ANIMATION: 15146, START: 4433, FEMALE_START: 4435, PROJECTILE: 4427, END: 4429 };
+const SPECIAL = { ANIMATION: 15140, FEMALE_ANIMATION: 15147, START: 4432, FEMALE_START: 4434, PROJECTILE: 4428, END: 4430 };
 
 let core = null;
 let TomeCombatMethod = null;
@@ -77,11 +75,12 @@ function spellFor(player) {
   if (spell) return spell;
   const { CombatNormalSpell, Animation, Graphic, GraphicHeight, Projectile } = core;
   const gfx = () => (casts.get(player) === "special" ? SPECIAL : STANDARD);
+  const female = () => player.getAppearance?.().isMale?.() === false;
   spell = new CombatNormalSpell({
     spellId: () => ids().ZORYAS_TOME,
     maximumHit: () => BASE_MAX_HIT,
-    castAnimation: () => new Animation(casts.get(player) === "special" ? SPECIAL_ANIMATION : ATTACK_ANIMATION),
-    startGraphic: () => new Graphic(gfx().START, GraphicHeight.HIGH),
+    castAnimation: () => new Animation(female() ? gfx().FEMALE_ANIMATION : gfx().ANIMATION),
+    startGraphic: () => new Graphic(female() ? gfx().FEMALE_START : gfx().START, GraphicHeight.HIGH),
     castProjectile: (cast, castOn) => Projectile.createProjectile(cast, castOn, gfx().PROJECTILE, 0, 20, 43, 31),
     endGraphic: () => new Graphic(gfx().END),
     baseExperience: () => 0,

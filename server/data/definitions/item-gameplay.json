@@ -27402,6 +27402,6 @@
   {"id":34681,"name":"Ascension crossbows","equipmentType":"WEAPON","weaponInterface":"CROSSBOW","blockAnim":424,"standAnim":15110,"walkAnim":15111,"runAnim":15112,"standTurnAnim":823,"turn180Anim":820,"turn90CWAnim":821,"turn90CCWAnim":821},
   {"id":34715,"name":"Obligator","equipmentType":"WEAPON","weaponInterface":"EXTENDING_CHAINMACE","blockAnim":15133,"standAnim":15118,"walkAnim":15119,"runAnim":15121},
   {"id":34717,"name":"Obligator (uncharged)","equipmentType":"WEAPON","weaponInterface":"EXTENDING_CHAINMACE","blockAnim":15133,"standAnim":15118,"walkAnim":15119,"runAnim":15121},
-  {"id":34725,"name":"Zorya's tome","equipmentType":"WEAPON","weaponInterface":"UNARMED"},
-  {"id":34727,"name":"Zorya's tome (uncharged)","equipmentType":"WEAPON","weaponInterface":"UNARMED"}
+  {"id":34725,"name":"Zorya's tome","equipmentType":"WEAPON","weaponInterface":"POWERED_STAFF","blockAnim":15141,"standAnim":15135,"walkAnim":15136,"runAnim":15138,"standTurnAnim":823,"turn180Anim":820,"turn90CWAnim":821,"turn90CCWAnim":821},
+  {"id":34727,"name":"Zorya's tome (uncharged)","equipmentType":"WEAPON","weaponInterface":"POWERED_STAFF","blockAnim":15141,"standAnim":15135,"walkAnim":15136,"runAnim":15138,"standTurnAnim":823,"turn180Anim":820,"turn90CWAnim":821,"turn90CCWAnim":821}
 ]
