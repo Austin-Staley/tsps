@@ -37,7 +37,7 @@ before(async () => {
 const {
   applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
   applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration,
-  clearPrayerRegeneration, processBoostDecay, curePoisonAndVenom,
+  clearPrayerRegeneration, processBoostDecay, notePreserveActivated, curePoisonAndVenom,
   pauseTimedEffects, resumeTimedEffects,
 } = Potions._test;
 
@@ -155,12 +155,14 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
   const player = {
     levels,
     attributes,
+    prayerActive: [],
     poisonImmunity,
     poisonDamage: current,
     venomed: current > 0,
     isVenomed() { return this.venomed && this.poisonDamage > 0; },
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
+    getPrayerActive: () => player.prayerActive,
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
     getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
     getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {}, sendRunEnergy() {} }),
@@ -359,7 +361,7 @@ test("a house tablet goes to the house portal and enters unless Outside was chos
   assert.deepEqual(teleports.map(({ onArrival }) => onArrival?.() ?? null), ["entered", "entered", null]);
 });
 
-test("the minute cycle decays boosts and restores drains one point toward base", () => {
+test("the minute cycle decays boosts one point toward base and leaves drains to the core", () => {
   const player = createPlayer({ base: 99, current: 99 });
   player.levels.set(Skill.ATTACK, 110);
   player.levels.set(Skill.STRENGTH, 90);
@@ -371,9 +373,32 @@ test("the minute cycle decays boosts and restores drains one point toward base",
   player.setAttribute("potions:boost-cycle", Date.now() - 1);
   processBoostDecay(player);
   assert.equal(player.levels.get(Skill.ATTACK), 109, "a boost loses a point");
-  assert.equal(player.levels.get(Skill.STRENGTH), 91, "a drain gains a point");
+  assert.equal(player.levels.get(Skill.STRENGTH), 90, "drains restore on the core's own timer, not a second time here");
   assert.equal(player.levels.get(Skill.PRAYER), 110, "prayer points do not decay");
-  assert.equal(player.levels.get(Skill.HITPOINTS), 110, "hitpoints do not decay");
+  assert.equal(player.levels.get(Skill.HITPOINTS), 110, "hitpoints above base drop on the core's Hitpoints timer");
+});
+
+test("Preserve stretches the boost cycle to 90 seconds once it has been on for 15", () => {
+  const { PrayerHandler } = core;
+  const player = createPlayer({ base: 99, current: 99 });
+  player.levels.set(Skill.ATTACK, 110);
+  player.prayerActive[PrayerHandler.PRESERVE] = true;
+  notePreserveActivated({ player, prayerId: PrayerHandler.PRESERVE });
+  player.setAttribute("potions:preserve-since", Date.now() - 15_000);
+
+  const cycleEnd = Date.now() - 1;
+  player.setAttribute("potions:boost-cycle", cycleEnd);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 110, "the boost holds when the minute ends");
+  assert.equal(player.getAttribute("potions:boost-cycle"), cycleEnd + 30_000, "the cycle runs 30 seconds longer");
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 109, "then the stretched cycle decays it");
+
+  notePreserveActivated({ player, prayerId: PrayerHandler.PRESERVE });
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 108, "Preserve switched on under 15 seconds ago does not stretch it");
 });
 
 test("a divine-timed skill is pinned and only decays after the divine state ends", () => {
