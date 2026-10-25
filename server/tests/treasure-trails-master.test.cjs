@@ -116,14 +116,20 @@ test("every master row is a step on the one master clue scroll; Falo's songs and
   assert.equal(data.uri, C.getNpcId("trail_master_uri"));
 });
 
-test("hot/cold and the three-part torn cryptics wait for PR B; the rest is rolled", () => {
+test("hot/cold starts from Jorral and three-part steps draw their parts; the targets themselves are never rolled", () => {
   fixture();
+  const data = Runtime.data(MASTER);
   const out = steps().filter(step => !rollable().includes(step));
-  assert.ok(out.filter(step => step.family === "hotcold").length === 136);
-  assert.equal(out.filter(step => step.family === "cryptic").length, 32, "every master cryptic but Falo's");
-  assert.ok(rollable().some(step => step.falo));
+  assert.equal(out.filter(step => step.family === "hotcold").length, 136, "hot/cold targets come through Jorral");
+  assert.deepEqual(rollable().filter(step => step.family === "cryptic").map(step => step.key).sort(),
+    ["cluehelper_cryptic_master_falo_the_bard", "cluehelper_cryptic_master_jorral"]);
+  assert.ok(rollable().some(step => step.key === "cluehelper_skillchallenge_master_25"), "the three-part step");
+  // Viggora (no Curse of the Empty Lord), Piles (no Resource Area fee) and Lovada (not spawned) are never parts.
+  assert.equal(data.parts.length, 27);
+  assert.deepEqual(ofKind("cryptic").filter(step => !step.falo && !/_(jorral|watson)$/.test(step.key) && !data.parts.includes(step)).map(step => step.key).sort(),
+    ["cluehelper_cryptic_master_lovada", "cluehelper_cryptic_master_piles", "cluehelper_cryptic_master_viggora"]);
   for (const family of ["anagram", "coordinate", "emote"]) assert.ok(ofKind(family).every(step => rollable().includes(step)), family);
-  for (const step of ofKind("skillchallenge")) assert.equal(rollable().includes(step), Boolean(SKILL_CHALLENGES[step.key]), step.key);
+  for (const step of ofKind("skillchallenge").filter(entry => entry.target !== "none")) assert.equal(rollable().includes(step), Boolean(SKILL_CHALLENGES[step.key]), step.key);
 });
 
 test("a fresh master clue starts a 6-8 step trail whose step lives in the clue's meta", () => {
@@ -420,4 +426,299 @@ test("master STASH units need Construction 88, mahogany planks and a gold leaf",
   assert.deepEqual(f.attributes.get(Stash.BUILT_ATTRIBUTE), [units[0].step.stash.locId]);
   assert.equal(f.skills.xp, 1500);
   assert.equal(f.items[4], null, "the gold leaf is used");
+});
+
+const HotCold = require("../plugins/treasuretrails/trails/HotCold.TreasureTrails");
+const Parts = require("../plugins/treasuretrails/trails/Parts.TreasureTrails");
+const MASTER_PARTS = require("../plugins/treasuretrails/trails/data/master-parts.json");
+
+/** A fixture whose player takes hits, has given bonuses and answers quest checks. */
+function masterFixture({ quests = true } = {}) {
+  const f = fixture();
+  f.hits = [];
+  f.player.getCombat = () => ({ getHitQueue: () => ({ addPendingDamage: hits => f.hits.push(...hits) }) });
+  f.bonuses = { attack: [0, 0, 0, 0, 0], other: [0, 0, 0, 0] };
+  f.player.getBonusManager = () => ({ getAttackBonus: () => f.bonuses.attack, getOtherBonus: () => f.bonuses.other });
+  f.player.setLocation = (x, y, z = 0) => { f.player.getLocation = () => new core.Location(x, y, z); };
+  f.api.onCustomEvent("quest:is-complete", request => { request.complete = quests; });
+  return f;
+}
+
+const BONUS_UPDATE = core.BonusManager.update;
+core.BonusManager.update = () => {};
+const jorral = () => steps().find(step => step.key === "cluehelper_cryptic_master_jorral");
+const threePart = () => steps().find(step => step.key === "cluehelper_skillchallenge_master_25");
+const part = key => steps().find(step => step.key === `cluehelper_cryptic_master_${key}`);
+const deviceId = () => C.getObjId("master_device");
+const feel = f => HotCold.feel({ player: f.player, itemId: deviceId(), slot: f.items.findIndex(item => item?.getId() === deviceId()) });
+const messages = f => f.sent.filter(([name]) => name === "message").map(([, text]) => text);
+
+/** Puts a three-part step in slot 0 with these parts. */
+function placeParts(f, keys, { completed = 1, length = 7 } = {}) {
+  f.items[0] = new core.Item(I.CLUE_SCROLL_MASTER_, 1).setMetaValue(Runtime.metaKey(MASTER), { version: 1, token: `parts-${Math.random()}`, revision: 0,
+    completed, length, row: threePart().row, parts: keys.map(key => part(key).row), found: [false, false, false] });
+}
+
+test("Jorral needs Making History, hands over the device once, and aims the clue at a master hot/cold target", () => {
+  let f = masterFixture({ quests: false });
+  f.place(jorral());
+  played.length = 0;
+  HotCold.talk(npcEvent(f, jorral())); f.finish();
+  assert.ok(played.some(line => line.npc === "Stop! I can't help you unless you help me out first."));
+  assert.equal(f.state().hotcold, undefined);
+  f = masterFixture();
+  f.place(jorral());
+  assert.equal(f.talk(jorral().npcIds[0]).handled, false, "the generic NPC step leaves Jorral to hot/cold");
+  assert.equal(f.state().completed, 1);
+  const shown = shownDuring(f, () => { HotCold.talk(npcEvent(f, jorral())); f.finish(); });
+  assert.ok(shown.includes("Ah! Remember that enchanted key you had to use previously?"));
+  assert.ok(shown.includes("Jorral hands you the strange device."));
+  assert.equal(f.items.filter(item => item?.getId() === deviceId()).length, 1);
+  const target = Runtime.data(MASTER).byRow.get(f.state().hotcold);
+  assert.equal(target.family, "hotcold");
+  played.length = 0;
+  HotCold.talk(npcEvent(f, jorral())); f.finish();
+  assert.ok(played.some(line => /That strange device will guide you/.test(line.npc ?? "")));
+  assert.equal(f.items.filter(item => item?.getId() === deviceId()).length, 1, "no second device");
+  assert.equal(f.state().hotcold, target.row, "the target stays");
+  const full = masterFixture();
+  full.place(jorral());
+  for (let slot = 1; slot < 28; slot++) full.items[slot] = new core.Item(I.BRONZE_DAGGER, 1);
+  played.length = 0;
+  HotCold.talk(npcEvent(full, jorral())); full.finish();
+  assert.deepEqual(played, [{ npc: "You should make some room for it before I can give you it." }]);
+});
+
+test("feeling the device tells the temperature against last time and hurts; without a target it is inactive", () => {
+  const f = masterFixture();
+  f.items[1] = new core.Item(deviceId(), 1);
+  feel(f);
+  assert.deepEqual(messages(f), ["This device won't function yet."]);
+  f.sent.length = 0;
+  f.place(jorral());
+  assert.deepEqual(shownDuring(f, () => feel(f)), ["The strange device is inactive."]);
+  f.items[0].setMetaValue(Runtime.metaKey(MASTER), { ...f.state(), hotcold: Runtime.data(MASTER).hotcold[0].row, previous: null });
+  const target = Runtime.data(MASTER).hotcold[0].location;
+  f.sent.length = 0;
+  f.player.setLocation(target.x + 120, target.y, target.z);
+  feel(f);
+  assert.deepEqual(messages(f), ["The device is warm.", "The power of the strange device hurts you in the process."]);
+  assert.equal(f.hits.length, 1);
+  assert.ok(f.hits[0].getDamage() >= 3 && f.hits[0].getDamage() <= 8);
+  for (const [x, said] of [[60, "The device is very hot, and warmer than last time."], [60, "The device is very hot, and the same temperature as last time."],
+    [600, "The device is ice cold, but colder than last time."], [2, "The device is visibly shaking, and warmer than last time."]]) {
+    f.sent.length = 0;
+    f.player.setLocation(target.x + x, target.y, target.z);
+    feel(f);
+    assert.equal(messages(f)[0], said);
+  }
+});
+
+test("a hot/cold dig summons the target's fight, and once it is beaten the device cools and gives the next clue", () => {
+  const f = masterFixture();
+  const target = Runtime.data(MASTER).hotcold.find(step => step.encounter.npcIds.length === 3);
+  f.place(jorral());
+  f.items[0].setMetaValue(Runtime.metaKey(MASTER), { ...f.state(), hotcold: target.row, previous: null });
+  f.items[1] = new core.Item(I.SPADE, 1);
+  f.items[2] = new core.Item(deviceId(), 1);
+  const dig = () => { const event = { player: f.player, itemId: I.SPADE, option: "Dig", allow: true }; HotCold.dig(event); return event.allow; };
+  f.player.setLocation(target.location.x + 5, target.location.y, target.location.z);
+  assert.equal(dig(), true, "outside the 9x9 square");
+  f.player.setLocation(target.location.x + 4, target.location.y - 4, target.location.z);
+  assert.equal(dig(), false);
+  assert.deepEqual(f.spawned.map(npc => npc.def.id), [7307, 7308, 7309]);
+  for (const npc of f.spawned) { npc.hitpoints = 0; Runtime.encounterDied({ npc }); }
+  f.sent.length = 0;
+  dig(); f.finish();
+  assert.ok(messages(f).includes("The strange device cools as you find your treasure."));
+  assert.equal(f.state().completed, 2);
+  assert.equal(f.state().hotcold, undefined, "the next step has no target");
+  assert.ok(f.items.some(item => item?.getId() === deviceId()), "the device is kept");
+});
+
+test("a three-part clue reads its three cryptics, striking each through once its torn part is found", () => {
+  const f = masterFixture();
+  placeParts(f, ["key_master", "1_47_77_35_46", "biblia"]);
+  f.actions.get("Clue scroll (master)").Read(f.event());
+  const text = keys => keys.map(([key, struck]) => struck ? `<str>${part(key).text}</str>` : part(key).text).join("<br><br>");
+  assert.ok(f.sent.some(([name, value]) => name === "sendString" && value === text([["key_master"], ["1_47_77_35_46"], ["biblia"]])));
+  const dig = part("1_47_77_35_46");
+  f.player.setLocation(dig.location.x, dig.location.y, dig.location.z);
+  f.items[1] = new core.Item(I.SPADE, 1);
+  const shown = shownDuring(f, () => Parts.dig({ player: f.player, itemId: I.SPADE, option: "Dig", allow: true }));
+  assert.deepEqual(shown, ["You find a torn part of a clue scroll."]);
+  assert.ok(f.items.some(item => item?.getId() === C.getObjId("trail_master_part2")), "the second cryptic's part is part 2");
+  assert.deepEqual(f.state().found, [false, true, false]);
+  f.sent.length = 0;
+  f.actions.get("Clue scroll (master)").Read(f.event());
+  assert.ok(f.sent.some(([name, value]) => name === "sendString" && value === text([["key_master"], ["1_47_77_35_46", true], ["biblia"]])));
+});
+
+test("a part's NPC hands its torn part over in their own words, or asks for space", () => {
+  const f = masterFixture();
+  placeParts(f, ["key_master", "biblia", "mage_of_zamorak"]);
+  const keyMaster = part("key_master");
+  played.length = 0;
+  const shown = shownDuring(f, () => { Parts.talk(npcEvent(f, keyMaster)); f.finish(); });
+  assert.deepEqual(shown.slice(0, 2), ["Here you go.", "You are handed a torn part of a clue scroll."]);
+  assert.ok(f.items.some(item => item?.getId() === C.getObjId("trail_master_part1")));
+  assert.deepEqual(f.state().found, [true, false, false]);
+  const full = masterFixture();
+  placeParts(full, ["key_master", "biblia", "mage_of_zamorak"]);
+  for (let slot = 1; slot < 28; slot++) full.items[slot] = new core.Item(I.BRONZE_DAGGER, 1);
+  played.length = 0;
+  Parts.talk(npcEvent(full, keyMaster)); full.finish();
+  assert.deepEqual(played, [{ npc: "Hey, I have something for you but you don't have any space for it!" }]);
+  assert.deepEqual(full.state().found, [false, false, false]);
+});
+
+test("the equipment checks: Robin, Ghommal, Cromperty, the Abbot, god items, white plate, the monk and the ring", () => {
+  const f = masterFixture();
+  const meets = key => Parts.meets(f.player, part(key));
+  assert.equal(meets("robin"), false);
+  f.bonuses.attack[core.BonusManager.ATTACK_RANGE] = 180;
+  assert.equal(meets("robin"), true);
+  f.worn[core.Equipment.WEAPON_SLOT] = new core.Item(I.TOXIC_BLOWPIPE, 1);
+  assert.equal(meets("robin"), false, "a toxic blowpipe doesn't count");
+  f.worn.fill(null);
+  assert.equal(meets("ghommal"), false);
+  f.bonuses.other[core.BonusManager.STRENGTH] = 100;
+  assert.equal(meets("ghommal"), true);
+  assert.equal(meets("wizard_cromperty"), false);
+  f.bonuses.attack[core.BonusManager.ATTACK_MAGIC] = 100;
+  assert.equal(meets("wizard_cromperty"), true);
+  assert.equal(meets("abbot_langley"), false);
+  f.bonuses.other[core.BonusManager.PRAYER] = -1;
+  assert.equal(meets("abbot_langley"), true);
+  assert.equal(meets("monk_of_entrana"), false);
+  f.worn[core.Equipment.HEAD_SLOT] = new core.Item(I.BRONZE_FULL_HELM, 1);
+  assert.equal(meets("monk_of_entrana"), true);
+  f.worn.fill(null);
+  for (const key of ["mage_of_zamorak", "juna"]) {
+    const slots = part(key).equipment.filter(requirement => requirement.anyOf?.length);
+    slots.slice(0, 2).forEach((requirement, index) => { f.worn[index] = new core.Item(requirement.anyOf[0], 1); });
+    assert.equal(meets(key), false, `${key}: two god items`);
+    f.worn[2] = new core.Item(slots[2].anyOf[0], 1);
+    assert.equal(meets(key), true, `${key}: three god items`);
+    f.worn.fill(null);
+  }
+  assert.equal(meets("sir_vyvin"), false);
+  part("sir_vyvin").equipment.forEach((requirement, index) => { f.worn[index] = new core.Item(requirement.anyOf[0], 1); });
+  assert.equal(meets("sir_vyvin"), true);
+  f.worn.fill(null);
+  const shadow = part("0_42_79_56_60");
+  placeParts(f, ["0_42_79_56_60", "key_master", "biblia"]);
+  f.player.setLocation(shadow.location.x, shadow.location.y, shadow.location.z);
+  f.items[1] = new core.Item(I.SPADE, 1);
+  Parts.dig({ player: f.player, itemId: I.SPADE, option: "Dig", allow: true });
+  assert.deepEqual(f.state().found, [false, false, false], "no ring of visibility");
+  f.items[2] = new core.Item(I.RING_OF_VISIBILITY, 1);
+  Parts.dig({ player: f.player, itemId: I.SPADE, option: "Dig", allow: true });
+  assert.deepEqual(f.state().found, [true, false, false]);
+});
+
+test("Robin says why he isn't impressed; the torn parts combine only all together and with the clue", () => {
+  const f = masterFixture();
+  placeParts(f, ["robin", "key_master", "biblia"]);
+  played.length = 0;
+  Parts.talk(npcEvent(f, part("robin"))); f.finish();
+  assert.ok(played[0]?.npc?.startsWith("As THE Master Bowman, I am quite impressed by your equipment, but it's not the sort"));
+  assert.deepEqual(f.state().found, [false, false, false]);
+  f.bonuses.attack[core.BonusManager.ATTACK_RANGE] = 200;
+  Parts.talk(npcEvent(f, part("robin"))); f.finish();
+  Parts.talk(npcEvent(f, part("key_master"))); f.finish();
+  const slotOf = name => f.items.findIndex(item => item?.getId() === C.getObjId(name));
+  assert.deepEqual(shownDuring(f, () => Parts.combine({ player: f.player, slot: slotOf("trail_master_part1") })), ["I cannot combine the pieces without having all 3."]);
+  assert.deepEqual(shownDuring(f, () => Parts.inspect({ player: f.player, slot: slotOf("trail_master_part1") })),
+    ["There must be more parts to this. If I can combine them together..."]);
+  Parts.talk(npcEvent(f, part("biblia"))); f.finish();
+  assert.deepEqual(f.state().found, [true, true, true]);
+  const clue = f.items[0];
+  f.items[0] = null;
+  f.sent.length = 0;
+  Parts.combine({ player: f.player, slot: slotOf("trail_master_part2") });
+  assert.deepEqual(messages(f), ["You cannot see how to combine the 3 pieces without also carrying your clue scroll."]);
+  f.items[0] = clue;
+  assert.ok(shownDuring(f, () => Parts.combine({ player: f.player, slot: slotOf("trail_master_part3") })).includes("You've obtained a new clue!"));
+  assert.equal(f.state().completed, 2);
+  assert.deepEqual(["trail_master_part1", "trail_master_part2", "trail_master_part3"].map(slotOf), [-1, -1, -1], "the parts are used");
+  assert.equal(f.state().parts, undefined);
+});
+
+test("a three-part step draws three different parts this server can finish", () => {
+  const f = masterFixture();
+  for (let i = 0; i < 100; i++) {
+    f.items.fill(null);
+    f.place(jorral(), { completed: 1, length: 7 });
+    let seed = i * 7919 + 1;
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const next = Runtime.nextItem({ tier: MASTER, state: f.state() }, () => {
+      const rows = Runtime.data(MASTER).rollable;
+      return (rows.indexOf(threePart()) + 0.5) / rows.length;
+    });
+    const state = next.item.getMetaValue(Runtime.metaKey(MASTER));
+    assert.equal(state.row, threePart().row);
+    assert.equal(new Set(state.parts).size, 3);
+    assert.ok(state.parts.every(row => Runtime.data(MASTER).parts.some(step => step.row === row)));
+    assert.ok(state.parts.every(row => !Object.keys(MASTER_PARTS.unrolled).includes(Runtime.data(MASTER).byRow.get(row).key)));
+  }
+});
+
+test.after(() => { core.BonusManager.update = BONUS_UPDATE; });
+
+const Watson = require("../plugins/treasuretrails/trails/Watson.TreasureTrails");
+
+test("Watson takes one clue of each lower tier, says which he still needs, then hands over a master clue", () => {
+  const f = masterFixture();
+  const prompts = [];
+  f.api.sendMultiChatboxPrompt = (player, title, ...pairs) => prompts.push({ title, pairs });
+  const watsonId = 7304;
+  const watson = { getLocation: () => new core.Location(1645, 3572, 0), getCurrentDefinition: () => C.getNpc(watsonId), getDefinition: () => C.getNpc(watsonId) };
+  const check = () => { played.length = 0; Watson.check({ player: f.player, npcId: watsonId, npc: watson, clickType: 3, handled: false, definition: { getActions: () => C.getNpc(watsonId).actions } }); f.finish(); return played.map(line => line.npc); };
+  assert.deepEqual(check(), ["I still need an easy clue, a medium clue, a hard clue and an elite clue from you before I give you a master clue scroll."]);
+  const use = tier => {
+    f.items[5] = new core.Item(I[`CLUE_SCROLL_${tier.toUpperCase()}_`], 1);
+    prompts.length = 0;
+    Watson.useClue({ player: f.player, target: watson, npcId: watsonId, itemId: f.items[5].getId(), slot: 5, handled: false });
+    return prompts[0];
+  };
+  const medium = use("medium");
+  assert.equal(medium.title, "Select an option");
+  assert.deepEqual([medium.pairs[0], medium.pairs[2]], ["Hand over medium clue.", "Cancel."]);
+  assert.deepEqual(shownDuring(f, () => medium.pairs[1]()), ["You hand over the clue scroll to Watson."]);
+  assert.equal(f.items[5], null, "the clue is handed over");
+  assert.equal(f.attributes.get("treasure-trails:watson-medium"), true);
+  assert.ok(f.sent.some(([name, varbit, value]) => name === "sendVarbit" && varbit === C.getVarbitId("trail_watson_medium") && value === 1));
+  f.sent.length = 0;
+  assert.equal(use("medium"), undefined);
+  assert.deepEqual(messages(f), ["You have already given Watson a clue scroll of that tier."]);
+  assert.deepEqual(check(), ["I still need an easy clue, a hard clue and an elite clue from you before I give you a master clue scroll."]);
+  // The generic clue is rolled into its step's item on use: the hand-over takes it all the same,
+  // but not something else put in the slot.
+  const easy = use("easy");
+  f.items[5] = new core.Item(core.ItemIdentifiers.SHARK, 1);
+  easy.pairs[1]();
+  assert.equal(f.attributes.get("treasure-trails:watson-easy"), undefined, "not a clue any more");
+  const rolled = 23154; // another "Clue scroll (easy)", as the step rolled it live
+  assert.equal(core.ItemDefinition.forId(rolled).getName(), "Clue scroll (easy)");
+  f.items[5] = new core.Item(rolled, 1);
+  easy.pairs[1]();
+  assert.equal(f.items[5], null, "a rolled clue of the tier is handed over");
+  use("hard").pairs[1]();
+  f.finish();
+  const elite = use("elite");
+  const shown = shownDuring(f, () => { elite.pairs[1](); f.finish(); });
+  assert.ok(shown.includes("Nice work Tester, I've had one of each lower tier clue scroll from you."));
+  assert.ok(shown.includes("Watson hands you a master clue scroll."));
+  assert.ok(f.items.some(item => item?.getId() === I.CLUE_SCROLL_MASTER_));
+  assert.ok(Watson.LOWER_TIERS.every(tier => f.attributes.get(`treasure-trails:watson-${tier}`) === false), "the tiers start again");
+  const blocked = masterFixture();
+  blocked.api.onCustomEvent("treasure-trails:can-receive", request => { if (request.tier === "master") request.allowed = false; });
+  for (const tier of Watson.LOWER_TIERS) blocked.attributes.set(`treasure-trails:watson-${tier}`, true);
+  assert.equal(Watson.settle(blocked.player, watsonId), false, "no room for another master clue");
+  const master = masterFixture();
+  master.place(ofKind("emote")[0]);
+  played.length = 0;
+  Watson.useClue({ player: master.player, target: watson, npcId: watsonId, itemId: I.CLUE_SCROLL_MASTER_, slot: 0, handled: false }); master.finish();
+  assert.deepEqual(played, [{ npc: "Sorry [player name]. That scroll is for you, not me." }]);
 });

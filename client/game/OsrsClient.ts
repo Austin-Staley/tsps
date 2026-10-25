@@ -1694,6 +1694,17 @@ export class OsrsClient {
                 const pkt = createPacket(ClientPacketId.IF_CLOSE);
                 queuePacket(pkt);
             },
+            sendWidgetOp: (widget, opIndex) => {
+                const uid = widget.uid | 0;
+                sendWidgetAction({
+                    widgetId: uid,
+                    groupId: (uid >>> 16) & 0xffff,
+                    childId: uid & 0xffff,
+                    opId: opIndex,
+                    option: (widget as any).actions?.[opIndex - 1] ?? undefined,
+                    slot: typeof widget.childIndex === "number" && widget.childIndex >= 0 ? widget.childIndex : undefined,
+                });
+            },
             getWeight: () => {
                 // Return player weight in kg for RUNWEIGHT_VISIBLE opcode
                 return self.playerWeight;
@@ -4981,13 +4992,13 @@ export class OsrsClient {
             const fallbackSlot = this.inventory?.getSelectedSlot?.() ?? null;
             if (fallbackSlot !== null) {
                 const fallbackEntry = this.inventory.getSlot(fallbackSlot);
-                if (fallbackEntry && fallbackEntry.itemId > 0) {
+                if (fallbackEntry && fallbackEntry.itemId >= 0) {
                     selectedSlot = fallbackSlot | 0;
                     selectedItemId = fallbackEntry.itemId | 0;
                 }
             }
         }
-        if (selectedSlot === null || selectedItemId <= 0) return;
+        if (selectedSlot === null || selectedItemId < 0) return;
 
         const tile = context.tile ?? this.menuTile ?? this.hoveredTile;
         const plane = (() => {
@@ -5092,7 +5103,7 @@ export class OsrsClient {
         if (selected === null) return;
         const src = this.inventory.getSlot(selected);
         const dst = this.inventory.getSlot(targetSlot | 0);
-        if (!src || src.itemId <= 0 || !dst || dst.itemId <= 0) return;
+        if (!src || src.itemId < 0 || !dst || dst.itemId < 0) return;
         if (isServerConnected()) {
             sendInventoryUseOn({
                 slot: selected,
@@ -6818,7 +6829,7 @@ export class OsrsClient {
                 prevSel != null &&
                 prevSel >= 0 &&
                 prevSel < slots.length &&
-                (slots[prevSel]?.itemId ?? -1) > 0
+                (slots[prevSel]?.itemId ?? -1) >= 0
                     ? prevSel
                     : null;
             this.inventory.setSnapshot(slots, { selectedSlot: keepSel });
@@ -7039,11 +7050,11 @@ export class OsrsClient {
         // A worn-equipment slot (387, 84) keeps its ops on a static layer and draws the item in a
         // CC_CREATE child (script 546), so a static widget without an item examines its child's.
         const own = widget?.itemId ?? -1;
-        const itemId = own > 0 || widget?.fileId === -1
+        const itemId = own >= 0 || widget?.fileId === -1
             ? own
             : this.widgetManager?.getDynamicChildrenByParent(widget as any)
-                .find((child) => (child.itemId ?? -1) > 0)?.itemId ?? -1;
-        if (!(itemId > 0)) return false;
+                .find((child) => (child.itemId ?? -1) >= 0)?.itemId ?? -1;
+        if (!(itemId >= 0)) return false;
         try {
             const examine = this.objTypeLoader?.load?.(itemId)?.examine;
             if (typeof examine !== "string" || examine.length === 0 || examine === "null") {
@@ -7921,7 +7932,7 @@ export class OsrsClient {
         const dst = Math.max(0, Math.min(Inventory.SLOT_COUNT - 1, toSlot | 0));
         if (src === dst) return;
         const sourceEntry = this.inventory.getSlot(src);
-        if (!sourceEntry || sourceEntry.itemId <= 0) return;
+        if (!sourceEntry || sourceEntry.itemId < 0) return;
 
         const before = this.inventory.snapshotSignature();
         this.inventory.swapSlots(src, dst);
@@ -7938,7 +7949,7 @@ export class OsrsClient {
         const slot = slotIndex | 0;
         const selected = this.inventory.getSelectedSlot();
         const entry = this.inventory.getSlot(slot);
-        if (!entry || entry.itemId <= 0) {
+        if (!entry || entry.itemId < 0) {
             if (selected !== null) {
                 this.inventory.setSelectedSlot(null);
             }
@@ -7969,7 +7980,7 @@ export class OsrsClient {
     useInventoryItem(slotIndex: number, entry?: InventorySlot, actionHint?: string): void {
         const slot = slotIndex | 0;
         const data = entry ?? this.inventory.getSlot(slot);
-        if (!data || data.itemId <= 0) return;
+        if (!data || data.itemId < 0) return;
 
         try {
             console.log("[inventory] use item", { slot, item: data, actionHint });
@@ -7981,7 +7992,7 @@ export class OsrsClient {
     }
 
     private getPrimaryInventoryAction(itemId: number): string | undefined {
-        if (!(itemId > 0)) return undefined;
+        if (!(itemId >= 0)) return undefined;
         try {
             const obj = this.objTypeLoader?.load?.(itemId);
             const actions: Array<string | null | undefined> = Array.isArray(obj?.inventoryActions)

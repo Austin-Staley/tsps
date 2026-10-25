@@ -79,7 +79,9 @@ function player() {
     refreshItems() {},
   };
   let packet;
-  packet = new Proxy({}, { get: (_, method) => (...args) => { packets.push([method, ...args]); return packet; } });
+  packet = new Proxy({
+    getVarbit: id => packets.findLast(([method, bit]) => method === 'sendVarbit' && bit === id)?.[2] ?? 0,
+  }, { get: (target, method) => target[method] ?? ((...args) => { packets.push([method, ...args]); return packet; }) });
   const p = { attributes, items, bank, equipment, packets, messages, xp,
     getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory, getBanks: () => [{ getAmount: (id) => bank.get(id) || 0 }],
@@ -361,6 +363,24 @@ test('as captured: Port Sarim and Karamja boats charge once, sail under ship_jou
   // After Pandemonium the boats name their stops instead of offering Travel.
   p.items.set(995, 30); q.namedNpc.get('Captain Tobias:The Pandemonium')({ player: p }); q.tick(5);
   assert.equal(p.items.get(995), 0); assert.equal(p.getLocation().getX(), 3069); assert.equal(p.getLocation().getY(), 2987);
+});
+
+test('the customs officer lets worn Karamja gloves pass for half the fare, as the Pay-fare transcript says', () => {
+  const q = register('PiratesTreasure', 'pirates_treasure'), p = player();
+  p.equipment[9] = { getId: () => 11136, getDefinition: () => ({ getName: () => 'Karamja gloves 1' }) };
+  p.items.set(995, 14);
+  q.namedNpc.get('Customs officer:Travel')({ player: p });
+  assert.equal(p.items.get(995), 14);
+  assert.equal(p.messages.at(-1), 'You do not have enough coins to pay passage. You need 15 when wearing the Karamja gloves.');
+  p.items.set(995, 20);
+  q.namedNpc.get('Customs officer:Travel')({ player: p });
+  assert.equal(p.items.get(995), 5);
+  assert.equal(p.messages.at(-1), 'The officer smiles as she recognises your Karamja gloves and lets you pass for half price - 15 coins.');
+  const answer = (text) => q.hooks.get('onNpcDialogueCondition')[0]({ player: p, npcId: core.NpcIdentifiers.CUSTOMS_OFFICER, text });
+  p.items.set(995, 40);
+  assert.equal(answer('If the player is wearing Karamja gloves and has 15 coins:'), true);
+  assert.equal(answer('If the player has 30 coins:'), false, 'the gloves answer first');
+  q.tick(9);
 });
 
 test('Corsair vine ladder preserves the side used on its one-tick climb', () => {

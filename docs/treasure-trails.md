@@ -3,7 +3,7 @@
 Beginner clues are in [beginner-treasure-trails.md](beginner-treasure-trails.md). This page covers
 the members tiers, built in `server/plugins/treasuretrails/TreasureTrails.plugin.js`
 (`members: true`) and its `trails/` units. Easy, medium, hard and elite are implemented. Master
-trails are completable; its hot/cold steps and three-part torn cryptics come next.
+trails are complete too: hot/cold, the three-part torn cryptics and Watson's master-clue exchange.
 
 ## Where the content comes from
 
@@ -91,12 +91,15 @@ beginner runtime does. Master has 265 steps, plus Falo's 20 songs:
 | Skill challenge | Sherlock | 27 | the master clue is the task; there is no master challenge scroll |
 | Hot/cold | Dig | 136 | Brassican Mage (117) or three Ancient Wizards (19) |
 
-Not rolled yet, by the same rule as content the server lacks:
-- **Hot/cold steps:** with Jorral's and Watson's starters.
-- **Three-part torn cryptics:** the Wiki says master gives "three cryptic clues in one step", each for
-  a torn part. That is every master cryptic but Falo's, including the equipment checks (Robin,
-  Ghommal, Cromperty …).
-- **Sherlock tasks** without a detector (below).
+- **Hot/cold targets** are reached through Jorral's cryptic, never rolled themselves.
+- **Three-part steps:** the targetless "Combine the torn clue scroll parts." row draws three of the
+  other master cryptics.
+- **Not rolled**, by the same rule as content the server lacks (`trails/data/master-parts.json`):
+  - Watson's hot/cold starter: Watson gave out the device only in the Twisted League (Wiki);
+  - Viggora's part: Curse of the Empty Lord isn't on this server;
+  - Piles's part: the Resource Area fee isn't on this server;
+  - Lovada's part: she has no world spawn;
+  - Sherlock tasks without a detector (below).
 
 The challenge answers are read from the cache. They agree with the Wiki's challenge-scroll guide
 (the osrsreboxed-db `clue-challenges.json` export) on 89 of 90 questions. The exception is the Old
@@ -276,6 +279,56 @@ assumption.
   - **Wrong object:** "Falo's eyes fail to light up."
   - **Outlanders:** without The Fremennik Trials started, he says "Get away! I do not speak to
     outlanders."
+- **Hot/cold** (`HotCold.TreasureTrails.js`; Wiki "Strange device", Transcript:Jorral; messages
+  from live captures, rsprox.net):
+  - **Jorral:** without Making History he refuses ("Stop! I can't help you unless you help me out
+    first."). Without a device he hands one over ("Jorral hands you the strange device.", or "You
+    should make some room for it before I can give you it."). Either way the clue then holds a
+    random master hot/cold target.
+  - **Feel:** "The device is warm." the first time, then "…, and warmer than last time.", "…, but
+    colder than last time." or "…, and the same temperature as last time.". Beginner's bands are the
+    Wiki's master table. Each feel deals 3-8 damage (Wiki) with "The power of the strange device
+    hurts you in the process.".
+  - **Without a target:** with no master clue, "This device won't function yet."; with one that has
+    no target, "The strange device is inactive.".
+  - **The dig:** inside the target's 9x9 square, the dig first summons its fight (a Brassican Mage
+    or three Ancient Wizards); once they're beaten, digging again says "The strange device cools as
+    you find your treasure." and gives the next clue. The device is kept (Wiki).
+- **Three-part torn cryptics** (`Parts.TreasureTrails.js`; Wiki cryptic clues guide, "Torn clue
+  scroll"; live captures):
+  - **Reading:** the clue reads its three cryptics, each struck through once found.
+  - **Torn parts:** each part gives its own torn part (1, 2 or 3, by its place on the clue). Dig
+    parts say "You find a torn part of a clue scroll."; NPCs speak their transcript ("Here you
+    go."), hand it over with "You are handed a torn part of a clue scroll.", then their
+    compliment. With no space they say "Hey, I have something for you but you don't have any space
+    for it!".
+  - **Conditions** (`data/master-parts.json`):
+    - Robin wants 180 ranged attack and no toxic blowpipe; his "not the sort I'd recommend" line
+      when not.
+    - Ghommal wants 100 melee strength, and Wizard Cromperty 100 magic attack.
+    - Abbot Langley wants a negative prayer bonus.
+    - The Monk of Entrana wants a weapon or armour worn as one talks or tries to take the boat.
+    - The Mage of Zamorak and Juna want three items from their cache outfit lists, and Sir Vyvin
+      his white plate.
+    - The Shadow Dungeon dig needs its cached ring of visibility.
+    - Failing a condition, the NPC carries on as normal.
+  - **Combining:** all three with the clue give the next clue or the casket ("You've obtained a new
+    clue!" / "You've obtained a casket!").
+    - Fewer: "I cannot combine the pieces without having all 3."
+    - Without the clue: "You cannot see how to combine the 3 pieces without also carrying your
+      clue scroll."
+    - Inspect: "There must be more parts to this. If I can combine them together...".
+- **Watson** (`Watson.TreasureTrails.js`; Wiki "Watson"; the exchange from live captures):
+  - **Handing over:** using an easy, medium, hard or elite clue on him asks "Hand over <tier>
+    clue." / "Cancel.". He takes it ("You hand over the clue scroll to Watson.") and remembers the
+    tier (attribute `treasure-trails:watson-<tier>`, varbits `trail_watson_*`). A repeat says "You
+    have already given Watson a clue scroll of that tier.".
+  - **Check:** says which tiers he still needs ("I still need a medium clue from you before I give
+    you a master clue scroll.").
+  - **All four in:** "Nice work …, I've had one of each lower tier clue scroll from you." and a
+    master clue, a box after X Marks the Spot, when clue capacity allows.
+  - **A master clue used on him:** "Sorry [player name]. That scroll is for you, not me." (or his
+    Sherlock joke).
 - **Master Sherlock:**
   - **The task:** the master clue reads the task. It counts when done with the clue held, and
     Sherlock then gives the next clue.
@@ -583,6 +636,17 @@ PR #890 review verification independently decoded RSProx recordings
   - the master casket and its 10th-casket Mimic;
   - master STASH units with the gold leaf.
 
+- The master test also covers PR B:
+  - Jorral's three cases and the device given once;
+  - every feel message, the damage and both inactive messages;
+  - the hot/cold dig's fight, the cooling line and the next clue;
+  - three-part reading and striking;
+  - each part kind's torn part and NPC words;
+  - every condition passing and failing;
+  - combining all, too few or without the clue;
+  - three distinct finishable parts per three-part step over 100 seeded rolls;
+  - Watson's exchange end to end, with the capacity block.
+
 Sources:
 - [Clue scroll (easy)](https://oldschool.runescape.wiki/w/Clue_scroll_(easy))
 - [STASH](https://oldschool.runescape.wiki/w/STASH)
@@ -610,6 +674,8 @@ Sources:
 - [Light box](https://oldschool.runescape.wiki/w/Light_box) and the [light box guide](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Light_boxes)
 - [Falo the Bard](https://oldschool.runescape.wiki/w/Falo_the_Bard) and [his transcript](https://oldschool.runescape.wiki/w/Transcript:Falo_the_Bard)
 - [Ancient Wizard](https://oldschool.runescape.wiki/w/Ancient_Wizard) and [Brassican Mage](https://oldschool.runescape.wiki/w/Brassican_Mage)
+- [Strange device](https://oldschool.runescape.wiki/w/Strange_device), [hot/cold guide](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Hot_Cold) and [Jorral's transcript](https://oldschool.runescape.wiki/w/Transcript:Jorral)
+- [Torn clue scroll](https://oldschool.runescape.wiki/w/Torn_clue_scroll) and [Watson](https://oldschool.runescape.wiki/w/Watson)
 - installed cache revision 241
 
 ## Inventory and repeat-step regressions

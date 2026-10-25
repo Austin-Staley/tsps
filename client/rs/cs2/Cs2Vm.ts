@@ -235,6 +235,11 @@ export interface Cs2Context {
      * () sends IF_CLOSE when deferred close executes.
      */
     sendIfClose?: () => void;
+    /**
+     * Sends a component op the server owns (an entry in its `actions`) as the IF_BUTTON a
+     * click would: if_triggerop / cc_triggerop are clicks, not just onOp listeners.
+     */
+    sendWidgetOp?: (widget: WidgetNode, opIndex: number) => void;
 
     // Player weight in kg (can be negative)
     getWeight?: () => number;
@@ -1387,6 +1392,11 @@ export class Cs2Vm {
             });
             if (this.executionState === ExecutionState.ABORTED) {
                 return;
+            }
+            // A triggered op is a click: an op the server owns goes to it as well (the report
+            // form's submit triggers its own Close, which live's server answers).
+            if ((entry.widget as any).actions?.[entry.opIndex - 1]) {
+                this.context.sendWidgetOp?.(entry.widget, entry.opIndex);
             }
         }
 

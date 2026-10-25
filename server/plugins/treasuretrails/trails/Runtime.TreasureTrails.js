@@ -6,6 +6,9 @@ const Dialogue = require("./Dialogue.TreasureTrails");
 const { TIERS } = require("./Tiers.TreasureTrails");
 const SKILL_CHALLENGES = require("./data/skill-challenges.json");
 const NPC_SPAWNS = require("../../../data/definitions/npc-spawns.json");
+const MASTER_PARTS = require("./data/master-parts.json");
+// A three-part master step's torn parts, as the cache names them.
+const TORN_PARTS = ["trail_master_part1", "trail_master_part2", "trail_master_part3"];
 const META_PREFIX = "treasure-trails:";
 // The clue helper names a target tile but no area. Emote steps accept the beginner
 // runtime's usual radius around it; music steps need the player near Cecilia's bridge.
@@ -36,6 +39,9 @@ function data(tier) {
 function loadCatalogue(tier) {
   const loaded = Catalogue.load(core, tier);
   loaded.supportedTasks = [...loaded.tasks.values()].filter(task => SKILL_CHALLENGES[task.key]);
+  // Master's three-part steps draw their cryptics from these (Wiki: "three cryptic clues in one step").
+  loaded.parts = loaded.steps.filter(step => isPart(loaded, step) && partRollable(step));
+  loaded.hotcold = loaded.steps.filter(step => step.family === "hotcold");
   loaded.rollable = loaded.steps.filter(step => rollable(loaded, step));
   return loaded;
 }
@@ -54,13 +60,38 @@ function worldSpawned() {
 function rollable(catalogue, step) {
   if (step.target === "kill") return step.npcIds.some(id => worldSpawned().has(id));
   if (step.skill) return step.skill.itemId != null && catalogue.supportedTasks.length > 0;
+  // "Combine the torn clue scroll parts." is master's three-part step.
+  if (isThreePart(catalogue, step)) return catalogue.parts.length >= 3;
   // A master skill challenge is its own step: only tasks the server can detect.
   if (step.family === "skillchallenge") return Boolean(SKILL_CHALLENGES[step.key]);
-  // Not yet: hot/cold (Jorral's and Watson's strange device) and master's three-part torn cryptics,
-  // which are every master cryptic but Falo's.
+  // Hot/cold targets are reached through Jorral, never rolled themselves.
   if (step.family === "hotcold") return false;
-  if (catalogue.oneItem && step.family === "cryptic") return Boolean(step.falo);
+  if (catalogue.oneItem && step.family === "cryptic") return Boolean(step.falo) || MASTER_PARTS.hotColdStarters.includes(step.key);
   return true;
+}
+
+/** Master's targetless skill-challenge row is the step that holds three cryptic parts. */
+function isThreePart(catalogue, step) {
+  return catalogue.oneItem && step.family === "skillchallenge" && step.target === "none";
+}
+
+/** Every master cryptic but Falo's, Jorral's and Watson's is a part of a three-part step. */
+function isPart(catalogue, step) {
+  return catalogue.oneItem && step.family === "cryptic" && !step.falo && !MASTER_PARTS.hotColdStarters.includes(step.key);
+}
+
+/** A part this server can finish: not one master-parts.json leaves out, and an NPC that is spawned. */
+function partRollable(step) {
+  if (MASTER_PARTS.unrolled[step.key]) return false;
+  return step.target !== "npc" || step.npcIds.some(id => worldSpawned().has(id));
+}
+
+/** A new step's own state: a three-part step draws its three parts. */
+function stepState(tier, step, random = Math.random) {
+  if (!isThreePart(data(tier), step)) return {};
+  const pool = [...data(tier).parts], parts = [];
+  while (parts.length < 3) parts.push(pool.splice(Math.floor(random() * pool.length), 1)[0].row);
+  return { parts, found: [false, false, false] };
 }
 
 function tierOfItem(id) {
@@ -97,7 +128,7 @@ function stateOf(player, slot, random = Math.random) {
   if (validState(tier, item, current)) return { tier, item, slot, state: current, step: data(tier).byRow.get(current.row) };
   // A clue without a trail (a drop, box or vessel) starts one on a random step of its tier.
   const step = pick(data(tier).rollable, random);
-  const state = { version: 1, token: randomUUID(), revision: 0, completed: 0, length: trailLength(tier, random), row: step.row };
+  const state = { version: 1, token: randomUUID(), revision: 0, completed: 0, length: trailLength(tier, random), row: step.row, ...stepState(tier, step, random) };
   const replacement = stepItem(tier, step, state);
   inventory.setItem(slot, replacement);
   inventory.refreshItems();
@@ -182,8 +213,16 @@ function read(event) {
   }
   const group = data(trail.tier).textInterface;
   sender.sendInterface(group);
-  sender.sendString(clueText(trail.step), (group << 16) | 2);
+  sender.sendString(Array.isArray(trail.state.parts) ? partsText(trail) : clueText(trail.step), (group << 16) | 2);
   return true;
+}
+
+/** A three-part step reads its three cryptics, each struck through once found (live captures). */
+function partsText(trail) {
+  return trail.state.parts.map((row, index) => {
+    const text = data(trail.tier).byRow.get(row)?.text ?? "";
+    return trail.state.found?.[index] ? `<str>${text}</str>` : text;
+  }).join("<br><br>");
 }
 
 function checkSteps(event) {
@@ -203,10 +242,11 @@ function dismissUri(player) {
 function nextItem(trail, random = Math.random) {
   const completed = trail.state.completed + 1;
   if (completed >= trail.state.length) return { casket: true, item: new core.Item(data(trail.tier).casket, 1) };
-  // A step's own progress (a fight, a puzzle, master's done task and Falo's song) ends with it.
-  const { defeated, solved, image, taskDone, song, ...carried } = trail.state;
+  // A step's own progress (a fight, a puzzle, master's done task, Falo's song, a hot/cold target
+  // and a three-part step's parts) ends with it.
+  const { defeated, solved, image, taskDone, song, hotcold, previous, parts, found, ...carried } = trail.state;
   const step = pick(data(trail.tier).rollable, random);
-  return { casket: false, item: stepItem(trail.tier, step, { ...carried, completed, revision: trail.state.revision + 1 }) };
+  return { casket: false, item: stepItem(trail.tier, step, { ...carried, completed, revision: trail.state.revision + 1, ...stepState(trail.tier, step, random) }) };
 }
 
 /** `said` overrides the hand-over message, as the giving NPC's transcript words it: { clue, casket }. */
@@ -256,9 +296,10 @@ function talk(event) {
     meetUri(player, npc, npcId, trail);
     return;
   }
-  // Sherlock's skill challenges are Skills.TreasureTrails's.
+  // Sherlock's skill challenges, Falo and Jorral (hot/cold) have their own units.
   const trail = startedTrails(player).find(entry => ["anagram", "cryptic", "cipher", "music"].includes(entry.step.family) &&
-    entry.step.target === "npc" && !entry.step.skill && !entry.step.falo && entry.step.npcIds.includes(npcId));
+    entry.step.target === "npc" && !entry.step.skill && !entry.step.falo && !MASTER_PARTS.hotColdStarters.includes(entry.step.key) &&
+    entry.step.npcIds.includes(npcId));
   if (!trail) return;
   event.handled = true;
   if (trail.step.family === "music") { hearSong(player, npcId, trail); return; }
@@ -618,5 +659,5 @@ module.exports = function attachTreasureTrails(pluginApi) {
 };
 
 Object.assign(module.exports, { META_PREFIX, EMOTE_RADIUS, MUSIC_RADIUS, data, tierOfItem, trailLength, stateOf, trails, read, checkSteps,
-  advance, nextItem, puzzleSlot, lightSlot, boxSlot, auxiliarySlot, handOutPuzzle, summon, startedTrails, stillHeld, rollable, talk, search, keyDrop, killDrop, dig, emote, encounterDied,
+  advance, nextItem, puzzleSlot, lightSlot, boxSlot, auxiliarySlot, handOutPuzzle, summon, liveEncounter, partsText, wearing, TORN_PARTS, MASTER_PARTS, startedTrails, stillHeld, rollable, talk, search, keyDrop, killDrop, dig, emote, encounterDied,
   songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey });

@@ -11,5 +11,8 @@ module.exports = {
     require("./trails/Skills.TreasureTrails")(api);
     require("./trails/Light.TreasureTrails")(api);
     require("./trails/Falo.TreasureTrails")(api);
+    require("./trails/HotCold.TreasureTrails")(api);
+    require("./trails/Parts.TreasureTrails")(api);
+    require("./trails/Watson.TreasureTrails")(api);
   },
 };

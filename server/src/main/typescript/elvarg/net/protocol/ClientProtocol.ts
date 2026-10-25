@@ -266,6 +266,7 @@ export type ClientMessage =
   | { type: "friends_chat_action"; action: FriendsChatAction }
   | { type: "private_message"; recipient: string; text: string }
   | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
+  | { type: "report_abuse"; name: string; ruleId: number; mute: boolean }
   | { type: "widget_action"; widgetId: number; groupId: number; childId: number; buttonNum?: number; opId?: number; option?: string; target?: string; slot?: number; itemId?: number; subOpId?: number; simple?: boolean }
   | { type: "widget"; action: "open" | "close"; groupId: number; modal?: boolean }
   | { type: "widget_target"; targetWidgetId: number; targetSlot: number; targetItemId: number; sourceWidgetId: number; sourceSlot: number; sourceItemId: number }
@@ -823,6 +824,9 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         privateMode: reader.byte(),
         tradeMode: reader.byte(),
       };
+    case HighClientPacket.REPORT_ABUSE:
+      // SEND_SNAPSHOT: the reported name, the internal rule id (RSProx's table) and the mute request.
+      return { type: "report_abuse", name: reader.string(), ruleId: reader.byte(), mute: reader.byte() === 1 };
     case HighClientPacket.VARP_TRANSMIT:
       return { type: "varp_transmit", varpId: reader.short(), value: reader.int() };
     case HighClientPacket.INTERACT:

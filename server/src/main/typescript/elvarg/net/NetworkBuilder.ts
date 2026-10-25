@@ -613,6 +613,7 @@ export class ClientConnection {
         case "friends_chat_action":
         case "private_message":
         case "chat_filter":
+        case "report_abuse":
           if (this.player) PluginManager.emitSocialPacket({ player: this.player, packet, handled: false });
           continue;
         case "dialogue_continue": {
@@ -836,7 +837,7 @@ export class ClientConnection {
             } else if (packet.varpId === 301 && (packet.value !== 0) !== this.player.isSpecialActivated()) {
               CombatSpecial.activate(this.player);
             }
-            this.player.setAudioSetting(packet.varpId, packet.value);
+            this.player.applyAudioSettingFromClient(packet.varpId, packet.value);
           }
           continue;
         case "widget":

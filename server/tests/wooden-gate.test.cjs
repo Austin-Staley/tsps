@@ -165,6 +165,27 @@ test('shared wall-door reach masks cover every operation and preserve other obje
   } finally { h.restore(); }
 });
 
+test('real Ardougne wall doors retain collision checks at their ends', async () => {
+  await initializeMapCollisionOnce();
+  const door = MapObjects.get(1535, new Location(2579, 3285, 0), null);
+  assert.equal(door.getFace(), 2);
+  const h = buildHarness({ realMapObjects: true });
+  const finder = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  try {
+    const request = { object: door, definition: { getName: () => 'Door' },
+      sourceLocation: { x: 2579, y: 3284, z: 0 }, clickType: 1, destination: null };
+    h.routes[0](request);
+    assert.equal(request.destination, null, 'being adjacent cannot bypass another wall');
+    const reachable = (x, y) => finder.reachedAbsolute({
+      level: 0, srcX: x, srcY: y, srcSize: 1, destX: 2579, destY: 3285,
+      destWidth: 1, destLength: 1, locAngle: door.getFace(), locShape: door.getType(),
+      blockAccessFlags: request.blockAccessFlags, privateArea: null,
+    });
+    assert.equal(reachable(2579, 3284), false, 'the south tile is separated by the castle wall');
+    assert.equal(reachable(2580, 3285), true, 'the actual east door face remains usable');
+  } finally { h.restore(); }
+});
+
 test('base-map doors send private removals before spawns and keep identical instances independent', async () => {
   await initializeMapCollisionOnce();
   const base = MapObjects.get(1535, new Location(3226, 3214, 0), null);
@@ -407,13 +428,14 @@ test('a door open across a region boundary is re-applied once as either region l
   const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
   // No cache door swings across a region edge, so place one on the last column of a region
   // whose eastern neighbour is not loaded yet.
-  const [x, y] = [2623, 3300];
+  // The Ardougne end-clipping test also loads the next eastern region; use its next boundary.
+  const [x, y] = [2687, 3300];
   const west = regionOf(x, y);
   const east = regionOf(x + 1, y);
-  RegionManager.loadMapFiles(x, y, false);
-  assert.ok(RegionManager.getRegionid(west).isLoaded() && !RegionManager.getRegionid(east).isLoaded());
-  RegionManager.addObject(1535, x, y, 0, 0, 2);
   try {
+    RegionManager.loadMapFiles(x, y, false);
+    assert.ok(RegionManager.getRegionid(west).isLoaded() && !RegionManager.getRegionid(east).isLoaded());
+    RegionManager.addObject(1535, x, y, 0, 0, 2);
     openWith(h, sharedPlayer, MapObjects.get(1535, new Location(x, y, 0), null));
     assert.equal(mapCopies(1536, x + 1, y), 1, 'the open leaf lands in the unloaded region');
     RegionManager.loadMapFiles(x + 1, y, false);
@@ -517,6 +539,35 @@ test('captured door portals can hand off before the ordinary door swing', () => 
     h.setDoorToggleHandler(null);
     assert.deepEqual(h.click(25341, 1631, 5343, 3, 'Open', 'Mithril door', 0, null, 1), [],
       'an unrelated cache placement is not given a speculative DS2 door override');
+  } finally {
+    h.restore();
+  }
+});
+
+test('cache-named ground doors open and close when the open loc precedes the closed loc', async () => {
+  await initializeMapCollisionOnce();
+  const closedId = CacheDefinitions.getLocId('canafis_door_ground');
+  const openId = CacheDefinitions.getLocId('canafis_door_ground_open');
+  const closed = CacheDefinitions.getObject(closedId);
+  const open = CacheDefinitions.getObject(openId);
+  assert.equal(closedId, 24369);
+  assert.equal(openId, 24368);
+  assert.equal(closed.actions[0], 'Open');
+  assert.equal(open.actions[0], 'Close');
+  assert.deepEqual(closed.models, open.models);
+
+  const h = buildHarness({ cacheObjects: new Map([[closedId, closed], [openId, open]]) });
+  try {
+    for (let face = 0; face < 4; face++) {
+      const opening = h.click(closedId, 1237, 3683, face, 'Open', 'Door');
+      assert.ok(opening.some(([action, id]) => action === 'deregister' && id === closedId));
+      const leaf = opening.find(([action, id]) => action === 'register' && id === openId);
+      assert.ok(leaf, `rotation ${face} uses the cache-named open variant`);
+      const closing = h.click(openId, leaf[2], leaf[3], leaf[4], 'Close', 'Door');
+      assert.ok(closing.some(([action, id]) => action === 'deregister' && id === openId));
+      assert.deepEqual(closing.find(([action, id]) => action === 'register' && id === closedId),
+        ['register', closedId, 1237, 3683, face], 'closing restores the original tile and rotation');
+    }
   } finally {
     h.restore();
   }
@@ -1739,4 +1790,57 @@ test('Rehnison door opens a real path past the entrance chair to the hidden bed'
       privateArea: area, moveNear: false });
     assert.equal(route.success, true, 'the entrance must connect to the clear tile south-west of the bed');
   } finally { area.destroy(); h.restore(); }
+});
+
+test('Murder Mystery mansion Large doors 25748/25750 open their real north threshold together', async () => {
+  await initializeMapCollisionOnce();
+  RegionManager.loadMapFiles(2740, 3572, true);
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  assert.deepEqual([O.LARGE_DOOR_79, O.LARGE_DOOR_80], [25748, 25750]);
+  const definitions = new Map([25748, 25749, 25750, 25751].map(id => [id, CacheDefinitions.getObject(id)]));
+  for (const id of [25749, 25751]) {
+    assert.equal(definitions.get(id).name, 'null');
+    assert.equal(definitions.get(id).actions[0], 'Close');
+    assert.deepEqual(definitions.get(id).models, definitions.get(id - 1).models);
+  }
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const at = (id, x, y) => MapObjects.get(id, new Location(x, y, 0), null);
+  const crosses = (x, northward) => RegionManager.canMove(x, northward ? 3572 : 3573,
+    x, northward ? 3573 : 3572, 0, 1, 1, null);
+  try {
+    const west = at(25748, 2740, 3572), east = at(25750, 2741, 3572);
+    assert.ok(west && east, 'actual cache places both closed mansion leaves');
+    assert.deepEqual([west.getType(), east.getType(), west.getFace(), east.getFace()], [0, 0, 1, 1]);
+    for (const x of [2740, 2741]) assert.equal(crosses(x, true), false, 'closed wall blocks the threshold');
+
+    h.click(25748, 2740, 3572, 1, 'Open', 'Large door');
+    assert.equal(at(25748, 2740, 3572), null);
+    assert.equal(at(25750, 2741, 3572), null);
+    const openWest = at(25749, 2740, 3573), openEast = at(25751, 2741, 3573);
+    assert.ok(openWest && openEast, 'ordinary Open swings both leaves onto their north hinge tiles');
+    assert.deepEqual([openWest.getFace(), openEast.getFace()], [0, 2]);
+    for (const x of [2740, 2741]) {
+      assert.equal(crosses(x, true), true, 'normal collision permits entry');
+      assert.equal(crosses(x, false), true, 'normal collision permits exit');
+      for (const [srcY, destY] of [[3571, 3574], [3574, 3571]]) {
+        const route = new RsmodRouteFinding().findRoute({ level: 0, srcX: x, srcY, srcSize: 1,
+          destX: x, destY, privateArea: null, moveNear: false });
+        assert.equal(route.success, true, 'ordinary RSMOD reaches the opposite side of the mansion threshold');
+      }
+    }
+
+    h.submitted.at(-1).execute();
+    assert.ok(at(25748, 2740, 3572) && at(25750, 2741, 3572), 'auto-close restores both closed leaves');
+    for (const x of [2740, 2741]) assert.equal(crosses(x, true), false);
+    h.click(25750, 2741, 3572, 1, 'Open', 'Large door');
+    assert.ok(at(25749, 2740, 3573) && at(25751, 2741, 3573), 'the other leaf can reopen the pair');
+  } finally {
+    for (const [id, x, y] of [[25748, 2740, 3572], [25750, 2741, 3572],
+      [25749, 2740, 3573], [25751, 2741, 3573]]) {
+      const object = at(id, x, y);if (object) ObjectManager.deregister(object, true);
+    }
+    ObjectManager.register(new GameObject(25748, new Location(2740, 3572, 0), 0, 1, null), true);
+    ObjectManager.register(new GameObject(25750, new Location(2741, 3572, 0), 0, 1, null), true);
+    h.restore();
+  }
 });
