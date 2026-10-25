@@ -26,7 +26,7 @@ before(() => {
   const api = {
     core,
     persistAttribute() {},
-    onObjectInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) hooks.objects.set(`${name}:${op}`, fn); },
+    onObjectInteraction: (name, actions) => { if (typeof name !== 'function') for (const [op, fn] of Object.entries(actions)) hooks.objects.set(`${name}:${op}`, fn); },
     onCustomEvent: (name, fn) => { (hooks.events.get(name) ?? hooks.events.set(name, []).get(name)).push(fn); },
     onPlayerLogout() {},
     onPlayerLogin: (fn) => { hooks.login = fn; },
