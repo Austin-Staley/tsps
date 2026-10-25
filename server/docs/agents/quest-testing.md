@@ -716,3 +716,10 @@ requested action.
 Quest Helper is a route guide, not a verifier. Source tests, native MCP routes, negative
 predicate checks and the live client overlay prove different things; no one of them guarantees
 a 1:1 match on every branch. State which one you actually ran.
+
+Named interaction callbacks must return `false` when they do not own the target's
+actual id/location. A bare `return` produces `undefined`, which the named dispatcher
+treats as a claim. Register competing owners in their production order in regressions;
+calling a quest handler alone misses this class. The Tourist Trap Chest callback, for
+example, previously swallowed Tribal Totem's mansion chest before its owner could run.
+Check the same rule for shared gates, bookcases, carts and NPC names.
