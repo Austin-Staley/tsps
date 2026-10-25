@@ -24,9 +24,11 @@
  * 5025 CHAT_GETTIMESTAMPS: pop 0, push 1 int
  * 5030 CHAT_GETHISTORYEX_BYTYPEANDLINE: pop 2 ints, push 4 ints + 4 strings
  * 5031 CHAT_GETHISTORYEX_BYUID: pop 1 int, push 4 ints + 4 strings
+ * The 7th value of the four history ops is the timestamp string proc 4742 affixes to a line
+ * when chat_gettimestamps != 0 (setting 119 "Chat timestamps"); the 8th is its epoch seconds.
  */
 import { sendChat, sendChatFilter, sendPrivateMessage } from "../../../network/ServerConnection";
-import { chatHistory } from "../ChatHistory";
+import { chatHistory, formatChatTimestamp } from "../ChatHistory";
 import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
 
@@ -80,8 +82,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.friendStatus);
-            ctx.pushString(""); // timestamp string (used by affixtimestamp)
-            ctx.pushInt(0); // timestamp delta
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
@@ -109,8 +111,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.isFromFriend ? 1 : msg.isFromIgnored ? 2 : 0);
-            ctx.pushString(""); // timestamp string (used by affixtimestamp)
-            ctx.pushInt(0); // timestamp delta
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
@@ -279,8 +281,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.friendStatus);
-            ctx.pushString(""); // clan name (unused in this context)
-            ctx.pushInt(0); // timestamp delta (unused)
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
@@ -307,8 +309,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.isFromFriend ? 1 : msg.isFromIgnored ? 2 : 0);
-            ctx.pushString(""); // clan name
-            ctx.pushInt(0); // timestamp delta
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
