@@ -174,6 +174,12 @@ function harness(t, members = true) {
       }),
       getInventory: () => ({ get: slot => slots[slot], getItems: () => slots, getFreeSlots: () => p.free,
         containsNumber: id => slots.some(item => item?.getId() === id && item.getAmount() > 0),
+        getAddableAmount(item) {
+          if (!item.getDefinition().isStackable()) return Math.min(item.getAmount(), p.free);
+          const stack = slots.find(slot => slot?.getId() === item.getId());
+          if (stack) return Math.min(item.getAmount(), Math.max(0, 2_147_483_647 - stack.getAmount()));
+          return p.free > 0 ? item.getAmount() : 0;
+        },
         addItem(item) {
           rewards.push(item.getId()); rewardItems.push(item);
           if (!item.getDefinition().isStackable() || !slots.some(slot => slot?.getId() === item.getId())) p.free--;
@@ -877,6 +883,19 @@ test('Mysterious Old Man gives a single owned gift, places it on the ground when
   const q = h.player(), dismissed = h.spawn(q, 5);
   h.hooks['Mysterious Old Man'].Dismiss({ player: q, npc: dismissed });
   assert.equal(dismissed.removed, true); assert.deepEqual(q.rewards, []);
+});
+
+test('a reward too big for a nearly full stack goes to the ground whole instead of being clamped', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 5);
+  p.free = 0; p.slots[0] = new Item(I.COINS, 2_147_483_646); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []);
+  assert.deepEqual(h.drops.map(drop => [drop.getItem().getId(), drop.getItem().getAmount()]), [[I.COINS, 80]]);
+  assert.deepEqual(p.messages, [PLACED(80, 'Coins')]);
+  const q = h.player(), giver = h.spawn(q, 5);
+  q.free = 0; q.slots[0] = new Item(I.COINS, 2_147_483_647 - 80); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: q, npc: giver });
+  assert.deepEqual(q.rewards, [I.COINS]); assert.deepEqual(q.messages, [REWARD(80, 'Coins')]);
 });
 
 test('Strange Plant stays planted, grows before picking, denies strangers and rewards only once', t => {

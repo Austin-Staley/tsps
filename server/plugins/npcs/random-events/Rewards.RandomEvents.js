@@ -7,9 +7,10 @@
 const LIFETIME_TICKS = 3 * 60 * 60 * 1000 / 600;
 const HIGHLIGHT = "<col=ff0000>";
 
+// A reward joins the inventory whole or not at all: add() clamps a stack at its maximum, so a
+// stack too full for the whole amount sends the reward to the ground instead.
 function fits(inventory, item) {
-  if (item.getDefinition().isStackable() && inventory.containsNumber(item.getId())) return true;
-  return inventory.getFreeSlots() >= (item.getDefinition().isStackable() ? 1 : item.getAmount());
+  return inventory.getAddableAmount(item) >= item.getAmount();
 }
 
 /**
