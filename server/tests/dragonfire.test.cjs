@@ -172,3 +172,29 @@ test("expiry warnings come 30 ticks (antifire) and 20 ticks (super antifire) bef
     Date.now = original.now;
   }
 });
+
+test("the expiry notice is sent once, even when dragonfire resolves on the expiry tick first", () => {
+  let now = 1_000_000;
+  Date.now = () => now;
+  ({ shield = false, prayer = false, accurate = false } = {});
+  const expired = "<col=7f007f>Your antifire potion has expired.</col>";
+  const notices = (target) => target.messages.filter((m) => m.text === expired).length;
+  try {
+    const plain = player({ potion: Tier.ANTIFIRE });
+    now += 360_000;
+    Dragonfire.processDragonfireProtection(plain);
+    Dragonfire.processDragonfireProtection(plain);
+    assert.equal(notices(plain), 1, "player processing alone");
+    assert.equal(Dragonfire.getDragonfireProtectionTier(plain), Tier.NONE);
+
+    now = 1_000_000;
+    const attacked = player({ potion: Tier.ANTIFIRE });
+    now += 360_000;
+    const { messages } = Dragonfire.resolveChromaticDragonfireDamage({}, attacked, { maxHit: 50 });
+    assert.ok(!messages.some((m) => m.text.startsWith("Your antifire potion helps")), "protection has ended");
+    Dragonfire.processDragonfireProtection(attacked);
+    assert.equal(notices(attacked), 1, "dragonfire resolved before player processing");
+  } finally {
+    Date.now = original.now;
+  }
+});

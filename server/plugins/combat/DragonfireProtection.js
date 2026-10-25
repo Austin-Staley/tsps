@@ -36,7 +36,12 @@ function initDragonfireProtectionCoreAccess(api) {
   core = api.core;
 }
 
-function normalizeState(player, options = {}) {
+/**
+ * Current protection state, or null. Every reader expires a finished state here, and the expiry
+ * notice goes with it, so a dragon attack on the expiry tick (NPCs process before players)
+ * still tells the player exactly once.
+ */
+function normalizeState(player) {
   if (!player) {
     return null;
   }
@@ -50,6 +55,7 @@ function normalizeState(player, options = {}) {
   const nowMs = Date.now();
   if (state && Number.isFinite(state.endsAt) && nowMs >= state.endsAt) {
     clearDragonfireProtection(player);
+    player.getPacketSender?.().sendMessage?.(`<col=${EXPIRY_MESSAGE_COLOUR}>Your ${state.label} has expired.</col>`);
     return null;
   }
 
@@ -104,14 +110,6 @@ function clearDragonfireProtection(player) {
 }
 
 function processDragonfireProtection(player) {
-  // Read the raw state first: normalizeState drops an expired one without telling the player.
-  const stored = player?.getAttribute?.(ATTR_DRAGONFIRE_STATE);
-  if (stored && typeof stored === "object" && Number.isFinite(stored.endsAt) && Date.now() >= stored.endsAt) {
-    clearDragonfireProtection(player);
-    player.getPacketSender?.().sendMessage?.(`<col=${EXPIRY_MESSAGE_COLOUR}>Your ${stored.label} has expired.</col>`);
-    return;
-  }
-
   const state = normalizeState(player);
   if (!state) {
     return;
