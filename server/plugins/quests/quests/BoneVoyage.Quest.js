@@ -93,6 +93,13 @@ module.exports = function registerBoneVoyageQuest(api) {
     NpcIdentifiers.LEAD_NAVIGATOR, // 7761
     NpcIdentifiers.LEAD_NAVIGATOR_2, // 7762
   ]);
+
+  /** Hands an ordinary crossing to the Ferries plugin's captured trip; without it, the plain move. */
+  function ferry(player, route, fallback) {
+    const request = { player, route, handled: false };
+    api.emitCustomEvent("ferries:travel", request);
+    if (!request.handled) player.moveTo(fallback);
+  }
   const JUNIOR_NAVIGATOR_NPC_IDS = new Set([
     NpcIdentifiers.JUNIOR_NAVIGATOR, // 7763
     NpcIdentifiers.JUNIOR_NAVIGATOR_2, // 7764
@@ -548,11 +555,11 @@ module.exports = function registerBoneVoyageQuest(api) {
         return;
       case "OgUvos": // post-quest row to the expedition camp
         if (!BARGE_GUARD_NPC_IDS.has(npcId) || quest.getStage(player) < STAGE_COMPLETE) return;
-        player.moveTo(new Location(ISLAND_ARRIVAL_TILE.x, ISLAND_ARRIVAL_TILE.y, ISLAND_ARRIVAL_TILE.z));
+        ferry(player, "fossil-island", new Location(ISLAND_ARRIVAL_TILE.x, ISLAND_ARRIVAL_TILE.y, ISLAND_ARRIVAL_TILE.z));
         return;
       case "R43aKV": // the navigator's "Yes, please." row to Fossil Island
         if (!LEAD_NAVIGATOR_NPC_IDS.has(npcId)) return;
-        player.moveTo(new Location(ISLAND_ARRIVAL_TILE.x, ISLAND_ARRIVAL_TILE.y, ISLAND_ARRIVAL_TILE.z));
+        ferry(player, "fossil-island", new Location(ISLAND_ARRIVAL_TILE.x, ISLAND_ARRIVAL_TILE.y, ISLAND_ARRIVAL_TILE.z));
         return;
       default:
         return;
