@@ -8,7 +8,8 @@
  * - Control: the obelisk and graveyards changing hands;
  * - Souls: Forgotten Souls, wolves, fragments and the obelisk;
  * - Supplies: the tables, potions, bandages, bones and the activity bar;
- * - Bots: filling the queue on small worlds (world config `SoulWars:seedBots`), and playing.
+ * - Bots: filling the queue on small worlds (world config `SoulWars:seedBots`), and playing;
+ * - Rewards: the Nomad's Zeal shop (experience, imbues and the other rewards).
  */
 const Common = require("./soulwars/Common.SoulWars");
 const Lobby = require("./soulwars/Lobby.SoulWars");
@@ -19,6 +20,7 @@ const Souls = require("./soulwars/Souls.SoulWars");
 const Supplies = require("./soulwars/Supplies.SoulWars");
 const Stats = require("./soulwars/Stats.SoulWars");
 const Bots = require("./soulwars/Bots.SoulWars");
+const Rewards = require("./soulwars/Rewards.SoulWars");
 
 module.exports = {
   name: "Soul Wars",
@@ -33,5 +35,6 @@ module.exports = {
     Souls.attachSouls(api);
     Supplies.attachSupplies(api);
     Bots.attachBots(api);
+    Rewards.attachRewards(api);
   },
 };

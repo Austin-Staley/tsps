@@ -1443,5 +1443,58 @@
     "zeal": "You earned {zeal} Zeal. You now have {tokens} Zeal Tokens to spend.",
     "inactive": "You have been removed from the game for inactivity."
   },
-  "minPlayersFloor": 2
+  "minPlayersFloor": 2,
+  "_rewards": "The Nomad's Trade opens interface 442 (rsprox 227/00079, 00076): the lists are the cache's (scripts 535-538, 675, 842; enums below); every selection is client-side and reaches the server only as the confirm button's sub (the entry's index). Recorded: Spoils of War bought 10 at a time ('How many would you like to buy? (1-10)', 'You purchase some Spoils of war for 300 Tokens.', synth 2304), a Slayer helmet imbued in place for 500 (synth 2655). Cache: XP per token floor(L*L/600) * 30 (melee, Hitpoints), 27 (Ranged, Magic), 14 (Prayer) from level 30; Prayer 70 for the Soul cape, 40 for the Ectoplasmator. Inferred: the XP line, the XP 'X' prompt, and a Buy 1 giving one batch (enum 3652's count) of the blighted supplies.",
+  "rewards": {
+    "interface": "soul_wars_rewards",
+    "openScript": 535,
+    "modalScript": 2524,
+    "enums": {
+      "xpTokens": 3538,
+      "imbuedOf": 3541,
+      "imbueIndex": 3545,
+      "imbueItem": 3544,
+      "imbueBase": 3542,
+      "imbueCost": 3543,
+      "otherItem": 3553,
+      "otherCost": 3540,
+      "otherBatch": 3652
+    },
+    "xpRows": [
+      ["ATTACK", 30],
+      ["STRENGTH", 30],
+      ["DEFENCE", 30],
+      ["RANGED", 27],
+      ["MAGIC", 27],
+      ["HITPOINTS", 30],
+      ["PRAYER", 14]
+    ],
+    "xpMinLevel": 30,
+    "prayerFor": {
+      "25346": 70,
+      "25344": 70,
+      "25340": 40
+    },
+    "quantityVarp": 3426,
+    "xpAmountVarp": 2971,
+    "synths": {
+      "select": 2266,
+      "refused": 2277,
+      "bought": 2304,
+      "imbued": 2655
+    },
+    "messages": {
+      "howMany": "How many would you like to buy? (1-{max})",
+      "howManyTokens": "How many tokens would you like to spend? (1-{max})",
+      "bought": "You purchase some {name} for {cost} Tokens.",
+      "imbued": "<col=3366ff>You sense a newfound power emanating from your {name}...</col>",
+      "xp": "You receive {xp} {skill} experience.",
+      "needTokens": "You need {cost} Tokens to claim that reward.",
+      "needAtLeast": "You need at least {cost} Tokens to claim that reward.",
+      "needLevel": "You need to be at least level 30 in a skill to buy experience in it.",
+      "needPrayer": "A Prayer level of at least {level} is required to purchase {article} {name}.",
+      "noItem": "You don't have that item to imbue.",
+      "noRoom": "You don't have enough inventory space."
+    }
+  }
 }
