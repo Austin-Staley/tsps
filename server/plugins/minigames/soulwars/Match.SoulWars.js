@@ -17,6 +17,7 @@ const Common = require("./Common.SoulWars");
 
 /** The worn cape's slot (Equipment.CAPE_SLOT). */
 const CAPE_SLOT = 1;
+const ARENA_PLANES = 4;
 const tickHooks = [];
 const startHooks = [];
 const endHooks = [];
@@ -34,9 +35,13 @@ function areaClass() {
       super(size[0], size[1]);
       this.game = game;
       this.origin = [chunk[0] * 8, chunk[1] * 8];
-      for (let x = 0; x < size[0]; x++) {
-        for (let y = 0; y < size[1]; y++) {
-          this.setChunk(0, x, y, { sourceChunkX: chunk[0] + x, sourceChunkY: chunk[1] + y, sourcePlane: 0, rotation: 0 });
+      // Every plane: the bridges onto the obelisk's island are marked on the plane above (a
+      // plane-0-only copy leaves them as the water under them).
+      for (let z = 0; z < ARENA_PLANES; z++) {
+        for (let x = 0; x < size[0]; x++) {
+          for (let y = 0; y < size[1]; y++) {
+            this.setChunk(z, x, y, { sourceChunkX: chunk[0] + x, sourceChunkY: chunk[1] + y, sourcePlane: z, rotation: 0 });
+          }
         }
       }
     }
