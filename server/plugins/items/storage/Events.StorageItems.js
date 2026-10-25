@@ -48,6 +48,7 @@ function deathDrops(event) {
 }
 
 module.exports = (api) => {
+  api.onCustomEvent("storage:contents", Storage.answerContents);
   api.onCustomEvent(Storage.ROOM_EVENT, Storage.answerRoom);
   api.onCustomEvent(Storage.GATHER_EVENT, Storage.answerGather);
   api.onCustomEvent(Storage.AMOUNT_EVENT, Storage.answerAmount);
