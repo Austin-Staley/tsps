@@ -19,15 +19,17 @@ test('CHAT kind 3 is public chat flagged as autochat; kinds 0-2 are unchanged', 
   assert.deepEqual(decodeClientPacket(chatPacket(2, 'hi')), { type: 'chat', messageType: 'friends_chat', text: 'hi' });
 });
 
-test('public filter mode 4 (Autochat) receives autochat lines only; modes 0-3 keep their meaning', () => {
+// The Public stone's menu: Show autochat (4), Show standard (0), Show friends (1), Show none (2),
+// Hide (3). The cache chatbox shows autochat lines only in mode 4, next to standard chat.
+test('public filter mode 4 (Show autochat) receives standard and autochat lines; the other modes never receive autochat', () => {
   const other = { getLongUsername: () => 5n };
   const relations = new PlayerRelations({});
   relations.setChatModes(4, 1, 0);
   assert.equal(relations.getPublicChatMode(), 4, 'mode 4 is not clamped away');
   assert.equal(relations.canReceivePublicChatFrom(other, true), true);
-  assert.equal(relations.canReceivePublicChatFrom(other, false), false);
+  assert.equal(relations.canReceivePublicChatFrom(other, false), true, 'Show autochat keeps standard chat');
   relations.setChatModes(0, 1, 0);
-  assert.equal(relations.canReceivePublicChatFrom(other, true), true, 'On shows autochat too');
+  assert.equal(relations.canReceivePublicChatFrom(other, true), false, 'Show standard hides autochat');
   assert.equal(relations.canReceivePublicChatFrom(other, false), true);
   relations.setChatModes(1, 1, 0);
   assert.equal(relations.canReceivePublicChatFrom(other, true), false, 'Friends: a stranger\'s autochat is hidden');

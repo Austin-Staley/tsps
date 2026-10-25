@@ -10,13 +10,14 @@ Presence is single-world: friend snapshots resolve currently registered players 
 
 Public chat arrives as the CHAT packet (kind byte 0 public, 1 game, 2 friends chat, 3 public autochat) and
 goes out as a CHAT_MESSAGE of type 2 to every local player whose public filter admits the speaker
-(`PlayerRelations.canReceivePublicChatFrom`; modes 0 On, 1 Friends, 2 Off, 3 Hide, 4 Autochat), plus the
-overhead line.
+(`PlayerRelations.canReceivePublicChatFrom`; the Public stone's modes 0 Show standard, 1 Show friends,
+2 Show none, 3 Hide, 4 Show autochat), plus the overhead line.
 
 Autochat is the [Chat Interface](https://oldschool.runescape.wiki/w/Chat_Interface) "Setup your autochat"
 option and lives in the cache scripts: the phrase sits in varcstring 358, "Pause/Resume autochat" flips
 varcint 62, and the chatbox timer (proc 552) forces the public filter to mode 4 and calls
 `chat_sendpublic(text, 1)` every 150 client cycles (3 seconds). The client sends kind 3 for type 1, the
-server flags the social packet `public_chat` with `autoChat`, delivers it as type 90 (AUTOTYPER, or 91
-MODAUTOTYPER with a mod crown) so the chatbox colours it as "Auto chat", and a listener on mode 4 receives
-only those lines. The overhead text is still the plain forced chat; the "Autochat" filter does not hide it.
+server flags the social packet `public_chat` with `autoChat` and delivers it as type 90 (AUTOTYPER, or 91
+MODAUTOTYPER with a mod crown) so the chatbox colours it as "Auto chat". The cache chatbox shows those lines
+only in mode 4 "Show autochat" (beside standard chat), so the server sends autochat only to listeners on
+mode 4. The overhead text is still the plain forced chat; the public filter does not hide it.

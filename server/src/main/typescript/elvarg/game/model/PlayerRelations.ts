@@ -47,7 +47,10 @@ export class PlayerRelations {
         return this.status;
     }
 
-    /** Public modes: 0 On, 1 Friends, 2 Off, 3 Hide, 4 Autochat (only auto-chatted lines). */
+    /**
+     * Public modes: 0 Show standard, 1 Show friends, 2 Show none, 3 Hide, 4 Show autochat.
+     * The client shows autochat lines (types 90/91) only in mode 4, which shows standard chat too.
+     */
     public setChatModes(publicMode: number, privateMode: number, tradeMode: number): void {
         this.publicChatMode = Math.max(0, Math.min(PlayerRelations.PUBLIC_MODE_AUTOCHAT, publicMode | 0));
         this.tradeChatMode = Math.max(0, Math.min(2, tradeMode | 0));
@@ -80,9 +83,10 @@ export class PlayerRelations {
 
     public canReceivePublicChatFrom(other: Player, autoChat = false): boolean {
         if (!other || this.hasIgnore(other.getLongUsername())) return false;
+        if (this.publicChatMode === PlayerRelations.PUBLIC_MODE_AUTOCHAT) return true;
+        if (autoChat) return false;
         return this.publicChatMode === 0 ||
-            (this.publicChatMode === 1 && this.hasFriend(other.getLongUsername())) ||
-            (this.publicChatMode === PlayerRelations.PUBLIC_MODE_AUTOCHAT && autoChat);
+            (this.publicChatMode === 1 && this.hasFriend(other.getLongUsername()));
     }
 
     public canReceivePrivateMessageFrom(other: Player): boolean {
