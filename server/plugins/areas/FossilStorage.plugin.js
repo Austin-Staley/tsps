@@ -14,6 +14,8 @@ const STORED_ATTRIBUTE = Object.freeze(Object.fromEntries(DATA.fossils.map((name
   [name, `fossil-storage:${name.replace(/^fossil_/, "").replace(/_/g, "-")}`])));
 const BENCH_BUILT_ATTRIBUTE = "fossil-storage:bench-built";
 const HAS_KIT_EVENT = "archaeology:has-kit";
+const BANK_PIN_GUARD_EVENT = "bank-pin:guard";
+const BANK_PIN_FEATURE = "fossil-storage";
 const INV_INIT_SCRIPT = 149; // interface_inv_init
 const MAIN_MODAL_BACKGROUND_SCRIPT = 917; // toplevel_mainmodal_background
 const OP1_TO_5 = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
@@ -56,8 +58,19 @@ const isOpen = (player) => player.getInterfaceId?.() === cache().getInterfaceId(
 
 // ---------------------------------------------------------------- the crate
 
+/**
+ * The Bank PIN guards the crate (Wiki: Bank_PIN, "Situations requiring a PIN"): with a PIN this
+ * session hasn't entered, the keypad asks first and the crate opens once it's right.
+ */
+function pinLocked(player) {
+  const request = { player, feature: BANK_PIN_FEATURE, resume: () => open({ player }) };
+  api.emitCustomEvent(BANK_PIN_GUARD_EVENT, request);
+  return request.locked === true;
+}
+
 /** As recorded: the crate as the main modal, its own inventory panel as the side modal. */
 function open({ player }) {
+  if (pinLocked(player)) return true;
   const sender = player.getPacketSender();
   const sideInv = component(DATA.components.sideInv);
   sender.sendInterfaceRemoval();
@@ -130,6 +143,7 @@ function clickSide(event) {
 }
 
 function withdrawOne(player, name, wanted) {
+  if (pinLocked(player)) return;
   const amount = take(player, name, wanted);
   player.getInventory().refreshItems();
   if (amount > 0) player.sendMessage(text("withdraw", { name: nameOf(fossilTypes().byName.get(name)), amount }));
@@ -138,7 +152,7 @@ function withdrawOne(player, name, wanted) {
 
 function clickList(event) {
   const { player } = event;
-  if (!isOpen(player)) return true;
+  if (!isOpen(player) || pinLocked(player)) return true;
   const name = DATA.fossils[event.slot ?? -1];
   if (!name || stored(player, name) <= 0) return true;
   const op = opOf(event);
@@ -158,7 +172,7 @@ function depositAll({ player }) {
 
 /** Recorded: everything stored comes out, as far as the inventory takes it, and no message. */
 function withdrawAll({ player }) {
-  if (!isOpen(player)) return true;
+  if (!isOpen(player) || pinLocked(player)) return true;
   for (const name of DATA.fossils) take(player, name, Infinity);
   player.getInventory().refreshItems();
   return true;

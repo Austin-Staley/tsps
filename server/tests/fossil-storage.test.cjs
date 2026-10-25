@@ -31,6 +31,7 @@ before(() => {
     onPlayerLogin: (fn) => { hooks.login = fn; },
   }, { get: (target, key) => (key in target ? target[key] : () => {}) });
   require('../plugins/world/Museum.plugin').register(api);
+  require('../plugins/interface/BankPin.plugin').register(api);
   Fossils = require('../plugins/areas/FossilStorage.plugin');
   Fossils.register(api);
 });
@@ -232,4 +233,44 @@ test('Build is only for the cleaning bench, not other table parts', (t) => {
   const p = player(t);
   assert.equal(hooks['Table parts'].Build({ player: p, object: { getId: () => 1 } }), false);
   assert.deepEqual(p.lines, []);
+});
+
+const BankPinCommon = () => require('../plugins/interface/bankpin/Common.BankPin');
+
+/** A PIN set and this session locked, as after a login. */
+function withPin(p, pin = '1234') {
+  p.setUsername('fossilpin');
+  BankPinCommon().set(p, 'hash', BankPinCommon().hash(p, pin));
+  BankPinCommon().lock(p);
+}
+
+test('the Bank PIN guards the crate (Wiki): locked, the keypad opens instead and withdrawals move nothing', (t) => {
+  const p = player(t);
+  p.setAttribute(attr('fossil_small_1'), 3);
+  withPin(p);
+  openCrate(p);
+  assert.notEqual(p.getInterfaceId(), 605, 'not the crate');
+  assert.equal(p.getInterfaceId(), 213, 'the Bank PIN keypad');
+  p.getPacketSender().sendInterface(605); // a forged open: clicks still check the PIN
+  press(p, 605, 11, 1, 0);
+  press(p, 605, 4, 1);
+  assert.equal(stored(p, 'fossil_small_1'), 3);
+  assert.equal(has(p, 'fossil_small_1'), 0);
+});
+
+test('the right PIN opens the crate a tick later and withdrawals work; with no PIN it opens at once', (t) => {
+  const p = player(t);
+  p.setAttribute(attr('fossil_small_1'), 3);
+  withPin(p);
+  openCrate(p);
+  p.getEnteredAmountAction().execute(1234);
+  assert.ok(p.lines.includes('You have correctly entered your PIN.'));
+  TaskManager.process();
+  TaskManager.process();
+  assert.equal(p.getInterfaceId(), 605, 'resumed into the crate');
+  press(p, 605, 11, 1, 0);
+  assert.equal(stored(p, 'fossil_small_1'), 2);
+  const open = player(t);
+  openCrate(open);
+  assert.equal(open.getInterfaceId(), 605, 'no PIN: straight in');
 });
