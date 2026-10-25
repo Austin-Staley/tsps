@@ -227,6 +227,38 @@ test("search withdrawals cannot clone one metadata stack using the aggregate ite
   assert.deepEqual(metas(player.getBank(0)), [[1, { charges: 1200 }]]);
 });
 
+test("as captured: withdrawing into a full inventory says there is no space", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 3), false);
+  for (let i = 0; i < 28; i++) player.getInventory().add(new Item(LAVA_BATTLESTAFF, 1), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 1, 0);
+
+  assert.deepEqual(player.messages, ["You don't have enough inventory space."]);
+  assert.equal(player.getBank(0).getAmount(TRIDENT), 3);
+});
+
+test("as captured: withdrawing more than the free slots takes what fits and says so", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 5), false);
+  for (let i = 0; i < 26; i++) player.getInventory().add(new Item(LAVA_BATTLESTAFF, 1), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 5, 0);
+
+  assert.deepEqual(player.messages, ["You don't have enough inventory space to withdraw that many."]);
+  assert.equal(player.getInventory().getAmount(TRIDENT), 2);
+  assert.equal(player.getBank(0).getAmount(TRIDENT), 3);
+});
+
+test("withdrawing what fits sends no message", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 2), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 2, 0);
+
+  assert.deepEqual(player.messages, []);
+});
+
 test("the client layout lists tabs 1-9 before the main tab", () => {
   const player = createPlayer();
   player.getBank(0).add(new Item(LAVA_BATTLESTAFF, 1), false);
@@ -295,7 +327,7 @@ test("clicking a tab views it; clicking the empty slot after the last tab explai
 
   clickTab(player, 2, 1, "View tab");
   assert.equal(player.getCurrentBankTab(), 1);
-  assert.ok(player.messages.includes("To create a new tab, drag an item here."));
+  assert.ok(player.messages.includes("To create a new tab, drag items from your bank onto this tab."));
 });
 
 test("collapsing a tab moves its items and placeholders into the main tab and shifts later tabs down", () => {

@@ -16,6 +16,11 @@ import { Sounds } from "../../../Sounds";
 const getPluginManager = () =>
     require("../../../../plugins/PluginManager").PluginManager as typeof import("../../../../plugins/PluginManager").PluginManager;
 
+/** Live OSRS's wording (rsprox recordings 454, 3066, 4151, 3467, 1059). */
+const INVENTORY_FULL_MESSAGE = "You don't have enough inventory space.";
+const WITHDRAW_PARTIAL_MESSAGE = "You don't have enough inventory space to withdraw that many.";
+const NEW_TAB_MESSAGE = "To create a new tab, drag items from your bank onto this tab.";
+
 export class Bank extends ItemContainer {
     full(): ItemContainer {
         this.getPlayer().sendMessage("Not enough space in bank.");
@@ -351,7 +356,7 @@ export class Bank extends ItemContainer {
 
     public static viewTab(player: Player, tab: number): void {
         if (tab > Bank.getTabCount(player)) {
-            player.sendMessage("To create a new tab, drag an item here.");
+            player.sendMessage(NEW_TAB_MESSAGE);
             return;
         }
         player.setCurrentBankTab(tab);
@@ -759,7 +764,7 @@ export class Bank extends ItemContainer {
                                 player.setCurrentBankTab(bankId);
                                 player.getBank(bankId).open();
                             } else {
-                                player.sendMessage("To create a new tab, simply drag an item here.");
+                                player.sendMessage(NEW_TAB_MESSAGE);
                                 if (searching) {
                                     player.getBank(player.getCurrentBankTab()).open();
                                 }
@@ -1034,21 +1039,28 @@ export class Bank extends ItemContainer {
         // Make sure we have enough space in the other container
         if (to.getFreeSlots() <= 0 && (!(to.contains(item.getId()) && item.getDefinition().isStackable()))
                 && !(this.getPlayer().withdrawAsNote() && canWithdrawAsNote && to.contains(noteId))) {
-            to.full();
+            if (to instanceof Inventory) this.getPlayer().sendMessage(INVENTORY_FULL_MESSAGE);
+            else to.full();
             return this;
         }
 
         // If bank > inventory and item.amount > inventory.freeslots,
         // change the item amount to the free slots we have in inventory.
+        let shortened = false;
         if (item.getAmount() > to.getFreeSlots() && !item.getDefinition().isStackable()) {
             if (to instanceof Inventory) {
                 if (this.getPlayer().withdrawAsNote()) {
-                    if (!canWithdrawAsNote)
+                    if (!canWithdrawAsNote) {
                         item.setAmount(to.getFreeSlots());
-                } else
+                        shortened = true;
+                    }
+                } else {
                     item.setAmount(to.getFreeSlots());
+                    shortened = true;
+                }
             }
         }
+        if (shortened) this.getPlayer().sendMessage(WITHDRAW_PARTIAL_MESSAGE);
 
         // Make sure we aren't taking more than we have.
         if (item.getAmount() > this.getAmount(item.getId())) {
