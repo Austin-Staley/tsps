@@ -16,6 +16,9 @@ const { Location } = require('../dist/game/model/Location');
 
 let Common, Run, hooks;
 
+/** Whether the test player has done Sins of the Father (the Sepulchre's quest). */
+let questDone = true;
+
 before(() => {
   CachePipeline.initialize();
   RegionManager.init();
@@ -31,7 +34,9 @@ before(() => {
     onPlayerLogout: (handler) => (hooks.logout ??= []).push(handler),
     onObjectRoute: (handler) => { hooks.route = handler; },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
-    emitCustomEvent() {},
+    emitCustomEvent: (name, request) => {
+      if (name === 'quest:is-complete' && request.key === 'sins_of_the_father') request.complete = questDone;
+    },
     spawnNpc: ({ id, x, y, z }) => fakeNpc(id, new Location(x, y, z)),
     removeNpc: (npc) => { npc.registered = false; hooks.removed.push(npc); },
   };
@@ -180,6 +185,24 @@ test('the stairs: the Stranger first, then the recorded warning box and its menu
   assert.equal(varbit(p, 'hallowed_entry_check'), 1, "don't ask again is saved");
   assert.ok(Run.runOf(p));
   Run.runOf(p).finish();
+});
+
+test('without Sins of the Father neither the stairs nor a shard lets you in', () => {
+  const p = fakePlayer();
+  p.setAttribute(Common.data.attributes.tutorial, true);
+  p.setAttribute(Common.data.attributes.entryCheck, true);
+  p.inventory.adds(Common.data.items.shard, 1);
+  questDone = false;
+  try {
+    click(p, Common.data.lobby.stairs);
+    assert.equal(Run.runOf(p), null);
+    assert.equal(p.messages.at(-1), 'You need to have completed Sins of the Father to enter the Hallowed Sepulchre.');
+    hooks.items['Hallowed crystal shard'].Activate({ player: p });
+    assert.equal(p.inventory.getAmount(Common.data.items.shard), 1, 'the shard is kept');
+    assert.equal(p.messages.at(-1), 'You need to have completed Sins of the Father to enter the Hallowed Sepulchre.');
+  } finally {
+    questDone = true;
+  }
 });
 
 test('below 52 Agility the stairs refuse', () => {

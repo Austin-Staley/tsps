@@ -20,9 +20,20 @@ function setFlag(player, name, varbitName) {
   Common.varbit(player, varbitName, 1);
 }
 
+/** The Wiki: no way in without Sins of the Father. */
+function questDone(player) {
+  const request = { player, key: Common.data.quest, complete: null };
+  Common.api.emitCustomEvent("quest:is-complete", request);
+  return request.complete === true;
+}
+
 /** Climb-down on the lobby stairs. */
 function climbDown({ player }) {
   if (Run.runOf(player)) return true;
+  if (!questDone(player)) {
+    player.sendMessage(Common.message("needQuest"));
+    return true;
+  }
   if (!flag(player, "tutorial")) {
     // Recorded (1862 T18955): before his tutorial the Stranger stops you going down.
     Common.npcChat(player, 9639, Common.message("strangerWait"));
@@ -70,6 +81,10 @@ function activateShard(event) {
   const { player } = event;
   const { Animation, TeleportHandler, TeleportType } = Common.core;
   const run = Run.runOf(player);
+  if (!run && !questDone(player)) {
+    player.sendMessage(Common.message("needQuest"));
+    return true;
+  }
   const destination = Common.toLocation(Common.data.lobby.shardTile);
   if (!run && TeleportHandler?.checkReqs && !TeleportHandler.checkReqs(player, destination)) return true;
   player.getInventory().delete(Common.data.items.shard, 1);

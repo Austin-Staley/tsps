@@ -149,6 +149,8 @@
   },
 
   "_requirements": "Wiki: Ranged 62 with a crossbow and a mith grapple (or a Hallowed grapple); Construction 56 with 2 planks, 5 nails, a saw and a hammer; Prayer 54 with 2 vampyre dust (1 with a Hallowed symbol); coffins Thieving 66; the grand coffin Thieving 84.",
+  "_quest": "Wiki: the Sepulchre needs Sins of the Father completed. Unrecorded: the refusal's wording.",
+  "quest": "sins_of_the_father",
   "requirements": { "ranged": 62, "construction": 56, "prayer": 54, "thieving": 66, "grandThieving": 84, "brazierDust": 2 },
   "_enchants": "Wiki: the portal takes any of the Lvl-1 to Lvl-7 Enchant spells; the highest one the player can cast is used. [magic level, [[rune, amount]]].",
   "enchants": [
@@ -162,6 +164,7 @@
   ],
 
   "messages": {
+    "needQuest": "You need to have completed Sins of the Father to enter the Hallowed Sepulchre.",
     "entryWarning": "You are about to enter the Hallowed Sepulchre. Dying during this activity will not be considered a safe death. Are you sure you wish to enter?",
     "entryQuestion": "Are you sure you wish to enter?",
     "entryYes": "Yes.",
