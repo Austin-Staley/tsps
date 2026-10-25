@@ -78,8 +78,12 @@ function pack(event) {
   api.emitCustomEvent("item-sets:can-pack", request);
   if (!request.allow) return true;
   const inventory = player.getInventory();
-  if (holds(inventory, value.pieces)) exchange(player, value.pieces, [value.set]);
-  else {
+  if (holds(inventory, value.pieces)) {
+    // Stackable components (god pages) produce a noted set in OSRS.
+    const set = value.pieces.every((id) => api.core.ItemDefinition.forId(id).isStackable())
+      ? api.core.ItemDefinition.forId(value.set).getNoteId() : value.set;
+    exchange(player, value.pieces, [set]);
+  } else {
     const noted = value.pieces.map((id) => api.core.ItemDefinition.forId(id).getNoteId());
     if (holds(inventory, noted)) exchange(player, noted, [api.core.ItemDefinition.forId(value.set).getNoteId()]);
     else player.sendMessage(`Contents: ${value.pieces.map((id) => api.core.ItemDefinition.forId(id).getName()).join(", ")}.`);

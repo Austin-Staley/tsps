@@ -123,8 +123,9 @@ test('every native cache recipe packs and unpacks, including all available noted
     h.open(p);
     give(p, recipe.components);
     h.pack(p, recipe);
-    assert.deepEqual(counts(p), [[recipe.setId, 1]], `unnoted pack: ${label}`);
-    h.unpack(p, recipe.setId);
+    const packedId = recipe.components.every((id) => core.ItemDefinition.forId(id).isStackable()) ? note(recipe.setId) : recipe.setId;
+    assert.deepEqual(counts(p), [[packedId, 1]], `unnoted pack: ${label}`);
+    h.unpack(p, packedId);
     assert.deepEqual(counts(p), expected(recipe.components), `unnoted unpack: ${label}`);
 
     const noted = h.player();
@@ -149,6 +150,25 @@ test('mixed or incomplete components remain untouched and explain why they canno
     h.pack(p, recipe);
     assert.deepEqual(snapshot(p), before);
     assert.ok(p.messages.length > messages, 'the missing complete noted/unnoted set is explained');
+  }
+});
+
+test('stackable god pages pack into noted sets, including an existing stack in a full inventory', () => {
+  const h = harness();
+  const pageSets = recipes().filter((recipe) => recipe.components.every((id) => core.ItemDefinition.forId(id).isStackable()));
+  assert.equal(pageSets.length, 6, 'all six native god-page recipes');
+  for (const recipe of pageSets) {
+    const p = h.player();
+    h.open(p);
+    give(p, [...recipe.components, ...recipe.components, note(recipe.setId), ...Array(23).fill(core.ItemIdentifiers.BONES)]);
+    assert.equal(p.getInventory().getFreeSlots(), 0);
+    h.pack(p, recipe);
+    assert.deepEqual(counts(p), expected([...recipe.components, note(recipe.setId), note(recipe.setId), ...Array(23).fill(core.ItemIdentifiers.BONES)]));
+    h.pack(p, recipe);
+    assert.equal(p.getInventory().getAmount(note(recipe.setId)), 3);
+    assert.equal(p.getInventory().getAmount(recipe.setId), 0);
+    h.unpack(p, note(recipe.setId));
+    assert.deepEqual(counts(p), expected([...recipe.components, note(recipe.setId), note(recipe.setId), ...Array(23).fill(core.ItemIdentifiers.BONES)]));
   }
 });
 
