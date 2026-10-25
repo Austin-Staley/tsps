@@ -980,3 +980,92 @@ test('paired cutscene NPCs can use the native right-side chatbox without the pla
   assert.ok(sent.some(row => row[0] === 'sendNpcHeadOnInterface' && row[1] === 16536 && row[2] === (217 << 16 | 2)));
   assert.ok(!sent.some(row => row[0] === 'sendPlayerHeadOnInterface'));
 });
+
+test('Talk-to warns once per NPC name when it falls back to the placeholder line', (t) => {
+  const NpcDialogues = require('../plugins/npcs/NpcDialogues.plugin');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const warn = t.mock.method(console, 'warn', () => {});
+  let talk;
+  NpcDialogues.register({
+    core: { ...PluginManager.getCoreApi(), NpcDefinition: { forId: () => ({ getName: () => 'null' }) } },
+    onCustomEvent() {}, emitCustomEvent() {},
+    onAnyNpcInteraction(actions) { talk = actions['Talk-to']; },
+  });
+  const chains = [];
+  const player = { getUsername: () => 'Test', getDialogueManager: () => ({ reset() {}, startDialogues: chain => chains.push(chain) }) };
+  const talkTo = (name) => talk({ player, npc: null, npcId: -1, definition: { getName: () => name, getId: () => 0 } });
+  const placeholder = () => [...chains.at(-1).getDialogues().values()][0].getText();
+
+  // No transcript at all.
+  talkTo('Nobody with a transcript'); talkTo('Nobody with a transcript');
+  assert.equal(placeholder(), "Sorry, i've nothing interesting to talk about yet");
+  // A transcript of overhead shouts only: pickVariant has nothing to play.
+  assert.equal(pickVariant(data['Battle mage']), undefined);
+  talkTo('Battle mage'); talkTo('Battle mage');
+  assert.equal(placeholder(), "Sorry, i've nothing interesting to talk about yet");
+  // A playable transcript stays quiet.
+  talkTo('Hans');
+
+  const warnings = warn.mock.calls.map(call => String(call.arguments[0]));
+  assert.equal(warnings.length, 2, warnings.join('\n'));
+  assert.match(warnings[0], /Nobody with a transcript .*no transcript reaches it/);
+  assert.match(warnings[1], /Battle mage .*transcript "Battle mage" has no playable variant/);
+});
+
+test('cancelling mid-chain through closeInterruptibleInterfaces leaves no stuck dialogue', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PacketSender } = require('../dist/net/packet/PacketSender');
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { PlayerStatus } = require('../dist/game/model/PlayerStatus');
+  await CachePipeline.initialize(process.cwd());
+  const sender = new Proxy({}, { get: () => () => sender });
+  const player = { getUsername: () => 'Test', getPacketSender: () => sender, getDialogueManager: () => manager,
+    getSession: () => ({ sendClientPacket() {} }), getInterfaceId: () => -1, getFrameUpdater: () => ({ clearGroup() {} }) };
+  const manager = new DialogueManager(player);
+  // The fields Player.closeInterruptibleInterfaces reads; the real PacketSender does the reset.
+  const core = { status: PlayerStatus.NONE, interfaceId: -1, dialogueManager: manager, packetSender: new PacketSender(player) };
+  const definition = { getName: () => 'Hans', getId: () => 3105 };
+  const shown = () => manager.getCurrent()?.getText?.();
+  const talk = () => startDialogue({ emitCustomEvent() {} }, { player, npcId: 3105, definition },
+    [{ npc: 'One.' }, { npc: 'Two.' }, { npc: 'Three.' }]);
+
+  talk();
+  manager.advance();
+  assert.equal(shown(), 'Two.');
+  Player.prototype.closeInterruptibleInterfaces.call(core);
+  assert.equal(manager.isActive(), false);
+  assert.equal(manager.getCurrent(), undefined);
+  // A late continue click from the closed chatbox resumes nothing.
+  assert.equal(manager.handleResume(231 << 16, -1), false);
+  assert.equal(manager.getCurrent(), undefined);
+  // Talking again starts over from the first line, not the abandoned tail.
+  talk();
+  assert.equal(shown(), 'One.');
+});
+
+test('npc-dialogue:line skip applies to one player and one line only', () => {
+  const steps = [{ npc: 'Hello.' }, { npc: 'Here is your reward.' }, { npc: 'Goodbye.' }];
+  const definition = { getName: () => 'Hans', getId: () => 3105 };
+  const chains = new Map();
+  const makePlayer = (name) => ({ getUsername: () => name,
+    getDialogueManager: () => ({ reset() {}, startDialogues: chain => chains.set(name, chain) }) });
+  const alice = makePlayer('Alice'), bob = makePlayer('Bob');
+  const seen = [];
+  const api = { emitCustomEvent(name, request) {
+    if (name !== 'npc-dialogue:line') return;
+    seen.push([request.player.getUsername(), request.text, request.skip]);
+    if (request.player === alice && request.text === 'Here is your reward.') request.skip = true;
+  } };
+  const lines = (name) => [...chains.get(name).getDialogues().values()].filter(entry => entry.getText).map(entry => entry.getText());
+
+  startDialogue(api, { player: alice, npcId: 3105, definition }, steps);
+  startDialogue(api, { player: bob, npcId: 3105, definition }, steps);
+  assert.deepEqual(lines('Alice'), ['Hello.', 'Goodbye.']);
+  assert.deepEqual(lines('Bob'), ['Hello.', 'Here is your reward.', 'Goodbye.']);
+  // Every line starts unskipped: a skip never carries to the next line or another player.
+  assert.ok(seen.every(([, , skip]) => skip === false));
+  assert.ok(steps.every(step => !('skip' in step)), 'the shared transcript steps are not marked');
+  startDialogue(api, { player: bob, npcId: 3105, definition }, steps);
+  assert.deepEqual(lines('Bob'), ['Hello.', 'Here is your reward.', 'Goodbye.']);
+});
