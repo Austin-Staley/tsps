@@ -450,7 +450,7 @@ function keepRunEnergyFull({ player }) {
 }
 
 /** ::give id [amount] player - puts items in an online player's inventory, as ::item does in yours. */
-function giveItemCommand({ player, parts }) {
+function giveItemCommand(core, { player, parts }) {
   const id = parseIntArg(parts[1]);
   // A number before the name is the amount: ::give 4151 1 5 Guys gives one whip to "5 Guys".
   const hasAmount = parts.length > 3 && /^\d+$/.test(parts[2]);
@@ -472,9 +472,7 @@ function giveItemCommand({ player, parts }) {
   const inventory = target.getInventory();
   // Only what fits, as ::runes does, so the container never tells the target they
   // "couldn't hold all those items" without saying who sent them.
-  const room = ItemDefinition.forId(id)?.isStackable?.()
-    ? (inventory.contains(id) || inventory.getFreeSlots() > 0 ? amount : 0)
-    : Math.min(amount, inventory.getFreeSlots());
+  const room = inventory.getAddableAmount(new core.Item(id, amount));
   const before = inventory.getAmount(id);
   if (room > 0) {
     inventory.adds(id, room);
@@ -1526,7 +1524,7 @@ module.exports = {
       return true;
     }, PlayerRights.ADMINISTRATOR, "Spawn an item");
 
-    api.registerCommand("give", giveItemCommand, PlayerRights.ADMINISTRATOR, "Give a player an item (id [amount] player)");
+    api.registerCommand("give", giveItemCommand.bind(null, api.core), PlayerRights.ADMINISTRATOR, "Give a player an item (id [amount] player)");
 
     api.registerCommand("clearinv", ({ player }) => {
       player.getInventory().resetItems().refreshItems();

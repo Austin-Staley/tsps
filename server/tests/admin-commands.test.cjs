@@ -141,6 +141,49 @@ test("::give gives only what fits, and refuses unknown items and players who are
   }
 });
 
+test("::give needs a separate slot beside preset arrows and never leaks a container failure", () => {
+  const admin = login("Admin", Rights.ADMINISTRATOR);
+  const bob = login("Bob");
+  const inventory = bob.getInventory();
+  const meta = { [core.Item.UNTRADEABLE_META]: true, [core.Item.UNBANKABLE_META]: true, [core.Item.PRESET_META]: true };
+  inventory.addItem(new core.Item(I.BRONZE_ARROW, 100, meta));
+  for (let slot = 0; slot < 27; slot++) inventory.adds(I.ABYSSAL_WHIP, 1);
+  assert.equal(inventory.getFreeSlots(), 0);
+
+  type(admin, `give ${I.BRONZE_ARROW} 10 bob`);
+  assert.equal(inventory.getAmount(I.BRONZE_ARROW), 100);
+  assert.deepEqual(bob.messages, []);
+  assert.equal(admin.messages.at(-1), "Bob's inventory is full.");
+
+  inventory.deleteNumber(I.ABYSSAL_WHIP, 1);
+  type(admin, `give ${I.BRONZE_ARROW} 10 bob`);
+  const arrows = inventory.getValidItems().filter(item => item.getId() === I.BRONZE_ARROW);
+  assert.deepEqual(arrows.map(item => [item.getAmount(), item.getMeta()]), [[100, meta], [10, null]]);
+  assert.deepEqual(bob.messages, ["Admin gave you 10 x Bronze arrow."]);
+});
+
+test("::give caps the matching ordinary stack and reports only what arrived beside preset arrows", () => {
+  const admin = login("Admin", Rights.ADMINISTRATOR);
+  const bob = login("Bob");
+  const inventory = bob.getInventory();
+  const meta = { [core.Item.UNTRADEABLE_META]: true, [core.Item.UNBANKABLE_META]: true, [core.Item.PRESET_META]: true };
+  inventory.addItem(new core.Item(I.BRONZE_ARROW, 100, meta));
+  inventory.adds(I.BRONZE_ARROW, 2147483645);
+  for (let slot = 0; slot < 26; slot++) inventory.adds(I.ABYSSAL_WHIP, 1);
+  assert.equal(inventory.getFreeSlots(), 0);
+
+  type(admin, `give ${I.BRONZE_ARROW} 10 bob`);
+  const arrows = inventory.getValidItems().filter(item => item.getId() === I.BRONZE_ARROW);
+  assert.deepEqual(arrows.map(item => [item.getAmount(), item.getMeta()]), [[100, meta], [2147483647, null]]);
+  assert.deepEqual(bob.messages, ["Admin gave you 2 x Bronze arrow."]);
+  assert.equal(admin.messages.at(-1), "Gave Bob 2 x Bronze arrow (882); only 2 of 10 fit.");
+
+  type(admin, `give ${I.BRONZE_ARROW} 10 bob`);
+  assert.deepEqual(bob.messages, ["Admin gave you 2 x Bronze arrow."]);
+  assert.equal(inventory.getAmount(I.BRONZE_ARROW), 2147483747);
+  assert.equal(admin.messages.at(-1), "Bob's inventory is full.");
+});
+
 test("::setlevel sets another player's level and experience, or your own", () => {
   const owner = login("Owner", Rights.OWNER);
   const bob = login("Bob");
