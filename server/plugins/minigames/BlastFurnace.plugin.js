@@ -252,6 +252,10 @@ function useCoffer({ player }) {
   const location = player.getLocation();
   if (location.getX() < ROOM.minX || location.getX() > ROOM.maxX ||
       location.getY() < ROOM.minY || location.getY() > ROOM.maxY || location.getZ() !== 0) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "blast-furnace-coffer", resume: () => useCoffer({ player }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (stateOf(player).coffer === 0 && coins(player) === 0) {
     coinsStatement(player, "There are no coins in the coffer or your inventory.");
     return;
@@ -379,10 +383,18 @@ function putOre(player, onlyItemId = null) {
 }
 
 function putOreOnBelt({ player }) {
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "blast-furnace-belt", resume: () => putOreOnBelt({ player }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   putOre(player);
 }
 
 function useOreOnBelt({ player, itemId }) {
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "blast-furnace-belt", resume: () => useOreOnBelt({ player, itemId }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   putOre(player, itemId);
 }
 
