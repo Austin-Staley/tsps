@@ -127,3 +127,33 @@ test("ground item views sent to the client carry the timing", () => withWorld(()
   assert.equal(view.isPrivate, true);
   assert.equal(view.ownership, 1);
 }));
+
+test("a stack registered with its own lifetime keeps it, and stays owner-only when it does not go global", () => withWorld(() => {
+  let reward, untradeable;
+  cycle({players: () => {
+    reward = ItemOnGroundManager.registerLocation(player, new Item(2327), player.getLocation(), undefined, {despawnDelay: 18000});
+    untradeable = ItemOnGroundManager.registerLocation(player, new Item(6654), new Location(3223, 3218), undefined,
+      {goesGlobal: false, despawnDelay: 18000});
+  }});
+  const created = World.getProcessCycle();
+  assert.deepEqual(reward.getTiming(), {createdTick: created, privateUntilTick: created + 100, expiresTick: created + 18000});
+  assert.deepEqual(untradeable.getTiming(), {createdTick: created, privateUntilTick: 0, expiresTick: created + 18000});
+  let publicAt = -1, untradeableGone = -1;
+  while (World.getItems().includes(reward)) {
+    cycle();
+    if (publicAt < 0 && reward.getState() === State.SEEN_BY_EVERYONE) publicAt = World.getProcessCycle();
+    if (untradeableGone < 0 && !World.getItems().includes(untradeable)) untradeableGone = World.getProcessCycle();
+    assert.equal(untradeable.getState(), State.SEEN_BY_PLAYER);
+    assert.ok(World.getProcessCycle() < created + 20000, "stack never despawned");
+  }
+  assert.deepEqual({publicAt, goneAt: World.getProcessCycle(), untradeableGone},
+    {publicAt: created + 100, goneAt: created + 18000, untradeableGone: created + 18000});
+}));
+
+test("a long-lived stack does not merge into an ordinary one on the same tile", () => withWorld(() => {
+  const coins = ItemOnGroundManager.registers(player, new Item(995, 10));
+  const reward = ItemOnGroundManager.registerLocation(player, new Item(995, 80), player.getLocation(), undefined, {despawnDelay: 18000});
+  assert.equal(coins.getItem().getAmount(), 10);
+  assert.ok(World.getItems().includes(reward));
+  assert.equal(reward.clone().getDespawnDelay(), 18000);
+}));

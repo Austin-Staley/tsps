@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const Progress = require("./Progress.Music");
+const QuestUnlocks = require("./QuestUnlocks.Music");
 
 const COINS = 995;
 const CAPE_PRICE = 99000;
@@ -30,6 +31,8 @@ let nonHolidayTrackIds;
 let slotByTrackId;
 let canonicalTrackBySlot;
 let autoUnlockTrackIds;
+/** Quest-hinted tracks and the quest names they name (QuestUnlocks.Music). */
+let questUnlocks = { entries: [], questNames: [] };
 
 function enableMusicActions(player) {
   const rowCount = core.CacheDefinitions.getDbTableRows(44).length;
@@ -91,15 +94,49 @@ function unlockNameColour(player) {
   return UNLOCK_NAME_COLOUR[transparent ? "transparent" : "opaque"];
 }
 
-function unlockTrack({ player, trackId }) {
+function unlockTrack({ player, trackId, silent = false }) {
   trackId = Number(trackId);
   const name = trackNames?.[trackId];
   const slot = slotByTrackId?.[trackId];
   if (!player || !name || !slot || !Progress.unlock(player, canonicalTrackBySlot[slot.key])) return;
+  // A login backstop: the varps and cape flag are sent whole right after it.
+  if (silent) return;
   const fullVarps = Progress.varpsFor(Progress.unlockedTracks(player), slotByTrackId);
   player.getPacketSender().sendConfig(slot.varp, fullVarps[slot.varp]);
   player.sendMessage(`You have unlocked a new music track: <col=${unlockNameColour(player)}>${name}`);
   Progress.refreshCapeUnlock(player, nonHolidayTrackIds);
+}
+
+/** true, false, or undefined for a quest the server has not got (asked under each alias the hint may mean). */
+function questComplete(player, hintName) {
+  for (const name of QuestUnlocks.questNameAliases(hintName)) {
+    const request = { player, name };
+    pluginApi.emitCustomEvent("quest:is-complete", request);
+    if (request.complete !== undefined) return request.complete === true;
+  }
+  return undefined;
+}
+
+/**
+ * Unlocks the tracks whose cache hint names `questName`, once every quest the hint needs is
+ * complete ("after completing the While Guthix Sleeps and Dragon Slayer II quests.").
+ */
+function unlockQuestTracks(player, questName, { silent = false } = {}) {
+  const isComplete = (hintName) => QuestUnlocks.hintNamesQuest(hintName, questName) ? true : questComplete(player, hintName);
+  for (const { trackId, requires } of QuestUnlocks.entriesForQuest(questUnlocks.entries, questName)) {
+    if (QuestUnlocks.requirementMet(requires, isComplete)) unlockTrack({ player, trackId, silent });
+  }
+}
+
+function onQuestCompleted({ player, quest }) {
+  if (player && quest?.name) unlockQuestTracks(player, quest.name);
+}
+
+/** Saves from before quest unlocks existed: what their completed quests should have unlocked. */
+function unlockCompletedQuestTracks(player) {
+  for (const name of questUnlocks.questNames) {
+    if (questComplete(player, name) === true) unlockQuestTracks(player, name, { silent: true });
+  }
 }
 
 function allDiariesComplete(player) {
@@ -223,6 +260,7 @@ function onTrackPlayed(event) {
 }
 
 function onMusicLogin({ player }) {
+  unlockCompletedQuestTracks(player);
   syncMusicVarps(player);
   queueMicrotask(() => enableMusicActions(player));
 }
@@ -311,6 +349,7 @@ module.exports = {
     autoUnlockTrackIds = [...groups.values()]
       .filter((entries) => entries.some(({ autoUnlock }) => autoUnlock))
       .map((entries) => entries[0].id);
+    questUnlocks = QuestUnlocks.questTracks(tracks);
 
     api.persistAttribute(Progress.UNLOCKED_TRACKS_ATTRIBUTE);
     api.persistAttribute(Progress.CAPE_OWNED_ATTRIBUTE);
@@ -324,6 +363,7 @@ module.exports = {
   api.onCustomEvent("audio:setting-changed", restartMusicAfterVolumeRaised);
     api.onCustomEvent("audio:play-song", onTrackPlayed);
     api.onCustomEvent("music:unlock-track", unlockTrack);
+    api.onCustomEvent("quest:completed", onQuestCompleted);
     api.onCustomEvent("music:air-guitar-unlocked", answerAirGuitarUnlock);
     api.onNpcInteraction("Olaf the Bard", { "Talk-to": talkToOlaf });
     api.onItemAction(capeAction);
@@ -332,8 +372,8 @@ module.exports = {
   _test: {
     unlockTrack, syncMusicVarps, allDiariesComplete, canTrim, buyMusicCape, talkToOlaf, capeAction,
     enableMusicActions, removeInvalidEquippedCape,
-    getCatalog: () => ({ allTrackIds, nonHolidayTrackIds, slotByTrackId, canonicalTrackBySlot, autoUnlockTrackIds }),
+    getCatalog: () => ({ allTrackIds, nonHolidayTrackIds, slotByTrackId, canonicalTrackBySlot, autoUnlockTrackIds, questUnlocks }),
     canEquipMusicCape, onMusicLogin, onMusicWelcomeAction, answerAirGuitarUnlock,
-    onTrackPlayed,
+    onTrackPlayed, questComplete, unlockQuestTracks, onQuestCompleted, unlockCompletedQuestTracks,
   },
 };

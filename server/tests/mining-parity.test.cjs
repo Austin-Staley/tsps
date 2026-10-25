@@ -250,3 +250,52 @@ test("each pickaxe swings its own animation", () => {
     assert.equal(pickaxe.animation.getId(), expected[pickaxe.id], `pickaxe ${pickaxe.id}`);
   }
 });
+
+test("quarry sandstone (232/03162): one piece, \"You manage to quarry some sandstone.\", then rocks1 for 9 ticks", () => {
+  const h = harness();
+  const player = createPlayer();
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  const { restore } = mineRock(h, player, "Sandstone rocks", loc("enakh_sandstone_rocks"));
+  try {
+    h.tick(1);
+    assert.deepEqual(player.messages, ["You swing your pick at the rock."]);
+    h.tick(3);
+    assert.equal(player.messages.at(-1), "You manage to quarry some sandstone.");
+    assert.deepEqual(player.added, [[core.CacheDefinitions.getObjId("enakh_sandstone_tiny"), 1]]);
+    assert.equal(player.xp.at(-1)[1], 30);
+    assert.deepEqual(player.packets.configs, [[ORE_MINED_VARP, 1]], "sandstone counts as ore mined, as recorded");
+    assert.equal(h.registered.at(-1).getId(), loc("rocks1"));
+    assert.equal(player.packets.scripts.at(-1)[0], RESPAWN_TIMER_SCRIPT);
+    assert.equal(player.packets.scripts.at(-1)[5], 9);
+  } finally {
+    Math.random = originalRandom;
+    restore();
+  }
+});
+
+test("quarry rocks (Wiki): sandstone 35 and granite 45; bigger pieces get likelier towards level 99", () => {
+  const byName = new Map(Mining.ROCKS.map((rock) => [rock.objectName, rock]));
+  const sandstone = byName.get("Sandstone rocks");
+  const granite = byName.get("Granite rocks");
+  assert.deepEqual([sandstone.level, granite.level], [35, 45]);
+  assert.deepEqual([sandstone.petBase, granite.petBase], [741600, 741600], 'Wiki: rock golem and clue geode base for both');
+  assert.deepEqual(sandstone.outcomes.map((o) => o.xp), [30, 40, 50, 60]);
+  assert.deepEqual(granite.outcomes.map((o) => o.xp), [50, 60, 75]);
+  // The 256 roll at the Wiki's chart points: 56.5% at 35 and 92.7% at 99; granite 42.0% at 45, 68.2% at 99.
+  const chance = (rock, level) => Math.floor(rock.successLow + (rock.successHigh - rock.successLow) * (level - 1) / 98) / 256;
+  assert.ok(Math.abs(chance(sandstone, 35) - 0.565) < 0.01 && Math.abs(chance(sandstone, 99) - 0.927) < 0.01);
+  assert.ok(Math.abs(chance(granite, 45) - 0.42) < 0.01 && Math.abs(chance(granite, 99) - 0.682) < 0.01);
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.999;
+    assert.equal(Mining.rollOutcome(sandstone, 35).xp, 60, "the top of the roll is the 10kg piece");
+    Math.random = () => 0.7;
+    assert.equal(Mining.rollOutcome(sandstone, 35).xp, 50, "at 35, 0.7 falls in the 5kg share");
+    Math.random = () => 0.55;
+    assert.equal(Mining.rollOutcome(sandstone, 35).xp, 40, "at 35, 0.55 is still a 2kg piece");
+    assert.equal(Mining.rollOutcome(sandstone, 99).xp, 50, "at 99 the smaller shares have shrunk, so it is 5kg");
+  } finally {
+    Math.random = originalRandom;
+  }
+});

@@ -721,3 +721,30 @@ test("Ape Atoll: the rope won't take a pet across (Wiki)", () => {
     answerForm(null);
   }
 });
+
+test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets the streak and the unclaimed ticket and reward; the payment stays", () => {
+  const listeners = {};
+  const Dispenser = require("../plugins/skills/AgilityDispenser.plugin");
+  Dispenser.register(new Proxy({
+    core: PluginManager.getCoreApi(),
+    onCustomEvent: (name, handler) => { listeners[name] = handler; },
+  }, { get: (target, key) => (key in target ? target[key] : () => {}) }));
+  const answers = ["agility:lap", "agility:obstacle-start"];
+  for (const name of answers) hooks.answers[name] = listeners[name];
+  try {
+    const course = COURSES.find((entry) => entry.key === "wilderness");
+    const player = createPlayer(3004, 3937, 0);
+    player.setAttribute(Dispenser.ATTRIBUTE("deposit"), 1);
+    const varbit = (name) => player.state.varbits.get(CacheDefinitions.getVarbitId(name));
+    runLap(course, player);
+    assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "a paid lap: streak 1");
+    assert.equal(varbit("wildy_agility_reward_available"), 1);
+    player.setLocation(new Location(3004, 3937, 0));
+    runLap(course, player);
+    assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "the untagged lap's pipe reset it, so this lap starts again at 1");
+    assert.equal(player.getAttribute(Dispenser.ATTRIBUTE("deposit")), 1, "the payment stays");
+    assert.equal(varbit("wildy_agility_token_available"), 1, "this lap's own ticket");
+  } finally {
+    for (const name of answers) delete hooks.answers[name];
+  }
+});
