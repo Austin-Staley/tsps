@@ -222,6 +222,12 @@ export interface PluginNpcHitModifyEvent {
   hit: any;
 }
 
+/** A hit about to land on a player; handlers may change `hit` (e.g. setTotalDamage) as for NPCs. */
+export interface PluginPlayerHitModifyEvent {
+  player: any;
+  hit: any;
+}
+
 /** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
 export interface PluginZone {
   minX: number;
@@ -947,6 +953,7 @@ export interface PluginApi {
   onNpcDeath(handler: (event: PluginNpcDeathEvent) => void): void;
   onNpcBeforeDeath(handler: (event: PluginNpcBeforeDeathEvent) => void): void;
   onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
+  onPlayerHitModify(handler: (event: PluginPlayerHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
   onCanLogout(handler: (event: PluginCanLogoutEvent) => void): void;

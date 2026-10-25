@@ -19,6 +19,10 @@ const HOST = "nzone_host";
 const LIST_MENU_SCRIPT = 217;
 const PAUSE_BUTTON = 1;
 
+/** Each dreamer's dream (Dream.NightmareZone makes and ends them; the other units read them). */
+const dreams = new Map();
+const dreamOf = (player) => dreams.get(player) ?? null;
+
 /** The list menu's pending pick per player (the boss list). */
 const listMenus = new WeakMap();
 
@@ -243,6 +247,8 @@ module.exports = {
   get data() {
     return data;
   },
+  dreams,
+  dreamOf,
   POINTS_ATTRIBUTE,
   COFFER_ATTRIBUTE,
   DREAM_ATTRIBUTE,

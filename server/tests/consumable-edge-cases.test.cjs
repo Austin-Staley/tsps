@@ -604,11 +604,8 @@ test("Moonlight mead and Slayer's respite match the Wiki", () => {
   assert.equal(matureRespite.levels.get(Skill.SLAYER), 103, "+4 Slayer");
 });
 
-test("Overload needs more than 50 Hitpoints and a Saradomin brew may over-heal", () => {
-  const overload = Potions._test.findPotionEntry(ItemIdentifiers.OVERLOAD_4_);
-  assert.equal(overload.potion.canUse(createPlayer({ base: 99, current: 50 })), false);
-  assert.equal(overload.potion.canUse(createPlayer({ base: 99, current: 51 })), true);
-
+// Nightmare Zone's overload (and its 51 Hitpoints) is tested in nightmare-zone.test.cjs.
+test("a Saradomin brew may over-heal", () => {
   const brewed = createPlayer({ base: 99, current: 50 });
   Potions._test.findPotionEntry(ItemIdentifiers.SARADOMIN_BREW_4_).potion.effect(brewed);
   assert.equal(brewed.levels.get(Skill.HITPOINTS), 50 + Math.floor(2 + 99 * 0.15), "the brew may heal over max");
