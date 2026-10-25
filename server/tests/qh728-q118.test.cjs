@@ -525,3 +525,72 @@ test('a full bag still receives all five swordfish through the reward path', () 
   const dropped = p.drops.filter(([id]) => id === core.ItemIdentifiers.SWORDFISH).reduce((sum, [, amount]) => sum + amount, 0);
   assert.equal(held + dropped, 5, 'all five swordfish are either held or dropped, never lost');
 });
+
+test('the real Doors-first dispatch keeps the KURT wall clipped until the combination is solved', () => {
+  core.RegionManager.init();
+  core.RegionManager.loadMapFiles(2634, 3323, false);
+  const anchor = new core.Location(2634, 3323, 0);
+  const door = core.MapObjects.get(2705, anchor, null);
+  assert.ok(door, 'the actual cache map contains the KURT door');
+  assert.deepEqual([door.getType(), door.getFace()], [0, 0]);
+  const crossing = () => core.RegionManager.canMove(2633, 3323, 2634, 3323, 0, 1, 1, null);
+  assert.equal(crossing(), false);
+  const h = harness();
+  const p = makePlayer();
+  p.setLocation(2635, 3323);
+  const saved = {
+    objectInteractionHooks: PluginManager.objectInteractionHooks,
+    objectHooksByName: PluginManager.objectHooksByName,
+    nextObjectHookOrder: PluginManager.nextObjectHookOrder,
+    customEventHooks: PluginManager.customEventHooks,
+  };
+  const placed = [];
+  PluginManager.objectInteractionHooks = [];
+  PluginManager.objectHooksByName = new Map();
+  PluginManager.nextObjectHookOrder = 0;
+  PluginManager.customEventHooks = new Map();
+  try {
+    const api = PluginManager.createApi('q118-doors-first');
+    const doorCore = { ...core,
+      ObjectManager: { ...core.ObjectManager,
+        deregister: (...args) => core.ObjectManager.deregister(...args),
+        register: (...args) => { placed.push(args[0]); return core.ObjectManager.register(...args); },
+      },
+      TaskManager: { cancelTasks: noop, submit: noop },
+      Sounds: { sendSound: noop },
+    };
+    delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
+    require('../plugins/objects/Doors.plugin').register({ ...api, core: doorCore,
+      onRegionLoaded: noop, onServerStartup: noop });
+    for (const [name, handlers] of Object.entries(h.events)) {
+      for (const handler of handlers) api.onCustomEvent(name, handler);
+    }
+    for (const handler of h.objectInteraction) api.onObjectInteraction(handler);
+    const click = () => {
+      const current = core.MapObjects.get(2705, anchor, null);
+      const event = objectEvent(p, 2705, 2634, 3323, 0, 'Open', current);
+      event.definition = current.getDefinition();
+      PluginManager.emitObjectInteraction(event);
+      return event;
+    };
+    assert.equal(click().handled, true);
+    assert.equal(p.getInterfaceId(), 369, 'the earlier generic Doors hook opens the actual lock interface');
+    assert.equal(placed.length, 0, 'an unsolved click does not replace the door');
+    assert.equal(crossing(), false, 'the real map wall stays locked');
+    const enter = () => h.buttons.forEach(handler => handler({ player: p, buttonId: 0x0171003b, handled: false }));
+    enter();
+    assert.equal(p.getAttribute('tribal-totem:kurt-door-unlocked'), undefined);
+    assert.equal(crossing(), false, 'a wrong code does not change collision');
+    [14807, 14808, 14809, 14810].forEach((id, index) => p.varbits.set(id, [11, 21, 18, 20][index]));
+    enter();
+    assert.equal(p.getAttribute('tribal-totem:kurt-door-unlocked'), true);
+    assert.equal(crossing(), false, 'solving authorizes the next ordinary Open');
+    assert.equal(click().handled, true);
+    assert.ok(placed.length > 0, 'the solved door yields to the real generic replacement');
+    assert.equal(crossing(), true, 'ordinary Doors opening now clears the wall');
+  } finally {
+    for (const object of placed) core.ObjectManager.deregister(object, true);
+    core.ObjectManager.register(new core.GameObject(2705, anchor, 0, 0, null), true);
+    Object.assign(PluginManager, saved);
+  }
+});
