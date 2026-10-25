@@ -18,6 +18,12 @@ whole, so tenths round up, as the old table did (bones 4.5 → 5, bat bones 5.3 
 The core's `ArceuusOfferings.BONE_XP` (Sinister Offering, Construction altars) is separate and
 unchanged.
 
+Burying sends "You dig a hole in the ground..." and "You bury the bones." for every bone, never the
+bone's name (rsprox captures, for example recordings 901, 3455 and 3461, revision 235; the
+transcripts hold no variant naming a bone). Live OSRS sends the dig message, the bone's removal, the experience
+and the sound on the click's tick and "You bury the bones." on the next; tsps still does all of it
+two ticks after the click, which lets walking away keep the bone.
+
 ### Sequential burial (opt-in)
 
 By default **Bury** buries one bone per click, as OSRS. A custom world can let one click continue

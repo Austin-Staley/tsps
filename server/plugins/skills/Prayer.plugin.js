@@ -18,6 +18,9 @@ const ASHES = require("./data/ashes.json");
 
 const BURY_DELAY_MS = 1200; // Two OSRS game ticks.
 const BURY_ANIMATION = 827; // human_pickupfloor
+// Every bone sends these two, whatever its name (rsprox captures, docs/prayer-bones.md).
+const DIG_MESSAGE = "You dig a hole in the ground...";
+const BURY_MESSAGE = "You bury the bones.";
 // Scattering as live OSRS sends it (rsprox captures, docs/prayer-bones.md): no spotanim.
 const SCATTER_ANIMATION = 2295; // farming_ingredient_sprinkle
 const SCATTER_SOUND = 2444; // farming_sprinkle
@@ -129,8 +132,8 @@ function resolveBurial(player, itemId, slot, bone) {
   const inventory = player.getInventory();
   if (inventory.get(slot)?.getId() !== itemId) return false;
   inventory.deleteAtSlot(slot, 1);
-  player.sendMessage("You dig a hole in the ground..");
-  player.sendMessage(`..and bury the ${api.core.ItemDefinition.forId(itemId).getName()}.`);
+  player.sendMessage(DIG_MESSAGE);
+  player.sendMessage(BURY_MESSAGE);
   award(player, itemId, bone, 1);
   return true;
 }

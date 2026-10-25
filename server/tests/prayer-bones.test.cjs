@@ -281,12 +281,20 @@ test("by default a Bury click buries only the clicked bone, as OSRS, and nothing
     assert.equal(who.xp.get(Skill.PRAYER), undefined);
     tickBurials(1);
     assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
+    assert.deepEqual(who.messages, ["You dig a hole in the ground...", "You bury the bones."]);
     tickBurials(4);
     assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
     assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
     assert.equal(burialTasks.some(task => task.isRunning()), false);
     assert.deepEqual(who.animations.map(animation => animation.id), [827, Animation.DEFAULT_RESET_ANIMATION.id]);
   }
+});
+
+test("every bone sends the same two burial messages, not its own name", () => {
+  const who = burialPlayer([Items.BIG_BONES]);
+  clickBury(who);
+  tickBurials(2);
+  assert.deepEqual(who.messages, ["You dig a hole in the ground...", "You bury the bones."]);
 });
 
 test("by default walking away before the bone resolves keeps it, with the animation reset", () => {
