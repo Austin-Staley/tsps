@@ -36,14 +36,16 @@ function harness({ diaryComplete = false } = {}) {
     onObjectInteraction: (name, actions) => { hooks[name] = actions; },
     onPlayerLogin: (handler) => { hooks.login = handler; },
     onCustomEvent: (name, handler) => { hooks[name] = handler; },
+    diaryTasks: [],
     emitCustomEvent: (name, request) => {
+      if (name === "diary:task") api.diaryTasks.push([request.player, request.diary, request.task]);
       if (name === "diary:is-complete" && request.diary === "wilderness" && request.tier === "easy") {
         request.complete = diaryComplete;
       }
     },
   };
   Levers.register(api);
-  return { hooks, tasks, persisted };
+  return { hooks, tasks, persisted, diaryTasks: api.diaryTasks };
 }
 
 function player(varbits = {}) {
@@ -180,6 +182,28 @@ test("the easy Wilderness Diary gives the Keep lever its Ardougne and Edgeville 
   runTicks(out, who, 8);
   assert.deepEqual(who.log.find((entry) => entry[1] === "tele").slice(2), [3090, 3475]);
   assert.equal(who.log.filter((entry) => entry[1] === "msg").at(-1)[2], "... and teleport out of the Wilderness.");
+});
+
+test("the East Ardougne lever warns, lands beside the Keep lever and completes the easy Ardougne Diary task", () => {
+  const h = harness({ diaryComplete: true });
+  const who = player();
+  who.setLocation(new core.Location(2561, 3310, 0));
+  use(h, who, "wildinlever", "Pull", 2561, 3311);
+  const [statement, options] = [...who.dialogue.getDialogues().values()];
+  assert.equal(statement.getText(), "<col=7f0000>Warning!</col> The lever will teleport you deep into the <col=7f0000>Wilderness</col>.");
+  assert.equal(options.getOptions().length, 3);
+  options.execute(2);
+  runTicks(h, who, 8);
+  assert.equal(who.log.find((entry) => entry[1] === "tele"), undefined, "Eeep! stays put");
+  assert.deepEqual(h.diaryTasks, []);
+
+  options.execute(1);
+  runTicks(h, who, 8);
+  assert.deepEqual(who.log.find((entry) => entry[1] === "tele"), [6, "tele", 3154, 3924]);
+  assert.deepEqual(who.log.filter((entry) => entry[1] === "msg").map((entry) => entry[2]),
+    ["You pull the lever...", "... and teleport into the Wilderness."]);
+  assert.deepEqual(h.diaryTasks, [[who, "ardougne", "use-the-ardougne-lever-to-teleport-to-the-wilder"]]);
+  assert.equal(who.sent.get(varbit("wildoutlever_vis")), 1, "the Keep lever shows its diary options");
 });
 
 test("other levers fall through", () => {

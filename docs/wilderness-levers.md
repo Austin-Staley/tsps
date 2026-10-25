@@ -6,6 +6,7 @@ Wilderness, by loc gameval:
 | Lever | Option | Lands on | Line on landing |
 | --- | --- | --- | --- |
 | `edgeville_wildy_lever` (Edgeville, 3090,3475) | Pull | 3154,3924 (Deserted Keep) | `... and teleport into the Wilderness.` |
+| `wildinlever` (East Ardougne, 2561,3311) | Pull | 3154,3924 (inferred, see below) | `... and teleport into the Wilderness.` |
 | `wildoutlever` (Deserted Keep, 3153,3923) | Pull / Ardougne | 2562,3311 (East Ardougne) | `... and teleport out of the Wilderness.` |
 | `wildoutlever` | Edgeville | 3090,3475 | `... and teleport out of the Wilderness.` |
 | `magearena_lever_to_cellar` (3090,3956) | Pull | 2539,4712 | `... and teleport into the mage's cave.` |
@@ -49,9 +50,17 @@ thank you." and "Yes, and don't show this warning again." under "Are you sure yo
 it?". The third sets varbit `wilderness_lever_blockwarning_standard` and is remembered
 (`levers:skip-wilderness-warning`); in recording 4155 the lever is pulled with no warning at all.
 
+## The East Ardougne lever
+
+No recording holds a pull of `wildinlever`. The Wiki
+([Lever (Ardougne)](https://oldschool.runescape.wiki/w/Lever_(Ardougne))) says it lands by the
+Keep's lever and gives "You pull the lever..." and "... and teleport into the Wilderness.", so it
+uses the Edgeville lever's captured landing tile (3154,3924), sequence and warning. The tile and
+the warning are inferred, not captured. Landing completes the easy Ardougne Diary task "Use the
+Ardougne Lever to teleport to the Wilderness." and, as from Edgeville, sets the Keep lever's look.
+
 ## Not covered
 
-- The East Ardougne lever (`wildinlever`): no recording shows where it lands.
 - The Keep lever's Edgeville tile: no recording shows it; it keeps the tile this server used before.
 - Swap-options (no recording of what it sends), the lever's down state (`magearena_lever_down`
   appears a tick after the pull, but no recording shows it turning back), the High Risk world

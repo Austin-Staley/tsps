@@ -1,7 +1,7 @@
 /**
- * The Wilderness teleport levers (docs/wilderness-levers.md): Edgeville's lever into the Deserted
- * Keep, the Keep's lever out (East Ardougne, or Edgeville after the easy Wilderness Diary), and the
- * Mage Arena bank's pair. As rsprox captures show them: the player pulls (macro_lever_switch_down)
+ * The Wilderness teleport levers (docs/wilderness-levers.md): the Edgeville and East Ardougne
+ * levers into the Deserted Keep, the Keep's lever out (East Ardougne, or Edgeville after the easy
+ * Wilderness Diary), and the Mage Arena bank's pair. As rsprox captures show them: the player pulls (macro_lever_switch_down)
  * with "You pull the lever...", the lever clicks a tick later, the standard teleport is cast a tick
  * after that, and the player lands three ticks later with the lever's own line.
  *
@@ -10,7 +10,7 @@
  */
 const ObstacleRunner = require("../skills/agility/ObstacleRunner.Agility");
 
-// "Yes, and don't show this warning again." on the Edgeville lever's warning.
+// "Yes, and don't show this warning again." on the levers' warning.
 const SKIP_WARNING_ATTRIBUTE = "levers:skip-wilderness-warning";
 
 const PULL_MESSAGE = "You pull the lever...";
@@ -26,9 +26,12 @@ const WARNING_OPTIONS = [
 const INTO_WILDERNESS = "... and teleport into the Wilderness.";
 const OUT_OF_WILDERNESS = "... and teleport out of the Wilderness.";
 
-// Landing tiles from the captures, except the Keep lever's Edgeville option, which no recording
-// shows (the tile is the one this server always used, the Edgeville lever's).
+// Landing tiles from the captures, except two no recording shows: the Keep lever's Edgeville
+// option (the tile this server always used, the Edgeville lever's) and the East Ardougne lever,
+// which the Wiki only says lands by the Keep lever (the tile the Edgeville lever lands on).
 const DESERTED_KEEP = [3154, 3924];
+// The easy Ardougne Diary's "Use the Ardougne Lever to teleport to the Wilderness."
+const ARDOUGNE_LEVER_TASK = { diary: "ardougne", task: "use-the-ardougne-lever-to-teleport-to-the-wilder" };
 const EAST_ARDOUGNE = [2562, 3311];
 const EDGEVILLE = [3090, 3475];
 
@@ -37,6 +40,11 @@ const LEVERS = Object.freeze({
   edgeville_wildy_lever: {
     warn: true,
     Pull: { to: DESERTED_KEEP, landed: INTO_WILDERNESS, intoKeep: true },
+  },
+  // Wiki, Lever (Ardougne). Its warning is assumed to be the Edgeville lever's.
+  wildinlever: {
+    warn: true,
+    Pull: { to: DESERTED_KEEP, landed: INTO_WILDERNESS, intoKeep: true, diaryTask: ARDOUGNE_LEVER_TASK },
   },
   // The Keep's multiloc: "Pull" until the easy Wilderness Diary, then "Ardougne" and "Edgeville".
   wildoutlever: {
@@ -113,14 +121,19 @@ function hasEasyWildernessDiary(player) {
  * Edgeville with it (wildoutlever_vis 1 on landing in recording 1444; 4155's player, who had put
  * Edgeville first, got 2).
  */
-function landedInKeep({ player }) {
+function landedInKeep(player) {
   if (hasEasyWildernessDiary(player)) player.getPacketSender().sendVarbit(ids.keepLever, 1);
+}
+
+function landed(player, destination) {
+  if (destination.intoKeep) landedInKeep(player);
+  if (destination.diaryTask) api.emitCustomEvent("diary:task", { player, ...destination.diaryTask });
 }
 
 function pull(player, object, destination) {
   const to = new core.Location(destination.to[0], destination.to[1], 0);
   if (!core.TeleportHandler.checkReqs(player, to, Infinity)) return;
-  ObstacleRunner.run({ player, object }, pullSteps(destination, destination.intoKeep ? landedInKeep : () => {}));
+  ObstacleRunner.run({ player, object }, pullSteps(destination, () => landed(player, destination)));
 }
 
 function skipsWarning(player) {
