@@ -2,7 +2,7 @@
 
 **Opening a PR is not completing a quest.** This split contains 103 quest PRs and
 five shared-code, regression and documentation PRs. All 108 are draft. The accepted
-natural main-route count at this checkpoint is **23/106 active quests (21.70%)**;
+natural main-route count at this checkpoint is **24/106 active quests (22.64%)**;
 22 long quests remain deferred. No full branch, recovery or Java overlay parity is implied.
 
 The split supersedes [PR753](https://github.com/RSPSApp/tsps/pull/753). Existing
@@ -42,8 +42,7 @@ paths are assigned exactly once, and reassembling the split commits matches the 
 aggregate tree. Generated dialogue/index blobs were preserved, never hand edited.
 
 Verification was paused with all actors offline. Horror from the Deep is preserved at
-stage 1 on its existing account; Murder Mystery is completed/offline with its acceptance
-packet awaiting independent review. Completed q090/q084 routes remain recorded.
+stage 1 on its existing account; Murder Mystery is completed/offline with its Anna-route evidence independently accepted. Completed q090/q084 routes remain recorded.
 
 After this split, put further quest fixes in that quest's PR and shared fixes in their
 own support PR. Preserve newer main changes when moving a fix from the integration
@@ -115,7 +114,7 @@ percentages from PR counts or source-only tests.
 | [#1143](https://github.com/RSPSApp/tsps/pull/1143) | Monkey Madness II | Deferred quest; existing committed work preserved |
 | [#1144](https://github.com/RSPSApp/tsps/pull/1144) | Monk's Friend | Scoped main-route evidence recorded; full parity pending |
 | [#1145](https://github.com/RSPSApp/tsps/pull/1145) | Mourning's End Part I | Deferred quest; existing committed work preserved |
-| [#1146](https://github.com/RSPSApp/tsps/pull/1146) | Murder Mystery | Completion packet awaits independent acceptance |
+| [#1146](https://github.com/RSPSApp/tsps/pull/1146) | Murder Mystery | Scoped Anna main-route evidence recorded; full parity pending |
 | [#1147](https://github.com/RSPSApp/tsps/pull/1147) | Nature Spirit | Pending natural verification |
 | [#1148](https://github.com/RSPSApp/tsps/pull/1148) | Observatory Quest | Scoped main-route evidence recorded; full parity pending |
 | [#1149](https://github.com/RSPSApp/tsps/pull/1149) | Olaf's Quest | Scoped main-route evidence recorded; full parity pending |

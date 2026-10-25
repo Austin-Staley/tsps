@@ -6,13 +6,19 @@ Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinn
 
 ## Active 106: accepted natural main-route proofs
 
-Twenty-three quests have accepted scoped main-route completion evidence: **23 / 106 active quests (21.70%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q084, q085, q088, q090, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
+Twenty-four quests have accepted scoped main-route completion evidence: **24 / 106 active quests (22.64%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
-long or complex quests; all 23 accepted routes are within the retained 106. Against
-the original inventory the count is 23/128 (17.97%). Deferral changes scope,
+long or complex quests; all 24 accepted routes are within the retained 106. Against
+the original inventory the count is 24/128 (18.75%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
+
+### q080 — Murder Mystery
+
+- **Revision:** epoch26 loaded Murder Mystery `179c694105102cf1c5419aeb58f063e96a01ec1dfd84067f8fe8ca30054eda25`; shared Doors `ba9e184e70d53a9e3dee94207f5b5ba0e1bc659fbfeeb4967866573762dc51e3`. Quest test `65498e1ed61f4af8b3cef67cbc20c7547b157f4344063b8e7bca07eaf243b474`; root combined door/QOT checks 71/71. The split's door fixture was subsequently reconciled with main; that does not replace this captured runtime hash.
+- **Route and rewards:** fresh stage0 prefix from epoch24, preserved stage1 clues through epoch25, resumed without reset under epoch26. Normal opening of both mansion leaves allowed Anna's alibi dialogue. Investigating the actual compost heap proved her contradiction; the Guard accepted thread, poison and fingerprint evidence. Stage192=2; QP3, Crafting +1,406 XP and coins +2,000; evidence consumed.
+- **Persistence and scope:** Guard repeat dialogue gave no further reward; normal relog retained stage/rewards and final logout confirmed offline. Root independently checked raw SHA `4a6d64091077f48e50b2edb77cb1efbe8a291318ae1cfeffa6a4361bbc98b591` and SQLite completion/logout rows2015–2017. Ordinary prebaseline skills/coins/food only, no quest item or state injection. This accepts the Anna main route, not alternate suspects, recovery or overlay parity. Sanitized artifact `/tmp/tsps-728/native/evidence/q080-root-accepted-20261025.json`; worker packet `/tmp/tsps-728/q080-epoch26-acceptance.md`.
 
 ### q084 — Observatory Quest
 

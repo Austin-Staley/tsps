@@ -36,11 +36,11 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **23/106 active scoped main routes (21.70%)**. The count
-is 23/128 against the original inventory; the increase in percentage comes only
+of accepted route counts: **24/106 active scoped main routes (22.64%)**. The count
+is 24/128 against the original inventory; the increase in percentage comes only
 from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Lost City, Tree Gnome Village, Hazeel Cult, Elemental Workshop I, Observatory Quest and Queen of Thieves routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
-completion. The draft PR is updated in reviewed batches; historical figures below remain
+completion. The [independent draft PRs](quest-helper-728-prs.md) are updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
 
 Reviewed publications after the scope reduction include the scoped Secrets of the
@@ -71,10 +71,9 @@ with no additional accepted natural-route count.
 Tree Gnome Village and the Hazeel Cult Hazeel-side route now have accepted
 reward/repeat/relog/offline evidence. Alomone and Jones's post-Hazeel availability fix is separately natively verified; this
 does not add an alternate-branch/recovery claim.
-Lost City, Observatory Quest and Queen of Thieves are now accepted within their scoped
+Lost City, Observatory Quest, Queen of Thieves and Murder Mystery are now accepted within their scoped
 main-route evidence. Queen of Thieves includes a completed-account epoch26 reward-flag
-replay check. Murder Mystery (q080) remains assigned to the routes worker at its saved
-checkpoint under epoch26. All raw evidence and prior checkpoints are retained.
+replay check. Murder Mystery completed its Anna route under epoch26 after the shared door fix, with independently checked reward/repeat/relog/offline evidence. All raw evidence and prior checkpoints are retained.
 
 ## Historical cumulative status checkpoint — 2026-10-22
 
@@ -322,7 +321,7 @@ deferred quest. No deferred quest is counted as complete.
 | Merlin's Crystal | `MerlinsCrystal` | Pending | Pending | Pending |
 | Monk's Friend | `MonksFriend` | Rune timing, deferred reward settlement and named Monk variants corrected and reviewed | 11 focused tests pass, including real final transcript | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
 | Mountain Daughter | `MountainDaughter` | Pending | Pending | Pending |
-| Murder Mystery | `MurderMystery` | Shared guard and Salesman ownership, actual culprit alibi, native suspect replay, receipts and evidence hand-in reviewed/published | 9 focused checks pass; shared guard regression fails against old published King's Ransom and passes with its minimal prerequisite fix | Stage1 clues gathered; front Large door pair does not open from tested sides; Anna and poison contradiction, completion/rewards/relog remain pending |
+| Murder Mystery | `MurderMystery` | Shared guard and Salesman ownership, actual culprit alibi, native suspect replay, receipts and evidence hand-in reviewed/published | 9 focused checks pass; shared guard regression fails against old published King's Ransom and passes with its minimal prerequisite fix | Accepted Anna main route: normal front doors, alibi/untouched heap, Guard hand-in, exact rewards, repeat/relog/offline; alternate suspects/recovery remain unverified |
 | My Arm's Big Adventure | `MyArmsBigAdventure` | Pending | Pending | Pending |
 | Nature Spirit | `NatureSpirit` | Pending | Pending | Pending |
 | Observatory Quest | `ObservatoryQuest` | Earned gate/mould/view helper state and assistant-name condition reviewed; full-bag mould retry, consumed-key reopening and actual destruction/death refresh repaired | 12 focused checks pass | Accepted scoped natural stage0→7 route, QP+2, Crafting+2250, observed Taurus reward/repeat/relog/offline; optional Assistant wine, duplicate guard cleanup, other branches, recovery and overlay unverified ([ledger](quest-helper-728-verification.md)) |
