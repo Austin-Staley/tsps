@@ -23,7 +23,7 @@ In the first run, 234 weapons got a type they didn't have and 112 had theirs cor
 - Arclight is a slash sword, not a two-handed sword;
 - the Elder maul's type was in the cache's "egg" category (32); it's blunt (2).
 
-New types for categories tsps had none for: `BLADED_STAFF`, `BULWARK`, `GUN`, `MULTI_MELEE` (Infernal tecpatl) and `SLASH_FLAIL` (Hallowed flail). `yarn dump:item-combat-styles` filled their styles from the cache.
+New types for categories tsps had none for: `BLADED_STAFF`, `BULWARK`, `GUN`, `MULTI_MELEE` (Infernal tecpatl), `SLASH_FLAIL` (Hallowed flail) and `EXTENDING_CHAINMACE` (Obligator, from the Wiki's "Extending Chain Mace"). `yarn dump:item-combat-styles` filled their styles from the cache.
 
 **Left without a type** (listed in the test):
 - **Nature's reprisal** ("Multi-style"): its attacks change combat method with the chosen style, which the combat engine can't do yet.
