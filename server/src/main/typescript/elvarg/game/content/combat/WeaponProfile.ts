@@ -37,6 +37,8 @@ export interface WeaponCombatProfile {
     fireSound?: Sound;
     ammoRequired?: number;
     boltEffects?: boolean;
+    /** Scales the enchanted bolt effects' chance (the Ascension crossbows halve it). */
+    boltEffectChanceMultiplier?: number;
     rangedDefenceType?: "light" | "standard" | "heavy";
 }
 
@@ -346,6 +348,8 @@ export class WeaponProfiles {
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_CROSSBOW,
             boltEffects: true,
+            // Wiki (Ascension crossbows): the chance to trigger enchanted bolt effects is reduced by 50%.
+            boltEffectChanceMultiplier: 0.5,
         });
         // Machetes, sickles and canes share the slash-sword/mace interfaces but swing one tick slower.
         this.register({

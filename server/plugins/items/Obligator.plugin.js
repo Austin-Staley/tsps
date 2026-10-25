@@ -4,7 +4,7 @@
  *
  * Passive (Thrust, charged): two damage rolls a swing, and a third when the target's stab or slash
  * defence beats its crush defence; the best roll lands. Against a 2x2 target it deals 20% more, against
- * a 3x3 or larger one 40% more. Each roll is a full hit roll, accuracy then damage (an estimate: the
+ * a 3x3 or larger one 40% more (before the hitpoints cap). Each roll is a full hit roll, accuracy then damage (an estimate: the
  * Wiki says "damage rolls"). The Wiki does not say how many or which targets the Thrust also reaches, so
  * it only ever strikes the target.
  *
@@ -111,20 +111,19 @@ function createMethod() {
       if (isSmash(player) || charges(item) <= 0) {
         return super.hits(character, target);
       }
-      let best = null;
-      for (let roll = rollCount(target); roll > 0; roll--) {
-        const hit = new PendingHit(character, target, this);
-        if (!best || hit.getTotalDamage() > best.getTotalDamage()) best = hit;
-      }
-      best.setTotalDamage(Math.floor(best.getTotalDamage() * sizeMultiplier(target)));
+      const hit = new PendingHit(character, target, this, { bestOf: rollCount(target), damageMultiplier: sizeMultiplier(target) });
       this.useCharge(player, item);
-      return [best];
+      return [hit];
     }
 
     useCharge(player, item) {
       const left = charges(item) - 1;
-      setCharges(player, item, left);
-      if (left <= 0) player.sendMessage("Your Obligator has run out of charges.");
+      if (left > 0) {
+        item.setMetaValue(CHARGES_META_KEY, left);
+        return;
+      }
+      setCharges(player, item, 0);
+      player.sendMessage("Your Obligator has run out of charges.");
     }
   })();
 }

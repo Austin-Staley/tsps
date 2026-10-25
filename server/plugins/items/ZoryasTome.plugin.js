@@ -231,6 +231,12 @@ function chargeTome(event) {
   player.sendMessage(`You apply ${affordable.toLocaleString()} charge${affordable === 1 ? "" : "s"} to your Zorya's tome.`);
 }
 
+/** The cache's "Charge" option: like Sanguinesti's, the runes are used on the tome. */
+function chargeOption({ player }) {
+  player.sendMessage(`Use ${ASTRAL_PER_CHARGE} astral runes and ${NATURE_PER_CHARGE} nature runes a charge on the tome to charge it.`);
+  return true;
+}
+
 function checkCharges({ player, item }) {
   player.sendMessage(`Your Zorya's tome has ${chargesOf(item).toLocaleString("en-US")} charges left.`);
   return true;
@@ -275,7 +281,8 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
-    api.onItemAction("Zorya's tome", { Check: checkCharges, Uncharge: uncharge });
+    api.onItemAction("Zorya's tome", { Check: checkCharges, Charge: chargeOption, Uncharge: uncharge });
+    api.onItemAction("Zorya's tome (uncharged)", { Charge: chargeOption });
     api.onItemOnItem(chargeTome, { noted: false });
     api.onCombatHitResolved(onHitResolved);
     api.onCustomEvent("combat:magic-max-hit", onMaxHit);

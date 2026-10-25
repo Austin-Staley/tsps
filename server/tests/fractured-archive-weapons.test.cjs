@@ -21,11 +21,10 @@ class MeleeCombatMethod {
     hits() { return ['plain']; }
     attackSpeed() { return 5; }
 }
-let damages = [];
+const pendingHits = [];
 class PendingHit {
-    constructor() { this.damage = damages.shift() ?? 0; }
-    getTotalDamage() { return this.damage; }
-    setTotalDamage(value) { this.damage = value; }
+    constructor(attacker, target, method, config) { this.config = config; pendingHits.push(this); }
+    getTotalDamage() { return 0; }
 }
 class Animation { constructor(id) { this.id = id; } }
 let resolvers = [];
@@ -127,19 +126,24 @@ test('thrust rolls twice, three times when stab or slash beat crush; sizes add 2
     assert.deepEqual([1, 2, 3, 5].map((s) => Obligator._test.sizeMultiplier(npc(s))), [1, 1.2, 1.4, 1.4]);
 });
 
-test('a charged thrust lands its best roll, scaled by size, and spends a charge; smash is plain, 3 ticks', () => {
+test('a charged thrust is one PendingHit that rolls best-of-N with the size bonus (so hooks and the HP cap run once), and spends a charge', () => {
     const thrust = WeaponInterfaces.EXTENDING_CHAINMACE.getFightType()[0];
     const smash = WeaponInterfaces.EXTENDING_CHAINMACE.getFightType()[2];
     const mace = weapon(ItemIdentifiers.OBLIGATOR, { [Obligator._test.CHARGES_META_KEY]: 2 });
     const user = player(mace, { fightType: thrust });
     const method = obligatorResolver.resolve(user);
-    damages = [10, 30];
-    const [hit] = method.hits(user, npc(3, [0, 0, 0]));
-    assert.equal(hit.getTotalDamage(), 42, 'best of two rolls, +40% on a 3x3');
+    pendingHits.length = 0;
+    const hits = method.hits(user, npc(3, [0, 5, 0])); // slash beats crush: three rolls
+    assert.equal(pendingHits.length, 1, 'one hit goes through the pipeline, however many rolls');
+    assert.deepEqual(hits, pendingHits);
+    assert.deepEqual(pendingHits[0].config, { bestOf: 3, damageMultiplier: 1.4 }, 'the multiplier is applied inside the hit, before the cap');
     assert.equal(Obligator._test.charges(mace), 1);
     assert.equal(method.attackSpeed(user), 5);
+    const flags = [];
+    user.getUpdateFlag = () => ({ flag: () => flags.push('appearance') });
     method.hits(user, npc(1));
     assert.equal(mace.getId(), ItemIdentifiers.OBLIGATOR_UNCHARGED_, 'the last charge makes it uncharged');
+    assert.equal(flags.length, 1, 'only the 1 to 0 swap refreshes the appearance');
     assert.deepEqual(method.hits(user, npc(1)), ['plain'], 'uncharged: no passive');
 
     const smashing = player(weapon(ItemIdentifiers.OBLIGATOR, { [Obligator._test.CHARGES_META_KEY]: 5 }), { fightType: smash });
@@ -162,4 +166,42 @@ test('charging takes a shard, 20 nature and 20 death runes per 10 charges; uncha
     assert.equal(mace.getId(), ItemIdentifiers.OBLIGATOR_UNCHARGED_);
     assert.deepEqual([user.stacks[ASCENSION_SHARDS], user.stacks[NATURE_RUNE], user.stacks[DEATH_RUNE]], [3, 100, 50]);
     assert.ok(registered.Obligator.Check && registered.Obligator.Uncharge && registered['Obligator (uncharged)'].Charge);
+});
+
+test('a real PendingHit keeps the best of N rolls, scales it before the hitpoints cap, and fires the hooks once', () => {
+    const { PendingHit: RealHit } = require('../dist/game/content/combat/hit/PendingHit');
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const { CombatSpecial } = require('../dist/game/content/combat/CombatSpecial');
+    const { HitDamage } = require('../dist/game/content/combat/hit/HitDamage');
+    const { HitMask } = require('../dist/game/content/combat/hit/HitMask');
+    const { PluginManager } = require('../dist/plugins/PluginManager');
+    const realGetHitDamage = CombatFactory.getHitDamage;
+    const realTraits = CombatSpecial.activeTraitsFor;
+    const realRoll = PluginManager.emitCombatHitRoll;
+    const realDamage = PluginManager.emitCombatHitDamage;
+    const realTraitsRoll = RealHit.prototype.rollSpecialTraits;
+    RealHit.prototype.rollSpecialTraits = () => ({ accurate: true });
+    const rolls = [10, 30, 20];
+    let hooks = 0;
+    CombatFactory.getHitDamage = () => new HitDamage(rolls.shift(), HitMask.RED);
+    CombatSpecial.activeTraitsFor = () => null;
+    PluginManager.emitCombatHitRoll = () => { hooks++; };
+    PluginManager.emitCombatHitDamage = () => { hooks++; };
+    const attacker = { isPlayer: () => true, isNpc: () => false, getAsPlayer: () => attacker };
+    const target = (hp) => ({ isPlayer: () => false, isNpc: () => true, getHitpoints: () => hp });
+    const method = { type: () => 0 };
+    try {
+        const kept = new RealHit(attacker, target(1000), method, { bestOf: 3, damageMultiplier: 1.4 });
+        assert.equal(kept.getTotalDamage(), 42, 'best roll 30 x 1.4');
+        assert.equal(hooks, 2, 'one roll hook and one damage hook, not three of each');
+        rolls.push(30);
+        const capped = new RealHit(attacker, target(35), method, { damageMultiplier: 1.4 });
+        assert.equal(capped.getTotalDamage(), 35, 'the bonus cannot overkill the target');
+    } finally {
+        Object.assign(CombatFactory, { getHitDamage: realGetHitDamage });
+        CombatSpecial.activeTraitsFor = realTraits;
+        PluginManager.emitCombatHitRoll = realRoll;
+        PluginManager.emitCombatHitDamage = realDamage;
+        RealHit.prototype.rollSpecialTraits = realTraitsRoll;
+    }
 });
