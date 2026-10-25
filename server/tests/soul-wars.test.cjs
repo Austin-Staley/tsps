@@ -82,8 +82,8 @@ function container(capacity = 28) {
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
     getValidItems: () => slots.filter((s) => s.amount > 0).map((s) => ({ getId: () => s.id, getAmount: () => s.amount })),
-    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount } : null)),
-    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount() }; },
+    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount, getMeta: () => s.meta ?? null } : null)),
+    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null }; },
     refreshItems() {}, full() {},
   };
 }
@@ -796,4 +796,16 @@ test('other rewards: Buy 1 of a blighted sack gives its batch; the Soul cape wan
   button('confirm_other')({ player: p, slot: 0 });
   assert.equal(zealTokens(p), 2990, 'Prayer 60 refused');
   assert.equal(p.inventory.getAmount(25346), 0);
+});
+
+test('an imbue keeps what the item carries: a charged ring of suffering keeps its charges', () => {
+  const p = fakePlayer();
+  const imbued = core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueItem);
+  const slot = [...imbued.keys()].find((index) => core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueBase).get(imbued.get(index)) === 20655);
+  assert.ok(slot != null, 'the cache imbues a ring of suffering (r)');
+  p.inventory.slots.push({ id: 20655, amount: 1, meta: { 'ring-of-suffering': 100000, preset: true } });
+  Common.addVarp(p, 'zeal_tokens', 1000);
+  Rewards.imbue({ player: p, slot });
+  assert.equal(p.inventory.slots[0].id, imbued.get(slot));
+  assert.deepEqual(p.inventory.slots[0].meta, { 'ring-of-suffering': 100000, preset: true });
 });

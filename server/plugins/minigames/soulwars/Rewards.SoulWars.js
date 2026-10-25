@@ -143,11 +143,14 @@ function imbue({ player, slot }) {
   const base = imbued == null ? null : enumOf("imbueBase").get(imbued);
   if (base == null || cost == null) return true;
   const inventory = player.getInventory();
-  const at = inventory.getItems().findIndex((item) => item?.getId?.() === base);
+  const items = inventory.getItems();
+  const at = items.findIndex((item) => item?.getId?.() === base);
   if (at < 0) return refuse(player, message("noItem"));
   if (tokens(player) < cost) return clientRefused();
   Common.addVarp(player, "zeal_tokens", -cost);
-  inventory.setItem(at, new Common.core.Item(imbued, 1));
+  // The item keeps what it carries (a ring of suffering's charges, a preset's restriction).
+  const meta = items[at].getMeta?.();
+  inventory.setItem(at, new Common.core.Item(imbued, 1, meta ? { ...meta } : null));
   inventory.refreshItems?.();
   player.sendMessage(message("imbued", { name: Common.core.CacheDefinitions.getItem(base)?.name ?? "item" }));
   synth(player, "imbued");
