@@ -132,6 +132,60 @@ function walkable(x, y, z) {
   return !core.RegionManager.blocked(tile, null) && !core.MapObjects.getType(tile, 10, null);
 }
 
+/** An event's npc: no respawn, no wandering. */
+function spawnNpc(id, location, graphic = -1) {
+  const { NPC, World } = core;
+  const npc = NPC.create(id, location.clone());
+  npc.__skipDefaultRespawn = true;
+  npc.getMovementCoordinator?.().setRadius?.(0);
+  World.getAddNPCQueue().push(npc);
+  if (graphic >= 0) npc.performGraphic?.(new core.Graphic(graphic));
+  return npc;
+}
+
+function removeNpc(npc) {
+  if (npc) core.World.getRemoveNPCQueue().push(npc);
+}
+
+function animate(entity, seq, delay = 0) {
+  entity.performAnimation(new core.Animation(seq, delay));
+}
+
+/** Free tiles within `range` of `location` (outside a `size` footprint there), shuffled. */
+function freeTiles(location, range, size = 1) {
+  const [x0, y0, z] = [location.getX(), location.getY(), location.getZ()];
+  const tiles = [];
+  for (let x = x0 - range; x < x0 + size + range; x++) {
+    for (let y = y0 - range; y < y0 + size + range; y++) {
+      const inside = x >= x0 && x < x0 + size && y >= y0 && y < y0 + size;
+      if (!inside && walkable(x, y, z)) tiles.push(new core.Location(x, y, z));
+    }
+  }
+  for (let i = tiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+  }
+  return tiles;
+}
+
+/**
+ * A chatbox conversation: lines of ["npc", text] / ["player", text], with `npcId`'s head, then
+ * `onEnd` once the last is continued.
+ */
+function chat(player, npcId, lines, onEnd = null) {
+  const { ActionDialogue, DialogueChainBuilder, EndDialogue, NpcDialogue, PlayerDialogue } = core;
+  const builder = new DialogueChainBuilder();
+  let index = 0;
+  for (const [who, text] of lines) builder.add(who === "npc" ? new NpcDialogue(index++, npcId, text) : new PlayerDialogue(index++, text));
+  builder.add(onEnd ? new ActionDialogue(index, { execute: onEnd }) : new EndDialogue(index));
+  player.getDialogueManager().startDialogues(builder);
+}
+
+/** A two-option chatbox menu. */
+function menu(player, first, second) {
+  api.sendMultiChatboxPrompt(player, "Select an option", first[0], first[1], second[0], second[1]);
+}
+
 const ORDINALS = ["first", "second", "third"];
 
 module.exports = {
@@ -164,5 +218,11 @@ module.exports = {
   placeLoc,
   removeLoc,
   walkable,
+  spawnNpc,
+  removeNpc,
+  animate,
+  freeTiles,
+  chat,
+  menu,
   ORDINALS,
 };
