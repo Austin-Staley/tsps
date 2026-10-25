@@ -404,6 +404,8 @@ function openConvertDialog(event) {
   player.setEnteredAmountAction({
     acceptsZero: true, // Cancel
     execute: (amount) => {
+      // A stale action (the pouch was left without answering) must not turn a later amount entry into a conversion.
+      if (player.getInterfaceId?.() !== BOND_MANAGEMENT_INTERFACE) return;
       player.getPacketSender().closeInterface(BOND_CONVERT_INTERFACE);
       if (amount > 0) convertPouchBonds(player, amount);
     },
