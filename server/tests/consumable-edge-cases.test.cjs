@@ -12,7 +12,7 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const Potions = require("../plugins/items/Potions.plugin");
 const { Item } = require("../dist/game/model/Item");
 const { PluginManager } = require("../dist/plugins/PluginManager");
-let combinePotions, emptyVessel, staminaFromHook, core;
+let combinePotions, emptyVessel, staminaFromHook, drinkPotion, core;
 before(async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -21,6 +21,7 @@ before(async () => {
   Potions.register(new Proxy({}, {
     get: (_, key) => key === "core" ? core : (...args) => {
       if (key === "onItemAction") emptyVessel = args[0];
+      if (key === "onItemFirstAction") drinkPotion = args[0];
       if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
       // The Skillcapes plugin answers this; a worn Prayer cape is all these tests need.
       if (key === "emitCustomEvent" && args[0] === "skillcape:has-perk" && args[1].skill === "PRAYER") {
@@ -556,6 +557,34 @@ test("the Drunken Dwarf's beer is drinkable and leaves a beer glass", () => {
   entry.potion.effect(player);
   assert.equal(player.levels.get(Skill.STRENGTH), 101, "the boost does not stack");
   assert.equal(player.levels.get(Skill.ATTACK), 43, "the drain uses the current level");
+});
+
+test("drinking beer sends its captured feedback instead of potion completion text", t => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = new Player(null);
+  const messages = [];
+  const sender = new Proxy({}, { get: () => () => sender });
+  t.mock.method(player, "getPacketSender", () => sender);
+  t.mock.method(player, "sendMessage", message => messages.push(message));
+  const beer = core.CacheDefinitions.getObjId("beer");
+  const glass = core.CacheDefinitions.getObjId("beer_glass");
+  assert.equal(beer, ItemIdentifiers.BEER);
+  assert.equal(glass, ItemIdentifiers.BEER_GLASS);
+  assert.equal(core.CacheDefinitions.getItem(beer).inventoryActions[0], "Drink");
+  player.getInventory().setItem(0, new Item(beer, 1));
+
+  assert.equal(drinkPotion({ player, itemId: beer, slot: 0 }), true);
+  assert.equal(player.getInventory().getItems()[0].getId(), glass);
+  assert.deepEqual(messages, [
+    "You drink the beer. You feel slightly reinvigorated...",
+    "...and slightly dizzy too.",
+  ]);
+
+  // A blocked repeat must neither consume another beer nor repeat success feedback.
+  player.getInventory().setItem(1, new Item(beer, 1));
+  drinkPotion({ player, itemId: beer, slot: 1 });
+  assert.equal(player.getInventory().getItems()[1].getId(), beer);
+  assert.equal(messages.length, 2);
 });
 
 test("Moonlight mead and Slayer's respite match the Wiki", () => {
