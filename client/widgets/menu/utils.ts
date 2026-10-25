@@ -166,14 +166,15 @@ export function getVisibleWidgetSurfaceReason(w: any): string | undefined {
 
 // Best-effort plain-text target label for a widget: prefer opBase, then dataText, name, text.
 /**
- * Whether a widget's visible surface covers a screen point. A text widget only draws its text,
- * so the rest of its box (a buff timer's can span the whole screen) is see-through.
+ * Whether a widget's visible surface covers a screen point. A text widget only covers the text
+ * the renderer drew, so the rest of its box (a buff timer's spans the whole screen) and text
+ * that wasn't drawn are see-through.
  */
 export function isVisibleWidgetSurfaceAt(w: any, x: number, y: number): boolean {
     if (!getVisibleWidgetSurfaceReason(w)) return false;
-    const bounds = w?._textBounds;
-    if ((w.type === 4 || w.type === 8) && bounds) {
-        return x >= bounds.x && x < bounds.x + bounds.width &&
+    if (w.type === 4 || w.type === 8) {
+        const bounds = w._textBounds;
+        return !!bounds && x >= bounds.x && x < bounds.x + bounds.width &&
             y >= bounds.y && y < bounds.y + bounds.height;
     }
     return true;

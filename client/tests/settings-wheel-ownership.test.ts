@@ -43,6 +43,8 @@ const overTimer = (hits: any[]) => {
 };
 overTimer([viewport, buffTimer]);
 assert.deepEqual(invoked, [], "the drawn text itself still blocks viewport zoom");
+assert.equal(scroll([viewport, { uid: 8, type: 4, text: "28m" }]), 0);
+assert.deepEqual(invoked, [1], "text the renderer never drew does not block viewport zoom");
 assert.equal(scroll([{ uid: 5, type: 0, isIf3: true, noScrollThrough: true, onScroll: [36, 10, 5] }]), 0);
 assert.deepEqual(invoked, [5], "raw cache listener also runs on its owning blocker");
 
