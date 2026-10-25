@@ -1398,6 +1398,7 @@ export interface PluginCoreApi {
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
+  NpcSpawnDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;

@@ -68,6 +68,7 @@ function ticksUntilRespawn(id, limit = 60) {
 }
 
 function clearWorld() {
+  new NpcSpawnDefinitionLoader().applyToWorld([]);
   // Lets every queued task (respawns included) run out first.
   tick(80);
   for (const npc of [...World.getNpcs()]) if (npc) World.getNpcs().remove(npc);
@@ -77,11 +78,130 @@ function clearWorld() {
 
 afterEach(clearWorld);
 
-const spawnFile = (rows) => {
+const spawnFile = (rows, activate = true) => {
   const loader = new NpcSpawnDefinitionLoader();
   loader.applyToWorld(rows.map((row) => loader.toDefinition({ level: 0, ...row }, "test")));
+  if (activate) for (const row of rows) NpcSpawnDefinitionLoader.activateNear(new Location(row.x, row.y, row.level ?? 0));
   return loader;
 };
+
+test("spawn records allocate no NPC until a player approaches, including neighbouring map squares", (t) => {
+  const create = t.mock.method(NPC, "create");
+  spawnFile([
+    { id: MAN, x: 3300, y: 3218 },
+    { id: SMOKE_DEVIL, x: 2400, y: 9440 },
+    { id: MAN, x: 3222, y: 3218, level: 1 },
+  ], false);
+  assert.equal(create.mock.callCount(), 0);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(create.mock.callCount(), 1, "activate beyond view distance before the player reaches the next square");
+  assert.equal(live(MAN).length, 1);
+  assert.equal(live(SMOKE_DEVIL).length, 0);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 1));
+  assert.equal(live(MAN).length, 2, "each floor activates independently");
+});
+
+test("login and a bot's registration activate nearby NPCs", () => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218 }], false);
+  World.registerPlayerPosition({ getLocation: () => new Location(3222, 3218, 0), isPlayerBot: () => true });
+  assert.equal(live(MAN).length, 1);
+});
+
+test("extended NPC view distances preload their full view and wander margin", () => {
+  spawnFile([{ id: MAN, x: 3370, y: 3218 }], false);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(live(MAN).length, 0);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0), 127);
+  assert.equal(live(MAN).length, 1);
+});
+
+test("crossing a square or teleporting activates the destination before map-square hooks", (t) => {
+  spawnFile([{ id: SMOKE_DEVIL, x: 2400, y: 9440 }], false);
+  let countAtHook = 0;
+  t.mock.method(PluginManager, "emitPlayerMapSquareChange", () => { countAtHook = live(SMOKE_DEVIL).length; });
+  const player = {};
+  World.onPlayerMoved(player, new Location(3222, 3218, 0), new Location(2400, 9440, 0));
+  assert.equal(countAtHook, 1);
+});
+
+test("a teleport during player processing includes new NPCs in that tick's visibility candidates", () => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218 }], false);
+  let location = new Location(2400, 9440, 0);
+  let registered = false;
+  let index = -1;
+  const player = {
+    getLocation: () => location,
+    getNpcViewDistance: () => 15,
+    getAttribute: () => undefined,
+    getPrivateArea: () => null,
+    getArea: () => null,
+    getSession: () => ({ getChannel: () => ({ readyState: 1 }) }),
+    isPlayerBot: () => false,
+    isRegistered: () => registered,
+    setRegistered: value => { registered = value; },
+    getIndex: () => index,
+    setIndex: value => { index = value; },
+    onAdd() {}, onRemove() {},
+  };
+  World.getPlayers().add(player);
+  try {
+    const previous = location;
+    location = new Location(3222, 3218, 0);
+    World.onPlayerMoved(player, previous, location);
+    World.rebuildUpdateBuckets();
+    assert.ok(World.getNearbyNpcsForUpdate(player).includes(live(MAN)[0]));
+  } finally {
+    World.getPlayers().remove(player);
+    World.refreshActiveRegions();
+  }
+});
+
+test("returning to an activated square preserves identity, damage, position and queued respawns", () => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218 }]);
+  const [npc] = live(MAN);
+  npc.moveTo(new Location(3224, 3219, 0));
+  npc.setHitpoints(1);
+  NpcSpawnDefinitionLoader.activateNear(new Location(2400, 9440, 0));
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.deepEqual(live(MAN), [npc]);
+  assert.equal(npc.getHitpoints(), 1);
+  assert.equal(npc.getLocation().getX(), 3224);
+  kill(npc);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(live(MAN).length, 0, "re-entry cannot bypass the respawn delay");
+  assert.equal(ticksUntilRespawn(MAN), 25);
+});
+
+test("a reload discards unvisited old spawns too", () => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218 }], false);
+  spawnFile([{ id: SMOKE_DEVIL, x: 2400, y: 9440 }], false);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(live(MAN).length, 0);
+  NpcSpawnDefinitionLoader.activateNear(new Location(2400, 9440, 0));
+  assert.equal(live(SMOKE_DEVIL).length, 1);
+});
+
+test("a full NPC pool retains pending spawns and retries without duplicating successful ones", (t) => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218 }, { id: MAN, x: 3223, y: 3218 }], false);
+  const add = World.getNpcs().add;
+  let accepted = 0;
+  const mock = t.mock.method(World.getNpcs(), "add", function (npc) {
+    return accepted++ === 0 && add.call(this, npc);
+  });
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(live(MAN).length, 1);
+  mock.mock.restore();
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(live(MAN).length, 2);
+  NpcSpawnDefinitionLoader.activateNear(new Location(3222, 3218, 0));
+  assert.equal(live(MAN).length, 2);
+});
+
+test("wide-ranging NPCs stay eager so their roaming is not tied to visits to the spawn square", () => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218, wanderRadius: 100 }], false);
+  assert.equal(live(MAN).length, 1);
+  assert.equal(live(MAN)[0].getMovementCoordinator().getRadius(), 100);
+});
 
 test("a respawn keeps its tile, plane, facing and wander radius", () => {
   const npc = NPC.create(MAN, new Location(3222, 3218, 1));

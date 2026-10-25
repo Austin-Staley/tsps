@@ -1568,6 +1568,27 @@ test('the NPC cluster index never places a cluster in the Wilderness', () => {
     .some((cluster) => cluster.y >= 3520 && cluster.y <= 3967 && cluster.x >= 2944 && cluster.x <= 3392), false);
 });
 
+test('bots discover unvisited NPC spawns and count activated spawns only once', () => {
+  const { npcClustersFor, nearestClusters } = require('../plugins/bots/brain/NpcClusterIndex.PlayerBots');
+  const at = { getX: () => 3222, getY: () => 3218, getZ: () => 0 };
+  const npc = (owner) => ({
+    getSpawnPosition: () => at,
+    getDefinition: () => ({ name: 'Chicken' }),
+    getSpawnLineage: () => ({ owner }),
+  });
+  const world = { core: {
+    NpcSpawnDefinition: { all: () => [{ getId: () => 1, getPosition: () => at }] },
+    NpcDefinition: { forId: () => ({ name: 'Chicken' }) },
+    World: { getNpcs: () => [npc('npc-spawns'), npc('a plugin')] },
+  } };
+  const index = npcClustersFor(world, 'name', (definition) => definition.name);
+  const [cluster] = nearestClusters(index, ['Chicken'], { x: 3222, y: 3218, z: 0 });
+  assert.equal(cluster.count, 2, 'one recorded spawn plus one plugin spawn');
+  const unvisited = { core: { ...world.core, World: { getNpcs: () => [] } } };
+  const [pending] = nearestClusters(npcClustersFor(unvisited, 'name', (definition) => definition.name), ['Chicken'], { x: 3000, y: 3000, z: 0 });
+  assert.equal(pending.count, 1, 'a bot can choose a destination before its NPCs exist');
+});
+
 test('replacing a training brain stops its NPC fight and releases its claim', () => {
   const s = trainingScene();
   const a = createTrainCombatAction(chickenSpec, s.world);
