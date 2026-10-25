@@ -165,6 +165,20 @@ export function getVisibleWidgetSurfaceReason(w: any): string | undefined {
 }
 
 // Best-effort plain-text target label for a widget: prefer opBase, then dataText, name, text.
+/**
+ * Whether a widget's visible surface covers a screen point. A text widget only draws its text,
+ * so the rest of its box (a buff timer's can span the whole screen) is see-through.
+ */
+export function isVisibleWidgetSurfaceAt(w: any, x: number, y: number): boolean {
+    if (!getVisibleWidgetSurfaceReason(w)) return false;
+    const bounds = w?._textBounds;
+    if ((w.type === 4 || w.type === 8) && bounds) {
+        return x >= bounds.x && x < bounds.x + bounds.width &&
+            y >= bounds.y && y < bounds.y + bounds.height;
+    }
+    return true;
+}
+
 export function getWidgetTargetLabel(w: any): string {
     if (w && (w as any).__dummyRoot) return ""; // never surface synthetic root ids
     // Check opBase first - CS2 scripts set this for spells via if_setopbase.
