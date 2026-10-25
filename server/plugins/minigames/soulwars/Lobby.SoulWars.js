@@ -27,6 +27,8 @@ let lobbyArea = null;
 /** Who's in the lobby (the area's players; a test can swap it). */
 const source = { players: () => lobbyArea?.getPlayers?.() ?? [] };
 let countdown = null;
+/** Bots (when a world seeds them): who they are, and filling the queue. */
+const bots = { isBot: () => false, seed: () => {} };
 
 /** The Wiki's 20, or a world's own (never under 2: a game needs both sides). */
 function minPlayers() {
@@ -132,6 +134,7 @@ function closeHud(player) {
 
 function tick() {
   const min = minPlayers();
+  bots.seed(waitingPlayers(), min, source.players());
   const queued = waitingPlayers();
   if (!Match.current && queued.length >= min && countdown === null) countdown = Common.data.countdownTicks;
   if (countdown !== null && (queued.length < min || Match.current)) countdown = null;
@@ -142,7 +145,7 @@ function tick() {
       countdown = null;
       // Whatever they've put on or picked up while waiting is checked again (a cape would be lost).
       const ready = queued.filter((player) => {
-        const refused = refusal(player);
+        const refused = bots.isBot(player) ? null : refusal(player);
         if (refused) player.sendMessage(refused);
         return !refused;
       });
@@ -197,4 +200,4 @@ function attachLobby(api) {
   Common.every(tick);
 }
 
-module.exports = { attachLobby, tick, refusal, barrier, countdownText, waitingPlayers, minPlayers, source };
+module.exports = { attachLobby, tick, refusal, barrier, countdownText, waitingPlayers, minPlayers, source, bots };

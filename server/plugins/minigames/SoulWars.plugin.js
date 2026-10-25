@@ -7,7 +7,8 @@
  * - Avatars: strength, defeats and returns;
  * - Control: the obelisk and graveyards changing hands;
  * - Souls: Forgotten Souls, wolves, fragments and the obelisk;
- * - Supplies: the tables, potions, bandages, bones and the activity bar.
+ * - Supplies: the tables, potions, bandages, bones and the activity bar;
+ * - Bots: filling the queue on small worlds (world config `SoulWars:seedBots`), and playing.
  */
 const Common = require("./soulwars/Common.SoulWars");
 const Lobby = require("./soulwars/Lobby.SoulWars");
@@ -17,6 +18,7 @@ const Control = require("./soulwars/Control.SoulWars");
 const Souls = require("./soulwars/Souls.SoulWars");
 const Supplies = require("./soulwars/Supplies.SoulWars");
 const Stats = require("./soulwars/Stats.SoulWars");
+const Bots = require("./soulwars/Bots.SoulWars");
 
 module.exports = {
   name: "Soul Wars",
@@ -30,5 +32,6 @@ module.exports = {
     Control.attachControl(api);
     Souls.attachSouls(api);
     Supplies.attachSupplies(api);
+    Bots.attachBots(api);
   },
 };
