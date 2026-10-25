@@ -10,8 +10,8 @@
  * - Routes.Ferries.js: what starts each route, the Entrana search and `ferries:travel`.
  *
  * Quest plugins keep their own crossings and hand ordinary ones over with `ferries:travel`.
- * Not here: Veos and the Port Sarim Cabin Boy Herbert have no spawn in the generated
- * npc-spawns.json, so the Port Sarim side of Veos's ship has nobody to talk to yet.
+ * At Port Sarim, Veos (1063) is in npc-spawns.json; Cabin Boy Herbert (11126, shown from
+ * A Kingdom Divided's stage 12) has no spawn on this branch, added by fix/herbert-sarim-spawn.
  */
 const Common = require("./ferries/Common.Ferries");
 const Voyages = require("./ferries/Voyages.Ferries");
