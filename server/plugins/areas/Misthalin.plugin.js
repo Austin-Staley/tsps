@@ -4,7 +4,7 @@
  * Edgeville
  *  - Ladder at 3097,9867 (dungeon) > Climb-up: surface at 3096,3468.
  *  - Trapdoor at 3097,3468 > Open: dungeon at 3096,9867.
- *  - Lever at 3090,3475 > Pull: warn, then teleport to deep Wilderness (3153,3923).
+ *  - Lever at 3090,3475: the Levers plugin (docs/wilderness-levers.md).
  *
  * Varrock
  *  - Manhole at 3237,3458 > Open/Close: swap the closed (881) and open (882) locs.
@@ -30,8 +30,6 @@ const EDGEVILLE_DUNGEON_LADDER = { x: 3097, y: 9867, z: 0 };
 const EDGEVILLE_SURFACE = { x: 3096, y: 3468, z: 0 };
 const EDGEVILLE_TRAPDOOR = { x: 3097, y: 3468, z: 0 };
 const EDGEVILLE_DUNGEON_LANDING = { x: 3096, y: 9867, z: 0 };
-const EDGEVILLE_LEVER = { x: 3090, y: 3475, z: 0 };
-const DEEP_WILDERNESS = { x: 3153, y: 3923, z: 0 };
 
 // Varrock
 const VARROCK_MANHOLE = { x: 3237, y: 3458, z: 0 };
@@ -84,26 +82,6 @@ function edgevilleTrapdoorOpen(event) {
   const { player, location } = event;
   if (!isAt(location, EDGEVILLE_TRAPDOOR)) return false;
   pluginApi.emitCustomEvent("ladders:climbDown", { player, destination: toLocation(EDGEVILLE_DUNGEON_LANDING) });
-  event.handled = true;
-}
-
-// Edgeville: lever to the deep Wilderness, after the warning prompt.
-function edgevilleLeverPull(event) {
-  const { player, location } = event;
-  if (!isAt(location, EDGEVILLE_LEVER)) return false;
-  const start = player.getLocation().clone();
-  pluginApi.sendMultiChatboxPrompt(
-    player,
-    "Warning: deep Wilderness! Players can attack you.",
-    "Yes, teleport me into deep Wilderness.",
-    () => {
-      if (player.getLocation().equals(start)) {
-        pluginApi.emitCustomEvent("lever:teleport", { player, destination: toLocation(DEEP_WILDERNESS) });
-      }
-    },
-    "No, stay here.",
-    () => {},
-  );
   event.handled = true;
 }
 
@@ -234,7 +212,6 @@ module.exports = {
     // Edgeville
     api.onObjectInteraction("Ladder", { "Climb-up": edgevilleLadderUp });
     api.onObjectInteraction("Trapdoor", { Open: edgevilleTrapdoorOpen });
-    api.onObjectInteraction("Lever", { Pull: edgevilleLeverPull });
     // Varrock
     api.onObjectInteraction("Manhole", {
       Open: varrockManholeOpen,
