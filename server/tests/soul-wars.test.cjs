@@ -281,6 +281,14 @@ test("the arena's creatures: souls drop 2 fragments, wolves bones, in place of t
   assert.deepEqual(wolfRoll.drops, [{ itemId: 25199, amount: 1 }]);
 });
 
+test("the bridges onto the obelisk's island can be walked (the copy keeps the plane above)", () => {
+  const { game } = startGame(2);
+  for (const [x, y] of [[2185, 2913], [2228, 2911]]) {
+    const tile = game.area.at([x, y, 0]);
+    assert.equal(RegionManager.getClipping(tile.getX(), tile.getY(), 0, game.area) & 0x200000, 0, `${x},${y}`);
+  }
+});
+
 // ------------------------------------------------------------------ control
 
 test('control: a majority moves the alignment, captures at the end with the line, drifts back', () => {
