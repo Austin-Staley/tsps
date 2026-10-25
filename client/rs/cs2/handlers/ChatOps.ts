@@ -133,6 +133,9 @@ export function registerChatOps(handlers: HandlerMap): void {
     // CHAT_SENDPUBLIC (5008): Sends public or legacy Chat-channel messages.
     // Revision 237's cached script uses chat type 2 and prepends "/" for the
     // legacy channel; CHAT_SENDCLAN is reserved for the newer Clan channels.
+    // Type 1 is autochat: the cache timer (proc 552) repeats the phrase in
+    // varcstring 358 every 150 client cycles, and the encoder flags it so
+    // listeners see message type 90/91 rather than ordinary public chat.
     // Pops: message (string), type (int)
     handlers.set(Opcodes.CHAT_SENDPUBLIC, (ctx) => {
         const message = ctx.stringStack[--ctx.stringStackSize];

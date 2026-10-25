@@ -649,9 +649,10 @@ export class PacketSender {
     return this;
   }
 
-  sendPublicChat(message: string, from: string, playerId: number): this {
+  /** `chatType` overrides the public type 2: ChatType.AUTOTYPER / MODAUTOTYPER for autochat. */
+  sendPublicChat(message: string, from: string, playerId: number, chatType?: number): this {
     this.player.getSession().sendClientPacket(
-      encodeChatMessage("public", message, from, "", playerId)
+      encodeChatMessage("public", message, from, "", playerId, chatType)
     );
     return this;
   }

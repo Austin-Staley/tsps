@@ -5,6 +5,7 @@ import { Misc } from "../../util/Misc";
 export class PlayerRelations {
     private static readonly MAX_FRIENDS = 200;
     private static readonly MAX_IGNORES = 100;
+    private static readonly PUBLIC_MODE_AUTOCHAT = 4;
     private status: PrivateChatStatus = PrivateChatStatus.ON;
     private publicChatMode = 0;
     private tradeChatMode = 0;
@@ -46,8 +47,9 @@ export class PlayerRelations {
         return this.status;
     }
 
+    /** Public modes: 0 On, 1 Friends, 2 Off, 3 Hide, 4 Autochat (only auto-chatted lines). */
     public setChatModes(publicMode: number, privateMode: number, tradeMode: number): void {
-        this.publicChatMode = Math.max(0, Math.min(3, publicMode | 0));
+        this.publicChatMode = Math.max(0, Math.min(PlayerRelations.PUBLIC_MODE_AUTOCHAT, publicMode | 0));
         this.tradeChatMode = Math.max(0, Math.min(2, tradeMode | 0));
         this.setStatus(Math.max(0, Math.min(2, privateMode | 0)) as PrivateChatStatus, false);
     }
@@ -76,10 +78,11 @@ export class PlayerRelations {
         return this.ignoreSet.has(username);
     }
 
-    public canReceivePublicChatFrom(other: Player): boolean {
+    public canReceivePublicChatFrom(other: Player, autoChat = false): boolean {
         if (!other || this.hasIgnore(other.getLongUsername())) return false;
         return this.publicChatMode === 0 ||
-            (this.publicChatMode === 1 && this.hasFriend(other.getLongUsername()));
+            (this.publicChatMode === 1 && this.hasFriend(other.getLongUsername())) ||
+            (this.publicChatMode === PlayerRelations.PUBLIC_MODE_AUTOCHAT && autoChat);
     }
 
     public canReceivePrivateMessageFrom(other: Player): boolean {
