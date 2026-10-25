@@ -613,6 +613,7 @@ export class ClientConnection {
         case "friends_chat_action":
         case "private_message":
         case "chat_filter":
+        case "report_abuse":
           if (this.player) PluginManager.emitSocialPacket({ player: this.player, packet, handled: false });
           continue;
         case "dialogue_continue": {

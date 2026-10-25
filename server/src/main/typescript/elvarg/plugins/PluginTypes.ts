@@ -40,6 +40,7 @@ export type PluginSocialPacketEvent = {
     | { type: "friends_chat_action"; action: FriendsChatAction }
     | { type: "private_message"; recipient: string; text: string }
     | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
+    | { type: "report_abuse"; name: string; ruleId: number; mute: boolean }
     | { type: "chat"; text: string; messageType: "friends_chat" }
     | { type: "public_chat"; text: string; autoChat: boolean };
 };

@@ -27,7 +27,7 @@
  * The 7th value of the four history ops is the timestamp string proc 4742 affixes to a line
  * when chat_gettimestamps != 0 (setting 119 "Chat timestamps"); the 8th is its epoch seconds.
  */
-import { sendChat, sendChatFilter, sendPrivateMessage } from "../../../network/ServerConnection";
+import { sendChat, sendChatFilter, sendPrivateMessage, sendReportAbuse } from "../../../network/ServerConnection";
 import { chatHistory, formatChatTimestamp } from "../ChatHistory";
 import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
@@ -55,14 +55,15 @@ export function registerChatOps(handlers: HandlerMap): void {
         ctx.setChatFilter?.(publicMode, privateMode, tradeMode);
     });
 
-    // CHAT_SENDABUSEREPORT (5002): Sends abuse report
-    // Pops: 1 string (reported name), 2 ints (reason, mute flag)
+    // CHAT_SENDABUSEREPORT (5002): the report form's submit (interface 875, script 5105).
+    // Pops: 1 string (reported name), 2 ints (rule, mute flag). The native op sends
+    // SEND_SNAPSHOT with the rule id one less than the script's value (RSProx SendSnapshot).
     handlers.set(Opcodes.CHAT_SENDABUSEREPORT, (ctx) => {
-        const _name = ctx.stringStack[--ctx.stringStackSize];
+        const name = ctx.stringStack[--ctx.stringStackSize];
         ctx.intStackSize -= 2;
-        const _reason = ctx.intStack[ctx.intStackSize];
-        const _muteFlag = ctx.intStack[ctx.intStackSize + 1];
-        // Server would handle the abuse report packet
+        const rule = ctx.intStack[ctx.intStackSize] | 0;
+        const muteFlag = ctx.intStack[ctx.intStackSize + 1] | 0;
+        sendReportAbuse(name ?? "", rule - 1, muteFlag === 1);
     });
 
     // CHAT_GETHISTORY_BYTYPEANDLINE (5003): Gets message by type and line

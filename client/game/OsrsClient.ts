@@ -1694,6 +1694,17 @@ export class OsrsClient {
                 const pkt = createPacket(ClientPacketId.IF_CLOSE);
                 queuePacket(pkt);
             },
+            sendWidgetOp: (widget, opIndex) => {
+                const uid = widget.uid | 0;
+                sendWidgetAction({
+                    widgetId: uid,
+                    groupId: (uid >>> 16) & 0xffff,
+                    childId: uid & 0xffff,
+                    opId: opIndex,
+                    option: (widget as any).actions?.[opIndex - 1] ?? undefined,
+                    slot: typeof widget.childIndex === "number" && widget.childIndex >= 0 ? widget.childIndex : undefined,
+                });
+            },
             getWeight: () => {
                 // Return player weight in kg for RUNWEIGHT_VISIBLE opcode
                 return self.playerWeight;
