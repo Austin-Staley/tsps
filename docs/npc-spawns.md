@@ -171,7 +171,7 @@ The fix to the version pairing above, on the 60 spawns it affected (32 Wiki page
 
 The sync read a map line only when it began with `{{Map}}`, and only its first map. Pages that label their places, or give several on one line, lost some or all of their spawns: 35 pages in the Wiki authoring cache gain maps (Cabin Boy Herbert, Veos, Zanik, Captain Barnaby, Jenny Blade, the Gamer and others). They show up on their next sync; none was synced with the fix.
 
-**Cabin Boy Herbert** at Port Sarim, placed from rsprox captures instead (26 recordings): `cabin_boy_herbert_sarim` (11126) at 3053, 3245, facing north, standing still. The Wiki lists only his visible ids (10932-10934), so a sync would pick the wrong one. 11126 shows as 10933 (Talk-to, Port Piscarilius, Land's End) once varbit 12296 `akd` reaches 12, when Fuggy names Veos' ship in *A Kingdom Divided*. Veos (1063) keeps his spawn beside him.
+**Cabin Boy Herbert** at Port Sarim, placed from rsprox captures instead (26 recordings): `cabin_boy_herbert_sarim` (11126) at 3053, 3245, facing north, standing still. The Wiki lists only his visible ids (10932-10934), so a sync would pick the wrong one. 11126 shows as 10933 (Talk-to, Port Piscarilius, Land's End) once varbit 12296 `akd` reaches 12, when Fuggy names Veos' ship in *A Kingdom Divided*. Veos (1063) keeps his spawn beside him, but from the same stage *X Marks the Spot* sends his visibility (`veos_sarim_vis`, 12148) as 0, so he's gone: captures at `akd` 150 have it at 0 and never add him.
 
 ## Doubled spawns
 
