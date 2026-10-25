@@ -92,6 +92,14 @@ export type WidgetServerPayload =
           colour: number;
       }
     | {
+          /** IF_SETANGLE: a model component's x and y angles and zoom. */
+          action: "set_angle";
+          uid: number;
+          angleX: number;
+          angleY: number;
+          zoom: number;
+      }
+    | {
           action: "set_model";
           uid: number;
           modelId?: number;

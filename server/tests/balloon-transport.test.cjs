@@ -91,8 +91,9 @@ function fakePlayer({ at = [2808, 3354], firemaking = 99, items = {}, worn = {} 
       sendJingle: (id) => { (player.jingles ??= []).push(id); },
       sendSong: (id) => { (player.songs ??= []).push(id); },
       sendTypedMessage: (type, line) => player.messages.push(line),
-      sendInterfaceRawModel: (uid, model) => { (player.models ??= []).push([uid, model]); },
-      sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
+      sendInterfaceRawModel: (uid, model) => { (player.models ??= []).push([uid, model]); (player.grid ??= []).push(['model', uid, model]); },
+      sendInterfaceAnimation: (uid, seq) => { player.journey = seq; (player.grid ??= []).push(['anim', uid, seq]); },
+      sendInterfaceAngle: (uid, x, y, zoom) => { (player.grid ??= []).push(['angle', uid, x, y, zoom]); },
       sendInterfaceDisplayState() {},
       sendInterfacePosition: (uid, x, y) => { (player.positions ??= []).push([uid, x, y]); },
       sendSound: (id) => { (player.sounds ??= []).push(id); },
@@ -500,4 +501,49 @@ test('with no sandbags left a sandbag click does nothing: no move, no counter, n
   assert.deepEqual([varbit('zep_if_sandbags'), varbit('zep_if_screen_dist'), varbit('zep_if_balloon_height')], [0, 17, 9]);
   assert.equal(player.sounds.length, sounds);
   assert.equal(Controls.inFlight(player), true);
+});
+
+test('IF_SETANGLE as captured: an animated cell gets its model, its angle, then its animation; the rest keep the default', () => {
+  const player = fakePlayer({ items: { oak: 10 } });
+  takeOff(player, 'craft');
+  const cell = (row, col) => core.CacheDefinitions.getComponentId(`zep_interface:zep_grid_${row}_${col}`);
+  const of = (uid) => player.grid.filter(([, at]) => at === uid);
+  // Map 4's bird at row 10, column 2 and its storm creature at row 8, column 5 (rsprox 226/01702).
+  assert.deepEqual(of(cell(10, 2)), [['model', cell(10, 2), 19780], ['angle', cell(10, 2), 201, 318, 2576], ['anim', cell(10, 2), 342]]);
+  assert.deepEqual(of(cell(8, 5)), [['model', cell(8, 5), 19781], ['angle', cell(8, 5), 99, 333, 3472], ['anim', cell(8, 5), 3160]]);
+  assert.deepEqual(of(cell(3, 0)), [['model', cell(3, 0), 19609]], 'scenery: the model alone');
+  const animated = Controls.data().routes.craft.screens[0].filter(([, , model]) => Controls.data().angles[model]).length;
+  assert.equal(player.grid.filter(([kind]) => kind === 'angle').length, animated);
+});
+
+test('a screen change clears the 220 cells row by row, puts every angle back, then draws the next screen', () => {
+  const player = fakePlayer({ items: { oak: 10 } });
+  takeOff(player, 'craft');
+  // The first screen's nineteen moves to column 19; its twentieth (R1) is the change.
+  flySolution(player, 'R3 L2 R2 E1 R4 L1 E1 R2 N1 R1 L1');
+  player.grid = [];
+  flySolution(player, 'R1');
+  const cell = (row, col) => core.CacheDefinitions.getComponentId(`zep_interface:zep_grid_${row}_${col}`);
+  const cleared = player.grid.slice(0, 220);
+  const reset = player.grid.slice(220, 440);
+  const order = [];
+  for (let row = 0; row <= 10; row++) for (let col = 0; col < 20; col++) order.push(cell(row, col));
+  assert.deepEqual(cleared, order.map((uid) => ['model', uid, 65535]));
+  assert.deepEqual(reset, order.map((uid) => ['angle', uid, 0, 0, 2576]));
+  const next = Controls.data().routes.craft.screens[1];
+  assert.equal(player.grid.slice(440).filter(([kind]) => kind === 'model').length, next.length);
+  // Map 5's shark at row 3, column 19 (99, 333, 2576 as captured).
+  assert.deepEqual(player.grid.filter(([, at]) => at === cell(3, 19)).slice(-3), [['model', cell(3, 19), 19717], ['angle', cell(3, 19), 99, 333, 2576], ['anim', cell(3, 19), 5154]]);
+});
+
+test("every route draws the balloon controls' own models, and each animated one has its captured angle", () => {
+  const { routes, angles } = Controls.data();
+  for (const [key, route] of Object.entries(routes)) {
+    for (const [index, cells] of route.screens.entries()) {
+      for (const [row, col, model, anim] of cells) {
+        assert.ok(model >= 19519 && model <= 19781, `${key} screen ${index + 1} (${row}, ${col}): ${model}`);
+        if (anim >= 0) assert.ok(angles[model], `${key} screen ${index + 1} (${row}, ${col}): ${model} animates without an angle`);
+      }
+    }
+  }
 });

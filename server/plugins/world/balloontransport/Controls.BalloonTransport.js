@@ -3,15 +3,17 @@
  * plays it (the Crafting Guild, 57 moves) and the Wiki describes it:
  *
  * - Take-off: the logs are paid, zep_if_current_map / screen_dist / balloon_height / sandbags (8)
- *   / logs (10) are set, the first screen's obstacles drawn into zep_interface's 13x20 grid, song
- *   206, the side tabs closed, zep_interface in the main modal and zep_interface_side beside it.
+ *   / logs (10) are set, the first screen's obstacles drawn into zep_interface's 13x20 grid (the
+ *   birds, storm creatures and sharks turned to their captured IF_SETANGLE), song 206, the side
+ *   tabs closed, zep_interface in the main modal and zep_interface_side beside it.
  * - Every control moves the balloon one column right: sandbags +2 (one sandbag), logs +1 (one
  *   log), relax 0, the rope -1, the red rope -2 - the counters, the height and the column, the
  *   control's sound, the balloon's two parts placed and the whoosh (3246). One move per two
  *   ticks; clicks wait their turn.
  * - The balloon fills two cells (its envelope's row and the basket's below); an obstacle in either
  *   crashes it. From column 19 of screens 1 and 2 the next move draws the next screen, at column
- *   1. It lands from screen 3's column 19 at height 5, the basket on the pad.
+ *   1, after clearing every cell's model and angle. It lands from screen 3's column 19 at height
+ *   5, the basket on the pad.
  * - Landing: the interfaces close as the screen goes black; a tick later the tabs come back, the
  *   route opens and 2,000 Firemaking XP; three ticks after that "You arrive safely at <place>."
  *   and the landing; the fade back in a tick later.
@@ -25,7 +27,7 @@
  *
  * The routes' screens are plugins/world/data/balloon-routes.json: the Crafting Guild's captured,
  * Varrock's, Castle Wars', the Grand Tree's and Taverley's transcribed from the Wiki's Balloon
- * path images.
+ * path images, their scenery's models matched against the client's renders of the cache's.
  */
 const fs = require("fs");
 const path = require("path");
@@ -61,6 +63,8 @@ const MAX_HEIGHT = 10;
 const MIN_HEIGHT = 2;
 const MOVE_TICKS = 2;
 const EMPTY_MODEL = 65535;
+/** The grid cells' angle x, angle y and zoom in the cache, which a screen change puts back. */
+const DEFAULT_ANGLE = [0, 0, 2576];
 const MINIMAP_STATE = "minimap_state";
 const MINIMAP_OFF = 2;
 /** The side tabs the flight closes (combat to magic, settings, emotes); friends, account and music stay. */
@@ -107,17 +111,27 @@ function place(player, flight) {
   sender.sendInterfacePosition(component(BASKET), x, y + 24);
 }
 
-function drawScreen(player, cells, clear) {
+/** A screen's cells: each model, the animated ones' camera angle (IF_SETANGLE), then their animation. */
+function drawScreen(player, cells) {
   const sender = player.getPacketSender();
-  if (clear) {
-    for (let col = 0; col < COLUMNS; col++) {
-      for (let row = 0; row < OBSTACLE_ROWS; row++) sender.sendInterfaceRawModel(component(GRID(row, col)), EMPTY_MODEL);
-    }
-  }
+  const angles = data().angles;
   for (const [row, col, model, anim] of cells) {
     const uid = component(GRID(row, col));
     sender.sendInterfaceRawModel(uid, model);
+    const angle = angles[model];
+    if (angle) sender.sendInterfaceAngle(uid, ...angle);
     if (anim != null && anim >= 0) sender.sendInterfaceAnimation(uid, anim);
+  }
+}
+
+/** The next screen wipes the grid row by row: every model, then every cell's angle back to the default. */
+function clearScreen(player) {
+  const sender = player.getPacketSender();
+  for (let row = 0; row < OBSTACLE_ROWS; row++) {
+    for (let col = 0; col < COLUMNS; col++) sender.sendInterfaceRawModel(component(GRID(row, col)), EMPTY_MODEL);
+  }
+  for (let row = 0; row < OBSTACLE_ROWS; row++) {
+    for (let col = 0; col < COLUMNS; col++) sender.sendInterfaceAngle(component(GRID(row, col)), ...DEFAULT_ANGLE);
   }
 }
 
@@ -151,7 +165,7 @@ function takeOff(player, station, logs, source, { opensRoute = true } = {}) {
   setVarbit(player, VARBITS.height, flight.height);
   setVarbit(player, VARBITS.sandbags, flight.sandbags);
   setVarbit(player, VARBITS.logs, flight.logs);
-  drawScreen(player, route.screens[0], false);
+  drawScreen(player, route.screens[0]);
   sender.sendSong(FLIGHT_SONG);
   sideTabs(player, false);
   sender.sendInterface(cache().getInterfaceId(FLIGHT_INTERFACE));
@@ -209,7 +223,11 @@ function move(player, flight, name) {
   }
   setVarbit(player, VARBITS.dist, flight.dist);
   sender.sendSound(control.sound, 1, 0);
-  if (redraw) drawScreen(player, flight.route.screens[flight.screen], true);
+  if (redraw) {
+    clearScreen(player);
+    place(player, flight);
+    drawScreen(player, flight.route.screens[flight.screen]);
+  }
   place(player, flight);
   sender.sendSound(MOVE_SOUND, 1, 0);
   flight.waiting = MOVE_TICKS;
