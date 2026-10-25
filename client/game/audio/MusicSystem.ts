@@ -294,8 +294,10 @@ export class MusicSystem {
     }
 
     public setVolume(vol: number) {
+        const wasAudible = this.outputVolume() > 0;
         this.volume = Math.max(0, Math.min(1, vol));
         this.applyOutputVolume();
+        if (!wasAudible && this.outputVolume() > 0) this.resumeRememberedMusic();
         // musicTrackVolume is preference-driven; update active songs' targets.
         const newMusicTrackVolumeInt = this.getMusicTrackVolumeInt();
         for (const song of this.osrsSongs) {
@@ -321,8 +323,26 @@ export class MusicSystem {
     }
 
     public setMuted(muted: boolean): void {
+        const wasAudible = this.outputVolume() > 0;
         this.muted = muted;
         this.applyOutputVolume();
+        if (!wasAudible && this.outputVolume() > 0) this.resumeRememberedMusic();
+    }
+
+    /**
+     * Volume came back (from 0, or unmuted) with nothing playing: start the track the server last
+     * asked for. Live's server re-sends it with zero fades when the music volume varp rises from 0,
+     * and the device's master volume never reaches the server, so the client keeps it either way.
+     */
+    private resumeRememberedMusic(): void {
+        if (this._playingJingle || this.osrsTaskQueue.length > 0) return;
+        if (this.osrsSongs.some((song) => song && song.started)) return;
+        if (!this.osrsQueuedAreaTracks || this.osrsQueuedAreaTracks.length === 0) return;
+        this.queueOsrsSongs(
+            this.createOsrsSongEntries(this.osrsQueuedAreaTracks, "music"),
+            { fadeOutDelayTicks: 0, fadeOutDurationTicks: 0, fadeInDelayTicks: 0, fadeInDurationTicks: 0 },
+            false,
+        );
     }
 
     private outputVolume(): number {
@@ -517,7 +537,7 @@ export class MusicSystem {
      * A song packet that arrives during the jingle only replaces the track to resume.
      */
     public async playJingle(jingleId: number, _delay: number): Promise<boolean> {
-        if (jingleId < 0 || !(this.volume > 0)) return false;
+        if (jingleId < 0 || !(this.outputVolume() > 0)) return false;
 
         this.queueOsrsSongs(
             this.createOsrsSongEntries([jingleId | 0], "jingle"),
@@ -1150,7 +1170,7 @@ export class MusicSystem {
         this._playingJingle = false;
         console.log("[MusicSystem] Jingle ended");
 
-        if (this.volume > 0 && this.osrsQueuedAreaTracks && this.osrsQueuedAreaFade) {
+        if (this.outputVolume() > 0 && this.osrsQueuedAreaTracks && this.osrsQueuedAreaFade) {
             this.queueOsrsSongs(
                 this.createOsrsSongEntries(this.osrsQueuedAreaTracks, "music"),
                 this.osrsQueuedAreaFade,
@@ -1179,8 +1199,6 @@ export class MusicSystem {
         }
         if (first === -1) return;
 
-        if (!(this.volume > 0)) return;
-
         const capped = trackIds
             .slice(0, 3)
             .map((id) => id | 0)
@@ -1197,6 +1215,10 @@ export class MusicSystem {
         this.osrsQueuedAreaTracks = capped.slice();
         this.osrsQueuedAreaFade = { ...fades };
 
+        // Silent (volume 0 or muted): the track is remembered and starts when there is volume.
+        if (!(this.outputVolume() > 0)) {
+            return;
+        }
         if (this._playingJingle) {
             return;
         }

@@ -233,6 +233,51 @@ function answerAirGuitarUnlock(request) {
     && request.player?.getAttribute?.(Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE) === true;
 }
 
+const MUSIC_VOLUME_VARP = 168;
+const MUSIC_MODE_VARP = 18;
+/** Track 147: silence. */
+const SILENCE_TRACK = 147;
+const NO_FADES = { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 };
+
+/**
+ * As captured (rsprox revs 236-239, 17 sessions with a music volume change): when the music volume
+ * varp rises from 0 the server sends silence with zero fades on that tick and the area track with
+ * zero fades on the next, so the client starts the track over; dropping to 0 sends nothing.
+ */
+/** The latest restart queued for each player; an older one that fires later is stale. */
+const restartGeneration = new WeakMap();
+
+/** The track a restart may send now: still the session's current track, in auto mode, with volume. */
+function restartStillWanted(player, track) {
+  const settings = player.getAudioSettings?.() ?? {};
+  return player.isRegistered?.() !== false
+    && (settings[MUSIC_MODE_VARP] ?? 0) === 0
+    && (settings[MUSIC_VOLUME_VARP] ?? 0) > 0
+    && (player.getSession?.()?.getCurrentMusicTrack?.() ?? -1) === track;
+}
+
+function restartMusicAfterVolumeRaised({ player, varpId, previous, value }) {
+  if (varpId !== MUSIC_VOLUME_VARP || previous !== 0 || !(value > 0)) return;
+  if ((player.getAudioSettings?.()?.[MUSIC_MODE_VARP] ?? 0) !== 0) return;
+  const track = player.getSession?.()?.getCurrentMusicTrack?.() ?? -1;
+  if (track < 0) return;
+  const generation = (restartGeneration.get(player) ?? 0) + 1;
+  restartGeneration.set(player, generation);
+  player.getPacketSender().sendSong(SILENCE_TRACK, NO_FADES);
+  core.TaskManager.submit(new (class extends core.Task {
+    constructor() {
+      super(1, player, false);
+    }
+    execute() {
+      this.stop();
+      // A region change, a later rise, manual mode or volume 0 since then: the session already
+      // sent what is current, so this restart must not put an older track back.
+      if (restartGeneration.get(player) !== generation || !restartStillWanted(player, track)) return;
+      player.getPacketSender().sendSong(track, NO_FADES);
+    }
+  })());
+}
+
 module.exports = {
   name: "Music",
   register(api) {
@@ -272,6 +317,7 @@ module.exports = {
   api.onCustomEvent("gameframe:tab-mounted", ({ player, group }) => {
     if (group === MUSIC_GROUP_ID) queueMicrotask(() => enableMusicActions(player));
   });
+  api.onCustomEvent("audio:setting-changed", restartMusicAfterVolumeRaised);
     api.onCustomEvent("audio:play-song", onTrackPlayed);
     api.onCustomEvent("music:unlock-track", unlockTrack);
     api.onCustomEvent("music:air-guitar-unlocked", answerAirGuitarUnlock);

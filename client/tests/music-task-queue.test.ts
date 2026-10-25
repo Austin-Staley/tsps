@@ -201,6 +201,52 @@ async function main() {
         assert.equal(music.playingJingle, false);
     }
 
+    // 7. Music volume 0: the track is remembered but nothing loads; turning the volume up plays it.
+    {
+        const { music, settle, playingIds, pending, state } = system();
+        music.setVolume(0);
+        music.playSong(70, 0, 60, 60, 0);
+        await run(music, 4);
+        assert.deepEqual(pending(), [], "nothing is loaded while the volume is 0");
+        assert.deepEqual(state().songs, []);
+        music.setVolume(0.5);
+        await run(music, 3);
+        settle(70, true);
+        await run(music, 6);
+        assert.deepEqual(playingIds(), [70], "the remembered track plays once there is volume");
+    }
+
+    // 8. Volume 0 while a track plays keeps it (silent), and volume back up does not restart it.
+    {
+        const { music, settle, playingIds, pending, state } = system();
+        music.playSong(71, 0, 0, 0, 0);
+        await run(music, 2);
+        settle(71, true);
+        await run(music, 6);
+        music.setVolume(0);
+        await run(music, 3);
+        assert.deepEqual(playingIds(), [71], "the song is kept");
+        music.setVolume(0.5);
+        await run(music, 3);
+        assert.deepEqual(pending(), [], "no reload");
+        assert.deepEqual(playingIds(), [71]);
+        assert.equal(state().taskQueueLength, 0);
+    }
+
+    // 9. Muted works the same way as volume 0.
+    {
+        const { music, settle, playingIds, pending } = system();
+        music.setMuted(true);
+        music.playSong(72, 0, 0, 0, 0);
+        await run(music, 4);
+        assert.deepEqual(pending(), [], "nothing is loaded while muted");
+        music.setMuted(false);
+        await run(music, 3);
+        settle(72, true);
+        await run(music, 6);
+        assert.deepEqual(playingIds(), [72], "unmuting plays the remembered track");
+    }
+
     console.log("music-task-queue.test.ts: all tests passed");
 }
 

@@ -18,3 +18,9 @@ track itself when the jingle ends; a song packet that arrives meanwhile is the t
 `PacketSender.sendSong(id, fades?)` sends the defaults, and `sendJingle(id)` sends the session's
 current track (`PlayerSession.getCurrentMusicTrack()`) with zero fades before the jingle. The jingle
 packet's 24-bit length field is left as the old callers pass it; the client no longer reads it.
+
+When the music volume varp (168) rises from 0, live sends track 147 (silence) with zero fades on that
+tick and the area track with zero fades on the next (17 captured sessions), so the track starts over;
+`restartMusicAfterVolumeRaised` in `Music.plugin.js` does the same from the `audio:setting-changed`
+event that `Player.applyAudioSettingFromClient` announces. Dropping the volume to 0 sends nothing; the
+client keeps the track it was asked for while silent and starts it when volume comes back.
