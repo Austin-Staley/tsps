@@ -10,7 +10,6 @@ const {
   hasGlobalWorldTag,
   WORLD_ZONE_BOUNDARIES,
 } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
-const { Obelisks } = require("../../src/main/typescript/elvarg/game/content/Obelisks");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
 const { World } = require("../../src/main/typescript/elvarg/game/World");
@@ -629,15 +628,6 @@ function pullLever(api, event) {
   api.emitCustomEvent("lever:teleport", { player, destination });
 }
 
-function onObeliskClick(event) {
-  if (!tileFactsOf(event.player)?.inWilderness) {
-    return;
-  }
-  if (Obelisks.activate(event.objectId)) {
-    event.handled = true;
-  }
-}
-
 module.exports = {
   name: "Wilderness",
   _test: { canAttack },
@@ -648,7 +638,6 @@ module.exports = {
     api.onCustomEvent("wilderness:rules", (request) => answerRules(api, state, request));
     api.onPlayerLogin(({ player }) => onPlayerLogin(state, api, player));
     api.onPlayerDisconnect(({ player }) => onPlayerDisconnect(state, player));
-    api.onObjectFirstClick(Obelisks.OBELISK_IDS, onObeliskClick);
     api.onObjectInteraction("Lever", { Pull: (event) => pullLever(api, event) });
     api.onObjectInteraction("Web", { Slash: (event) => slashWeb(api, event) });
     api.onItemOnObject("Knife", "Web", (event) => slashWeb(api, event, event.item), { noted: false });
