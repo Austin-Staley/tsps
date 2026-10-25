@@ -15,6 +15,9 @@ const VOLCANO_DUNGEON_LANDING = [2862, 9572, 0];
 const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
 const PASS_TICKS = 2;
 
+/** Each player's latest pass, which alone may end the clipping exemption. */
+const passes = new WeakMap();
+
 let core;
 
 /** Rotation 0 and 2 doors are passed north-south, 1 and 3 east-west (the cache's placements). */
@@ -22,20 +25,36 @@ function passVentDoor({ player, object }) {
   const door = object.getLocation();
   const at = player.getLocation();
   const northSouth = object.getFace() % 2 === 0;
-  const side = Math.sign(northSouth ? at.getY() - door.getY() : at.getX() - door.getX()) || 1;
-  const near = northSouth
-    ? new core.Location(door.getX(), door.getY() + side, door.getZ())
-    : new core.Location(door.getX() + side, door.getY(), door.getZ());
+  const beside = (offset) => northSouth
+    ? new core.Location(door.getX(), door.getY() + offset, door.getZ())
+    : new core.Location(door.getX() + offset, door.getY(), door.getZ());
+  // Clicked again while on the door tile itself: carry on to the side that pass was heading for.
+  const previous = passes.get(player);
+  const onDoor = at.getX() === door.getX() && at.getY() === door.getY();
+  const side = onDoor && previous ? -previous.towards
+    : Math.sign(northSouth ? at.getY() - door.getY() : at.getX() - door.getX()) || 1;
+  const near = beside(side);
+  const far = beside(-side);
   const movement = player.getMovementQueue();
   movement.reset();
-  if (!at.equals(near)) player.moveTo(near);
-  // The door blocks its own tile: the step goes straight through it, then clipping is back.
+  // The door blocks its own tile: the steps go straight through it, then clipping is back. Only the
+  // latest pass clears the flag, so a second click doesn't lose it to the first one's cleanup. Steps,
+  // not a teleport, so a diagonal arrival walks round to the door (a move would drop the queued step).
   player.setFlag(IGNORE_CLIPPING_FLAG, true);
-  movement.walkStep(northSouth ? 0 : -2 * side, northSouth ? -2 * side : 0);
+  if (!onDoor && !at.equals(near)) movement.addSteps(near);
+  movement.addSteps(far);
+  const pass = { towards: -side };
+  passes.set(player, pass);
   core.TaskManager.submit(new (class extends core.Task {
     constructor() { super(PASS_TICKS, player, false); }
     execute() { this.stop(); }
-    stop() { player.removeFlag(IGNORE_CLIPPING_FLAG); super.stop(); }
+    stop() {
+      if (passes.get(player) === pass) {
+        passes.delete(player);
+        player.removeFlag(IGNORE_CLIPPING_FLAG);
+      }
+      super.stop();
+    }
   })());
   return true;
 }
