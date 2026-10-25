@@ -214,3 +214,86 @@ test("short of coins for the vials, Bob says so instead of claiming there's noth
   assert.equal(has(p, 995), 9);
   assert.deepEqual(p.lines, ["You'll need some coins for the vials I'd have to give you."]);
 });
+
+// ---------------------------------------------------------------- review #1260: the planned inventory
+
+test('a preset (metadata) potion is never touched: the plain one beside it is the one decanted', (t) => {
+  const p = player(t);
+  const id = obj('4dose2strength');
+  p.getInventory().add(new core.Item(id, 1, { preset: 'pvp-arena' }));
+  p.getInventory().add(new core.Item(id, 1));
+  give(p, obj('vial_empty'), 3);
+  bob(p, 1);
+  const items = p.getInventory().getItems().filter((item) => item && item.getId() > 0);
+  const tagged = items.filter((item) => item.getMeta?.()?.preset === 'pvp-arena');
+  assert.equal(tagged.length, 1, 'the preset copy is still there');
+  assert.equal(tagged[0].getId(), id);
+  assert.equal(has(p, obj('1dose2strength')), 4, 'only the plain one was split');
+});
+
+test("two families can't both spend the same coins: the second is left whole, no doses lost", (t) => {
+  const p = player(t);
+  give(p, obj('4dosestamina'), 1);
+  give(p, obj('4dose2restore'), 1);
+  give(p, 995, 5);
+  for (let i = 0; i < 25; i++) give(p, 1511, 1);
+  bob(p, 2);
+  const doses = (prefix) => [1, 2, 3, 4].reduce((n, d) => n + d * has(p, obj(`${d}dose${prefix}`)), 0);
+  assert.equal(doses('stamina'), 4, 'stamina doses kept');
+  assert.equal(doses('2restore'), 4, 'restore doses kept');
+  assert.equal(has(p, 995), 0, 'one vial bought, once');
+  assert.equal(has(p, obj('2dosestamina')) + has(p, obj('2dose2restore')), 2, 'exactly one family split');
+});
+
+test('a result that would pass the stack limit is refused whole (noted glories at the limit)', (t) => {
+  const p = player(t);
+  give(p, note('amulet_of_glory_2'), 2147483647);
+  give(p, note('amulet_of_glory_3'), 2147483647);
+  npcs['Murky Matt (runes)'].Decant({ player: p });
+  assert.equal(has(p, note('amulet_of_glory_2')), 2147483647);
+  assert.equal(has(p, note('amulet_of_glory_3')), 2147483647);
+  assert.equal(has(p, note('amulet_of_glory_4')), 0);
+});
+
+test("Matt's result doesn't depend on order: a family refused for room is done once another frees it", (t) => {
+  const p = player(t);
+  give(p, note('ring_of_dueling_3'), 3);
+  for (let i = 0; i < 25; i++) give(p, 4151, 1);
+  give(p, obj('necklace_of_minigames_1'), 1);
+  give(p, obj('necklace_of_minigames_7'), 1);
+  npcs['Murky Matt (runes)'].Decant({ player: p });
+  assert.equal(has(p, obj('necklace_of_minigames_8')), 1);
+  assert.equal(has(p, note('ring_of_dueling_8')), 1);
+  assert.equal(has(p, note('ring_of_dueling_1')), 1, '9 charges: an (8) and a (1)');
+  assert.deepEqual(p.lines, ['Arr, all done.']);
+});
+
+test('item id 0 (Dwarf remains) is a real item: it stays, and nothing is put in its slot', (t) => {
+  const p = player(t);
+  p.getInventory().add(new core.Item(0, 1));
+  give(p, obj('1dosestamina'), 2);
+  bob(p, 4);
+  assert.equal(has(p, obj('2dosestamina')), 1);
+  assert.equal(p.getInventory().getAmount(0), 1, 'the remains are kept');
+  assert.equal(p.getInventory().getItems()[0].getId(), 0);
+});
+
+test("the buttons do nothing mid-trade (the trade's room check is already done)", (t) => {
+  const p = player(t);
+  give(p, obj('1dosestamina'), 2);
+  npcs['Bob Barter (herbs)'].Decant({ player: p });
+  t.mock.method(p, 'busy', () => true);
+  click({ player: p, groupId: 582, childId: 6, handled: false });
+  assert.equal(has(p, obj('1dosestamina')), 2);
+});
+
+test("Bob's cost doesn't depend on slot order: spare vials from one family go to another before any are bought", (t) => {
+  for (const order of [['4dosestamina', '1dose2restore'], ['1dose2restore', '4dosestamina']]) {
+    const p = player(t);
+    for (const name of order) give(p, obj(name), name === '1dose2restore' ? 2 : 1);
+    give(p, 995, 5);
+    bob(p, 2);
+    assert.equal(has(p, 995), 5, `${order.join(' then ')}: nothing bought`);
+    assert.equal(has(p, obj('vial_empty')), 0, 'the spare vial was used');
+  }
+});

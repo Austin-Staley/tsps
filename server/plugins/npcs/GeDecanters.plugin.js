@@ -14,7 +14,7 @@ let api;
 const core = () => api.core;
 const definition = (id) => core().ItemDefinition.forId(id);
 const objId = (name) => core().CacheDefinitions.getObjId(name);
-const MAX_STACK = 2147483647;
+const MAX_STACK = 2147483647; // the client's stack limit (StackType MAX_STACK_AMOUNT)
 
 function talk(player, who, line, mood) {
   const { DialogueChainBuilder, NpcDialogue, CacheDefinitions } = core();
@@ -22,10 +22,10 @@ function talk(player, who, line, mood) {
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new NpcDialogue(0, npcId, line, who.name, DATA.anim[mood])));
 }
 
-/** The inventory's stacks as { slot, id, amount, base, noted }: `base` is the unnoted item. */
+/** The inventory's stacks as { slot, id, amount, base, noted, meta }: `base` is the unnoted item. */
 function stacks(player) {
   return player.getInventory().getItems().map((item, slot) => {
-    if (!item || item.getId() <= 0 || item.getAmount() <= 0) return null;
+    if (!item || item.getId() < 0 || item.getAmount() <= 0) return null;
     const def = definition(item.getId());
     const noted = def.isNoted();
     return { slot, id: item.getId(), amount: item.getAmount(), base: noted ? def.getNoteId() : item.getId(), noted, meta: item.getMeta?.() ?? null };
@@ -34,58 +34,122 @@ function stacks(player) {
 
 const asNoted = (id, noted) => (noted ? definition(id).getNoteId() : id);
 
-/** A plain (no metadata) stack of `id` the group isn't consuming, which `add` would merge into. */
-function plainStack(player, id, consumed) {
-  if (consumed.has(id)) return null;
-  return player.getInventory().getItems().find((item) => item?.getId() === id && item.getAmount() > 0 && (item.getMeta?.() ?? null) == null) ?? null;
+// ---------------------------------------------------------------- a planned inventory
+//
+// Each family is worked out on a copy of the inventory, slot by slot: its own plain slots come out,
+// what it pays (vials, coins) comes from the copy as it stands then, and its results go in under the
+// stack limit. A family that doesn't fit leaves the copy as it was; families refused for room are tried
+// again once the others have freed theirs. The finished copy is written back in one go, so nothing is
+// taken without its result, and items a family doesn't own (presets, other metadata) are never touched.
+
+/** The inventory as { id, amount, meta } per slot, or null for an empty one. */
+function snapshot(player) {
+  return player.getInventory().getItems().map((item) =>
+    (item && item.getId() >= 0 && item.getAmount() > 0 ? { id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null } : null));
 }
+
+const plainSlot = (slots, id) => slots.findIndex((slot) => slot && slot.id === id && slot.meta == null);
+
+/** Adds to the copy as Inventory.add would; false if it can't hold all of it. */
+function addTo(slots, id, amount) {
+  if (definition(id).isStackable()) {
+    const at = plainSlot(slots, id);
+    if (at >= 0) {
+      if (MAX_STACK - slots[at].amount < amount) return false;
+      slots[at].amount += amount;
+      return true;
+    }
+    const free = slots.indexOf(null);
+    if (free < 0 || amount > MAX_STACK) return false;
+    slots[free] = { id, amount, meta: null };
+    return true;
+  }
+  for (let i = 0; i < amount; i++) {
+    const free = slots.indexOf(null);
+    if (free < 0) return false;
+    slots[free] = { id, amount: 1, meta: null };
+  }
+  return true;
+}
+
+/** Takes up to `amount` of plain `id` from the copy; returns how many it took. */
+function takeFrom(slots, id, amount) {
+  let taken = 0;
+  for (let i = 0; i < slots.length && taken < amount; i++) {
+    const slot = slots[i];
+    if (!slot || slot.id !== id || slot.meta != null) continue;
+    const n = Math.min(slot.amount, amount - taken);
+    slot.amount -= n;
+    taken += n;
+    if (slot.amount === 0) slots[i] = null;
+  }
+  return taken;
+}
+
+const count = (slots, id) => slots.reduce((n, slot) => n + (slot && slot.id === id && slot.meta == null ? slot.amount : 0), 0);
 
 /**
- * Whether a group's results fit once its own pieces (and, for Bob, the vials and coins it spends) are
- * gone: every unstackable result needs a slot; a stackable one merges into a plain stack only within
- * the stack limit, else needs a slot of its own.
+ * One family on a copy of `slots`: its pieces out, its payment taken, its results in. Returns the new
+ * copy, or { refused: "short" | "poor" } leaving `slots` as it was.
  */
-function fits(player, group, adds) {
-  const inventory = player.getInventory();
-  const consumed = new Set(group.pieces.map((piece) => piece.id));
-  let freed = group.noted ? group.stacks : group.pieces.reduce((n, piece) => n + piece.amount, 0);
-  freed += group.freesSlots ?? 0;
-  let slots = 0;
-  for (const { id, amount } of adds) {
-    if (!definition(id).isStackable()) {
-      slots += amount;
-      continue;
-    }
-    const stack = plainStack(player, id, consumed);
-    if (!stack) slots++;
-    else if (MAX_STACK - stack.getAmount() < amount) return false;
+function planGroup(slots, group) {
+  const next = slots.map((slot) => (slot ? { ...slot } : null));
+  for (const piece of group.pieces) {
+    const slot = next[piece.slot];
+    if (!slot || slot.id !== piece.id || slot.amount !== piece.amount || slot.meta != null) return { refused: "short" };
+    next[piece.slot] = null;
   }
-  return slots <= inventory.getFreeSlots() + freed;
+  if (group.vialsNeeded > 0) {
+    const vial = asNoted(objId(DATA.vial), group.noted);
+    const own = takeFrom(next, vial, Math.min(group.vialsNeeded, count(next, vial)));
+    const price = (group.vialsNeeded - own) * DATA.vialPrice;
+    if (price > 0 && takeFrom(next, objId(DATA.coins), price) < price) return { refused: "poor" };
+  }
+  for (const { id, amount } of [...group.outputs, ...(group.spare?.amount > 0 ? [group.spare] : [])]) {
+    if (!addTo(next, id, amount)) return { refused: "short" };
+  }
+  return { slots: next };
 }
 
-/** Pools each group whose results fit; returns { changed, short, poor }. */
-function apply(player, groups) {
-  const inventory = player.getInventory();
+/** Plans every family, retrying the refused ones while others still make room; returns the outcome. */
+function plan(player, groups) {
+  let slots = snapshot(player);
+  // Families that give vials back go first, so one that needs vials uses those before buying (any order).
+  let pending = [...groups].sort((a, b) => (b.spare?.amount ?? 0) - (a.spare?.amount ?? 0) || (a.vialsNeeded ?? 0) - (b.vialsNeeded ?? 0));
   let changed = false;
-  let short = false;
-  let poor = false;
-  for (const group of groups) {
-    const adds = [...group.outputs, ...(group.spare?.amount > 0 ? [group.spare] : [])];
-    if (group.cost && !group.cost.affordable) {
-      poor = true;
-      continue;
+  let progress = true;
+  const refusals = new Map();
+  while (progress && pending.length) {
+    progress = false;
+    for (const group of [...pending]) {
+      const result = planGroup(slots, group);
+      if (result.refused) {
+        refusals.set(group, result.refused);
+        continue;
+      }
+      slots = result.slots;
+      pending = pending.filter((other) => other !== group);
+      refusals.delete(group);
+      changed = progress = true;
     }
-    if (!fits(player, group, adds)) {
-      short = true;
-      continue;
-    }
-    group.cost?.pay();
-    for (const piece of group.pieces) inventory.deleteNumber(piece.id, piece.amount);
-    for (const { id, amount } of adds) inventory.add(new (core().Item)(id, amount));
-    changed = true;
   }
+  const left = [...refusals.values()];
+  return { slots, changed, short: left.includes("short"), poor: left.includes("poor") };
+}
+
+/** Writes a planned copy back, slot by slot. */
+function commit(player, slots) {
+  const inventory = player.getInventory();
+  const { Item } = core();
+  slots.forEach((slot, i) => inventory.setItem(i, slot ? new Item(slot.id, slot.amount, slot.meta) : new Item(-1, 0)));
   inventory.refreshItems();
-  return { changed, short, poor };
+}
+
+/** Plans `groups`, writes the result, and says how it went. */
+function apply(player, groups) {
+  const outcome = plan(player, groups);
+  if (outcome.changed) commit(player, outcome.slots);
+  return outcome;
 }
 
 /** The same counts as the pieces already are: nothing to do for this group. */
@@ -104,28 +168,6 @@ function doseFamily(itemId) {
   return request.family;
 }
 
-/**
- * Splitting needs vials: the player's own empty ones (noted for a noted group) first, then Bob's at
- * 5 coins each (Wiki). Spending them, and the whole coin stack, frees inventory slots.
- */
-function vialCost(player, needed, noted) {
-  const inventory = player.getInventory();
-  const vial = asNoted(objId(DATA.vial), noted);
-  const coins = objId(DATA.coins);
-  const own = Math.min(needed, inventory.getAmount(vial));
-  const price = (needed - own) * DATA.vialPrice;
-  const held = inventory.getAmount(coins);
-  const ownSlots = noted ? (own > 0 && own === inventory.getAmount(vial) ? 1 : 0) : own;
-  return {
-    affordable: held >= price,
-    freesSlots: ownSlots + (price > 0 && price === held ? 1 : 0),
-    pay() {
-      if (own > 0) inventory.deleteNumber(vial, own);
-      if (price > 0) inventory.deleteNumber(coins, price);
-    },
-  };
-}
-
 /** Potion groups (one per family, noted apart from unnoted) decanted into `target` doses. */
 function potionGroups(player, target) {
   const vial = objId(DATA.vial);
@@ -138,7 +180,7 @@ function potionGroups(player, target) {
     const key = `${family.byDose.join(",")}:${stack.noted}`;
     if (!groups.has(key)) groups.set(key, { noted: stack.noted, family, pieces: [], stacks: 0 });
     const group = groups.get(key);
-    group.pieces.push({ id: stack.id, amount: stack.amount, value: family.byDose.indexOf(stack.base) });
+    group.pieces.push({ slot: stack.slot, id: stack.id, amount: stack.amount, value: family.byDose.indexOf(stack.base) });
     group.stacks++;
   }
   const result = [];
@@ -153,12 +195,9 @@ function potionGroups(player, target) {
     if (sameAs(group.pieces, group.outputs)) continue;
     const potions = group.pieces.reduce((sum, piece) => sum + piece.amount, 0);
     const spare = potions - group.outputs.reduce((sum, out) => sum + out.amount, 0);
-    if (spare >= 0) {
-      group.spare = { id: asNoted(vial, group.noted), amount: spare };
-    } else {
-      group.cost = vialCost(player, -spare, group.noted);
-      group.freesSlots = group.cost.freesSlots;
-    }
+    // Splitting needs vials: the player's own (noted for a noted split) first, then Bob's at 5 coins each (Wiki).
+    if (spare >= 0) group.spare = { id: asNoted(vial, group.noted), amount: spare };
+    else group.vialsNeeded = -spare;
     result.push(group);
   }
   return result;
@@ -183,6 +222,8 @@ function decantButton(event) {
   if (event.groupId !== DATA.decantInterface) return;
   const target = DATA.buttons[event.childId];
   if (!target || !event.player.getPacketSender().isChatboxInterface(DATA.decantInterface)) return;
+  // Not while trading or otherwise busy: a trade's free-slot check has already been made.
+  if (event.player.busy()) return;
   event.handled = true;
   decant(event.player, target);
 }
@@ -216,7 +257,7 @@ function jewelleryGroups(player) {
     const key = `${piece.family.prefix}:${stack.noted}`;
     if (!groups.has(key)) groups.set(key, { noted: stack.noted, family: piece.family, pieces: [], stacks: 0 });
     const group = groups.get(key);
-    group.pieces.push({ id: stack.id, amount: stack.amount, value: piece.charges });
+    group.pieces.push({ slot: stack.slot, id: stack.id, amount: stack.amount, value: piece.charges });
     group.stacks++;
   }
   const result = [];
@@ -248,7 +289,7 @@ module.exports = {
   name: "GeDecanters",
   members: true,
   DATA,
-  _test: { potionGroups, jewelleryGroups, decant, combine },
+  _test: { potionGroups, jewelleryGroups, decant, combine, plan },
   register(pluginApi) {
     api = pluginApi;
     api.onNpcInteraction(DATA.bob.name, { Decant: openDecant });
