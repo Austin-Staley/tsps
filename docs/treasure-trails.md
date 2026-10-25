@@ -302,6 +302,10 @@ assumption.
     go."), hand it over with "You are handed a torn part of a clue scroll.", then their
     compliment. With no space they say "Hey, I have something for you but you don't have any space
     for it!".
+  - **A lost part:** a destroyed or lost part is given again by solving its part again (Wiki: "You'll
+    have to solve another clue to re-obtain it"). While it is still carried or banked, its NPC talks
+    as normal, and its dig says "You distinctly remember already finding a torn clue scroll part
+    here and there isn't another one to take." (live captures).
   - **Conditions** (`data/master-parts.json`):
     - Robin wants 180 ranged attack and no toxic blowpipe; his "not the sort I'd recommend" line
       when not.
@@ -644,6 +648,8 @@ PR #890 review verification independently decoded RSProx recordings
   - each part kind's torn part and NPC words;
   - every condition passing and failing;
   - combining all, too few or without the clue;
+  - a destroyed part solved again (NPC and dig), but not while carried or banked, and the clue
+    still finished;
   - three distinct finishable parts per three-part step over 100 seeded rolls;
   - Watson's exchange end to end, with the capacity block.
 

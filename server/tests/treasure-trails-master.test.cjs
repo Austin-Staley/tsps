@@ -440,6 +440,8 @@ function masterFixture({ quests = true } = {}) {
   f.bonuses = { attack: [0, 0, 0, 0, 0], other: [0, 0, 0, 0] };
   f.player.getBonusManager = () => ({ getAttackBonus: () => f.bonuses.attack, getOtherBonus: () => f.bonuses.other });
   f.player.setLocation = (x, y, z = 0) => { f.player.getLocation = () => new core.Location(x, y, z); };
+  f.bank = [];
+  f.player.getBanks = () => [{ getItems: () => f.bank }];
   f.api.onCustomEvent("quest:is-complete", request => { request.complete = quests; });
   return f;
 }
@@ -643,6 +645,41 @@ test("Robin says why he isn't impressed; the torn parts combine only all togethe
   assert.equal(f.state().completed, 2);
   assert.deepEqual(["trail_master_part1", "trail_master_part2", "trail_master_part3"].map(slotOf), [-1, -1, -1], "the parts are used");
   assert.equal(f.state().parts, undefined);
+});
+
+test("a lost torn part is found again by solving its part again, but not while it is carried or banked", () => {
+  const f = masterFixture();
+  placeParts(f, ["key_master", "1_47_77_35_46", "biblia"]);
+  const slotOf = name => f.items.findIndex(item => item?.getId() === C.getObjId(name));
+  const count = name => f.items.filter(item => item?.getId() === C.getObjId(name)).length;
+  Parts.talk(npcEvent(f, part("key_master"))); f.finish();
+  assert.equal(count("trail_master_part1"), 1);
+  const again = npcEvent(f, part("key_master"));
+  Parts.talk(again); f.finish();
+  assert.equal(again.handled, false, "a carried part isn't handed over twice");
+  assert.equal(count("trail_master_part1"), 1);
+  f.items[slotOf("trail_master_part1")] = null; // destroyed
+  assert.ok(shownDuring(f, () => { Parts.talk(npcEvent(f, part("key_master"))); f.finish(); }).includes("You are handed a torn part of a clue scroll."), "the NPC hands it over again");
+  assert.equal(count("trail_master_part1"), 1);
+  const dig = part("1_47_77_35_46");
+  f.player.setLocation(dig.location.x, dig.location.y, dig.location.z);
+  f.items[f.items.indexOf(null)] = new core.Item(I.SPADE, 1);
+  const digHere = () => { const event = { player: f.player, itemId: I.SPADE, option: "Dig", allow: true }; const shown = shownDuring(f, () => Parts.dig(event)); return { allow: event.allow, shown }; };
+  assert.deepEqual(digHere().shown, ["You find a torn part of a clue scroll."]);
+  f.bank.push(f.items[slotOf("trail_master_part2")]);
+  f.items[slotOf("trail_master_part2")] = null;
+  f.sent.length = 0;
+  const banked = digHere();
+  assert.equal(banked.allow, false);
+  assert.deepEqual(messages(f), ["You distinctly remember already finding a torn clue scroll part here and there isn't another one to take."]);
+  assert.equal(count("trail_master_part2"), 0, "a banked part isn't found twice");
+  f.bank.length = 0; // destroyed from the bank
+  assert.deepEqual(digHere().shown, ["You find a torn part of a clue scroll."]);
+  assert.equal(count("trail_master_part2"), 1);
+  Parts.talk(npcEvent(f, part("biblia"))); f.finish();
+  assert.deepEqual(f.state().found, [true, true, true]);
+  assert.ok(shownDuring(f, () => Parts.combine({ player: f.player, slot: slotOf("trail_master_part1") })).includes("You've obtained a new clue!"), "the clue can still be finished");
+  assert.equal(f.state().completed, 2);
 });
 
 test("a three-part step draws three different parts this server can finish", () => {
