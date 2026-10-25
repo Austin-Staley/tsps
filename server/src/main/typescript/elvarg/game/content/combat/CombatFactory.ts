@@ -1094,13 +1094,16 @@ export class CombatFactory {
     @param target
     */
     public static handleSkull(attacker: Player, target: Player) {
-        if (attacker.isSkulled()) {
-            return;
-        }
-
         const attackerInWilderness = Wilderness.isIn(attacker);
         const targetInWilderness = Wilderness.isIn(target);
         if (!attackerInWilderness || !targetInWilderness) {
+            return;
+        }
+
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
+        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        if (attacker.isSkulled()) {
+            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1132,6 +1135,13 @@ export class CombatFactory {
     }
 
     public static readonly PVP_SKULL_SECONDS = 30 * 60;
+    /** Wiki: an amulet of avarice skull lasts 20 minutes after it comes off; a cape of skulls 20 from putting it on. */
+    public static readonly ITEM_SKULL_SECONDS = 20 * 60;
+
+    /** Keeps a skull (and its colour) for at least `seconds` more, without the skulled message. */
+    static extendSkull(player: Player, seconds: number) {
+        player.setSkullTimer(Math.max(player.getSkullTimer(), Misc.getTicks(seconds)));
+    }
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);
