@@ -14,6 +14,7 @@ const PASS = ["treasure-trails-master", "treasure-trails-master-with-inventory-s
 const NO_SPACE = "Hey, I have something for you but you don't have any space for it!";
 const HANDED = "You are handed a torn part of a clue scroll.";
 const FOUND = "You find a torn part of a clue scroll.";
+const ALREADY_FOUND = "You distinctly remember already finding a torn clue scroll part here and there isn't another one to take.";
 const MISSING_PARTS = "I cannot combine the pieces without having all 3.";
 const NO_CLUE = "You cannot see how to combine the 3 pieces without also carrying your clue scroll.";
 const INSPECT = "There must be more parts to this. If I can combine them together...";
@@ -31,16 +32,39 @@ function partIds() {
   return Runtime.TORN_PARTS.map(name => core.CacheDefinitions.getObjId(name));
 }
 
-/** The first unsolved part of a held three-part step that `matches`. */
-function openPart(player, matches) {
+/** Whether the player still has a trail's torn part, carried or banked (its token links it). */
+function owns(player, trail, index) {
+  const ours = item => item?.getId() === partIds()[index] && item.getMetaValue(Runtime.metaKey(trail.tier))?.token === trail.state.token;
+  return player.getInventory().getItems().some(ours) || player.getBanks().some(bank => bank?.getItems().some(ours));
+}
+
+/** Whether a part can be solved: not found yet, or found and since lost (Wiki: a destroyed part is
+ * "re-obtained" by solving it again). */
+function open(player, trail, index) {
+  return !trail.state.found?.[index] || !owns(player, trail, index);
+}
+
+/**
+ * The part of a held three-part step that `matches`, open ones first; `open` says whether it can be
+ * solved, or was found and is still owned.
+ */
+function partAt(player, matches) {
+  let owned = null;
   for (const trail of Runtime.startedTrails(player)) {
     if (!Array.isArray(trail.state.parts)) continue;
     for (const [index, row] of trail.state.parts.entries()) {
       const step = Runtime.data(trail.tier).byRow.get(row);
-      if (!trail.state.found?.[index] && step && matches(step)) return { trail, index, step };
+      if (!step || !matches(step)) continue;
+      if (open(player, trail, index)) return { trail, index, step, open: true };
+      owned ??= { trail, index, step, open: false };
     }
   }
-  return null;
+  return owned;
+}
+
+function openPart(player, matches) {
+  const found = partAt(player, matches);
+  return found?.open ? found : null;
 }
 
 /** The torn parts of a trail the player carries, by part number (its token and revision link them). */
@@ -87,7 +111,7 @@ function carries(player, step) {
 /** Gives the part and marks it found; the clue keeps its revision, which links the parts to it. */
 function give(player, found) {
   const current = Runtime.stillHeld(player, found.trail);
-  if (!current || current.state.found?.[found.index] || player.getInventory().getFreeSlots() < 1) return false;
+  if (!current || !open(player, current, found.index) || player.getInventory().getFreeSlots() < 1) return false;
   const state = { ...current.state, found: current.state.found.map((done, index) => done || index === found.index) };
   current.item.setMetaValue(Runtime.metaKey(current.tier), state);
   player.getInventory().forceAdd(player, new core.Item(partIds()[found.index], 1)
@@ -159,10 +183,12 @@ function dig(event) {
   const I = core.ItemIdentifiers;
   if (event.allow === false || !/\bdig\b/i.test(String(event.option)) || ![I.SPADE, I.EASTFLOOR_SPADE].includes(event.itemId)) return;
   const { player } = event;
-  const found = openPart(player, step => step.target === "coord" && distance(location(player), step.location) === 0);
+  const found = partAt(player, step => step.target === "coord" && distance(location(player), step.location) === 0);
   if (!found) return;
   event.allow = false;
   player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_dig") ?? 830));
+  // Live captures: digging again while the part is still had.
+  if (!found.open) { player.sendMessage(ALREADY_FOUND); return; }
   if (!carries(player, found.step)) return;
   if (player.getInventory().getFreeSlots() < 1) { player.getInventory().full(); return; }
   if (give(player, found)) Dialogue.itemBox(player, partIds()[found.index], FOUND);
@@ -199,4 +225,4 @@ module.exports = function attachParts(pluginApi) {
   for (const part of [1, 2, 3]) api.onItemAction(`Torn clue scroll (part ${part})`, { Combine: combine, Inspect: inspect });
 };
 
-Object.assign(module.exports, { talk, search, dig, combine, inspect, meets, handOverLines, partIds, NO_SPACE, HANDED, FOUND, MISSING_PARTS, NO_CLUE, INSPECT });
+Object.assign(module.exports, { talk, search, dig, combine, inspect, meets, handOverLines, partIds, NO_SPACE, HANDED, FOUND, ALREADY_FOUND, MISSING_PARTS, NO_CLUE, INSPECT });
