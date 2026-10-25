@@ -24,8 +24,8 @@ before(() => {
   const api = {
     core,
     persistAttribute() {},
-    onObjectInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) hooks.objects.set(`${name}:${op}`, fn); },
-    onNpcInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) hooks.npcs.set(`${name}:${op}`, fn); },
+    onObjectInteraction: (name, actions) => { if (typeof name !== 'function') for (const [op, fn] of Object.entries(actions)) hooks.objects.set(`${name}:${op}`, fn); },
+    onNpcInteraction: (name, actions) => { if (typeof name !== 'function') for (const [op, fn] of Object.entries(actions)) hooks.npcs.set(`${name}:${op}`, fn); },
     onCustomEvent() {},
     onPlayerLogout() {},
     onPlayerLogin() {},

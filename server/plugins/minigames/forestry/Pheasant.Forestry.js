@@ -198,8 +198,15 @@ function loggedIn({ player }) {
   if (![...events].some((event) => event.eggTakers.has(player))) dropEggs(player);
 }
 
+/** Logging out drops what eggs are carried, as the pheasants won't wait. */
+function loggedOut({ player }) {
+  for (const event of events) event.eggTakers.delete(player);
+  dropEggs(player);
+}
+
 function attachPheasant(api) {
   api.onPlayerLogin(loggedIn);
+  api.onPlayerLogout(loggedOut);
   Spawns.registerEvent("pheasant", { start });
   api.onObjectInteraction("Pheasant Nest", { "Retrieve-egg": retrieve });
   api.onNpcInteraction("Freaky Forester", { "Talk-to": talk });

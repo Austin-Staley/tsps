@@ -8,12 +8,25 @@ const path = require("path");
 let api = null;
 let core = null;
 let data = null;
+/** Ticks since the plugin started (its own clock, for action delays). */
+let clock = 0;
+const busyUntil = new WeakMap();
 
 /** Set once by the plugin before any unit attaches. */
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
   data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "forestry.json"), "utf8"));
+  every(() => {
+    clock++;
+  });
+}
+
+/** Whether the player is still busy with their last event action; if not, they now are for `ticks`. */
+function busy(player, ticks) {
+  if ((busyUntil.get(player) ?? 0) > clock) return true;
+  busyUntil.set(player, clock + ticks);
+  return false;
 }
 
 /** Runs `action` `ticks` ticks from now (at least one). */
@@ -201,6 +214,7 @@ module.exports = {
   },
   later,
   every,
+  busy,
   randomInt,
   pick,
   message,
