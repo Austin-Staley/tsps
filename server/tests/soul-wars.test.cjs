@@ -389,11 +389,13 @@ test("a death: no items lost, bones dropped, back in the team's graveyard as a g
   const [x, y] = game.area.templateOf(a.location);
   assert.deepEqual([x, y], Common.data.bases[team].slice(0, 2), 'no graveyard held: the base');
   assert.equal(varbit(a, 'soul_wars_recent_death'), 1);
+  assert.equal(a.transform, core.CacheDefinitions.getNpcId('soul_wars_player_ghost'), 'a ghost looks like one');
   assert.equal(game.statsOf(b).kills, 1);
   assert.equal(game.isGhost(a), true);
   ticks(17);
   assert.equal(game.isGhost(a), false);
   assert.equal(varbit(a, 'soul_wars_recent_death'), 0);
+  assert.equal(a.transform, -1);
 
   game.control.east.holder = team;
   for (const fn of hooks.death) fn({ player: a, killer: null, handled: false });

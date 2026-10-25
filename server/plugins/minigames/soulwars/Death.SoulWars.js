@@ -2,7 +2,8 @@
  * Deaths, graveyards and barriers, as recorded (rsprox 227/00079, 234/03277; soul-wars.json
  * `graveyards`):
  * - a death keeps everything; the player comes back in the graveyard their team holds (else their
- *   base: inferred) as a ghost for 17 ticks (varbit soul_wars_recent_death); their bones fall
+ *   base: inferred) as a ghost for 17 ticks (varbit soul_wars_recent_death, and the look of
+ *   soul_wars_player_ghost: the appearance is re-sent at both ends, 234/03277 [2149]-[2166]); their bones fall
  *   where they died, with every bone and fragment they carried (Wiki);
  * - a sanctuary's barriers let the living out only: "You can only exit this sanctuary, not enter
  *   it.", "You must wait for another N second(s) before you rejoin the battle."; on the way out a
@@ -20,6 +21,11 @@ const immune = new Map();
 /** Players whose death began in a game: it ends there too, even if the game ends meanwhile. */
 const dying = new Map();
 const NORMAL_BONES = 526;
+const GHOST_NPC = "soul_wars_player_ghost";
+
+function ghostLook(player, on) {
+  player.setNpcTransformationId?.(on ? Common.core.CacheDefinitions.getNpcId(GHOST_NPC) : -1);
+}
 
 function started(game) {
   game.isGhost = (player) => (ghosts.get(player) ?? 0) > game.elapsed;
@@ -93,7 +99,11 @@ function died(event) {
   player.moveTo(game.area.at(respawnTile(game, team)));
   ghosts.set(player, game.elapsed + Common.data.ghostTicks);
   Common.varbit(player, "soul_wars_recent_death", 1);
-  Common.later(Common.data.ghostTicks, () => Common.varbit(player, "soul_wars_recent_death", 0));
+  ghostLook(player, true);
+  Common.later(Common.data.ghostTicks, () => {
+    Common.varbit(player, "soul_wars_recent_death", 0);
+    ghostLook(player, false);
+  });
 }
 
 function keepItems(event) {
@@ -151,6 +161,7 @@ function attackRule(game, attacker, target) {
 }
 
 function ended() {
+  for (const player of ghosts.keys()) ghostLook(player, false);
   ghosts.clear();
   immune.clear();
 }
