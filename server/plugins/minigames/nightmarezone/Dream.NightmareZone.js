@@ -197,14 +197,35 @@ function start(player) {
     postScripts: [{ scriptId: FADE.script, args: FADE.out }],
   });
   sender(player).sendSound?.(Common.data.sounds.prepared, 100, 0);
-  const state = { area: new (areaClass())(), dream, npcs: new Set(), queue: [], unlocked, kills: 0 };
+  const state = { area: new (areaClass())(), dream, npcs: new Set(), queue: [], unlocked, kills: 0, cost, entered: false };
   dreams.set(player, state);
-  Common.later(1, () => Common.setPreparedDream(player, null));
+  Common.later(1, () => dreamOf(player) === state && Common.setPreparedDream(player, null));
   Common.later(3, () => enter(player, state));
+}
+
+/**
+ * Gone before the fade ends (a logout): nothing was dreamt, so the fee goes back into the coffer
+ * and the dream stays prepared.
+ */
+function cancelEntry(player) {
+  const state = dreamOf(player);
+  if (!state || state.entered) return;
+  dreams.delete(player);
+  Common.setCoffer(player, Common.coffer(player) + state.cost);
+  Common.setPreparedDream(player, state.dream);
+  sender(player).closeSubInterface?.(Common.component("toplevel_osrs_stretch:overlay_atmosphere"));
+  Common.later(1, () => {
+    if (!state.area.isDestroyed?.()) state.area.destroy?.();
+  });
 }
 
 function enter(player, state) {
   if (dreamOf(player) !== state) return;
+  if (player.isRegistered?.() === false) {
+    cancelEntry(player);
+    return;
+  }
+  state.entered = true;
   player.sendMessage(Common.message("welcome"));
   state.area.enter(player);
   placeLocs(state);
@@ -304,6 +325,14 @@ function died(event) {
   finish(event.player);
 }
 
+/** A logout mid-fade cancels the dream; one inside it ends it (the arena's postLeave saves them by Dominic). */
+function loggedOut({ player }) {
+  const state = dreamOf(player);
+  if (!state) return;
+  if (state.entered) endDream(player);
+  else cancelEntry(player);
+}
+
 function keepItems(event) {
   if (dreams.has(event.player)) event.shouldDrop = false;
   return null;
@@ -321,6 +350,7 @@ function attachDream(api) {
   api.persistAttribute(Common.DREAM_ATTRIBUTE, "");
   api.persistAttribute(Common.PREVIOUS_ATTRIBUTE, "");
   api.onPlayerLogin(loggedIn);
+  api.onPlayerLogout(loggedOut);
   const [x0, y0, x1, y1] = Common.data.lobby.enclosure;
   enclosure = new (enclosureClass())([new Common.core.Boundary(x0, x1, y0, y1, 0)]);
   api.registerArea(enclosure);

@@ -39,7 +39,7 @@ before(() => {
     onPlayerDeath: (fn) => hooks.death.push(fn),
     onShouldDropItemsOnDeath: (fn) => hooks.drops.push(fn),
     onPlayerLogin() {},
-    onPlayerLogout() {},
+    onPlayerLogout: (fn) => (hooks.logout ??= []).push(fn),
     onInterfaceActionClick: (fn) => { hooks.click = fn; },
     onCustomEvent: (name, fn) => { const prior = hooks.events[name]; hooks.events[name] = prior ? (e) => { prior(e); fn(e); } : fn; },
     emitCustomEvent: (name, payload) => {
@@ -265,4 +265,31 @@ test("bosses with several forms fight through them all (Witch's experiment); a d
   assert.equal(event.handled, true);
   assert.equal(Dream.dreams.has(again), false);
   assert.deepEqual([again.location.getX(), again.location.getY()], [2608, 3115]);
+});
+
+test('a logout during the entry fade cancels the dream: the fee back in the coffer, the dream still prepared', () => {
+  const p = fakePlayer({ quests: QUESTS() });
+  Common.setCoffer(p, 5000);
+  Common.setPreparedDream(p, { mode: 'endurance', difficulty: 'normal' });
+  Dream.start(p);
+  assert.equal(Common.coffer(p), 4000);
+  ticks(1);
+  for (const fn of hooks.logout) fn({ player: p });
+  p.isRegistered = () => false;
+  ticks(3);
+  assert.equal(Dream.dreams.has(p), false);
+  assert.equal(Common.coffer(p), 5000, 'the fee is back');
+  assert.deepEqual(Common.preparedDream(p), { mode: 'endurance', difficulty: 'normal' });
+  assert.deepEqual([p.location.getX(), p.location.getY()], [2608, 3116], 'never moved into the arena');
+});
+
+test('a logout on the very first tick of the fade keeps the dream prepared too', () => {
+  const p = fakePlayer({ quests: QUESTS() });
+  Common.setPreparedDream(p, { mode: 'practice', difficulty: 'normal', boss: 1 });
+  Dream.start(p);
+  for (const fn of hooks.logout) fn({ player: p });
+  p.isRegistered = () => false;
+  ticks(4);
+  assert.deepEqual(Common.preparedDream(p), { mode: 'practice', difficulty: 'normal', boss: 1 });
+  assert.equal(Dream.dreams.has(p), false);
 });
