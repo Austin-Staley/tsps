@@ -4,6 +4,14 @@ This ledger preserves native playthrough evidence across service epochs. A nativ
 
 Cache: `osrs-241_2026-10-20`. Quest Helper reference used for these routes: pinned checkout `06da90f982518a093f2fe1c9cfac5547fa7053d3`. Cache data and shared runtime revisions are named where material. The epoch-3 shared MovementQueue footprint fix was `62eefaee16e32f2df54181ac71618c6b7808a2a6fb28022c8b4d9f34cee0bab4`, from source `b1bfa4f36636195e12ae089ee12db13bbb0ec3e9a476c62e50ac9db8d1c85d08` (accepted offline build/tests 19/19). Later service epochs captured loaded plugin hashes and cache hashes independently. These shared revisions do not replace the per-quest source/loaded hashes below.
 
+The owner authorized the 108-PR split merge batch on 25 October 2026; the
+[PR index](quest-helper-728-prs.md) links live publication state and records the passing
+full suites on the earlier repaired snapshot separately from latest-main delta checks.
+The repaired Another Slice of H.A.M. runtime now passes its focused regressions and has
+a bounded stage-9-to-10 native checkpoint recorded below. Neither those repairs nor
+publication changes the accepted **24/106** scoped natural-route count. Unplayed routes,
+alternate/recovery branches and visual Quest Helper overlay parity remain unverified.
+
 ## Active 106: accepted natural main-route proofs
 
 Twenty-four quests have accepted scoped main-route completion evidence: **24 / 106 active quests (22.64%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
@@ -185,6 +193,7 @@ These are real attempts, not completed quests. A clean source test or peer revie
 
 | Quest | Native source/test/loaded revision | Checkpoint and current disposition |
 | --- | --- | --- |
+| q002 Another Slice of H.A.M. | Repair source `9333c2264d960433dad56a93bffe01bd4cb24e3d3e09f702413eaa355fd2ef65`; test `85270807ea9e4d8efd79b9237f6b9090ca6df86740d1e1a444a187b3a2ff3575`. | Seven earlier integration failures repaired in #1192; 13 focused checks and 58 combined adjacent checks pass. A declared stage-9 setup checkpoint used normal crate hiding, guard lure/combat and ladder 23376 to reach stage 10; relog retained progress and one Sigmund, then the actor logged out. This is not a fresh complete route, reward/recovery proof or visual/timing parity. Evidence: `/tmp/quests-oct25/q002-repair-status.json`, `/tmp/quests-oct25/q002-final-adjacent-green.log`, `/tmp/quests-oct25/q002-native.raw.jsonl`. |
 | q006 Big Chompy Bird Hunting | Attempt: source = loaded `8043381031fd2f574d926fb3f099fe7f9cca49d88524ada102a94ae3daa13b18`; test `287ce5877577eaad87a0da614e06923b5bb3f94b14ee43e4685ecfb96d4c2422`. Later cave-exit correction: `1d22033d066ba1af26f833f3146da6e6a5f0bf50063bbac952822ff6ea6487a7`; focused test `f4bad7f8406e5731a82a9c5f12a561eb3b09c648df45aed7c5a16f02b8208205`. | Epoch 3 stopped at stage 20. Epoch 9 loaded the corrected plugin, resumed that same save, and used ordinary Home Teleport plus cache-backed travel from `(3088,3250,0)` to `(3007,3179,0)`; stage 20/QP 0 remain unchanged. Westward routing beyond the local planner window is unresolved; no swamp/toad/hunt/completion claim. `/tmp/tsps-728/native/jobs/q006-epoch9-travel-checkpoint.json`, `/tmp/tsps-728/native/jobs/q006-epoch9.raw.jsonl`. |
 | q007 Biohazard | Native attempt source = loaded `725069673e079e73ef8a1f0519123ec723341369f54502a99814dce754294aa1`; focused source review later recorded plugin/test `110975c408fc982cd4c5efc62cfb59c610a18a53ce2287131c9318031a3ab8f3` / `b96a622f16b63f3df8e9af61ab3bf4692251e62ec048260867dec3c8d82c5f2e`. | Incomplete before the target route completed; no final reward/QP/XP proof. Later source corrections/review do not retroactively validate the old loaded run. `/tmp/tsps-728/native/jobs/q007.report.json`. |
 | q011 Clock Tower | Native source = loaded `48a7cb0c9ffa5a3ee2fd861c67a747c7284675fe7b3073ebcb9dc8a022a62986`; test `8d35c5110e0696048b5b5d1997f1fa87ce923432a9afee20997b910094b4c3c1`. | Incomplete at stage 3 before obtaining the black cog; no completion/reward. The white ladder is a one-way surface exit, not a second-floor shortcut. No accepted natural route retry is recorded. `/tmp/tsps-728/native/jobs/q011.report.json`. |

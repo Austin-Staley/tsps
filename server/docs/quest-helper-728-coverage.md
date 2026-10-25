@@ -21,12 +21,23 @@ root selected MiniMax M3.1 Flash Free for continued source and peer work. Provid
 preserve the original sessions, reports, tests and changes; no paid fallback is used after
 the MiniMax switch. The integration owner reviews changes, handles shared files and
 generated-source fixes, freezes batches, tests and reloads. Generated JSON is never
-hand-edited or repaired through copied output overrides. The PR stays draft until all
-required checks are complete. Unverified cases stay explicit.
+hand-edited or repaired through copied output overrides. Publication follows the
+owner-authorized reviewed batches. Unverified cases stay explicit.
 
 ## Current checkpoint — 2026-10-25
 
-Work now uses three parallel Codex workers: two native route workers and one source
+The owner authorized the 108-PR split merge batch. The [independent PR index](quest-helper-728-prs.md)
+links live publication state and integration repairs; merging changes does not accept
+additional natural routes or certify deferred, recovery, alternate or visual branches.
+Another Slice of H.A.M.'s seven earlier integration failures are repaired in #1192,
+with 13 focused checks and a bounded native stage-9-to-10 checkpoint. It remains pending
+natural main-route verification. The repaired earlier snapshot passes all 7,453 server
+checks and 260 client test files; subsequent main changes pass separate affected-file
+checks (713 server checks and 26 client files), builds and client typecheck. Exact
+snapshots and the distinction between full suites and later delta checks are recorded
+in the PR index.
+
+Native route work used three parallel Codex workers: two native route workers and one source
 implementation/review worker, with integration review and publication alongside them.
 Each native worker may interleave two independently logged accounts. Eligible workers
 handle routine setup, focused tests and checkpoint administration without waiting for
@@ -40,7 +51,7 @@ of accepted route counts: **24/106 active scoped main routes (22.64%)**. The cou
 is 24/128 against the original inventory; the increase in percentage comes only
 from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Lost City, Tree Gnome Village, Hazeel Cult, Elemental Workshop I, Observatory Quest and Queen of Thieves routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
-completion. The [independent draft PRs](quest-helper-728-prs.md) are updated in reviewed batches; historical figures below remain
+completion. The [independent PRs](quest-helper-728-prs.md) are updated in reviewed batches; historical figures below remain
 checkpoints rather than current totals.
 
 Reviewed publications after the scope reduction include the scoped Secrets of the

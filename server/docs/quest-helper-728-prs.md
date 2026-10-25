@@ -1,7 +1,8 @@
 # Quest Helper issue 728: independent PR index
 
 **Opening a PR is not completing a quest.** This split contains 103 quest PRs and
-five shared-code, regression and documentation PRs. All 108 are draft. The accepted
+five shared-code, regression and documentation PRs. The owner authorized a merge batch
+for all 108; the per-quest PR links below show live publication state. The accepted
 natural main-route count at this checkpoint is **24/106 active quests (22.64%)**;
 22 long quests remain deferred. No full branch, recovery or Java overlay parity is implied.
 
@@ -17,12 +18,12 @@ worktree. Test accounts, saves and raw evidence were not reset.
 4. Individual quest PRs, targeting `split/728/shared-world` for small review diffs.
    Retarget them to `main` after the shared foundation merges. Related quest ownership
    dependencies are linked in the individual descriptions; merge those before accepting
-   the corresponding shared-NPC scenarios. Cross-quest regression tests remain draft
-   until their implementation dependencies land.
+   the corresponding shared-NPC scenarios. Cross-quest regressions and documentation
+   follow their implementation dependencies and final integration checks.
 
-The foundation is a real merge dependency. Keep it draft until its canonical transcript
-consumers and shared API checks are reviewed together; do not merge generated data alone
-and assume every existing selector is already compatible.
+The foundation and canonical transcript consumers were reviewed together for the
+owner-authorized batch. Generated data provenance and shared API compatibility remain
+required; publication does not certify unplayed quest branches.
 
 ## Evidence and ongoing verification
 
@@ -33,13 +34,30 @@ steps rather than replaying completed routes. Record the exact candidate source/
 hash and preserve per-quest raw evidence outside Git. A PR split does not invalidate a
 saved quest state; a behavior change requires a focused delta check.
 
-The reconciled combined snapshot builds. Automated checks passed **1,405/1,412**;
-seven known failures are Another Slice of H.A.M. assertions against unchanged main
-implementation, whose unpublished fix was deliberately excluded. These combined results
-are not standalone validation of every split branch. Four fixtures were reconciled to
-current main contracts without weakening their gameplay assertions. All original changed
-paths are assigned exactly once, and reassembling the split commits matches the reviewed
-aggregate tree. Generated dialogue/index blobs were preserved, never hand edited.
+The earlier split checkpoint passed **1,405/1,412** automated checks. Its seven Another
+Slice of H.A.M. failures are repaired in [#1192](https://github.com/RSPSApp/tsps/pull/1192):
+13 focused checks and 58 combined adjacent checks pass. The runtime repair preserves
+item transfers and restores the tunnel encounter; its native stage-9 checkpoint reached
+stage 10 and survived relog, without establishing a fresh complete quest route.
+
+The batch also repairs valid item-0 pickup/capacity, widget-test syntax, Temple of the
+Eye registration, Dragon Slayer II's cache completion threshold and Veldaban ownership.
+The repaired pre-concurrent-merge snapshot based on
+`5a184baa6d7699c603c82c80cc11168eacaaf957` passes the full server suite:
+**7,453/7,453 checks in 583 files, zero skips**. The full client suite on that base passes
+**260 files, zero failures/skips**, with typecheck and production build also passing.
+
+Concurrent main changes were checked separately on merged commit
+`833e05ec9bec9a73dde44c5d7398debdbd67097b` (tree
+`4c538771c21567b5af729761166305ff63ad83ad`): server build and **713/713 checks in
+17 affected/transport/quest files** pass; **26 connected client test files**, including
+both new report-abuse/CS2 trigger-op tests, pass alongside fresh client typecheck and
+production build. These latest-main checks have zero failures/skips; they are delta
+checks, not a rerun of either full suite on that later commit. Evidence is retained in
+`/tmp/quests-oct25/combined-server-final-status.json`, `combined-client-status.json`,
+`latest-main-merge-server-status.json` and `latest-main-client-status.json`.
+These results do not validate every split branch in isolation or add natural-route
+coverage. Generated dialogue/index blobs were preserved, never hand edited.
 
 Verification was paused with all actors offline. Horror from the Deep is preserved at
 stage 1 on its existing account; Murder Mystery is completed/offline with its Anna-route evidence independently accepted. Completed q090/q084 routes remain recorded.
