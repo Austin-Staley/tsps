@@ -7,6 +7,7 @@ import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegis
 import * as fs from "fs";
 import * as path from "path";
 import { GameConstants } from "../game/GameConstants";
+import { PluginContext } from "./PluginContext";
 import { isMembersWorld, readWorldConfig } from "../game/definition/WorldDefinition";
 import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
@@ -369,11 +370,14 @@ export class PluginManager {
     errorLabel: string,
     profileEventName: string
   ): void {
+    const previousPlugin = PluginContext.enter(hook.pluginName);
     if (!PluginManager.pluginPerfEnabled) {
       try {
         hook.handler(event);
       } catch (err) {
         console.error(`[plugins] ${errorLabel} hook failed (${hook.pluginName})`, err);
+      } finally {
+        PluginContext.exit(previousPlugin);
       }
       return;
     }
@@ -386,6 +390,7 @@ export class PluginManager {
       failed = true;
       console.error(`[plugins] ${errorLabel} hook failed (${hook.pluginName})`, err);
     } finally {
+      PluginContext.exit(previousPlugin);
       PluginManager.recordHookTiming(
         hook.pluginName,
         profileEventName,
@@ -401,12 +406,15 @@ export class PluginManager {
    * (which logs a player out). Fixed args rather than a closure: this sits on per-pair paths.
    */
   public static callArea(area: any, method: string, a?: any, b?: any, c?: any): any {
+    const previousPlugin = PluginContext.enter(area.pluginName ?? null);
     if (!PluginManager.pluginPerfEnabled) {
       try {
         return area[method](a, b, c);
       } catch (err) {
         console.error(`[plugins] area ${method} failed (${area.pluginName ?? area.getName()})`, err);
         return null;
+      } finally {
+        PluginContext.exit(previousPlugin);
       }
     }
 
@@ -419,6 +427,7 @@ export class PluginManager {
       console.error(`[plugins] area ${method} failed (${area.pluginName ?? area.getName()})`, err);
       return null;
     } finally {
+      PluginContext.exit(previousPlugin);
       PluginManager.recordHookTiming(
         area.pluginName ?? area.getName(),
         `area:${method}`,
@@ -802,19 +811,25 @@ export class PluginManager {
       if (inside) {
         active.add(index);
         if (hook.onEnter) {
+          const previousPlugin = PluginContext.enter(hook.pluginName);
           try {
             hook.onEnter({ player, zone: hook.zone });
           } catch (error) {
             console.warn(`[plugins] zone enter hook threw (${hook.pluginName})`, error);
+          } finally {
+            PluginContext.exit(previousPlugin);
           }
         }
       } else {
         active.delete(index);
         if (hook.onExit) {
+          const previousPlugin = PluginContext.enter(hook.pluginName);
           try {
             hook.onExit({ player, zone: hook.zone });
           } catch (error) {
             console.warn(`[plugins] zone exit hook threw (${hook.pluginName})`, error);
+          } finally {
+            PluginContext.exit(previousPlugin);
           }
         }
       }
@@ -2160,6 +2175,7 @@ export class PluginManager {
   private static registerPluginCandidate(
     candidate: PluginLoadCandidate
   ): boolean {
+    const previousPlugin = PluginContext.enter(candidate.pluginName);
     try {
       candidate.plugin.register(PluginManager.createApi(candidate.pluginName));
       PluginManager.loadedPlugins.push(candidate.pluginName);
@@ -2170,6 +2186,8 @@ export class PluginManager {
         err
       );
       return false;
+    } finally {
+      PluginContext.exit(previousPlugin);
     }
   }
 

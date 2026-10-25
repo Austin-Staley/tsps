@@ -272,7 +272,8 @@ function createContext(core, server) {
       const name = definition?.getName?.();
       const isDeckObject = deckArea?.getObjects?.().includes(object);
       if (options?.length || isDeckObject || viewedArea?.getObjects()?.includes(object) || (name && name !== "null")) {
-        objects.push({ id: object.getId(), displayId: definition?.id ?? object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY() });
+        const spawnedBy = object.getSpawnedBy?.();
+        objects.push({ id: object.getId(), displayId: definition?.id ?? object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY(), ...(spawnedBy ? { spawnedBy } : {}) });
       }
     }
 

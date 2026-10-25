@@ -55,12 +55,14 @@ export class UseItemPacketListener {
       return;
     }
 
-    const object = MapObjects.getPrivateArea(player, objectId, new Location(objectX, objectY, player.getLocation().getZ()));
+    const objectLocation = new Location(objectX, objectY, player.getLocation().getZ());
+    const object = MapObjects.getPrivateArea(player, objectId, objectLocation);
     if (!object) {
       return;
     }
 
     const useItem = () => {
+      if (!MapObjects.stillStands(player, objectId, objectLocation, object)) return;
       player.getMovementQueue().reset();
       player.getMovementQueue().walkToReset();
       player.setPositionToFace(object.getLocation());
@@ -208,6 +210,7 @@ export class UseItemPacketListener {
     }
     player.getMovementQueue().walkToObject(object, {
       execute: () => {
+        if (!MapObjects.stillStands(player, objectId, location, object)) return;
         player.getMovementQueue().reset();
         player.getMovementQueue().walkToReset();
         player.setPositionToFace(object.getLocation());

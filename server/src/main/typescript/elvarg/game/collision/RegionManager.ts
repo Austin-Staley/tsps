@@ -2,6 +2,8 @@ import { ObjectDefinition } from '../definition/ObjectDefinition'
 import type { Mobile } from '../entity/impl/Mobile'
 import { GameObject } from '../entity/impl/object/GameObject'
 import { MapObjects } from '../entity/impl/object/MapObjects'
+import { ObjectManager } from '../entity/impl/object/ObjectManager'
+import { World } from '../World'
 import { Direction } from '../model/Direction'
 import { Location } from '../model/Location'
 import { PrivateArea } from '../model/areas/impl/PrivateArea'
@@ -776,6 +778,32 @@ export class RegionManager {
         }
     }
 
+    /**
+     * Lays the world's runtime state over a region the cache has just loaded (again): map
+     * objects removed at runtime come out and runtime objects go back in, clipping included,
+     * so collision matches what ObjectManager.onRegionChange shows clients. Private-area and
+     * player-owned objects keep their own clipping and are not part of the region's.
+     */
+    private static replayWorldObjects(regionId: number): void {
+        const regionX = regionId >> 8;
+        const regionY = regionId & 0xff;
+        const shared = (object: GameObject) => object != null && !object.getPrivateArea() && !object.getOwner()
+            && object.getLocation().getX() >> 6 === regionX && object.getLocation().getY() >> 6 === regionY;
+        for (const removed of World.getRemovedObjects()) {
+            if (!shared(removed)) continue;
+            const location = removed.getLocation();
+            const standing = MapObjects.mapObjects.get(MapObjects.getHash(location.getX(), location.getY(), location.getZ()));
+            // Only one the load put back: a replaced map may no longer have it.
+            if (standing?.some((object) => object.getId() === removed.getId()
+                && object.getType() === removed.getType() && object.getFace() === removed.getFace())) {
+                MapObjects.remove(removed);
+            }
+        }
+        for (const object of ObjectManager.objectsInRegion(regionX, regionY)) {
+            if (shared(object)) MapObjects.add(object);
+        }
+    }
+
     public static reloadRegion(regionId: number): boolean {
         const region = RegionManager.getRegionid(regionId);
         if (!region) {
@@ -915,6 +943,7 @@ export class RegionManager {
             }
             r.roofTiles = roofTiles;
             r.setLoaded(true);
+            RegionManager.replayWorldObjects(regionId);
             PluginManager.emitRegionLoaded({
                 regionId,
                 absX,
