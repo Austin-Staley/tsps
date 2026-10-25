@@ -529,6 +529,15 @@ export class ClientBinaryEncoder {
         return this.buffer.toPacket(ClientPacketId.CHAT_FILTER);
     }
 
+    /** OSRS SEND_SNAPSHOT: the reported name, the internal rule id and the mute request. */
+    encodeReportAbuse(name: string, ruleId: number, mute: boolean): Uint8Array {
+        this.buffer.reset();
+        this.buffer.writeString(name);
+        this.buffer.writeByte(ruleId & 0xff);
+        this.buffer.writeByte(mute ? 1 : 0);
+        return this.buffer.toPacket(ClientPacketId.REPORT_ABUSE);
+    }
+
     encodeVarpTransmit(varpId: number, value: number): Uint8Array {
         this.buffer.reset();
         this.buffer.writeShort(varpId);
@@ -695,6 +704,9 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
                 payload.privateMode,
                 payload.tradeMode,
             );
+
+        case "report_abuse":
+            return clientEncoder.encodeReportAbuse(payload.name, payload.ruleId, payload.mute);
 
         case "varp_transmit":
             return clientEncoder.encodeVarpTransmit(payload.varpId, payload.value);
