@@ -2152,6 +2152,19 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                             [((c >>> 16) & 0xff) / 255, ((c >>> 8) & 0xff) / 255, (c & 0xff) / 255, 1]);
                     }
                 }
+                osrsClient?.setWorldMapViewport?.({
+                    x, y, width, height, displayX, displayY, pixelsPerTileX, pixelsPerTileY,
+                });
+                osrsClient?.clientPlugins?.drawWorldMap?.({
+                    renderer: glr,
+                    bounds: { x, y, w: width, h: height },
+                    pixelsPerTileX,
+                    pixelsPerTileY,
+                    worldToScreen: (worldX: number, worldY: number, plane: number) => {
+                        const displayPos = currentArea.position(plane, worldX, worldY);
+                        return displayPos ? projectDisplayToScreen(displayPos.x, displayPos.y) : undefined;
+                    },
+                });
                 for (const labelDraw of worldMapLabelDraws) {
                     if (labelDraw.font && !/<(?!br\s*\/?\s*>)/i.test(labelDraw.text)) {
                         drawWorldMapLabelGL(

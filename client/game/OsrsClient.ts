@@ -351,6 +351,7 @@ import { resolveWidgetIdentifiers, inferWidgetOpId } from "./widgets/widgetActio
 import { isPauseButtonWidget } from "../widgets/menu/utils";
 import { RenderDataWorkerPool } from "./worker/RenderDataWorkerPool";
 import { WorldMapController, type WorldMapRenderedIcon } from "./worldMap/WorldMapController";
+import type { WorldMapViewport } from "./worldMap/WorldMapTypes";
 import { WorldViewManager } from "./worldview/WorldViewManager";
 
 const DEVICE_OPTION_INTERFACE_SCALING = 27;
@@ -1317,6 +1318,7 @@ export class OsrsClient {
             getRenderer: () => this.renderer,
             getMinimapImageKey: (mapX, mapY, level) => this.getMinimapImageKey(mapX, mapY, level),
             loadClientScriptIfExists: (scriptId) => this.clientScripts.loadIfExists(scriptId),
+            getPluginMenuEntries: (point) => this.clientPlugins.worldMapMenuEntries(point),
             clearHostRenderCaches: () => {
                 const host = this as any;
                 delete host.__worldMapVisibleTileCache;
@@ -3941,6 +3943,10 @@ export class OsrsClient {
 
     getWorldMapMenuEntriesAt(screenX: number, screenY: number): SimpleMenuEntry[] {
         return this.worldMap.getWorldMapMenuEntriesAt(screenX, screenY);
+    }
+
+    setWorldMapViewport(viewport: WorldMapViewport | undefined): void {
+        this.worldMap.setWorldMapViewport(viewport);
     }
 
     getPlayerServerTile(serverId: number): { tileX: number; tileY: number } | undefined {

@@ -37,6 +37,7 @@ import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/Venge
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
+import { ShortestPathPlugin } from "../../../game/plugins/shortestpath/ShortestPathPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
 import { migrateGroundItemsConfig } from "../../../game/plugins/grounditems/migrateGroundItems";
 import { ConfigPlugin } from "./config/ConfigPlugin";
@@ -78,6 +79,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     QuestHelperPlugin,
     XpTrackerPlugin,
     XpGlobesPlugin,
+    ShortestPathPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */
