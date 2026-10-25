@@ -96,8 +96,8 @@ function container(capacity = 28) {
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
     getValidItems: () => slots.filter((s) => s.amount > 0).map((s) => ({ getId: () => s.id, getAmount: () => s.amount })),
-    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount } : null)),
-    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount() }; },
+    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount, getMeta: () => s.meta ?? null } : null)),
+    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null }; },
     refreshItems() {}, full() {},
   };
 }
@@ -1009,4 +1009,30 @@ test('tutorial: leaving early starts it over; only a player who saw it may wait 
   p.location = new Location(2200, 2842, 0);
   hooks.objects.get('Barrier:Pass')({ player: p, object: { getId: () => core.CacheDefinitions.getLocId('soul_wars_main_waiting_area_barrier') } });
   assert.ok(p.messages.includes(Common.message('needTutorial')));
+});
+
+test('an imbue keeps what the item carries: a charged ring of suffering keeps its charges', () => {
+  const p = fakePlayer();
+  const imbued = core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueItem);
+  const slot = [...imbued.keys()].find((index) => core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueBase).get(imbued.get(index)) === 20655);
+  assert.ok(slot != null, 'the cache imbues a ring of suffering (r)');
+  p.inventory.slots.push({ id: 20655, amount: 1, meta: { 'ring-of-suffering': 100000, preset: true } });
+  Common.addVarp(p, 'zeal_tokens', 1000);
+  Rewards.imbue({ player: p, slot });
+  assert.equal(p.inventory.slots[0].id, imbued.get(slot));
+  assert.deepEqual(p.inventory.slots[0].meta, { 'ring-of-suffering': 100000, preset: true });
+});
+
+test('tutorial: a cape put on during the entry fade stops the entry, and the cape stays', () => {
+  const p = fakePlayer({ demonstrated: false });
+  talkTo(p, lobbyNomad());
+  p.getDialogueManager().continueAll();
+  p.getDialogueManager().choose(1);
+  p.getDialogueManager().continueAll();
+  ticks(1);
+  p.worn[1] = new core.Item(6570, 1); // a fire cape, equipped mid-fade
+  ticks(6);
+  assert.equal(Tutorial.inTutorial(p), false);
+  assert.equal(p.worn[1]?.getId(), 6570, 'the cape is still worn');
+  assert.ok(p.messages.includes(Common.message('restricted')));
 });
