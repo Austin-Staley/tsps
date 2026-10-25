@@ -57,3 +57,6 @@ module.exports = (api) => {
   api.onCustomEvent("destroy-item:destroyed", Storage.destroyed);
   api.onPlayerDeathDrops(deathDrops);
 };
+
+/** For a death-drops hook that takes the lost items before this one runs (a boss's deathbank). */
+module.exports.deathDrops = deathDrops;
