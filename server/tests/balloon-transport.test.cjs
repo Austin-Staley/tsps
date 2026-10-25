@@ -417,14 +417,43 @@ test("an obstacle in the balloon's two cells crashes it: no route, no XP, the lo
   takeOff(player, 'craft');
   // Map 4 has a cloud at row 7, columns 4-6: four relaxes at height 8 fly the basket into it.
   flySolution(player, 'R4');
-  assert.equal(Controls.inFlight(player), false);
+  assert.equal(Controls.inFlight(player), true, "still the player's flight until it has set them down");
   assert.ok(player.messages.includes('The balloon crashes.'));
   tick(2);
   assert.deepEqual(xy(player.getLocation()), [2808, 3354], 'down on Entrana from the first screen');
+  tick(6);
+  assert.equal(Controls.inFlight(player), false);
   assert.equal(Common.opened(player, station('craft')), false);
   assert.equal(player.xp, 0);
   assert.equal(player.inventory.get(1521), 0);
   assert.equal(player.blocked, false);
+});
+
+test("a finished flight keeps the player until it lands: no new flight in the gap, and no move during one", () => {
+  const player = fakePlayer({ items: { oak: 10, willow: 10 } });
+  takeOff(player, 'craft');
+  flySolution(player, CRAFTING);
+  tick(1);
+  assert.equal(Common.opened(player, station('craft')), true, 'the route opens at +1');
+  assert.equal(player.blocked, false, 'and the player may move');
+  Travel.travel(player, station('entrana'), station('varrock'));
+  continueChain(player);
+  assert.equal(Controls.inFlight(player), true, 'still the Crafting Guild flight');
+  tick(3);
+  assert.deepEqual(xy(player.getLocation()), station('craft').land, 'set down at the Crafting Guild');
+  tick(4);
+  assert.equal(Controls.inFlight(player), false, 'free to fly again');
+  assert.equal(player.inventory.get(1519), 10, 'no Varrock flight was paid for');
+});
+
+test('logging out while a finished flight comes down saves the player where it was taking them', () => {
+  const player = fakePlayer({ items: { oak: 10 } });
+  takeOff(player, 'craft');
+  flySolution(player, CRAFTING);
+  Controls.logout({ player });
+  assert.deepEqual(xy(player.getLocation()), station('craft').land);
+  assert.equal(Common.opened(player, station('craft')), true);
+  assert.equal(Controls.inFlight(player), false);
 });
 
 test('bailing over Entrana lands safely there; a logout at the controls loses the logs', () => {
@@ -433,6 +462,7 @@ test('bailing over Entrana lands safely there; a logout at the controls loses th
   flySolution(bailer, 'R2');
   press(bailer, 'zep_btn_close');
   assert.ok(bailer.messages.includes('You bail, but land safely on Entrana.'));
+  tick(8);
   assert.equal(Controls.inFlight(bailer), false);
 
   const leaver = fakePlayer({ items: { oak: 10 } });

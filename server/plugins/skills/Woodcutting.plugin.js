@@ -1204,4 +1204,7 @@ module.exports = {
   findBestUsableAxe,
   findBestUsableAxeByLevel,
   isWoodcuttingActive,
+  calculateCutChance,
+  /** Stops the player's chopping (a Forestry event spawning beside them). */
+  stopWoodcutting: (player) => activeSessionsRef && stopWoodcutting(activeSessionsRef, player),
 };

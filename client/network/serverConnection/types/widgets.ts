@@ -69,6 +69,8 @@ export type WidgetServerPayload =
           fromSlot: number;
           toSlot: number;
           flags: number;
+          /** IF_SETEVENTS_V2's transmit mask for ops 1-32 (bit N for op N+1). */
+          opMask?: number;
       }
     | {
           action: "run_script";

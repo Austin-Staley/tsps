@@ -254,9 +254,22 @@ function closeControls(player) {
   player.setInterfaceId?.(-1);
 }
 
+/**
+ * The controls are done, but the flight stays the player's until it has set them down: no other
+ * flight starts meanwhile, and its delayed steps (`owns`) stand down if the player dies or leaves.
+ */
 function end(player, flight) {
   flight.done = true;
-  flights.delete(player);
+}
+
+function owns(player, flight) {
+  return flights.get(player) === flight && player.isRegistered?.() !== false
+    && player.isDyingReturn?.() !== true && (player.getHitpoints?.() ?? 1) > 0;
+}
+
+/** The flight is over: the player may fly again. */
+function finish(player, flight) {
+  if (flights.get(player) === flight) flights.delete(player);
 }
 
 function release(player) {
@@ -270,20 +283,30 @@ function land(player, flight) {
   closeControls(player);
   Common.fade(player, BLACK_OUT);
   const { station } = flight;
-  Common.later(SUCCESS.routeAt, () => {
+  const open = () => {
+    if (flight.opened) return;
+    flight.opened = true;
     sideTabs(player, true);
     release(player);
     if (!flight.opensRoute) return;
     Common.openRoute(player, station);
     player.getSkillManager().addExperience(Common.core.Skill.FIREMAKING, Common.data.unlockXp, false);
-  });
-  Common.later(SUCCESS.landAt, () => {
+  };
+  flight.arrive = () => {
+    if (flight.arrived) return;
+    open();
+    flight.arrived = true;
     player.sendMessage(flight.route.arrive);
     player.moveTo(Common.tile(station.land));
     Common.api.emitCustomEvent("balloon-transport:flight-landed", { player, station: station.key });
+  };
+  Common.later(SUCCESS.routeAt, () => owns(player, flight) && open());
+  Common.later(SUCCESS.landAt, () => owns(player, flight) && flight.arrive());
+  Common.later(SUCCESS.fadeInAt, () => owns(player, flight) && Common.fade(player, FADE_IN));
+  Common.later(SUCCESS.overlayAt, () => {
+    if (owns(player, flight)) Common.closeFade(player);
+    finish(player, flight);
   });
-  Common.later(SUCCESS.fadeInAt, () => Common.fade(player, FADE_IN));
-  Common.later(SUCCESS.overlayAt, () => Common.closeFade(player));
 }
 
 /** Coming down off the route (Wiki): the logs are gone, nothing opens. `crashed` is told on. */
@@ -292,17 +315,24 @@ function comeDown(player, flight, message, site, crashed) {
   closeControls(player);
   Common.fade(player, BLACK_OUT);
   player.sendMessage(message);
-  Common.later(SUCCESS.routeAt, () => {
+  flight.arrive = () => {
+    if (flight.arrived) return;
+    flight.arrived = true;
     sideTabs(player, true);
     release(player);
     player.moveTo(Common.tile(data().crashSites[site]));
-  });
+  };
+  Common.later(SUCCESS.routeAt, () => owns(player, flight) && flight.arrive());
   // Told as the screen fades back in: a conversation started on the teleport's tick is cleared.
   Common.later(SUCCESS.landAt, () => {
+    if (!owns(player, flight)) return;
     Common.fade(player, FADE_IN);
     if (crashed) Common.api.emitCustomEvent("balloon-transport:flight-crashed", { player, station: flight.station.key, screen: flight.screen, site });
   });
-  Common.later(SUCCESS.overlayAt, () => Common.closeFade(player));
+  Common.later(SUCCESS.overlayAt, () => {
+    if (owns(player, flight)) Common.closeFade(player);
+    finish(player, flight);
+  });
 }
 
 /** Down on Entrana from the first screen, else the route's crash site (per screen where given). */
@@ -325,7 +355,7 @@ function controlClick(event) {
   const group = event.groupId ?? (buttonId >>> 16);
   if (group !== cache().getInterfaceId(SIDE_INTERFACE)) return;
   const flight = flights.get(event.player);
-  if (!flight) return;
+  if (!flight || flight.done) return;
   const child = event.childId ?? (buttonId & 0xffff);
   const name = [...Object.keys(CONTROLS), BAIL].find((button) => (component(`${SIDE_INTERFACE}:${button}`) & 0xffff) === child);
   if (!name) return;
@@ -335,10 +365,16 @@ function controlClick(event) {
   if (flight.waiting === 0) move(event.player, flight, flight.queue.shift());
 }
 
-/** Logging out at the controls loses the logs (Wiki); the player was never moved off Entrana. */
+/**
+ * Logging out at the controls loses the logs (Wiki); the player was never moved off Entrana. Mid
+ * landing, they're set down at once, so the save is where the flight was taking them.
+ */
 function logout({ player }) {
   const flight = flights.get(player);
-  if (flight) end(player, flight);
+  if (!flight) return;
+  if (flight.done) flight.arrive?.();
+  end(player, flight);
+  finish(player, flight);
 }
 
 /**

@@ -999,6 +999,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
+        case ServerPacketId.WIDGET_SET_FLAGS_RANGE_V2:
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_flags_range",
+                    uid: reader.readInt(),
+                    fromSlot: reader.readShort(),
+                    toSlot: reader.readShort(),
+                    flags: reader.readInt(),
+                    opMask: reader.readInt(),
+                },
+            };
+
         case ServerPacketId.WIDGET_RUN_SCRIPT: {
             const scriptId = reader.readInt();
             const argCount = reader.readByte();

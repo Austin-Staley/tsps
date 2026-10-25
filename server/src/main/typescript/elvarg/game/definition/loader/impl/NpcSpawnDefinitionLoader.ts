@@ -2,6 +2,7 @@ import { World } from "../../../World";
 import { NpcDefinition } from "../../NpcDefinition";
 import { NpcSpawnDefinition } from "../../NpcSpawnDefinition";
 import { NPC } from "../../../entity/impl/npc/NPC";
+import { NpcSpawnLineage } from "../../../entity/impl/npc/NpcSpawnLineage";
 import { Direction } from "../../../model/Direction";
 import { Location } from "../../../model/Location";
 import { DefinitionLoader } from "../DefinitionLoader";
@@ -42,7 +43,9 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
      * numbering. Read the other way, every NPC without a direction faced north.
      */
     private static readonly CACHE_TO_CLIENT_DIRECTION = [5, 6, 7, 3, 4, 0, 1, 2];
-    private static readonly spawnedNpcs = new Set<NPC>();
+    /** The spawns the last load applied, with their respawn clones. */
+    private static lineage: NpcSpawnLineage | null = null;
+    public static readonly LINEAGE_OWNER = "npc-spawns";
 
     public load(): boolean {
         const loaded = this.loadSources<RawNpcSpawnDefinition>(
@@ -134,7 +137,10 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
     }
 
     private applyToWorld(definitions: NpcSpawnDefinition[]): number {
-        this.removePreviouslyAppliedNpcs();
+        // A reload replaces them all, respawn clones and queued respawns included.
+        NpcSpawnDefinitionLoader.lineage?.retire();
+        const lineage = new NpcSpawnLineage(NpcSpawnDefinitionLoader.LINEAGE_OWNER);
+        NpcSpawnDefinitionLoader.lineage = lineage;
         const availableCapacity = Math.max(
             0,
             World.getNpcs().capacityReturn() - World.getNpcs().sizeReturn() - 1
@@ -151,6 +157,7 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
                 definition.getRadius() ?? NpcSpawnDefinitionLoader.DEFAULT_WANDER_RADIUS
             );
             npc.setFace(definition.getFacing());
+            npc.setSpawnLineage(lineage);
 
             const describedNpc = npc as NPC & {
                 setDescription?(description: string): void;
@@ -159,7 +166,6 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
                 describedNpc.setDescription(definition.getDescription());
             }
             if (World.getNpcs().add(npc)) {
-                NpcSpawnDefinitionLoader.spawnedNpcs.add(npc);
                 applied++;
             }
         }
@@ -171,26 +177,5 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
             }
         }
         return applied;
-    }
-
-    private removePreviouslyAppliedNpcs(): void {
-        const addQueue = World.getAddNPCQueue();
-        const removeQueue = World.getRemoveNPCQueue();
-        for (const npc of NpcSpawnDefinitionLoader.spawnedNpcs) {
-            for (let index = addQueue.indexOf(npc); index !== -1; index = addQueue.indexOf(npc)) {
-                addQueue.splice(index, 1);
-            }
-            for (
-                let index = removeQueue.indexOf(npc);
-                index !== -1;
-                index = removeQueue.indexOf(npc)
-            ) {
-                removeQueue.splice(index, 1);
-            }
-            if (npc.isRegistered()) {
-                World.getNpcs().remove(npc);
-            }
-        }
-        NpcSpawnDefinitionLoader.spawnedNpcs.clear();
     }
 }
