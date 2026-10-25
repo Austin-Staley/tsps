@@ -64,6 +64,35 @@ const ROCKS = [
       { itemId: ItemIds.BARRONITE_DEPOSIT, min: 1, max: 1, weight: 24, xp: 32, message: "You manage to mine a barronite deposit." },
     ],
   },
+  // Wiki Sandstone rocks / Granite rocks: one piece per success, then the rock is "rocks1" for 9 ticks
+  // (5.4 s; recorded add_overlaytimer_loc 9). The chance of any piece (56.5% at 35 -> 92.7% at 99 for
+  // sandstone, 42.0% at 45 -> 68.2% at 99 for granite) is extended to level 1 on the 256 roll, and each
+  // size's share of a success moves from the Wiki's chart at the rock's level to its chart at 99.
+  // Recorded (232/03162): "You manage to quarry some sandstone."
+  {
+    objectName: "Sandstone rocks",
+    objectIds: [11386],
+    level: 35, xp: 30, oreId: 6971, petBase: 741600, // Wiki (Rock golem, Clue geode)
+    successLow: 95, successHigh: 237, respawnTicks: 9,
+    outcomes: [
+      { itemId: 6971, min: 1, max: 1, weight: 39.6, weightHigh: 28.9, xp: 30, message: "You manage to quarry some sandstone." },
+      { itemId: 6973, min: 1, max: 1, weight: 25.5, weightHigh: 24.0, xp: 40, message: "You manage to quarry some sandstone." },
+      { itemId: 6975, min: 1, max: 1, weight: 20.3, weightHigh: 25.6, xp: 50, message: "You manage to quarry some sandstone." },
+      { itemId: 6977, min: 1, max: 1, weight: 14.5, weightHigh: 21.5, xp: 60, message: "You manage to quarry some sandstone." },
+    ],
+  },
+  {
+    objectName: "Granite rocks",
+    objectIds: [11387],
+    depletedRock: "rocks2", // recorded (227/01757, 234/03285)
+    level: 45, xp: 50, oreId: 6979, petBase: 741600,
+    successLow: 53, successHigh: 175, respawnTicks: 9,
+    outcomes: [
+      { itemId: 6979, min: 1, max: 1, weight: 37.8, weightHigh: 30.4, xp: 50, message: "You manage to quarry some granite." },
+      { itemId: 6981, min: 1, max: 1, weight: 31.6, weightHigh: 32.5, xp: 60, message: "You manage to quarry some granite." },
+      { itemId: 6983, min: 1, max: 1, weight: 30.7, weightHigh: 37.2, xp: 75, message: "You manage to quarry some granite." },
+    ],
+  },
   { objectName: "Silver rocks", objectIds: [7457], level: 20, xp: 40, oreId: ItemIds.SILVER_ORE, petBase: 741600, cycles: 14, respawnTicks: 100 },
   { objectName: "Coal rocks", objectIds: [7456], level: 30, xp: 50, oreId: ItemIds.COAL, petBase: 290640, cycles: 15, respawnTicks: 50 },
   { objectName: "Gold rocks", objectIds: [7491, 9720, 9721, 9722, 11951, 11183, 11184, 11185, 2099, ObjectIds.GOLD_ROCKS_2], level: 40, xp: 65, oreId: ItemIds.GOLD_ORE, petBase: 296640, cycles: 15, respawnTicks: 100 },
@@ -162,9 +191,10 @@ function stopMining(activeSessions, player, resetAnim = true) {
   }
 }
 
-/** The mined-out loc for a rock: "rocks" plus the digit its own gameval ends in (copperrock2 -> rocks2). */
-function depletedRockId(rockId) {
+/** The mined-out loc for a rock: its own (granite's rocks2), else "rocks" plus the digit its gameval ends in (copperrock2 -> rocks2). */
+function depletedRockId(rockId, rock) {
   const { CacheDefinitions } = pluginApi.core;
+  if (rock?.depletedRock) return CacheDefinitions.getLocId(rock.depletedRock);
   const variant = ROCK_VARIANT_PATTERN.exec(CacheDefinitions.getLocNames().get(rockId) ?? "")?.[1];
   return CacheDefinitions.getLocId(variant ? `${DEPLETED_ROCK_NAME}${variant}` : DEFAULT_DEPLETED_ROCK);
 }
@@ -180,7 +210,7 @@ function sendRespawnTimer(player, depleted, ticks) {
 
 function depleteRock(player, rockObject, rock) {
   const depleted = new GameObject(
-    depletedRockId(rockObject.getId()),
+    depletedRockId(rockObject.getId(), rock),
     rockObject.getLocation().clone(),
     rockObject.getType(),
     rockObject.getFace(),
@@ -249,12 +279,21 @@ function swing(player, state) {
   player.performAnimation(state.pickaxe.animation);
 }
 
-function rollOutcome(outcomes) {
-  const total = outcomes.reduce((sum, outcome) => sum + outcome.weight, 0);
+/** An outcome's weight at this level: `weight` at the rock's level, moving to `weightHigh` (if any) at 99. */
+function outcomeWeight(outcome, rock, level) {
+  if (outcome.weightHigh === undefined || rock.level >= 99) return outcome.weight;
+  const progress = Math.max(0, Math.min(1, (level - rock.level) / (99 - rock.level)));
+  return outcome.weight + (outcome.weightHigh - outcome.weight) * progress;
+}
+
+function rollOutcome(rock, level) {
+  const { outcomes } = rock;
+  const weights = outcomes.map((outcome) => outcomeWeight(outcome, rock, level));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
   let roll = Math.random() * total;
-  for (const outcome of outcomes) {
-    roll -= outcome.weight;
-    if (roll < 0) return outcome;
+  for (let i = 0; i < outcomes.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return outcomes[i];
   }
   return outcomes[outcomes.length - 1];
 }
@@ -337,7 +376,7 @@ class MiningTask extends Task {
         if (state.cyclesUntilOre > 0) continue;
       }
 
-      const outcome = state.rock.outcomes ? rollOutcome(state.rock.outcomes) : null;
+      const outcome = state.rock.outcomes ? rollOutcome(state.rock, getRollMiningLevel(player)) : null;
       const oreId = outcome?.itemId ?? state.rock.oreId;
       const amount = outcome ? outcomeAmount(outcome) : 1;
       if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, oreId)) {
@@ -460,6 +499,7 @@ module.exports = {
   PICKAXES_DESC,
   ROCKS,
   findBestPickaxe,
+  rollOutcome,
   isMiningActive(player) {
     return ACTIVE_MINERS.has(player);
   },
