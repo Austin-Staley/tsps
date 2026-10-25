@@ -19,10 +19,11 @@ The core's `ArceuusOfferings.BONE_XP` (Sinister Offering, Construction altars) i
 unchanged.
 
 Burying sends "You dig a hole in the ground..." and "You bury the bones." for every bone, never the
-bone's name (rsprox captures, for example recordings 901, 3455 and 3461, revision 235; the
-transcripts hold no variant naming a bone). Live OSRS sends the dig message, the bone's removal, the experience
-and the sound on the click's tick and "You bury the bones." on the next; tsps still does all of it
-two ticks after the click, which lets walking away keep the bone.
+bone's name. Live OSRS answers the Bury click on its own tick with the dig message, the bone's
+removal, the Prayer experience, the sequence (827, `human_pickupfloor`) and synth 2738, then sends
+"You bury the bones." on the next tick (rsprox captures, for example recordings 901, 3455 and 3461,
+revision 235; the transcripts hold no variant naming a bone). tsps does the same, so walking away
+after the click does not give the bone back.
 
 ### Sequential burial (opt-in)
 
