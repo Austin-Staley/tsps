@@ -87,14 +87,16 @@ function retrieve(player) {
   }
 }
 
+function retrieveItems({ player }) {
+  retrieve(player);
+  return true;
+}
+
 function attachRetrieval(api) {
   api.persistAttribute(Common.data.attributes.stored);
   api.onPlayerBeforeDeath(beforeDeath);
   api.onPlayerDeathDrops(deathDrops);
-  api.onNpcClick(Common.data.npcs.pete, 5, ({ player }) => {
-    retrieve(player);
-    return true;
-  });
+  api.onNpcClick(Common.data.npcs.pete, 5, retrieveItems);
 }
 
 module.exports = { attachRetrieval, retrieve, beforeDeath, deathDrops, stored };
