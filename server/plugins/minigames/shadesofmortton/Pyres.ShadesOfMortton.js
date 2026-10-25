@@ -83,8 +83,7 @@ function putLogs(player, object, wood) {
   player.getInventory().refreshItems?.();
   player.performAnimation?.(new Common.core.Animation(p().anims.place));
   player.sendMessage(Common.message("logsOn"));
-  pyres.set(tileKey(object), { player, wood, remains: null });
-  swap(object, wood.pyre);
+  pyres.set(tileKey(object), { player, wood, remains: null, burning: false, object: swap(object, wood.pyre) });
   Common.api.emitCustomEvent("shades-of-mortton:pyre-logs", { player });
 }
 
@@ -97,7 +96,7 @@ function putRemains(player, object, remains) {
   player.performAnimation?.(new Common.core.Animation(p().anims.place));
   player.sendMessage(Common.message("remainsOn"));
   use.remains = remains;
-  swap(object, use.wood.ready);
+  use.object = swap(object, use.wood.ready);
 }
 
 /** Items used on a pyre: pyre logs on the empty one, remains on the logs. */
@@ -182,7 +181,7 @@ function light({ player, object }) {
   const use = pyres.get(tileKey(object));
   const wood = woodByPyre(object?.getId?.());
   if (!wood || object.getId() !== wood.ready) return false;
-  if (!use || use.player !== player || !use.remains) {
+  if (!use || use.player !== player || !use.remains || use.burning) {
     player.sendMessage(Common.message("pyreBusy"));
     return true;
   }
@@ -195,36 +194,48 @@ function light({ player, object }) {
     player.sendMessage(Common.message("firemaking", { level: wood.level }));
     return true;
   }
+  use.burning = true;
   player.sendMessage(Common.message("lighting"));
   player.performAnimation?.(new Common.core.Animation(p().anims.light));
   const at = object.getLocation();
   const { remains } = use;
+  // Each step is this burn's own: a pyre given up on logout is no longer it.
+  const key = tileKey(object);
+  const current = () => pyres.get(key) === use;
   Common.later(p().fireTicks, () => {
+    if (!current()) return;
     graphicAt(p().graphics.fire, at, nearbyPlayers(at));
     skills.addExperience(Common.core.Skill.PRAYER, remains.prayer);
     skills.addExperience(Common.core.Skill.FIREMAKING, wood.xp);
   });
   Common.later(p().fireTicks + p().spiritTicks, () => {
+    if (!current()) return;
     const spirit = Common.core.NPC.create(Common.npcId(p().spirit), at.clone());
     spirit.__skipDefaultRespawn = true;
     Common.core.World.getAddNPCQueue().push(spirit);
     Common.later(p().spiritLeavesTicks, () => Common.core.World.getRemoveNPCQueue().push(spirit));
   });
   Common.later(p().fireTicks + p().spiritTicks + p().rewardTicks, () => {
+    if (!current()) return;
     const stand = standNear(object);
     const reward = rewardFor(remains);
     // Recorded: the burner's alone, never public.
     Common.core.ItemOnGroundManager.registerNonGlobals(player, new Common.core.Item(reward.id, reward.amount), stand);
     graphicAt(p().graphics.smoke, stand, nearbyPlayers(stand));
-    pyres.delete(tileKey(object));
+    pyres.delete(key);
     swap(object, Common.locId(EMPTY_PYRE));
     Common.api.emitCustomEvent("shades-of-mortton:cremated", { player, remains: remains.itemId, reward });
   });
   return true;
 }
 
+/** A pyre its burner leaves is emptied for the next player. */
 function forget({ player }) {
-  for (const [key, use] of pyres) if (use.player === player) pyres.delete(key);
+  for (const [key, use] of pyres) {
+    if (use.player !== player) continue;
+    pyres.delete(key);
+    swap(use.object, Common.locId(EMPTY_PYRE));
+  }
 }
 
 function attachPyres(api) {

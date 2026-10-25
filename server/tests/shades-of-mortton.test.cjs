@@ -34,7 +34,7 @@ before(() => {
     onNpcDeath: (fn) => hooks.npcDeath.push(fn),
     onCustomEvent: (name, fn) => { hooks.events[name] = fn; },
     onItemOnObject: (fn) => { hooks.itemOnObject = fn; },
-    onPlayerLogout() {},
+    onPlayerLogout: (fn) => { hooks.logout = fn; },
     emitCustomEvent: (name, payload) => {
       if (name === 'quest:get-stage') payload.stage = payload.player.stage ?? 0;
       else hooks.events.emitted.push([name, payload]);
@@ -261,4 +261,44 @@ test('a chest without room for all its treasure (3 mithril bars, coins, paste) k
   assert.equal(p.inventory.getAmount(key('bronze', 'bloodred')), 0, 'with room, the key dissolves');
   assert.equal(p.inventory.getAmount(2359), 3);
   assert.ok(p.inventory.getAmount(Common.objId('swamppaste')) > 0);
+});
+
+function loaded(p, at = pyre('temple_pyre')) {
+  Pyres.pyres.clear(); // the pyres earlier tests left loaded
+  p.inventory.add(new core.Item(Common.objId('magic_logs_pyre'), 1));
+  p.inventory.add(new core.Item(Common.objId('shade_bones1'), 1));
+  p.inventory.add(new core.Item(Common.objId('tinderbox'), 1));
+  hooks.itemOnObject({ player: p, object: at, itemId: Common.objId('magic_logs_pyre'), handled: false });
+  hooks.itemOnObject({ player: p, object: pyre('temple_pyre_magic'), itemId: Common.objId('shade_bones1'), handled: false });
+}
+
+test('a pyre burns once: Light again while it burns is refused, and the experience comes once', () => {
+  const p = burner();
+  loaded(p);
+  const ready = pyre('temple_pyre_bones_magic');
+  hooks.objects.get('Magic Pyre:Light')({ player: p, object: ready });
+  hooks.objects.get('Magic Pyre:Light')({ player: p, object: ready });
+  assert.equal(p.messages.filter((m) => m === 'You attempt to light the funeral pyre.').length, 1);
+  assert.equal(p.messages.at(-1), Common.message('pyreBusy'));
+  ticks(3 + 2 + 4);
+  assert.deepEqual(p.xp, [['Prayer', 25], ['Firemaking', 404.5]]);
+  assert.equal(Pyres.pyres.size, 0, 'the pyre is free again');
+});
+
+test('a burner who logs out leaves the pyre empty for the next player, and a lit burn stops', () => {
+  const gone = burner();
+  loaded(gone);
+  hooks.logout({ player: gone });
+  assert.equal(Pyres.pyres.size, 0);
+  const next = burner();
+  next.inventory.add(new core.Item(Common.objId('magic_logs_pyre'), 1));
+  hooks.itemOnObject({ player: next, object: pyre('temple_pyre'), itemId: Common.objId('magic_logs_pyre'), handled: false });
+  assert.ok(next.messages.includes('You put some logs on the pyre.'), 'not held for the one who left');
+  hooks.logout({ player: next });
+  const lit = burner();
+  loaded(lit);
+  hooks.objects.get('Magic Pyre:Light')({ player: lit, object: pyre('temple_pyre_bones_magic') });
+  hooks.logout({ player: lit });
+  ticks(3 + 2 + 4);
+  assert.deepEqual(lit.xp, [], 'nothing more of a burn given up');
 });
