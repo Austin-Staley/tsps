@@ -45,7 +45,7 @@ module.exports = function registerDragonSlayerII(api) {
   // DS2's native main-progress varbit uses the milestones consumed by cache NPC/loc
   // transforms and the client journal. Keep the plugin's compact stage enum private.
   const NATIVE_STAGE = { 0: 0, 1: 5, 2: 10, 3: 15, 4: 30, 5: 40, 6: 55, 7: 90,
-    8: 125, 9: 130, 10: 135, 11: 140, 12: 170, 13: 200, 14: 210 };
+    8: 125, 9: 130, 10: 135, 11: 140, 12: 170, 13: 200, 14: 215 };
   // QuestHelper maps the repair phase and each earned wave to these cache-visible milestones.
   const ASSAULT_NATIVE_STAGE = [180, 181, 182, 183, 184, 185, 186, 190, 191, 191, 195, 196, 196];
   const KEY_PARTS = [I.DRAGON_KEY_PIECE, I.DRAGON_KEY_PIECE_2, I.DRAGON_KEY_PIECE_3, I.DRAGON_KEY_PIECE_4];

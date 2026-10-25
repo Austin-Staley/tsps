@@ -117,9 +117,9 @@ export async function connectHeadlessClient(username: string, password: string):
 
 /** "Log out" on the remembered-account screen: the server drops that browser's token. */
 async function forgetLoginToken(rawUsername: string, token: string): Promise<void> {
-  const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
+  const username = Misc.formatDisplayName(rawUsername);
+  const protocolName = Misc.formatNameForProtocol(username);
   if (protocolName.length < 1 || protocolName.length > 12 || !Misc.isValidName(protocolName)) return;
-  const username = Misc.formatText(protocolName);
   const online = World.getPlayerByName(username);
   if (online) {
     const entries = readLoginTokens(online.getAttribute(LOGIN_TOKENS_ATTRIBUTE), Date.now());
@@ -244,6 +244,22 @@ export class NetworkBuilder {
       if (request.url === "/regions") {
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify({ regions: MapRegionReplacementManager.getRegionIds() }));
+        return;
+      }
+      // Terrain-only replacements have no pack (the .pack format needs object
+      // data too); the map editor fetches their raw terrain bytes here instead.
+      const terrainMatch = /^\/regions\/(\d+)\.terrain$/.exec(request.url ?? "");
+      if (terrainMatch) {
+        const terrain = MapRegionReplacementManager.getReplacementMapData(
+          Number(terrainMatch[1]))?.terrainData;
+        if (!terrain) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader("Content-Length", terrain.length);
+        response.end(Buffer.from(terrain));
         return;
       }
       const match = /^\/regions\/(\d+)\.pack$/.exec(request.url ?? "");
@@ -481,6 +497,14 @@ export class ClientConnection {
           if (this.player) {
             const spellName = CacheDefinitions.getSpellName(packet.spellWidget, packet.spellItemId);
             const target = World.getPlayers().get(packet.targetIndex);
+            if (target) {
+              const event = {
+                player: this.player, target, spellName, spellWidget: packet.spellWidget,
+                spellChild: packet.spellChild, spellItemId: packet.spellItemId, handled: false,
+              };
+              PluginManager.emitCustomEvent("magic:spell-on-player", event);
+              if (event.handled) continue;
+            }
             if (target && LunarSpells.handlePlayerTarget(this.player, target, spellName)) {
               continue;
             }
@@ -578,7 +602,7 @@ export class ClientConnection {
         case "chat":
           if (this.player) {
             if (packet.messageType === "public") {
-              ChatPacketListener.handleText(this.player, packet.text);
+              ChatPacketListener.handleText(this.player, packet.text, packet.autoChat === true);
             } else if (packet.messageType === "friends_chat") {
               PluginManager.emitSocialPacket({
                 player: this.player, packet: packet as typeof packet & { messageType: "friends_chat" }, handled: false,
@@ -589,6 +613,7 @@ export class ClientConnection {
         case "friends_chat_action":
         case "private_message":
         case "chat_filter":
+        case "report_abuse":
           if (this.player) PluginManager.emitSocialPacket({ player: this.player, packet, handled: false });
           continue;
         case "dialogue_continue": {
@@ -634,7 +659,7 @@ export class ClientConnection {
         case "dialogue_amount": {
           const action = this.player?.getEnteredAmountAction();
           // 0 is dropped unless the prompt takes it (a setting where 0 means off).
-          if (action && (packet.amount > 0 || (packet.amount === 0 && (action as { acceptsZero?: boolean }).acceptsZero === true))) {
+          if (action && (packet.amount > 0 || (packet.amount === 0 && action.acceptsZero === true) || (packet.amount < 0 && action.acceptsNegative === true))) {
             action.execute(packet.amount);
           }
           else if (this.player && Bank.isOpen(this.player) && packet.amount > 0) {
@@ -812,7 +837,7 @@ export class ClientConnection {
             } else if (packet.varpId === 301 && (packet.value !== 0) !== this.player.isSpecialActivated()) {
               CombatSpecial.activate(this.player);
             }
-            this.player.setAudioSetting(packet.varpId, packet.value);
+            this.player.applyAudioSettingFromClient(packet.varpId, packet.value);
           }
           continue;
         case "widget":
@@ -1012,8 +1037,8 @@ export class ClientConnection {
   private async login(rawUsername: string, password: string, revision: number, flags = 0): Promise<void> {
     const tokenLogin = (flags & LOGIN_FLAG_TOKEN) !== 0;
     this.releasePendingName();
-    const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
-    const username = Misc.formatText(protocolName);
+    const typedName = Misc.formatDisplayName(rawUsername);
+    const protocolName = Misc.formatNameForProtocol(typedName);
     const key = protocolName.toLowerCase();
 
     if (revision !== CachePipeline.getActive().revision) {
@@ -1030,7 +1055,7 @@ export class ClientConnection {
       this.failLogin(3, "Invalid username or password.");
       return;
     }
-    if (PlayerPunishment.banned(username)) {
+    if (PlayerPunishment.banned(typedName)) {
       this.failLogin(4, "Your account has been disabled.");
       return;
     }
@@ -1040,8 +1065,8 @@ export class ClientConnection {
     }
     if (
       World.getPlayers().isFull() ||
-      World.getPlayerByName(username) ||
-      World.getAddPlayerQueue().some((player) => player.getUsername().toLowerCase() === username.toLowerCase()) ||
+      World.getPlayerByName(typedName) ||
+      World.getAddPlayerQueue().some((player) => Misc.formatNameForProtocol(player.getUsername()) === protocolName) ||
       ClientConnection.pendingNames.has(key)
     ) {
       this.failLogin(World.getPlayers().isFull() ? 2 : 5, World.getPlayers().isFull()
@@ -1054,9 +1079,9 @@ export class ClientConnection {
 
     let save: any | null = null;
     try {
-      save = GameConstants.PLAYER_PERSISTENCE.load(username);
+      save = GameConstants.PLAYER_PERSISTENCE.load(typedName);
     } catch (error) {
-      console.error(`[login] failed to load ${username}`, error);
+      console.error(`[login] failed to load ${typedName}`, error);
       this.releasePendingName();
       this.failLogin(8, "The login server is busy.");
       return;
@@ -1079,15 +1104,15 @@ export class ClientConnection {
         const check = checkLoginToken(entries, password);
         if (check.kind !== "valid") {
           if (check.kind === "reused") {
-            console.warn(`[login] ${username}: a replaced login token was used again; revoking it`);
-            await this.saveLoginTokens(username, save, revokeLoginToken(entries, check.index));
+            console.warn(`[login] ${typedName}: a replaced login token was used again; revoking it`);
+            await this.saveLoginTokens(typedName, save, revokeLoginToken(entries, check.index));
           }
           this.releasePendingName();
           this.failLogin(3, "Invalid username or password.");
           return;
         }
         ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now, check.index));
-        await this.saveLoginTokens(username, save, loginTokens);
+        await this.saveLoginTokens(typedName, save, loginTokens);
         passwordHash = String(save.getPasswordHashWithSalt?.() ?? "");
       } else if (save) {
         const stored = String(save.getPasswordHashWithSalt?.() ?? "");
@@ -1116,10 +1141,10 @@ export class ClientConnection {
         const now = Date.now();
         const entries = readLoginTokens(save?.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
         ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now));
-        if (save) await this.saveLoginTokens(username, save, loginTokens);
+        if (save) await this.saveLoginTokens(typedName, save, loginTokens);
       }
     } catch (error) {
-      console.error(`[login] failed to authenticate ${username}`, error);
+      console.error(`[login] failed to authenticate ${typedName}`, error);
       this.releasePendingName();
       this.failLogin(8, "The login server is busy.");
       return;
@@ -1131,6 +1156,9 @@ export class ClientConnection {
       this.releasePendingName();
       return;
     }
+    // An account keeps the name it was first saved with; the typed one only names a new account.
+    const savedName = String(save?.getDisplayName?.() ?? "");
+    const username = Misc.formatNameForProtocol(savedName) === protocolName ? savedName : typedName;
     this.pending = { username, passwordHash, save, loginTokens };
     this.send(encodeLoginResponse(true, -1, "", username, loginToken));
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
@@ -1220,14 +1248,14 @@ export class ClientConnection {
     // Ctrl (1) inverts the run toggle for this walk; Ctrl+Shift (2) is a staff teleport that
     // plugins take over, and walks like a Ctrl-click for everyone else.
     const invert = modifierFlags === 2 || (modifierFlags & 1) !== 0;
-    const run = forceRun || (invert ? !player.isRunningReturn() : player.isRunningReturn());
-    player.setRunning(run);
-    player.getMovementQueue().requestWalk(
-      new Location(x, y, player.getLocation().getZ())
-    );
+    // The inversion holds for this path only; the run setting and orb stay as they are.
+    const runOverride = forceRun ? true : invert ? !player.isRunningReturn() && player.getRunEnergy() > 0 : null;
     // MovementQueue owns the destination flag and de-duplicates it; sending it
     // here as well double-posts the marker on every walk click.
-    player.getPacketSender().sendRunStatus();
+    player.getMovementQueue().requestWalk(
+      new Location(x, y, player.getLocation().getZ()),
+      runOverride
+    );
   }
 
   private inventoryAction(packet: Extract<ReturnType<typeof decodeClientPackets>[number], { type: "inventory_action" }>): void {
@@ -1353,7 +1381,7 @@ export class ClientConnection {
       equip: player.getAppearanceEquipmentIds(),
       equipQty: displayEquipment.map((item) => item?.getAmount?.() ?? 0),
       headIcons: {
-        skull: player.isSkulled() ? player.getSkullIconId() : -1,
+        skull: player.getHeadSkullIcon(),
         prayer: player.getAppearance().getHeadHint(),
       },
     };

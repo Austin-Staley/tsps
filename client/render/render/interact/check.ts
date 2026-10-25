@@ -390,6 +390,8 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             });
         }
 
+        // RuneLite's getSelectedSceneTile: the scene tile under the mouse (kept while a menu is open).
+        if (!usingPinnedMenu) host.osrsClient.selectedSceneTile = undefined;
         if (!usingPinnedMenu && !mouseInUIRegion && !mouseOverWidget && anchorInSceneViewport) {
             // PERF: Reuse cached arrays/sets instead of allocating new ones each frame
             const locIds = host.cachedLocIds;
@@ -407,6 +409,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             const baseX = (ClientState.baseX | 0) as number;
             const baseY = (ClientState.baseY | 0) as number;
             const anchorTile = host.computeTileAt(anchorX, anchorY);
+            host.osrsClient.selectedSceneTile = anchorTile ?? undefined;
             let walkHereEntry: OsrsMenuEntry | undefined = undefined;
             if (ClientState.isItemSelected === 0 && !ClientState.isSpellSelected) {
                 const walkTile = anchorTile ?? host.osrsClient.menuTile ?? hoveredTile;
@@ -1005,7 +1008,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         plane,
                     );
                     if (!stacks || stacks.length === 0) continue;
-                    const groundItemsPlugin = host.osrsClient.groundItemsPlugin;
+                    const plugins = host.osrsClient.clientPlugins;
 
                     const tileKey = `${localX}:${localY}`;
                     if (objIds.has(tileKey)) continue;
@@ -1018,7 +1021,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         for (const stack of stacks) {
                             const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                             if (!objType || objType.name === "null") continue;
-                            const menuName = groundItemsPlugin.getMenuTargetName(
+                            const menuName = plugins.groundItemMenuName(
                                 stack,
                                 objType.name,
                             );
@@ -1051,7 +1054,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             for (const stack of stacks) {
                                 const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                                 if (!objType || objType.name === "null") continue;
-                                const menuName = groundItemsPlugin.getMenuTargetName(
+                                const menuName = plugins.groundItemMenuName(
                                     stack,
                                     objType.name,
                                 );
@@ -1081,12 +1084,13 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                     for (const stack of stacks) {
                         const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                         if (!objType || objType.name === "null") continue;
-                        const menuName = groundItemsPlugin.getMenuTargetName(stack, objType.name);
-                        const menuTarget = groundItemsPlugin.getMenuTargetColorized(
+                        const menuName = plugins.groundItemMenuName(stack, objType.name);
+                        const menuTarget = plugins.groundItemMenuTarget(
                             stack,
                             menuName,
                         );
-                        const deprioritized = groundItemsPlugin.shouldDeprioritizeInMenu(stack);
+                        // Only Take (the third option) is deprioritized, as RuneLite's Ground Items does.
+                        const deprioritized = plugins.deprioritizeGroundItem(stack);
 
                         const actions = objType.groundActions ?? [];
                         for (let actionIdx = 4; actionIdx >= 0; actionIdx--) {
@@ -1102,7 +1106,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                                     mapX: localX,
                                     mapY: localY,
                                     actionIndex: actionIdx,
-                                    deprioritized,
+                                    deprioritized: deprioritized && actionIdx === 2,
                                     onClick:
                                         option.toLowerCase() === "take"
                                             ? () => host.osrsClient.takeGroundItem(capturedStack)
