@@ -56,13 +56,14 @@ function inventory() {
   return inv;
 }
 
+const created = [];
 function player() {
   const attributes = new Map();
   const p = {
     messages: [], boxes: [], varbits: new Map(), xp: [], sounds: [], energy: 50, inv: inventory(),
     location: new Location(3004, 3936, 0),
     getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
-    getInventory: () => p.inv, getLocation: () => p.location, isRegistered: () => true,
+    getInventory: () => p.inv, getLocation: () => p.location, isRegistered: () => p.online !== false,
     sendMessage: (m) => p.messages.push(m), setRunEnergy(e) { p.energy = e; },
     energySent: 0, banks: [],
     getBanks: () => p.banks,
@@ -71,6 +72,7 @@ function player() {
     getSkillManager: () => ({ addExperiences: (skill, xp) => p.xp.push(xp) }),
     choose(text) { const i = p.prompt.pairs.indexOf(text); p.prompt.pairs[i + 1](); },
   };
+  created.push(p);
   return p;
 }
 
@@ -108,7 +110,7 @@ test("Pay: the prompt, 150,000 coins, a looting bag for a player without one; th
   op(p, 'Pay');
   assert.equal(p.boxes.at(-1), 'You have already paid 150,000 coins to receive a reward after each lap.');
   const poor = player();
-  poor.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  poor.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
   op(poor, 'Pay');
   assert.equal(poor.boxes.at(-1), 'You need 150,000 coins to pay to receive additional rewards.');
 });
@@ -116,7 +118,7 @@ test("Pay: the prompt, 150,000 coins, a looting bag for a player without one; th
 test('a paid lap: the streak line; Tag wants an open looting bag, then fills it, with an extra in the inventory', () => {
   const p = player();
   p.inv.add(new core.Item(995, 150000));
-  p.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  p.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
   op(p, 'Pay');
   lap(p);
   assert.equal(p.messages.at(-1), 'Your Wilderness Agility reward streak is: <col=ff0000>1</col>');
@@ -138,7 +140,7 @@ test('a paid lap: the streak line; Tag wants an open looting bag, then fills it,
 test('leaving the course loses the payment, the reward and the streak, not the ticket; logout takes 10 off the streak', () => {
   const p = player();
   p.inv.add(new core.Item(995, 150000));
-  p.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  p.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
   op(p, 'Pay');
   lap(p);
   p.location = new Location(2998, 3916, 0);
@@ -146,11 +148,11 @@ test('leaving the course loses the payment, the reward and the streak, not the t
   assert.equal(p.varbits.get(varbit('wildy_agility_deposit')), 0);
   assert.equal(p.varbits.get(varbit('wildy_agility_reward_available')), 0);
   assert.equal(p.varbits.get(varbit('wildy_agility_reward_lap_new')), 0);
-  assert.equal(p.getAttribute(Dispenser.ATTRIBUTE('ticket')), 1);
+  assert.equal(p.getAttribute(Dispenser.ATTRIBUTES.ticket), 1);
   const q = player();
-  q.setAttribute(Dispenser.ATTRIBUTE('streak'), 14);
+  q.setAttribute(Dispenser.ATTRIBUTES.streak, 14);
   hooks.logout({ player: q });
-  assert.equal(q.getAttribute(Dispenser.ATTRIBUTE('streak')), 4);
+  assert.equal(q.getAttribute(Dispenser.ATTRIBUTES.streak), 4);
 });
 
 test('Redeem: 200 XP a ticket up to 10, then 210, 220 and 230 (Wiki); the recorded lines and sound', () => {
@@ -176,7 +178,7 @@ test('reward tiers by streak (Wiki): steel and mithril at 1-15, rune chainbodies
 
 function paidLap(p) {
   p.inv.add(new core.Item(995, 150000));
-  p.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  p.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
   op(p, 'Pay');
   lap(p);
 }
@@ -187,7 +189,7 @@ test('Pay gives no second looting bag to a player with one in the bank', () => {
   bank.add(new core.Item(11941, 1));
   p.banks = [bank];
   p.inv.add(new core.Item(995, 150000));
-  p.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  p.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
   op(p, 'Pay');
   assert.equal(p.inv.getAmount(11941), 0);
   assert.deepEqual(p.messages, ['You have paid 150,000 coins to receive a reward after each lap.']);
@@ -236,4 +238,32 @@ test('with one slot left the clue takes it, not the extra (Wiki)', (t) => {
   assert.equal(p.inv.getFreeSlots(), 0);
   assert.match(p.messages.at(-1), /^You have been awarded .+ from the Agility dispenser\.$/);
   assert.doesNotMatch(p.messages.at(-1), /an extra/, 'no extra without a slot for it');
+});
+
+test('the paid-player watch runs only while someone has paid: one watch, gone when nobody is paid, back on the next Pay', () => {
+  for (const earlier of created) earlier.online = false; // the earlier tests' paid players log off
+  for (let i = 0; i < 3; i++) core.TaskManager.process();
+  assert.equal(Dispenser.isWatching(), false, 'nobody paid now');
+  const first = player();
+  const second = player();
+  for (const p of [first, second]) {
+    p.inv.add(new core.Item(995, 150000));
+    p.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
+    op(p, 'Pay');
+  }
+  assert.equal(Dispenser.isWatching(), true);
+  first.location = new Location(2998, 3916, 0);
+  second.location = new Location(2998, 3916, 0);
+  core.TaskManager.process();
+  core.TaskManager.process();
+  assert.equal(Dispenser.isWatching(), false, 'nobody paid: no per-tick work');
+  const again = player();
+  again.inv.add(new core.Item(995, 150000));
+  again.setAttribute(Dispenser.ATTRIBUTES.paymentWarning, 1);
+  op(again, 'Pay');
+  assert.equal(Dispenser.isWatching(), true, 'watched again');
+  again.location = new Location(2998, 3916, 0);
+  core.TaskManager.process();
+  core.TaskManager.process();
+  assert.equal(again.getAttribute(Dispenser.ATTRIBUTES.deposit), 0, 'and still forfeits on leaving');
 });

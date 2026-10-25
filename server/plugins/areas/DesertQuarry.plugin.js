@@ -4,8 +4,8 @@
 // The quarry's rocks are in skills/Mining.plugin.js.
 const DATA = require("./data/desert-quarry.json");
 
-const BUCKETS_KEY = "desert-quarry:buckets";
-const SAND_KEY = "desert-quarry:sand";
+const BUCKETS_ATTRIBUTE = "desert-quarry:buckets";
+const SAND_ATTRIBUTE = "desert-quarry:sand";
 
 let api;
 
@@ -14,10 +14,10 @@ const objId = (name) => core().CacheDefinitions.getObjId(name);
 const text = (key, values = {}) => DATA.messages[key].replace(/\{(\w+)\}/g, (_, name) => values[name]);
 const amount = (value) => Number(value).toLocaleString("en-US");
 
-const buckets = (player) => Number(player.getAttribute(BUCKETS_KEY)) || 0;
-const sand = (player) => Number(player.getAttribute(SAND_KEY)) || 0;
-const setBuckets = (player, value) => player.setAttribute(BUCKETS_KEY, value);
-const setSand = (player, value) => player.setAttribute(SAND_KEY, value);
+const buckets = (player) => Number(player.getAttribute(BUCKETS_ATTRIBUTE)) || 0;
+const sand = (player) => Number(player.getAttribute(SAND_ATTRIBUTE)) || 0;
+const setBuckets = (player, value) => player.setAttribute(BUCKETS_ATTRIBUTE, value);
+const setSand = (player, value) => player.setAttribute(SAND_ATTRIBUTE, value);
 
 /** Drew's lines ([mood, text], or ["player:mood", text] for the player's), then `then` if given. */
 function talk(player, lines, then = null) {
@@ -177,31 +177,52 @@ function sandstoneOnGrinder(event) {
   return item != null;
 }
 
+// ---------------------------------------------------------------- hooks
+
+/** Only the quarry's Drew (other NPCs may share the name). */
+const isDrew = (npc) => npc?.getId?.() === core().CacheDefinitions.getNpcId(DATA.drew);
+
+function drewTalkTo(event) {
+  if (!isDrew(event.npc)) return false;
+  talkTo(event);
+  return true;
+}
+
+function drewClaimSand({ player, npc }) {
+  if (!isDrew(npc)) return false;
+  claimSand(player);
+  return true;
+}
+
+function drewCheck({ player, npc }) {
+  if (!isDrew(npc)) return false;
+  check(player);
+  return true;
+}
+
+function drewDepositBuckets({ player, npc }) {
+  if (!isDrew(npc)) return false;
+  depositBuckets(player);
+  return true;
+}
+
+function itemOnGrinder(event) {
+  if (event.handled || !isGrinder(event.object)) return;
+  sandstoneOnGrinder(event);
+}
+
 module.exports = {
   name: "DesertQuarry",
   members: true,
   DATA,
-  BUCKETS_KEY,
-  SAND_KEY,
+  BUCKETS_ATTRIBUTE,
+  SAND_ATTRIBUTE,
   register(pluginApi) {
     api = pluginApi;
-    api.persistAttribute(BUCKETS_KEY, 0);
-    api.persistAttribute(SAND_KEY, 0);
-    const isDrew = (handler) => (event) => {
-      if (event.npc?.getId?.() !== core().CacheDefinitions.getNpcId(DATA.drew)) return false;
-      handler(event);
-      return true;
-    };
-    api.onNpcInteraction("Drew", {
-      "Talk-to": isDrew(talkTo),
-      "Claim Sand": isDrew(({ player }) => claimSand(player)),
-      Check: isDrew(({ player }) => check(player)),
-      "Deposit buckets": isDrew(({ player }) => depositBuckets(player)),
-    });
+    api.persistAttribute(BUCKETS_ATTRIBUTE, 0);
+    api.persistAttribute(SAND_ATTRIBUTE, 0);
+    api.onNpcInteraction("Drew", { "Talk-to": drewTalkTo, "Claim Sand": drewClaimSand, Check: drewCheck, "Deposit buckets": drewDepositBuckets });
     api.onObjectInteraction(DATA.grinder, { Deposit: deposit });
-    api.onItemOnObject((event) => {
-      if (event.handled || !isGrinder(event.object)) return;
-      sandstoneOnGrinder(event);
-    });
+    api.onItemOnObject(itemOnGrinder);
   },
 };

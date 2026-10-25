@@ -9,21 +9,29 @@
 const DATA = require("./data/agility-dispenser.json");
 
 const COURSE_KEY = "wilderness";
-const ATTRIBUTE = (name) => `agility-dispenser:${name}`;
-const STATE = ["deposit", "reward", "ticket", "paymentWarning", "streak"];
+const DEPOSIT_ATTRIBUTE = "agility-dispenser:deposit";
+const REWARD_ATTRIBUTE = "agility-dispenser:reward";
+const TICKET_ATTRIBUTE = "agility-dispenser:ticket";
+const PAYMENT_WARNING_ATTRIBUTE = "agility-dispenser:payment-warning";
+const STREAK_ATTRIBUTE = "agility-dispenser:streak";
+/** The dispenser's state, by its varbit's key in DATA.varbits. */
+const ATTRIBUTES = Object.freeze({
+  deposit: DEPOSIT_ATTRIBUTE, reward: REWARD_ATTRIBUTE, ticket: TICKET_ATTRIBUTE,
+  paymentWarning: PAYMENT_WARNING_ATTRIBUTE, streak: STREAK_ATTRIBUTE,
+});
 
 let api;
 const paid = new Set();
 
 const core = () => api.core;
 const message = (key, values = {}) => DATA.messages[key].replace(/\{(\w+)\}/g, (_, name) => values[name]);
-const get = (player, name) => Number(player.getAttribute(ATTRIBUTE(name))) || 0;
+const get = (player, name) => Number(player.getAttribute(ATTRIBUTES[name])) || 0;
 const itemName = (id) => core().ItemDefinition.forId(id).getName();
 const noted = (id) => core().ItemDefinition.forId(id).getNoteId();
 const ticketId = () => core().CacheDefinitions.getObjId(DATA.ticket);
 
 function set(player, name, value) {
-  player.setAttribute(ATTRIBUTE(name), value);
+  player.setAttribute(ATTRIBUTES[name], value);
   player.getPacketSender().sendVarbit(core().CacheDefinitions.getVarbitId(DATA.varbits[name]), value);
 }
 
@@ -155,7 +163,7 @@ function payFee(player) {
   if (inventory.getAmount(DATA.coins) < DATA.fee) return void messageBox(player, message("poor"));
   inventory.deleteNumber(DATA.coins, DATA.fee);
   set(player, "deposit", 1);
-  paid.add(player);
+  watchPaid(player);
   player.sendMessage(message("paid"));
   if (!ownsLootingBag(player)) {
     inventory.add(new (core().Item)(DATA.lootingBags[0], 1));
@@ -216,38 +224,63 @@ function checkPaid() {
   }
 }
 
+const WATCH_KEY = Object.freeze({ task: "agility-dispenser:watch" });
+let watcher = null;
+
+/** Watches a paid player for leaving the course; the check runs only while someone has paid. */
+function watchPaid(player) {
+  paid.add(player);
+  if (watcher) return;
+  const { Task, TaskManager } = core();
+  watcher = new (class extends Task {
+    constructor() { super(1, WATCH_KEY, false); }
+    execute() {
+      checkPaid();
+      if (paid.size === 0) this.stop();
+    }
+    stop() {
+      if (watcher === this) watcher = null;
+      super.stop();
+    }
+  })();
+  TaskManager.submit(watcher);
+}
+
+/** Whether the paid-player watch is running (for tests). */
+const isWatching = () => watcher != null;
+
 function login({ player }) {
-  for (const name of STATE) {
+  for (const name of Object.keys(ATTRIBUTES)) {
     const value = get(player, name);
     if (value) player.getPacketSender().sendVarbit(core().CacheDefinitions.getVarbitId(DATA.varbits[name]), value);
   }
-  if (get(player, "deposit")) paid.add(player);
+  if (get(player, "deposit")) watchPaid(player);
 }
 
 function logout({ player }) {
   paid.delete(player);
-  player.setAttribute(ATTRIBUTE("streak"), Math.max(0, get(player, "streak") - DATA.logoutStreakLoss));
+  player.setAttribute(STREAK_ATTRIBUTE, Math.max(0, get(player, "streak") - DATA.logoutStreakLoss));
 }
 
 module.exports = {
   name: "AgilityDispenser",
   members: true,
   DATA,
-  ATTRIBUTE,
+  ATTRIBUTES,
+  isWatching,
   rollReward,
   redeemXp,
   register(pluginApi) {
     api = pluginApi;
-    for (const name of STATE) api.persistAttribute(ATTRIBUTE(name), 0);
+    api.persistAttribute(DEPOSIT_ATTRIBUTE, 0);
+    api.persistAttribute(REWARD_ATTRIBUTE, 0);
+    api.persistAttribute(TICKET_ATTRIBUTE, 0);
+    api.persistAttribute(PAYMENT_WARNING_ATTRIBUTE, 0);
+    api.persistAttribute(STREAK_ATTRIBUTE, 0);
     api.onCustomEvent("agility:lap", lapDone);
     api.onCustomEvent("agility:obstacle-start", lapStarted);
     api.onObjectInteraction("Agility dispenser", { Tag: tag, Pay: pay, Redeem: redeem });
     api.onPlayerLogin(login);
     api.onPlayerLogout(logout);
-    const { Task, TaskManager } = core();
-    TaskManager.submit(new (class extends Task {
-      constructor() { super(1, null, false); }
-      execute() { checkPaid(); }
-    })());
   },
 };
