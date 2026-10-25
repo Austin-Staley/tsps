@@ -237,3 +237,16 @@ test("the ore counter is sent again on login", () => {
   h.hooks.login({ player });
   assert.deepEqual(player.packets.configs, [[ORE_MINED_VARP, 7]]);
 });
+
+test("each pickaxe swings its own animation", () => {
+  // human_mining_<pickaxe> sequences, as recorded (black 90, crystal 3276, dragon 561, infernal 1634, steel 69, mithril 1098).
+  const expected = {
+    [ItemIds.BRONZE_PICKAXE]: 625, [ItemIds.IRON_PICKAXE]: 626, [ItemIds.STEEL_PICKAXE]: 627,
+    [ItemIds.BLACK_PICKAXE]: 3873, [ItemIds.MITHRIL_PICKAXE]: 629, [ItemIds.ADAMANT_PICKAXE]: 628,
+    [ItemIds.RUNE_PICKAXE]: 624, [ItemIds.DRAGON_PICKAXE]: 7139, [ItemIds.CRYSTAL_PICKAXE]: 8347,
+    [ItemIds.INFERNAL_PICKAXE]: 4482,
+  };
+  for (const pickaxe of Mining.PICKAXES) {
+    assert.equal(pickaxe.animation.getId(), expected[pickaxe.id], `pickaxe ${pickaxe.id}`);
+  }
+});

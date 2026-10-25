@@ -18,6 +18,11 @@ From rsprox captures (recordings 3139 and 3182, iron rocks, rev 232) unless anot
 | Level too low | Message box: `You need a Mining level of 55 to mine this rock.` (recording 3280, mithril, a Leagues world; the Wiki gives the same level) |
 | Full inventory | Message box, `Your inventory is too full to hold any more <item>.` (recording 70, rune essence, a Leagues world; no recording has the message for an ore rock, so the ore's lowercase item name is the same pattern applied to it) |
 
+Each pickaxe swings its own sequence (`human_mining_<pickaxe>`): dragon 7139, infernal 4482, crystal 8347 and
+black 3873 are recorded (recordings 561, 1634, 3276 and 90); mithril 629 and adamant 628 follow the cache names
+(mithril is recorded in 1098; the plugin had these two swapped, and gave dragon, crystal and infernal the rune
+animation and black the steel one).
+
 The depleted loc is named after the rock's own variant: `ironrock2` becomes `rocks2`,
 `ironrock1` becomes `rocks1` (recordings 3139, 3182; copper and mithril rocks in Leagues recordings follow the same pattern). The plugin
 reads the digit from the rock's gameval, so every rock with a `...rock<digit>` name follows without a table.

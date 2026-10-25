@@ -34,13 +34,13 @@ const PICKAXES = [
   { id: ItemIds.BRONZE_PICKAXE, requiredLevel: 1, speed: 0.03, attemptIntervalTicks: 8, animation: new Animation(625) },
   { id: ItemIds.IRON_PICKAXE, requiredLevel: 1, speed: 0.05, attemptIntervalTicks: 7, animation: new Animation(626) },
   { id: ItemIds.STEEL_PICKAXE, requiredLevel: 6, speed: 0.09, attemptIntervalTicks: 6, animation: new Animation(627) },
-  { id: ItemIds.BLACK_PICKAXE, requiredLevel: 11, speed: 0.11, attemptIntervalTicks: 5, animation: new Animation(627) },
-  { id: ItemIds.MITHRIL_PICKAXE, requiredLevel: 21, speed: 0.13, attemptIntervalTicks: 5, animation: new Animation(628) },
-  { id: ItemIds.ADAMANT_PICKAXE, requiredLevel: 31, speed: 0.16, attemptIntervalTicks: 4, animation: new Animation(629) },
+  { id: ItemIds.BLACK_PICKAXE, requiredLevel: 11, speed: 0.11, attemptIntervalTicks: 5, animation: new Animation(3873) },
+  { id: ItemIds.MITHRIL_PICKAXE, requiredLevel: 21, speed: 0.13, attemptIntervalTicks: 5, animation: new Animation(629) },
+  { id: ItemIds.ADAMANT_PICKAXE, requiredLevel: 31, speed: 0.16, attemptIntervalTicks: 4, animation: new Animation(628) },
   { id: ItemIds.RUNE_PICKAXE, requiredLevel: 41, speed: 0.2, attemptIntervalTicks: 3, animation: new Animation(624) },
-  { id: ItemIds.DRAGON_PICKAXE, requiredLevel: 61, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(624) },
-  { id: ItemIds.CRYSTAL_PICKAXE, requiredLevel: 71, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(624) },
-  { id: ItemIds.INFERNAL_PICKAXE, requiredLevel: 61, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(624) },
+  { id: ItemIds.DRAGON_PICKAXE, requiredLevel: 61, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(7139) },
+  { id: ItemIds.CRYSTAL_PICKAXE, requiredLevel: 71, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(8347) },
+  { id: ItemIds.INFERNAL_PICKAXE, requiredLevel: 61, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(4482) },
 ];
 
 const PICKAXES_DESC = [...PICKAXES].sort((a, b) => b.requiredLevel - a.requiredLevel);
