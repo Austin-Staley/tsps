@@ -138,6 +138,7 @@ module.exports = {
   ALIGNMENT,
   component,
   varbitId,
+  varpId,
   varbit,
   addVarp,
   getVarp,

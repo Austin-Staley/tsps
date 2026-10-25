@@ -16,7 +16,7 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 
-let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, hooks, core;
+let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, Rewards, hooks, core;
 const online = [];
 const walks = [];
 let config = {};
@@ -42,6 +42,8 @@ before(() => {
     onPlayerLogin() {},
     onPlayerLogout() {},
     onCustomEvent: (name, fn) => { (hooks.events ??= {})[name] = fn; },
+    onCanShop: (fn) => { hooks.canShop = fn; },
+    onInterfaceActionButton: (ids, fn) => { for (const id of [].concat(ids)) (hooks.buttons ??= new Map()).set(id, fn); },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
   };
   require('../plugins/minigames/SoulWars.plugin').register(api);
@@ -56,6 +58,7 @@ before(() => {
   Death = require('../plugins/minigames/soulwars/Death.SoulWars');
   Supplies = require('../plugins/minigames/soulwars/Supplies.SoulWars');
   Bots = require('../plugins/minigames/soulwars/Bots.SoulWars');
+  Rewards = require('../plugins/minigames/soulwars/Rewards.SoulWars');
   // Fake players don't walk: the bots' routes are recorded instead.
   Bots.engine.walk = (player, to) => walks.push({ player, to });
   Lobby.source.players = () => online;
@@ -79,6 +82,8 @@ function container(capacity = 28) {
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
     getValidItems: () => slots.filter((s) => s.amount > 0).map((s) => ({ getId: () => s.id, getAmount: () => s.amount })),
+    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount, getMeta: () => s.meta ?? null } : null)),
+    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null }; },
     refreshItems() {}, full() {},
   };
 }
@@ -109,6 +114,7 @@ function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 
       getCombatLevel: () => combat, getTotalLevel: () => total,
       getCurrentLevel: (skill) => levels[skill.getName?.() ?? skill] ?? 99, getMaxLevel: () => 99,
       setCurrentLevel(skill, level) { levels[skill.getName?.() ?? skill] = level; return this; },
+      addExperience(skill, xp) { p.xp = [...(p.xp ?? []), [skill.getName?.() ?? String(skill), xp]]; return this; },
     }),
     getPacketSender() {
       const sender = {
@@ -118,7 +124,9 @@ function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 
         sendSubInterface: (uid, iid) => { p.subs.push(iid); return sender; },
         closeSubInterface: () => sender,
         sendInterfaceScript: (sid, args) => { p.scripts.push([sid, args]); return sender; },
-        sendSong: () => sender, sendEnterAmountPrompt: () => sender,
+        sendSong: () => sender, sendEnterAmountPrompt: (title) => { p.prompts = [...(p.prompts ?? []), title]; return sender; },
+        sendInterfaceFlagsRange: (uid, from, to, flags) => { (p.flags ??= []).push([uid, from, to, flags]); return sender; },
+        sendSound: (id) => { (p.sounds ??= []).push(id); return sender; },
       };
       return sender;
     },
@@ -696,4 +704,108 @@ test("a new bot is geared, but brings no food or potions; in a game it starts wi
     Bots.engine.create = create;
     Bots.engine.gear = gear;
   }
+});
+
+// ------------------------------------------------------------------ rewards
+
+const zealTokens = (p) => Common.getVarp(p, 'zeal_tokens');
+const button = (name) => hooks.buttons.get(Common.component(`soul_wars_rewards:${name}`));
+
+test("the Nomad's Trade opens interface 442 in place of the generic shop, with the recorded set-up", () => {
+  const p = fakePlayer();
+  const event = { player: p, shopId: Rewards.SHOP_ID, allow: null };
+  hooks.canShop(event);
+  assert.equal(event.allow, false);
+  assert.ok(p.subs.includes(core.CacheDefinitions.getInterfaceId('soul_wars_rewards')));
+  const open = p.scripts.find(([id]) => id === 535);
+  assert.equal(open[1].length, 14);
+  assert.equal(open[1][1], Common.component('soul_wars_rewards:xp_rewards'));
+  assert.deepEqual(p.flags.find(([uid]) => uid === Common.component('soul_wars_rewards:other_rewards')).slice(1), [0, 64, 2 | 32]);
+  const other = { player: p, shopId: 1, allow: null };
+  hooks.canShop(other);
+  assert.equal(other.allow, null, 'other shops are left alone');
+});
+
+test('experience: floor(L*L/600) * 30 a token at 99, from level 30; tokens and level checked again, quietly', () => {
+  const p = fakePlayer();
+  Common.addVarp(p, 'zeal_tokens', 15);
+  // Strength (row 1), 10 tokens: child 1*4+1.
+  button('confirm_xp')({ player: p, slot: 5 });
+  assert.equal(zealTokens(p), 5);
+  assert.deepEqual(p.xp, [['Strength', Math.floor((99 * 99) / 600) * 30 * 10]]);
+  const said = p.messages.length;
+  button('confirm_xp')({ player: p, slot: 6 });
+  assert.equal(zealTokens(p), 5, '100 tokens refused');
+  assert.equal(p.messages.length, said, 'the client has already said why');
+  p.getSkillManager = () => ({ getMaxLevel: () => 29, getCurrentLevel: () => 29, addExperience() { throw new Error('no'); } });
+  button('confirm_xp')({ player: p, slot: 24 });
+  assert.equal(zealTokens(p), 5, 'under level 30 refused');
+});
+
+test('experience X: the amount comes from the prompt, and Prayer pays 14 a token', () => {
+  const p = fakePlayer();
+  Common.addVarp(p, 'zeal_tokens', 40);
+  // Prayer row 6, X: list child 6*6+5, confirm 6*4+3.
+  button('xp_rewards')({ player: p, slot: 41 });
+  assert.match(p.prompts.at(-1), /\(1-40\)/);
+  p.amountAction.execute(25);
+  button('confirm_xp')({ player: p, slot: 27 });
+  assert.equal(zealTokens(p), 15);
+  assert.deepEqual(p.xp, [['Prayer', Math.floor((99 * 99) / 600) * 14 * 25]]);
+});
+
+test('an imbue swaps the item in place, as recorded for the Slayer helmet', () => {
+  const p = fakePlayer();
+  Common.addVarp(p, 'zeal_tokens', 816);
+  p.inventory.add(new core.Item(11864, 1));
+  p.inventory.add(new core.Item(995, 100));
+  button('confirm_imbue')({ player: p, slot: 15 });
+  assert.equal(zealTokens(p), 316);
+  assert.equal(p.inventory.getItems()[0].getId(), 25177);
+  assert.equal(p.messages.at(-1), '<col=3366ff>You sense a newfound power emanating from your Slayer helmet...</col>');
+  assert.ok(p.sounds.includes(2655));
+  button('confirm_imbue')({ player: p, slot: 15 });
+  assert.equal(zealTokens(p), 316, 'nothing left to imbue');
+});
+
+test('other rewards: Buy X of Spoils of War, as recorded (10 for 300, one to a slot)', () => {
+  const p = fakePlayer();
+  Common.addVarp(p, 'zeal_tokens', 316);
+  // Spoils (index 2): Buy X is child 2*5+4.
+  button('other_rewards')({ player: p, slot: 14, opId: 1 });
+  assert.equal(p.prompts.at(-1), 'How many would you like to buy? (1-10)');
+  p.amountAction.execute(10);
+  assert.equal(p.varps.get(3426), 10);
+  button('confirm_other')({ player: p, slot: 2 });
+  assert.equal(zealTokens(p), 16);
+  assert.equal(p.inventory.getAmount(25342), 10);
+  assert.equal(p.inventory.getFreeSlots(), 18);
+  assert.equal(p.messages.at(-1), 'You purchase some Spoils of war for 300 Tokens.');
+  assert.ok(p.sounds.includes(2304));
+});
+
+test('other rewards: Buy 1 of a blighted sack gives its batch; the Soul cape wants Prayer 70', () => {
+  const p = fakePlayer();
+  Common.addVarp(p, 'zeal_tokens', 3000);
+  button('other_rewards')({ player: p, slot: 3 * 5 + 3, opId: 1 });
+  button('confirm_other')({ player: p, slot: 3 });
+  assert.equal(p.inventory.getAmount(24613), 70);
+  assert.equal(zealTokens(p), 2990);
+  p.getSkillManager = () => ({ getMaxLevel: () => 60, getCurrentLevel: () => 60 });
+  button('other_rewards')({ player: p, slot: 1, opId: 1 });
+  button('confirm_other')({ player: p, slot: 0 });
+  assert.equal(zealTokens(p), 2990, 'Prayer 60 refused');
+  assert.equal(p.inventory.getAmount(25346), 0);
+});
+
+test('an imbue keeps what the item carries: a charged ring of suffering keeps its charges', () => {
+  const p = fakePlayer();
+  const imbued = core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueItem);
+  const slot = [...imbued.keys()].find((index) => core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueBase).get(imbued.get(index)) === 20655);
+  assert.ok(slot != null, 'the cache imbues a ring of suffering (r)');
+  p.inventory.slots.push({ id: 20655, amount: 1, meta: { 'ring-of-suffering': 100000, preset: true } });
+  Common.addVarp(p, 'zeal_tokens', 1000);
+  Rewards.imbue({ player: p, slot });
+  assert.equal(p.inventory.slots[0].id, imbued.get(slot));
+  assert.deepEqual(p.inventory.slots[0].meta, { 'ring-of-suffering': 100000, preset: true });
 });
