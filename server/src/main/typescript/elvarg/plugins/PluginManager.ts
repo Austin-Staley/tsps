@@ -2318,6 +2318,8 @@ export class PluginManager {
       FightStyle: require(`${combat}/FightStyle`).FightStyle,
       WeaponInterfaceManager: require(`${combat}/WeaponInterfaceManager`).WeaponInterfaceManager,
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
+      PrayerData: require("../game/content/PrayerHandler").PrayerData,
+      ItemActionPacketListener: require("../net/packet/impl/ItemActionPacketListener").ItemActionPacketListener,
       ChatType: require("../net/protocol/ClientProtocol").ChatType,
       DuelRule: require("../game/content/Duelling").DuelRule,
       RegionManager: require("../game/collision/RegionManager").RegionManager,

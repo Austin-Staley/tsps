@@ -182,6 +182,10 @@ function buyMusicCape(player) {
 }
 
 function talkToOlaf({ player }) {
+  const trials = { player, key: "fremennik_trials", started: false, complete: false };
+  pluginApi.emitCustomEvent("quest:is-started", trials);
+  pluginApi.emitCustomEvent("quest:is-complete", trials);
+  if (trials.started && !trials.complete) return false;
   pluginApi.sendMultiChatboxPrompt(
     player,
     "Music cape",

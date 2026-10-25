@@ -47,8 +47,8 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **24/106 active scoped main routes (22.64%)**. The count
-is 24/128 against the original inventory; the increase in percentage comes only
+of accepted route counts: **25/106 active scoped main routes (23.58%)**. The count
+is 25/128 against the original inventory; the increase in percentage comes only
 from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Lost City, Tree Gnome Village, Hazeel Cult, Elemental Workshop I, Observatory Quest and Queen of Thieves routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The [independent PRs](quest-helper-728-prs.md) are updated in reviewed batches; historical figures below remain
@@ -345,7 +345,7 @@ deferred quest. No deferred quest is counted as complete.
 | Recruitment Drive | `RecruitmentDrive` | Pending | Pending | Pending |
 | The Ribbiting Tale of a Lily Pad Labour Dispute | `RibbitingTale` | Pending | Pending | Pending |
 | Roving Elves | `RovingElves` | Pending | Pending | Pending |
-| A Ruff Situation | `ARuffSituation` | Pending | Pending | Pending |
+| A Ruff Situation | `ARuffSituation` | Reviewed dog/puppy/transcript route; Baraek sale tracked separately | Focused current hash retained; actual transcript sale regression in follow-up | Accepted combat-assisted main route: real fur drop/crafting, three puppies, reward/repeat/relog/offline; paid-fur branch and full recovery remain pending |
 | Rum Deal | `RumDeal` | Pending | Pending | Pending |
 | Scorpion Catcher | `ScorpionCatcher` | Pending | Pending | Pending |
 | Sea Slug | `SeaSlug` | Stage-aware wall menu, crane reach, Holgart and canonical torch/sticks recovery reviewed | 15 focused cache/handler checks pass | Pending |

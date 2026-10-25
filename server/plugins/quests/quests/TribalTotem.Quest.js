@@ -451,6 +451,7 @@ module.exports = function registerTribalTotemQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("interface:closed", handleInterfaceClosed);
   api.onCustomEvent("door:toggle", lockMansionDoor);
+  api.onCustomEvent("door:toggle", openCombinationDoor);
   api.onCustomEvent("ladders:climb", claimTrapStairs);
   api.onObjectInteraction(investigateCrate);
   api.onObjectInteraction(openCombinationDoor);

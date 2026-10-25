@@ -19,9 +19,7 @@ const core = PluginManager.getCoreApi();
 before(async () => {
   await CachePipeline.initialize();
   core.RegionManager.init();
-  require('../plugins/items/Food.plugin').register({
-    core, persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
-  });
+  require('../plugins/items/Food.plugin').register(PluginManager.createApi('BountyHunterFoodRegression'));
 });
 
 test('lobby entry spawns funded, skulled PK bots and restores their entry fee after death', (t) => {
