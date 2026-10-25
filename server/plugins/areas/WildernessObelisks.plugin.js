@@ -11,13 +11,11 @@
  *   Tele Blocked players stay behind.
  * - Set Destination (after the hard Wilderness Diary) opens the menu (187) listing the six by
  *   level; the choice is varbit wilderness_portal_choice (1-6), saved with the player.
+ * - Whoever has logged out or left the pad by the teleport stays. A shutdown puts glowing stones
+ *   back and ends every activation, so none is left going.
  */
 const fs = require("fs");
 const path = require("path");
-const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
-const { ObjectManager } = require("../../src/main/typescript/elvarg/game/entity/impl/object/ObjectManager");
-const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
-const { World } = require("../../src/main/typescript/elvarg/game/World");
 
 const DESTINATION_ATTRIBUTE = "wilderness-obelisks:destination";
 const MENU_ATTRIBUTE = "wilderness-obelisks:menu";
@@ -74,7 +72,7 @@ function onPad(player, obelisk) {
 function nearby(obelisk) {
   const [x, y] = obelisk.corner;
   const players = [];
-  for (const player of World.getPlayers()) {
+  for (const player of core.World.getPlayers()) {
     const at = player?.getLocation?.();
     if (at && at.getZ() === 0 && Math.abs(at.getX() - (x + 2)) <= VIEW_DISTANCE && Math.abs(at.getY() - (y + 2)) <= VIEW_DISTANCE) players.push(player);
   }
@@ -82,6 +80,7 @@ function nearby(obelisk) {
 }
 
 function setStones(obelisk, id) {
+  const { MapObjects, ObjectManager, GameObject } = core;
   for (const [x, y] of stones(obelisk)) {
     const tile = new core.Location(x, y, 0);
     const old = MapObjects.get(id === data.glowing ? obelisk.id : data.glowing, tile, null);
@@ -128,24 +127,29 @@ function activate(player, index, to, chosen) {
   if (active.has(index)) return false;
   const obelisk = data.obelisks[index];
   const { timeline } = data;
-  active.set(index, { to, chosen });
+  const activation = { to, chosen };
+  active.set(index, activation);
+  const going = () => active.get(index) === activation;
   setStones(obelisk, data.glowing);
   for (let i = 0; i < timeline.glowSounds; i++) player.getPacketSender().sendSound(timeline.glowSound, 1, timeline.glowSoundDelay);
   // Recorded: the smoke and sound on the pad's middle column, its south row (3156,3619 at level 13).
   const centre = [obelisk.corner[0] + 2, obelisk.corner[1] + 1];
   later(timeline.smokeAt, () => {
+    if (!going()) return;
     graphicAt(nearby(obelisk), timeline.smokeGraphic, timeline.smokeHeight, centre);
     for (const viewer of nearby(obelisk)) viewer.getPacketSender().sendAreaSound(timeline.areaSound, centre[0], centre[1], 0, 1, 0, timeline.areaSoundRadius);
   });
-  later(timeline.revertAt, () => setStones(obelisk, obelisk.id));
+  later(timeline.revertAt, () => going() && setStones(obelisk, obelisk.id));
   later(timeline.portalAt, () => {
+    if (!going()) return;
     const viewers = nearby(obelisk);
     for (const tile of padTiles(obelisk)) graphicAt(viewers, timeline.portalGraphic, timeline.portalHeight, tile);
   });
   later(timeline.teleportAt, () => {
+    if (!going()) return;
     active.delete(index);
     const destination = data.obelisks[to];
-    for (const traveller of World.getPlayers()) {
+    for (const traveller of core.World.getPlayers()) {
       if (!traveller?.isRegistered?.() || !onPad(traveller, obelisk)) continue;
       if (traveller.getHitpoints?.() <= 0 || traveller.isDyingReturn?.() === true) continue;
       if (isTeleblocked(traveller)) {
@@ -157,6 +161,12 @@ function activate(player, index, to, chosen) {
     }
   });
   return true;
+}
+
+/** Server shutdown: glowing stones go back and no activation is left going. */
+function resetActive() {
+  for (const index of active.keys()) setStones(data.obelisks[index], data.obelisks[index].id);
+  active.clear();
 }
 
 function hardDiary(player) {
@@ -240,7 +250,7 @@ function login({ player }) {
 module.exports = {
   name: "WildernessObelisks",
   members: true,
-  _test: { activate, activateOption, teleportToDestination, setDestination, chooseDestination, padTiles, stones, active, get data() { return data; } },
+  _test: { activate, activateOption, teleportToDestination, setDestination, chooseDestination, resetActive, padTiles, stones, active, get data() { return data; } },
   register(pluginApi) {
     api = pluginApi;
     core = api.core;
@@ -256,5 +266,6 @@ module.exports = {
     api.onInterfaceActionClick(chooseDestination);
     api.onCustomEvent("interface:closed", menuClosed);
     api.onPlayerLogin(login);
+    api.onServerShutdown(resetActive);
   },
 };

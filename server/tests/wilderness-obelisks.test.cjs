@@ -33,6 +33,7 @@ before(async () => {
     onInterfaceActionClick() {},
     onCustomEvent() {},
     onPlayerLogin() {},
+    onServerShutdown() {},
     emitCustomEvent: (name, request) => {
       if (name === "diary:is-complete" && request.diary === "wilderness" && request.tier === "hard") request.complete = diaryDone;
     },
@@ -166,4 +167,30 @@ test("Set and Teleport to Destination need the hard Wilderness Diary, and a dest
   assert.equal(handlers.Obelisk.Activate({ player, objectId: 31554 }), false, "the house's obelisk isn't one of these");
   const stray = { getLocation: () => new core.Location(4091, 4312, 0) };
   assert.equal(handlers.Obelisk.Activate({ player, objectId: 14826, object: stray }), false, "the map's stray copy of level 44's stones");
+});
+
+test("a player who logs out or steps off the pad before the teleport stays behind", () => {
+  const activator = fakePlayer([3156, 3620]);
+  const leaver = fakePlayer([3156, 3621]);
+  const walker = fakePlayer([3157, 3621]);
+  T.activate(activator, 0, 1, false);
+  tick(6);
+  leaver.isRegistered = () => false;
+  walker.moveTo(new core.Location(3160, 3625, 0));
+  tick(7);
+  assert.ok(activator.getLocation().getY() > 3660, "the activator still goes");
+  assert.equal(leaver.getLocation().getY(), 3621);
+  assert.equal(walker.getLocation().getY(), 3625);
+});
+
+test("a shutdown mid-activation puts the stones back and ends it, so none is left going", () => {
+  const activator = fakePlayer([3156, 3620]);
+  T.activate(activator, 0, 1, false);
+  tick(2);
+  locs.length = 0;
+  T.resetActive();
+  assert.equal(T.active.size, 0);
+  assert.deepEqual(locs, T.stones(T.data.obelisks[0]).map(([x, y]) => `${LEVEL_13}@${x},${y}`), "the four stones are the obelisk again");
+  tick(11);
+  assert.equal(activator.getLocation().getY(), 3620, "the cancelled activation teleports nobody");
 });
