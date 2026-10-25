@@ -78,6 +78,19 @@ function lapDone({ player, course }) {
   player.sendMessage(message("streak", { streak: get(player, "streak") }));
 }
 
+/**
+ * Wiki (Agility dispenser): starting the next lap at the pipe without having tagged the dispenser
+ * loses the unclaimed ticket and reward and resets the streak; the payment stays. Rev 233 kept the
+ * streak (233/00449: 2 -> 3 and 4 -> 5 across untagged laps); the current Wiki rule is followed here.
+ */
+function lapStarted({ player, objectId }) {
+  if (objectId !== core().CacheDefinitions.getLocId(DATA.lapStart)) return;
+  if (!get(player, "ticket") && !get(player, "reward")) return;
+  set(player, "ticket", 0);
+  set(player, "reward", 0);
+  set(player, "streak", 0);
+}
+
 // ---------------------------------------------------------------- the dispenser
 
 /**
@@ -227,6 +240,7 @@ module.exports = {
     api = pluginApi;
     for (const name of STATE) api.persistAttribute(ATTRIBUTE(name), 0);
     api.onCustomEvent("agility:lap", lapDone);
+    api.onCustomEvent("agility:obstacle-start", lapStarted);
     api.onObjectInteraction("Agility dispenser", { Tag: tag, Pay: pay, Redeem: redeem });
     api.onPlayerLogin(login);
     api.onPlayerLogout(logout);

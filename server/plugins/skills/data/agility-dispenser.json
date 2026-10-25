@@ -1,6 +1,8 @@
 {
   "_source": "rsprox 233/00449-00461 (the varbits, the order of a lap's end, Tag, Pay, Redeem and their lines) and the Wiki (Agility dispenser, Wilderness Agility Course, Wilderness agility ticket: the loot tables, the ticket XP, the streak rules).",
   "dispenser": "wildy_agility_pillar",
+  "_lapStart": "The course's first obstacle: starting it with an unclaimed ticket or reward resets the streak (Wiki).",
+  "lapStart": "obstical_pipe2",
   "fee": 150000,
   "coins": 995,
   "ticket": "wildy_agility_token",
