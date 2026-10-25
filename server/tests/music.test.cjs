@@ -326,3 +326,64 @@ test('PlayerSession remembers the track it started for the region, for the pre-j
   assert.deepEqual(songs, [trackId]);
   assert.equal(session.getCurrentMusicTrack(), trackId);
 });
+
+// Live (rsprox revs 236-239, 17 sessions with a mid-session music volume change): when the music
+// volume varp rises from 0 the server sends track 147 (silence) with zero fades on that tick and the
+// area track with zero fades on the next; dropping to 0 sends nothing.
+test('raising the music volume from 0 re-sends silence, then the area track, with zero fades', async () => {
+  await setup();
+  const changed = handlers.get('audio:setting-changed');
+  assert.ok(changed && changed.length, 'the Music plugin listens for audio setting changes');
+  const songs = [];
+  const player = {
+    getAudioSettings: () => ({ 18: 0, 168: 5 }),
+    getSession: () => ({ getCurrentMusicTrack: () => 454 }),
+    getPacketSender: () => ({ sendSong: (id, fades) => { songs.push([id, fades]); } }),
+    isRegistered: () => true,
+  };
+  const tasks = [];
+  const submit = api.core.TaskManager.submit;
+  api.core.TaskManager.submit = (task) => { tasks.push(task); };
+  try {
+    for (const handler of changed) handler({ player, varpId: 168, previous: 0, value: 5 });
+    assert.deepEqual(songs, [[147, { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 }]], 'silence now');
+    assert.equal(tasks.length, 1, 'the track follows on the next tick');
+    tasks[0].execute();
+    assert.deepEqual(songs[1], [454, { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 }]);
+
+    songs.length = 0; tasks.length = 0;
+    for (const handler of changed) handler({ player, varpId: 168, previous: 5, value: 0 });
+    for (const handler of changed) handler({ player, varpId: 168, previous: 5, value: 60 });
+    for (const handler of changed) handler({ player, varpId: 169, previous: 0, value: 60 });
+    assert.deepEqual(songs, [], 'only a rise of the music volume from 0 restarts anything');
+    assert.deepEqual(tasks, []);
+
+    const manual = { ...player, getAudioSettings: () => ({ 18: 1, 168: 5 }) };
+    for (const handler of changed) handler({ player: manual, varpId: 168, previous: 0, value: 5 });
+    assert.deepEqual(songs, [], 'manual music mode: nothing to restart');
+    const silent = { ...player, getSession: () => ({ getCurrentMusicTrack: () => -1 }) };
+    for (const handler of changed) handler({ player: silent, varpId: 168, previous: 0, value: 5 });
+    assert.deepEqual(songs, [], 'no region track known: nothing to restart');
+  } finally {
+    api.core.TaskManager.submit = submit;
+  }
+});
+
+test('a music volume varp from the client announces audio:setting-changed with the old and new value', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const events = [];
+  const emit = PluginManager.emitCustomEvent;
+  PluginManager.emitCustomEvent = (name, payload) => { if (name === 'audio:setting-changed') events.push(payload); };
+  try {
+    const player = new Player(null);
+    assert.equal(player.getAudioSettings()[168], 100);
+    assert.equal(player.applyAudioSettingFromClient(168, 0), true);
+    assert.equal(player.applyAudioSettingFromClient(168, 0), true, 'the same value again');
+    assert.equal(player.applyAudioSettingFromClient(168, 5), true);
+    assert.equal(player.applyAudioSettingFromClient(4242, 5), false, 'not an audio varp');
+    assert.deepEqual(events.map((e) => [e.varpId, e.previous, e.value]), [[168, 100, 0], [168, 0, 5]], 'only changes are announced');
+    assert.equal(events[0].player, player);
+  } finally {
+    PluginManager.emitCustomEvent = emit;
+  }
+});
