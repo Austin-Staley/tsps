@@ -32,7 +32,7 @@ test('public filter mode 4 (Show autochat) receives standard and autochat lines;
   assert.equal(relations.canReceivePublicChatFrom(other, true), false, 'Show standard hides autochat');
   assert.equal(relations.canReceivePublicChatFrom(other, false), true);
   relations.setChatModes(1, 1, 0);
-  assert.equal(relations.canReceivePublicChatFrom(other, true), false, 'Friends: a stranger\'s autochat is hidden');
+  assert.equal(relations.canReceivePublicChatFrom(other, true), false, 'Show friends hides autochat');
   relations.setChatModes(2, 1, 0);
   assert.equal(relations.canReceivePublicChatFrom(other, true), false);
   relations.setChatModes(9, 1, 0);
