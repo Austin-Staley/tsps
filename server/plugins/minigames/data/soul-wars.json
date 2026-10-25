@@ -1441,7 +1441,8 @@
     "draw": "The game has ended in a draw!",
     "zealFirst": "You earned {zeal} Zeal.",
     "zeal": "You earned {zeal} Zeal. You now have {tokens} Zeal Tokens to spend.",
-    "inactive": "You have been removed from the game for inactivity."
+    "inactive": "You have been removed from the game for inactivity.",
+    "needTutorial": "You need to see the Nomad's demonstration before you can join a battle."
   },
   "minPlayersFloor": 2,
   "_rewards": "The Nomad's Trade opens interface 442 (rsprox 227/00079, 00076): the lists are the cache's (scripts 535-538, 675, 842; enums below); every selection is client-side and reaches the server only as the confirm button's sub (the entry's index). Recorded: Spoils of War bought 10 at a time ('How many would you like to buy? (1-10)', 'You purchase some Spoils of war for 300 Tokens.', synth 2304), a Slayer helmet imbued in place for 500 (synth 2655). Cache: XP per token floor(L*L/600) * 30 (melee, Hitpoints), 27 (Ranged, Magic), 14 (Prayer) from level 30; Prayer 70 for the Soul cape, 40 for the Ectoplasmator. Inferred: the XP line, the XP 'X' prompt, and a Buy 1 giving one batch (enum 3652's count) of the blighted supplies.",
@@ -1490,6 +1491,268 @@
       "xp": "You receive {xp} {skill} experience.",
       "noItem": "You don't have that item to imbue.",
       "noRoom": "You don't have enough inventory space."
+    }
+  },
+  "_tutorial": "The Nomad's demonstration, as recorded (rsprox 234/03277 [24]-[398]): one instance shared by everyone in it (the template is x1880-2143 z5904-6047; the copy is x1920-2111, the 24 chunks an instance may have, which holds everything the demonstration uses); six Nomads (10548-10553) that each player sees by varbit soul_wars_tutorial (3798); a Zimberfizz of their own to kill (10517, then 10518); the steps' instructions on soul_wars_tutorial_instructions (261). Pages are [speaker, text, chathead animation]; 'box' pages are messageboxes. Lines the recording lacks are the Wiki's transcript (npc-dialogues.json, Nomad): talking out of turn, a lost fragment, I'll pass / Actually, I'm good., the poison refusal, Leave-tutorial and the guide.",
+  "tutorial": {
+    "chunk": [240, 738],
+    "size": [24, 18],
+    "land": [1935, 5958, 0],
+    "walkTo": [1935, 5974, 0],
+    "nomads": {
+      "10548": [1935, 5975, 0],
+      "10549": [1930, 6002, 0],
+      "10550": [1963, 5995, 0],
+      "10551": [2009, 5987, 0],
+      "10552": [2099, 5990, 0],
+      "10553": [1944, 5977, 0]
+    },
+    "scenery": [
+      [10520, [1933, 5960, 0]],
+      [10521, [2093, 6001, 0]],
+      [10554, [2006, 5990, 0]],
+      [10522, [2016, 6000, 0]],
+      [10522, [2025, 6002, 0]],
+      [10522, [2008, 5999, 0]],
+      [10523, [1966, 5998, 0]],
+      [10524, [1974, 6004, 0]],
+      [10523, [1978, 5992, 0]],
+      [10525, [2018, 5999, 0]],
+      [10526, [2024, 6002, 0]],
+      [10525, [2014, 6002, 0]]
+    ],
+    "imps": {
+      "ruins": [10517, [1964, 5994, 0]],
+      "obelisk": [10518, [2014, 5986, 0]]
+    },
+    "obelisk": [2014, 5983, 0],
+    "redBase": [2095, 5996, 0],
+    "redBaseWalk": [2095, 5982, 0],
+    "graveyard": [1947, 5977, 0],
+    "portal": [1951, 5977, 0],
+    "lobbyExit": [2212, 2857, 0],
+    "items": {
+      "cape": 25195,
+      "icon": 25213,
+      "fragment": 25196,
+      "guide": 25197
+    },
+    "iconSlot": 11,
+    "ghost": 10538,
+    "redStrength": "98%",
+    "arrowHeight": 110,
+    "obeliskArrow": 200,
+    "anims": {
+      "teleOtherImpact": 1816,
+      "teleOtherCasting": 1818,
+      "castTeleport": 714,
+      "terrified": 2836,
+      "death": 836,
+      "nomadBlast": 1979,
+      "impDeath": 172
+    },
+    "spotanims": {
+      "teleOtherImpact": 342,
+      "teleOtherCasting": 343,
+      "teleport": 111,
+      "smokepuff": 86,
+      "blastImpact": 89
+    },
+    "projectile": 88,
+    "sounds": {
+      "teleOtherCast": 199,
+      "teleOtherLand": 200,
+      "impAppears": 1930,
+      "pickup": 2582,
+      "charge": 4526,
+      "blast": 178
+    },
+    "instructions": {
+      "0": ["Soul Wars demonstration", "Follow the directional arrow on the minimap to find Nomad. Speak with him to start the demonstration."],
+      "1": ["Supplies", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about supply areas."],
+      "2": ["Souls", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about collecting souls."],
+      "4": ["Zimberfizz", "Follow the directional arrow on the minimap to find Zimberfizz the imp. Defeat him in combat to claim the soul fragment he is carrying."],
+      "5": ["Soul fragments", "Follow the directional arrow on the minimap to find the soul fragment. Pick it up to continue the demonstration."],
+      "6": ["The Soul Obelisk", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about the Soul Obelisk."],
+      "7": ["Zimberfizz returns", "Follow the directional arrow on the minimap to find Zimberfizz. Defeat him in combat to start taking control of the Soul Obelisk."],
+      "8": ["Area control", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about taking control of areas in Soul Wars."],
+      "11": ["Charging the Soul Obelisk", "Follow the directional arrow on the minimap to find the Soul Obelisk. Use the soul fragment on the Obelisk to charge the Obelisk and weaken the enemy avatar."],
+      "12": ["Angry avatars", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about the avatars."],
+      "14": ["Ghosts", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about being a ghost."],
+      "15": ["Death", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about death in Soul Wars."],
+      "16": ["Leaving Soul Wars", "Follow the directional arrow on the minimap to find the blue exit portal. Use the portal to return to the waiting area."]
+    },
+    "lines": {
+      "intro": [
+        ["player", "Excuse me, what is this place?", 554],
+        ["npc", "What is this place? This is Soul Wars, a glorious battleground where you must fight to crush the souls of your enemies!", 573],
+        ["player", "Really? Are souls easy to crush?", 554],
+        ["npc", "Easier than you'd imagine.", 8542],
+        ["player", "I see. So how does it all work?", 554],
+        ["npc", "I can give you a demonstration if you're interested?", 567]
+      ],
+      "again": [["npc", "Ah, you again. Are you ready for that demonstration?", 567]],
+      "letsDoIt": [["player", "Let's do it.", 567]],
+      "restricted": [
+        ["npc", "Hmm, it looks like you have some restricted items with you. You should put them somewhere safe before we continue. Food, potions, capes, followers and non-combat items are all restricted.", 578]
+      ],
+      "poisoned": [
+        ["npc", "Hmm, you're not looking so great. You should cure yourself of poison before I give you the demonstration.", 578]
+      ],
+      "started": [["npc", "Very well. Let's get started.", 567]],
+      "notNow": [["npc", "So be it. You know where to find me if you change your mind.", 588]],
+      "avatars": [
+        ["npc", "Welcome to Soul Wars! Let's get started.", 567],
+        ["player", "So, what's this place all about?", 554],
+        ["npc", "To the south you will have seen an avatar. You must fight to protect your team's avatar, and defeat the opposing team's avatar.", 569],
+        ["player", "Are you crazy? Have you seen the size of it?", 571],
+        ["npc", "You're here to fight, not whine.", 614],
+        ["player", "But how am I supposed to take on one of those?", 575],
+        ["npc", "By capturing the Soul Obelisk, which lies at the centre of the battleground, and offering it soul fragments.", 593],
+        ["npc", "Let's head towards the Obelisk now. I can point out some of the important landmarks on the way. Meet me to the north when you are ready to learn more.", 569]
+      ],
+      "supplies": [
+        ["npc", "You might find this little area behind me useful for defending your avatar. There's one in the other team's base, too.", 569],
+        ["npc", "During battle, you can gather supplies here to aid you and your teammates.", 568],
+        ["npc", "The Soul Obelisk is just a little way from here. Let's continue on; I'll meet you to the east.", 568]
+      ],
+      "souls": [
+        ["npc", "Now, to have a chance against an avatar, you are going to need souls. Lots of souls.", 593],
+        ["player", "What am I going to do with souls?", 554],
+        ["npc", "The Soul Obelisk is immensely powerful and, by channelling souls into it, you can weaken the enemy avatar.", 569],
+        ["player", "How does that work?", 554],
+        ["npc", "All I know is that it does, and that you should do it. Lots.", 593],
+        ["player", "So, where do I get these souls from?", 554],
+        ["npc", "You can kill the souls that inhabit the arena ruins and harvest their soul fragments.", 568],
+        ["npc", "For the purposes of this demonstration however, we will use my minion Zimberfizz.", 568]
+      ],
+      "heel": [["npc", "Zimberfizz! Heel!", 609]],
+      "zimberfizz": [
+        ["npc", "When you kill a creature in Soul Wars, they will leave a soul fragment behind, which you can use to charge the Soul Obelisk.", 569],
+        ["npc", "Zimberfizz has such a soul fragment. Why don't you kill him and take it?", 555],
+        ["player", "You want me to kill him?", 554],
+        ["npc", "Yes!", 609]
+      ],
+      "killHim": [["npc", "Come on! Kill him already and get that soul fragment.", 614]],
+      "onward": [
+        ["npc", "Good job! Let's carry on to the Soul Obelisk and channel this soul fragment into it. It's just to the east, over a bridge and on a small island.", 569]
+      ],
+      "lostFragment": [
+        ["npc", "Good job! Now, you've got that soul fragment, right?", 554],
+        ["player", "About that...", 575],
+        ["npc", "You've lost it? You're lucky you're not in a real battle yet!", 614]
+      ],
+      "lostAtObelisk": [
+        ["npc", "Here we are at the Soul Obelisk. Now, you've got that soul fragment, right?", 554],
+        ["player", "About that...", 575],
+        ["npc", "You've lost it? You're lucky you're not in a real battle yet!", 614]
+      ],
+      "newFragment": [
+        ["npc", "Here, have this one. Just look after it this time.", 568],
+        ["player", "I'll try...", 575]
+      ],
+      "makeSpace": [["npc", "Make some space and I'll give you one. Just look after it this time.", 568]],
+      "obelisk": [
+        ["npc", "Here we are at the Soul Obelisk. Now, to reap the full benefit of the soul fragment, you will need to first be in control of the Obelisk.", 569],
+        ["player", "How do I do that?", 554],
+        ["npc", "Various areas of the battleground can come under your team's control. To gain control, you must have more team members than the opposing team in these areas.", 570],
+        ["npc", "If you outnumber the enemy, you will gradually take control. Let's try it out now.", 568],
+        ["npc", "We shall use Zimberfizz to represent an enemy team member.", 568]
+      ],
+      "minionHeel": [["npc", "Minion! Heel!", 609]],
+      "returns": [
+        ["npc", "Come on, give him a good kick.", 609],
+        ["player", "I thought he was dead? Didn't we kill him earlier?", 575],
+        ["npc", "Ha! He wishes! No, his service to me is far from over.", 605]
+      ],
+      "kick": [["npc", "Come on, give him a good kick.", 609]],
+      "poorGuy": [
+        ["player", "Poor little guy.", 610],
+        ["npc", "Ha! I'm sure he loves the attention, right Zimberfizz?", 605]
+      ],
+      "outnumber": [
+        ["npc", "Right, now that Zimberfizz is no longer in the Obelisk's capturable area, you outnumber the enemy! The Soul Obelisk will now begin to fall under your control.", 569],
+        ["box", "Note the Obelisk's progress bar in the top-left of your screen. As you gain control over an area, this bar will fill with the colour of your team."],
+        ["box", "Once the bar is filled with your team's colour, you gain control of the area."]
+      ],
+      "controlled": [
+        ["box", "You now have control over the Soul Obelisk; it has taken on your team's colour as a result. This is also shown by the Obelisk icon in the top-left of your screen."],
+        ["box", "The three icons at the top-left of the screen tell you which team has control of the capturable areas."],
+        ["npc", "Right. Now, go and charge the Obelisk with that soul fragment and see what happens.", 593]
+      ],
+      "goCharge": [["npc", "Go on, use the soul fragment on the Obelisk.", 593]],
+      "charged": [["box", "You charge the Soul Obelisk and weaken the enemy avatar."]],
+      "angry": [
+        ["npc", "Good job! Now that you have charged the Obelisk, the enemy avatar will have been weakened.", 568],
+        ["box", "Note the display in the top-left of the screen. See how the red avatar's strength has decreased."],
+        ["box", "The number shown here represents the percentage of your damage that the avatar will block."],
+        ["player", "So, once I've charged the Obelisk, can I just kick back and wait for the end of the game?", 593],
+        ["npc", "Ha! I think not! I'm not about to reward those who don't put the effort in!", 606],
+        ["box", "Note the orange bar in the top-left of the screen. This bar represents how active you have been during the game."],
+        ["box", "Over the course of the battle, the bar will slowly drain. Should the bar drain completely you will be removed from the game due to your inactivity."],
+        ["box", "You can refill the bar by performing actions in the game, such as dealing damage or charging the Obelisk."],
+        ["player", "Oh well. Say, do you think the enemy avatar minds us weakening it like this?", 555],
+        ["npc", "Hmm, why don't we go find out?", 554]
+      ],
+      "redBase": [
+        ["npc", "So, here we are in the enemy base.", 567],
+        ["player", "Is that the enemy avatar over there?", 554],
+        ["npc", "Yeah, and it looks like you made it pretty mad.", 554],
+        ["player", "What? You're the one that told me to weaken it!", 571],
+        ["npc", "Ha! Don't worry - I won't let it kill you.", 605],
+        ["player", "Phew!", 567],
+        ["npc", "Of course, that doesn't mean I won't kill you.", 592],
+        ["player", "What did you say?", 571]
+      ],
+      "ghost": [
+        ["player", "Wooooooooooo!", 588],
+        ["npc", "What?", 575],
+        ["player", "Woooooo! Woooooo!", 588],
+        ["npc", "Sorry, I don't speak ghost.", 575]
+      ],
+      "alive": [["npc", "There we go! Much better.", 567]],
+      "death": [
+        ["box", "When you die in Soul Wars, you become a ghost."],
+        ["box", "After 10 seconds as a ghost, you return to life and can carry on with the fight."],
+        ["player", "Hey! You killed me.", 614],
+        ["npc", "At least it wasn't permanent! Think of it as an opportunity to learn.", 606],
+        ["player", "How so?", 554],
+        ["npc", "The other team will be after you and any soul fragments you have collected, after all.", 568],
+        ["npc", "I needed to show you what happens when you fall in battle.", 568],
+        ["player", "Did you turn me into a ghost?", 554],
+        ["npc", "Not exactly. The Soul Obelisk tried to claim your soul, as it does with all who perish in the battleground.", 593],
+        ["npc", "Only my power brought you here, and returned you to life.", 568],
+        ["player", "Erm, thanks, I guess.", 575],
+        ["npc", "You're more useful to me alive... for now.", 592],
+        ["player", "Are there any other painful things to learn about this place?", 597],
+        ["npc", "There is much more to this place, but you don't need to know about it yet.", 593],
+        ["npc", "If you want to learn more, I can give you a Soul Wars guide upon our return to the lobby.", 568]
+      ],
+      "portal": [
+        ["npc", "Use the large blue portal at the back of this graveyard to return to the lobby. Why not sign up for a battle while you're there?", 569]
+      ],
+      "seeYou": [
+        ["npc", "Use the portal over there to return to the waiting area. I'll see you on the other side!", 569]
+      ],
+      "back": [
+        ["npc", "Here we are. Just head into the western waiting area if you want to join a battle.", 568],
+        ["player", "That's all well and good, but what do I get out of all of this?", 555],
+        ["npc", "I can offer you experience in various skills, and items I have found on my travels.", 568]
+      ],
+      "guideOffer": [
+        ["npc", "I have a copy of the Soul Wars guide here. It contains information that I didn't have time to cover.", 555],
+        ["npc", "You don't need to know it all to get started, but the section on burying bones could be useful.", 606],
+        ["npc", "Did you want to take it and read it in your own time?", 554]
+      ],
+      "guideYes": [["player", "Yes, please.", 567]],
+      "guideHave": [["npc", "Hmm, it looks like you already have one.", 554], ["npc", "Oh, alright then.", 567]],
+      "guideGiven": [["npc", "Here you go.", 567], ["player", "Thanks!", 567]],
+      "guideNo": [["player", "No thanks.", 567]],
+      "noGuideRoom": [["player", "Okay, thanks.", 567]]
+    },
+    "messages": {
+      "notYourImp": "You've got no reason to bother that poor imp.",
+      "needTutorial": "You need to see the Nomad's demonstration before you can join a battle."
     }
   }
 }
