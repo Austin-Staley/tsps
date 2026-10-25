@@ -29,12 +29,16 @@ function parseQuestHint(hint) {
   return { all: names(/ and /) };
 }
 
+/** Hint names the cache spells differently from the quest: "during The Digsite quest." is The Dig Site. */
+const CACHE_QUEST_NAMES = { digsite: "The Dig Site" };
+
 /**
  * The names a hint's quest may be registered under: "Observatory" is "Observatory Quest",
- * "Monkey Madness" (the first one's tracks) is "Monkey Madness I".
+ * "Monkey Madness" (the first one's tracks) is "Monkey Madness I", "Digsite" is "The Dig Site".
  */
 function questNameAliases(name) {
-  return [name, `${name} Quest`, `${name} I`];
+  const spelled = CACHE_QUEST_NAMES[normaliseQuestName(name)];
+  return [name, `${name} Quest`, `${name} I`, ...(spelled ? [spelled] : [])];
 }
 
 /** Whether a hint's quest name means the registered quest `questName`. */
@@ -78,6 +82,7 @@ function requirementMet(requires, isComplete) {
 
 module.exports = {
   QUEST_HINT,
+  CACHE_QUEST_NAMES,
   normaliseQuestName,
   parseQuestHint,
   questNameAliases,

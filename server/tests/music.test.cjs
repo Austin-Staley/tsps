@@ -19,7 +19,7 @@ let catalog;
 let trackNames;
 let setupPromise;
 // Stands in for QuestRuntime's quest:is-complete: answers only for registered names, as it does.
-const registeredQuests = new Set(['Dragon Slayer II', 'While Guthix Sleeps', 'Observatory Quest', 'Monkey Madness I', 'Monkey Madness II']
+const registeredQuests = new Set(['Dragon Slayer II', 'While Guthix Sleeps', 'Observatory Quest', 'Monkey Madness I', 'Monkey Madness II', 'The Dig Site']
   .map(QuestUnlocks.normaliseQuestName));
 let completedQuests = new Set();
 const api = new Proxy({
@@ -600,7 +600,7 @@ test('every quest a cache hint names is a registered quest, or a known missing o
   }
   assert.ok(registered.size > 100, `found ${registered.size} quest definitions`);
   // Quests the server has not got yet; their tracks stay locked until it does.
-  const knownMissing = ['A Night at the Theatre', 'Blood Moon Rises', 'Digsite', 'Garden of Death', "General's Shadow",
+  const knownMissing = ['A Night at the Theatre', 'Blood Moon Rises', 'Garden of Death', "General's Shadow",
     'Lair of Tarn Razorlor', 'Song of the Elves', 'While Guthix Sleeps'];
   const unmatched = catalog.questUnlocks.questNames
     .filter((hint) => ![...registered].some((name) => QuestUnlocks.hintNamesQuest(hint, name)));
@@ -608,4 +608,20 @@ test('every quest a cache hint names is a registered quest, or a known missing o
     'a hint names a quest no definition is registered under: add an alias or the quest');
   const nowPresent = knownMissing.filter((name) => !unmatched.includes(name));
   if (nowPresent.length) console.log(`[music] quests once missing are now registered: ${nowPresent.join(', ')}`);
+});
+
+test('"during The Digsite quest." is The Dig Site: its completion and a later login both unlock Venture 2', async () => {
+  await setup();
+  const [VENTURE_2] = tracksNamed('Venture 2');
+  const venture = catalog.questUnlocks.entries.find(({ trackId }) => trackId === VENTURE_2);
+  assert.deepEqual(venture.requires, { all: ['Digsite'] });
+  completedQuests = new Set([QuestUnlocks.normaliseQuestName('The Dig Site')]);
+  const player = makePlayer();
+  MusicPlugin._test.onQuestCompleted({ player, quest: { key: 'the_dig_site', name: 'The Dig Site' } });
+  assert.ok(player.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE).includes(VENTURE_2), 'on completion');
+  const saved = makePlayer();
+  loginHandlers[0]({ player: saved });
+  assert.ok(saved.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE).includes(VENTURE_2), 'at login, for a save from before');
+  assert.deepEqual(saved.messages, []);
+  completedQuests = new Set();
 });

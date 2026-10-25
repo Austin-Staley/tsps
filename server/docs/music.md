@@ -21,11 +21,12 @@ Meat and Greet). `QuestUnlocks.Music.js` reads every quest-naming hint, and on `
 Music plugin unlocks the tracks whose hint names that quest, once every quest the hint needs is
 complete ("and": all; "or": either; asked through `quest:is-complete` by name). At login the same
 runs silently for quests completed before this existed, before the unlock varps are restored. A
-hint's name may be the registered one, "<name> Quest" (Observatory, Waterfall, Legends') or the first
-of a numbered pair ("Monkey Madness" is Monkey Madness I). `tests/music.test.cjs` lists the hinted
-quests the server has not got (While Guthix Sleeps, The Blood Moon Rises, Song of the Elves, A Night
-at the Theatre, Garden of Death, The Dig Site's "Digsite", and the General's Shadow and Lair of Tarn
-Razorlor miniquests): their tracks stay locked until those arrive.
+hint's name may be the registered one, "<name> Quest" (Observatory, Waterfall, Legends'), the first
+of a numbered pair ("Monkey Madness" is Monkey Madness I), or a cache spelling listed in
+`CACHE_QUEST_NAMES` ("Digsite" is The Dig Site). `tests/music.test.cjs` lists the hinted quests the
+server has not got (While Guthix Sleeps, The Blood Moon Rises, Song of the Elves, A Night at the
+Theatre, Garden of Death, and the General's Shadow and Lair of Tarn Razorlor miniquests): their tracks
+stay locked until those arrive.
 
 Holiday-event tracks ("during a Christmas event.", 15 slots) have no event plugins to unlock them yet;
 `data/music-holiday-tracks.json` keeps them out of the music cape requirement.
