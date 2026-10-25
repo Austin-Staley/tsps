@@ -99,7 +99,7 @@ percentages from PR counts or source-only tests.
 | [#1110](https://github.com/RSPSApp/tsps/pull/1110) | Desert Treasure I | Deferred quest; existing committed work preserved |
 | [#1111](https://github.com/RSPSApp/tsps/pull/1111) | Devious Minds | Pending natural verification |
 | [#1112](https://github.com/RSPSApp/tsps/pull/1112) | Dragon Slayer I | Pending natural verification |
-| [#1113](https://github.com/RSPSApp/tsps/pull/1113) | Druidic Ritual | Scoped main-route evidence recorded; full parity pending |
+| [#1113](https://github.com/RSPSApp/tsps/pull/1113) | Druidic Ritual | Completion used an alternate dungeon entrance; intended prison-gate failure and follow-up recorded in [#1080](https://github.com/RSPSApp/tsps/issues/1080) and the verification ledger. Full parity pending. |
 | [#1114](https://github.com/RSPSApp/tsps/pull/1114) | Dwarf Cannon | Pending natural verification |
 | [#1115](https://github.com/RSPSApp/tsps/pull/1115) | Eadgar's Ruse | Pending natural verification |
 | [#1116](https://github.com/RSPSApp/tsps/pull/1116) | Elemental Workshop I | Scoped main-route evidence recorded; full parity pending |
