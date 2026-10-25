@@ -1299,7 +1299,7 @@ export class Player extends Mobile {
     }
 
     public manipulateHit(hit: PendingHit): PendingHit {
-        return hit;
+        return PluginManager.emitPlayerHitModify(this, hit);
     }
 
     public getEnteredAmountAction(): EnteredAmountAction {

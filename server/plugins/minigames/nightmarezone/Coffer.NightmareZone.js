@@ -1,14 +1,12 @@
 /**
- * Dominic's coffer and the potion barrels, as recorded (rsprox 234/03279 [19614]-[19628],
+ * Dominic's coffer, as recorded (rsprox 234/03279 [19614]-[19628],
  * [19726]-[19745]; nightmare-zone.json `coffer`):
  * - the coffer unlocks the first time the player steps into the enclosure (varbit
  *   nzone_moneypouch_unlocked; its Unlock option does the same);
  * - Use: "The coffer is empty." / "You have N coins stored in the coffer." beside a pile of coins,
  *   then "Dominic's Coffer (...)": Deposit money., Withdraw money. (once there is some), Cancel.;
  *   "How much do you wish to deposit? (coins carried)", in thousands (varbit nzone_cash);
- * - coins used on the coffer are not a deposit (the engine's "Nothing interesting happens.");
- * - a barrel's Check: "This barrel contains <potion> potion..." (taking and storing doses come with
- *   the potions).
+ * - coins used on the coffer are not a deposit (the engine's "Nothing interesting happens.").
  * Not recorded: withdrawing (its prompt mirrors the deposit's) and a full coffer.
  */
 const Common = require("./Common.NightmareZone");
@@ -89,14 +87,6 @@ function unlockOption({ player }) {
   return true;
 }
 
-function checkBarrel({ player, object }) {
-  const name = String(object?.getDefinition?.()?.getName?.() ?? object?.definition?.name ?? "").replace(/ potion$/, "").toLowerCase();
-  const potionItem = Common.data.barrels[name];
-  if (potionItem == null) return false;
-  Common.talk(player, [["item", Common.message("barrel", { potion: name }), potionItem]]);
-  return true;
-}
-
 function loggedIn({ player }) {
   Common.varbit(player, "nzone_cash", Math.floor(Common.coffer(player) / Common.data.coffer.unit));
   Common.varbit(player, "nzone_moneypouch_unlocked", unlocked(player) ? 1 : 0);
@@ -107,9 +97,6 @@ function attachCoffer(api) {
   api.persistAttribute(Common.UNLOCKED_ATTRIBUTE, 0);
   api.onPlayerLogin(loggedIn);
   api.onObjectInteraction("Dominic's coffer", { Use: useCoffer, Unlock: unlockOption });
-  for (const name of ["Overload potion", "Absorption potion", "Super ranging potion", "Super magic potion"]) {
-    api.onObjectInteraction(name, { Check: checkBarrel });
-  }
 }
 
-module.exports = { attachCoffer, unlock, unlocked, useCoffer, cofferMenu, deposit, withdraw, checkBarrel };
+module.exports = { attachCoffer, unlock, unlocked, useCoffer, cofferMenu, deposit, withdraw };

@@ -8,13 +8,18 @@
  * - Practice: the chosen boss, once; Endurance: every unlocked boss in turn; Rumble: four at a time,
  *   in any order and over again (Wiki); bosses with several forms fight through them all;
  * - points (Endurance and Rumble): the Wiki's per-boss figure with every quest done, scaled by
- *   the share of bosses the player has unlocked (the Wiki's exact formula is not known);
+ *   the share of bosses the player has unlocked (the Wiki's exact formula is not known); they
+ *   gather on the dream's counter (varbit nzone_currentpoints, whose 20 bits are the Wiki's
+ *   1,048,575 cap a dream) and are paid into the reward points as the dream ends;
  * - the arena's potion wakes the player at once, by Dominic, with no message (recorded); so do a
  *   death (safe: nothing is lost) and a logout (Wiki).
- * Not yet: Rumble groups, spectators, Customisable dreams, the power-ups and potions.
+ * Potions.NightmareZone and PowerUps.NightmareZone add the potions and the power-ups.
+ * Not yet: Rumble groups, spectators, Customisable dreams.
  */
 const Common = require("./Common.NightmareZone");
 const Dominic = require("./Dominic.NightmareZone");
+const Potions = require("./Potions.NightmareZone");
+const PowerUps = require("./PowerUps.NightmareZone");
 
 /** The lobby vial (a multiloc: empty, or full once a dream is prepared) and the arena's. */
 const LOBBY_VIALS = ["nzone_lobby_vial", "nzone_lobby_vial_empty", "nzone_lobby_vial_full"];
@@ -24,13 +29,12 @@ const EMPTY_VIAL_NAME = "<col=ff9040>Empty vial";
 const FADE = { overlay: 174, script: 948, out: [0, 255, 0, 0, 50] };
 const LOBBY_OVERLAY_SCRIPT = 264;
 
-/** Each dreamer's dream: { area, dream, npcs, queue, kills }. */
-const dreams = new Map();
+/** Each dreamer's dream: { area, dream, npcs, queue, kills, points, tick }. */
+const { dreams, dreamOf } = Common;
 let DreamArea = null;
 let enclosure = null;
 
 const sender = (player) => player.getPacketSender();
-const dreamOf = (player) => dreams.get(player) ?? null;
 
 // ---------------------------------------------------------------- the enclosure
 
@@ -197,7 +201,7 @@ function start(player) {
     postScripts: [{ scriptId: FADE.script, args: FADE.out }],
   });
   sender(player).sendSound?.(Common.data.sounds.prepared, 100, 0);
-  const state = { area: new (areaClass())(), dream, npcs: new Set(), queue: [], unlocked, kills: 0, cost, entered: false };
+  const state = { area: new (areaClass())(), dream, npcs: new Set(), queue: [], unlocked, kills: 0, points: 0, tick: 0, cost, entered: false };
   dreams.set(player, state);
   Common.later(1, () => dreamOf(player) === state && Common.setPreparedDream(player, null));
   Common.later(3, () => enter(player, state));
@@ -235,6 +239,13 @@ function enter(player, state) {
   sender(player).sendSubInterface(Common.component("toplevel_osrs_stretch:overlay_hud"), Common.core.CacheDefinitions.getInterfaceId("nzone_game"), 1);
   sender(player).sendSong?.(Common.data.music.dream);
   if (state.dream.mode === "endurance") state.queue = [...state.unlocked];
+  Common.varbit(player, "nzone_currentpoints", 0);
+  Common.every(() => {
+    if (dreamOf(player) !== state) return false;
+    state.tick++;
+    PowerUps.tick(player, state, () => spawnTile(state));
+    return true;
+  });
   Common.later(Common.data.arena.firstSpawnTicks, () => {
     if (dreamOf(player) !== state) return;
     if (state.dream.mode === "practice") spawnBoss(player, state, state.dream.boss);
@@ -274,7 +285,10 @@ function bossDied({ npc }) {
   despawn(state, npc);
   if (spawnBoss(player, state, boss, form + 1, tile)) return;
   state.kills++;
-  if (state.dream.mode !== "practice") Common.addPoints(player, pointsFor(state, boss));
+  if (state.dream.mode !== "practice" && !npc.__noPoints) {
+    state.points = Math.min(Common.data.dreamPointsCap, state.points + pointsFor(state, boss));
+    Common.varbit(player, "nzone_currentpoints", state.points);
+  }
   if (state.dream.mode === "practice") {
     Common.later(Common.data.practiceWakeTicks, () => dreamOf(player) === state && finish(player));
   } else if (state.dream.mode === "endurance") {
@@ -296,6 +310,11 @@ function endDream(player) {
   const state = dreamOf(player);
   if (!state) return;
   dreams.delete(player);
+  // The dream's points (nzone_currentpoints, up to 1,048,575) are paid as it ends (Wiki's cap).
+  if (state.points > 0) Common.addPoints(player, state.points);
+  Common.varbit(player, "nzone_currentpoints", 0);
+  Potions.dreamEnded(player);
+  PowerUps.dreamEnded(state);
   for (const npc of [...state.npcs]) despawn(state, npc);
   Common.varbit(player, "multiway_indicator", 0);
   closeOverlay(player);

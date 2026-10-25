@@ -49,6 +49,7 @@ import {
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
   PluginNpcHitModifyEvent,
+  PluginPlayerHitModifyEvent,
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginWorldEntityInteractionEvent,
@@ -280,6 +281,7 @@ export class PluginManager {
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
   private static playerBeforeDeathHooks: PluginHook<PluginPlayerBeforeDeathEvent>[] = [];
   private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
+  private static playerHitModifyHooks: PluginHook<PluginPlayerHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
     zone: PluginZone;
@@ -1217,6 +1219,17 @@ export class PluginManager {
     const event: PluginNpcHitModifyEvent = { npc, hit };
     for (const hook of PluginManager.npcHitModifyHooks) {
       PluginManager.executeHook(hook, event, "npc_hit_modify", "npc_hit_modify");
+    }
+    return event.hit;
+  }
+
+  public static emitPlayerHitModify(player: any, hit: any): any {
+    if (PluginManager.playerHitModifyHooks.length === 0) {
+      return hit;
+    }
+    const event: PluginPlayerHitModifyEvent = { player, hit };
+    for (const hook of PluginManager.playerHitModifyHooks) {
+      PluginManager.executeHook(hook, event, "player_hit_modify", "player_hit_modify");
     }
     return event.hit;
   }
@@ -3149,6 +3162,19 @@ export class PluginManager {
           ...hookProfile(handler),
           handler: (event) => {
             if (event?.npc && event?.hit) {
+              handler(event);
+            }
+          },
+        });
+      },
+      onPlayerHitModify: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.playerHitModifyHooks.push({
+          ...hookProfile(handler),
+          handler: (event) => {
+            if (event?.player && event?.hit) {
               handler(event);
             }
           },

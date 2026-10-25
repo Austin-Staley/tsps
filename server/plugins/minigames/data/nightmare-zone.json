@@ -37,10 +37,29 @@
   "coffer": { "max": 262143000, "unit": 1000 },
   "pointsVarp": "nzone_rewardpoints",
   "pointsCap": 2147483647,
+  "dreamPointsCap": 1048575,
+  "_powerUps": "Wiki: Rumble only, one at a time, gone after a minute untouched; Power surge 45 s (special +20% a tick), Recurrent damage 45 s (an extra 3/4 hit, no experience), Zapper 60 s (max hit 8, every 2 ticks, nearby monsters), Ultimate force (all monsters die, no points). How often they appear and the zapper's reach are mine.",
+  "powerUps": {
+    "names": ["<col=ff9040>Power surge", "<col=ff9040>Recurrent damage", "<col=ff9040>Zapper", "<col=ff9040>Ultimate force"],
+    "kinds": { "surge": "nzone_powerup_specialattack", "recurrent": "nzone_powerup_damagemultiplier", "zapper": "nzone_powerup_zapper", "nuke": "nzone_powerup_nuke" },
+    "spawnEvery": [50, 100],
+    "lastsTicks": 100,
+    "surge": { "ticks": 75, "perTick": 20 },
+    "recurrent": { "ticks": 75 },
+    "zapper": { "ticks": 100, "every": 2, "maxHit": 8, "range": 3 }
+  },
   "music": { "dream": 24 },
   "sounds": { "prepared": 2401, "unlocked": 2274, "deposited": 2115 },
   "cofferIcons": [[10000000, 1004], [0, 1003]],
-  "barrels": { "overload": 11730, "absorption": 11734, "super ranging": 11722, "super magic": 11726 },
+  "_potions": "Wiki: Absorption (50 a dose, up to 1,000), Overload (Nightmare Zone) (floor(level*15/100)+5 every 15 s for 5 min, 50 damage of its own, 50 healed at the end, not under 51 Hitpoints); barrels hold up to 255 doses. The barrel varbits are inferred from their numbering (nzone_potion_3 overload and 4 absorption match the recording's barrel_3/4). The overload's 5 hits of 10, 2 ticks apart, are inferred.",
+  "potions": {
+    "drinkAnimation": 829,
+    "barrelCap": 255,
+    "superRanging": { "doses": [11722, 11723, 11724, 11725], "skill": "RANGED", "barrelName": "Super ranging", "varbit": "nzone_potion_1" },
+    "superMagic": { "doses": [11726, 11727, 11728, 11729], "skill": "MAGIC", "barrelName": "Super magic", "varbit": "nzone_potion_2" },
+    "overload": { "doses": [11730, 11731, 11732, 11733], "barrelName": "Overload", "varbit": "nzone_potion_3", "minimumHitpoints": 51, "hits": 5, "damage": 10, "hitEvery": 2, "steps": 20, "stepTicks": 25, "heal": 50 },
+    "absorption": { "doses": [11734, 11735, 11736, 11737], "barrelName": "Absorption", "varbit": "nzone_potion_4", "perDose": 50, "cap": 1000 }
+  },
   "bosses": [
     { "label": "The Ascent of Arceuus: Trapped Soul", "quest": "the_ascent_of_arceuus", "forms": ["arceuusquest_soul"], "points": [183, 2301] },
     { "label": "Vampyre Slayer: Count Draynor", "quest": "vampyre_slayer", "forms": ["count_draynor"], "points": [224, 7135] },
@@ -159,7 +178,7 @@
     "notStarted": [["npc", "You haven't started that dream I created for you. Can I help you with something?", 568]],
     "changeDream": [["player", "I want to change my dream.", 575], ["npc", "Okay, I've emptied the vial. I have not taken any money from you for that dream, since you never started it.", 568]]
   },
-  "_messages": "Recorded: welcome, nothing, cofferEmpty, cofferHolds, cofferTitle, depositPrompt, startDream, barrel, notComplete. Not recorded (wording mine): withdrawPrompt, noDream, notEnoughCoins, notEnoughQuests, cofferFull, dreamOver.",
+  "_messages": "Recorded: welcome, nothing, cofferEmpty, cofferHolds, cofferTitle, depositPrompt, startDream, barrel, notComplete. Not recorded (wording mine): withdrawPrompt, noDream, notEnoughCoins, notEnoughQuests, cofferFull, dreamOver, onlyInDream, overloadLowHp, overloadActive, overloadEnds, barrelHolds, takePrompt.",
   "messages": {
     "welcome": "Welcome to the Nightmare Zone.",
     "nothing": "Nothing interesting happens.",
@@ -175,6 +194,12 @@
     "cofferFull": "The coffer can't hold any more money.",
     "dreamOver": "You wake up.",
     "barrel": "This barrel contains {potion} potion that adventurers<br>have purchased from Dominic with their reward points.<br>You have no potion stored in here.",
-    "notComplete": "<col=ff0000>not complete</col>"
+    "notComplete": "<col=ff0000>not complete</col>",
+    "onlyInDream": "You can only drink this potion while in the Nightmare Zone.",
+    "overloadLowHp": "You need at least {hp} Hitpoints to survive the effects of the overload.",
+    "overloadActive": "You are still under the effects of an overload.",
+    "overloadEnds": "The effects of overload have worn off.",
+    "barrelHolds": "This barrel contains {doses} dose{s} of {potion} potion.",
+    "takePrompt": "How many doses of {potion} potion will you withdraw? ({doses})"
   }
 }

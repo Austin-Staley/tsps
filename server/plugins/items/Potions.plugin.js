@@ -1040,12 +1040,7 @@ registerPotion({
       [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]
     ),
 });
-registerPotion({
-  name: "Overload",
-  chains: [doseChain("OVERLOAD_4_", "OVERLOAD_3_", "OVERLOAD_2_", "OVERLOAD_1_")],
-  canUse: (player) => getCurrentLevel(player, Skill.HITPOINTS) > 50,
-  effect: applyOverload,
-});
+// Nightmare Zone's Overload (11730-11733) is drunk only in a dream: NightmareZone.plugin.js owns it.
 registerPotion({
   name: "Overload (+)",
   chains: [doseChain("OVERLOAD_4__5", "OVERLOAD_3__5", "OVERLOAD_2__5", "OVERLOAD_1__5")],

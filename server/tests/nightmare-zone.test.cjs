@@ -16,7 +16,7 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 
-let Common, Dominic, Coffer, Dream, hooks, core;
+let Common, Dominic, Coffer, Dream, Potions, PowerUps, hooks, core;
 
 /** Name hooks run in turn until one takes the click, as the plugin manager does. */
 function chain(map, key, fn) {
@@ -29,13 +29,16 @@ before(() => {
   RegionManager.init();
   new NpcDefinitionLoader().load();
   core = PluginManager.getCoreApi();
-  hooks = { objects: new Map(), npcs: new Map(), events: {}, death: [], drops: [], npcDeath: [] };
+  hooks = { objects: new Map(), npcs: new Map(), items: new Map(), events: {}, death: [], drops: [], npcDeath: [], playerHit: [], npcHit: [] };
   const api = {
     core,
     persistAttribute() {},
     onObjectInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) chain(hooks.objects, `${name}:${op}`, fn); },
     onNpcInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) chain(hooks.npcs, `${name}:${op}`, fn); },
     onNpcDeath: (fn) => hooks.npcDeath.push(fn),
+    onItemAction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) chain(hooks.items, `${name}:${op}`, fn); },
+    onPlayerHitModify: (fn) => hooks.playerHit.push(fn),
+    onNpcHitModify: (fn) => hooks.npcHit.push(fn),
     onPlayerDeath: (fn) => hooks.death.push(fn),
     onShouldDropItemsOnDeath: (fn) => hooks.drops.push(fn),
     onPlayerLogin() {},
@@ -53,6 +56,8 @@ before(() => {
   Dominic = require('../plugins/minigames/nightmarezone/Dominic.NightmareZone');
   Coffer = require('../plugins/minigames/nightmarezone/Coffer.NightmareZone');
   Dream = require('../plugins/minigames/nightmarezone/Dream.NightmareZone');
+  Potions = require('../plugins/minigames/nightmarezone/Potions.NightmareZone');
+  PowerUps = require('../plugins/minigames/nightmarezone/PowerUps.NightmareZone');
   Dream.engine.attack = (npc, player) => { npc.target = player; };
   Dream.engine.free = () => true;
 });
@@ -66,7 +71,7 @@ function container(capacity = 28) {
   const slots = [];
   return {
     slots,
-    add(item) { const slot = slots.find((s) => s.id === item.getId()); if (slot) slot.amount += item.getAmount(); else slots.push({ id: item.getId(), amount: item.getAmount() }); },
+    add(item) { const stacks = item.getId() === 995; const slot = stacks && slots.find((s) => s.id === item.getId() && s.amount > 0); if (slot) slot.amount += item.getAmount(); else slots.push({ id: item.getId(), amount: item.getAmount() }); },
     delete(id, amount = 1) { for (const s of slots) { if (s.id !== id || amount <= 0) continue; const n = Math.min(s.amount, amount); s.amount -= n; amount -= n; } },
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
@@ -87,6 +92,15 @@ function fakePlayer({ quests = QUESTS().slice(0, 12), coins = 0 } = {}) {
     getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
     getInventory: () => p.inventory,
     sendMessage: (m) => p.messages.push(m),
+    hp: 99, levels: {}, damage: [], special: 0,
+    getHitpoints: () => p.hp, heal(amount) { p.hp = Math.min(99, p.hp + amount); },
+    performAnimation() {}, setSpecialPercentage(v) { p.special = v; }, getSpecialPercentage: () => p.special,
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => { for (const h of hits) { p.damage.push(h.getDamage()); p.hp -= h.getDamage(); } } }) }),
+    getSkillManager: () => ({
+      getCurrentLevel: (skill) => p.levels[skill.getName?.() ?? skill] ?? 99,
+      getMaxLevel: () => 99,
+      setCurrentLevel(skill, level) { p.levels[skill.getName?.() ?? skill] = level; return this; },
+    }),
     setEnteredAmountAction(action) { p.amount = action; },
     getDialogueManager: () => (p.dialogue ??= dialogueManager(p)),
     getPacketSender() {
@@ -235,8 +249,11 @@ test('the vial: "Start dream", the fee from the coffer, then the arena, a boss a
   const [boss] = state.npcs;
   assert.equal(boss.getId(), core.CacheDefinitions.getNpcId('nzone_arceuusquest_soul_normal'));
   Dream.bossDied({ npc: boss });
-  assert.equal(Common.points(p), 183, 'every boss unlocked: the full figure');
+  assert.equal(varbit(p, 'nzone_currentpoints'), 183, "every boss unlocked: the full figure, on the dream's counter");
+  assert.equal(Common.points(p), 0, 'paid when the dream ends');
   assert.ok(Dream.wake({ player: p }));
+  assert.equal(Common.points(p), 183);
+  assert.equal(varbit(p, 'nzone_currentpoints'), 0);
   assert.deepEqual([p.location.getX(), p.location.getY()], [2608, 3115]);
   assert.equal(Dream.dreams.has(p), false);
 });
@@ -265,6 +282,114 @@ test("bosses with several forms fight through them all (Witch's experiment); a d
   assert.equal(event.handled, true);
   assert.equal(Dream.dreams.has(again), false);
   assert.deepEqual([again.location.getX(), again.location.getY()], [2608, 3115]);
+});
+
+// ------------------------------------------------------------------ potions and power-ups
+
+/** A player in a running Rumble with every boss unlocked. */
+function dreamer() {
+  const p = fakePlayer({ quests: QUESTS() });
+  Common.setCoffer(p, 2000);
+  Common.setPreparedDream(p, { mode: 'rumble', difficulty: 'normal' });
+  Dream.start(p);
+  ticks(3);
+  return p;
+}
+
+const drink = (p, id) => hooks.items.get(`${core.CacheDefinitions.getItem(id).name}:Drink`)({ player: p, itemId: id });
+
+test("absorption: only in a dream; 50 a dose up to 1,000; it takes monsters' damage first and is gone after the dream", () => {
+  const outside = fakePlayer();
+  outside.inventory.add(new core.Item(11734, 1));
+  assert.ok(drink(outside, 11734));
+  assert.ok(outside.messages.includes(Common.message('onlyInDream')));
+  assert.equal(outside.inventory.getAmount(11734), 1);
+  const p = dreamer();
+  p.inventory.add(new core.Item(11734, 1));
+  drink(p, 11734);
+  assert.equal(varbit(p, 'nzone_absorb_potion_effects'), 50);
+  assert.equal(p.inventory.getAmount(11735), 1, 'the next dose is left');
+  for (let i = 0; i < 25; i++) {
+    p.inventory.add(new core.Item(11737, 1));
+    drink(p, 11737);
+  }
+  assert.equal(varbit(p, 'nzone_absorb_potion_effects'), 1000, 'capped');
+  let total = 30;
+  const hit = { getTotalDamage: () => total, setTotalDamage(d) { total = d; }, getAttacker: () => ({ isNpc: () => true }) };
+  for (const fn of hooks.playerHit) fn({ player: p, hit });
+  assert.equal(total, 0);
+  assert.equal(varbit(p, 'nzone_absorb_potion_effects'), 970);
+  Dream.wake({ player: p });
+  assert.equal(varbit(p, 'nzone_absorb_potion_effects'), 0);
+});
+
+test('overload: not under 51 Hitpoints; +floor(15%)+5 to the combat skills, 50 damage of its own, 5 minutes, 50 back at the end', () => {
+  const p = dreamer();
+  p.hp = 50;
+  p.inventory.add(new core.Item(11730, 1));
+  drink(p, 11730);
+  assert.ok(p.messages.includes(Common.message('overloadLowHp', { hp: 51 })));
+  p.hp = 99;
+  drink(p, 11730);
+  assert.equal(p.levels.Strength, 99 + 14 + 5);
+  assert.equal(varbit(p, 'nzone_overload_potion_effects'), 20);
+  ticks(10);
+  assert.deepEqual(p.damage.slice(0, 5), [10, 10, 10, 10, 10]);
+  ticks(500);
+  assert.equal(varbit(p, 'nzone_overload_potion_effects'), 0);
+  assert.equal(p.levels.Strength, 99);
+  assert.ok(p.messages.includes(Common.message('overloadEnds')));
+  Dream.wake({ player: p });
+});
+
+test('barrels: Store takes every dose of the potion carried; Check counts them; Take makes potions of 4', () => {
+  const p = fakePlayer();
+  const barrel = { getDefinition: () => ({ getName: () => 'Absorption potion' }) };
+  p.inventory.add(new core.Item(11734, 1));
+  p.inventory.add(new core.Item(11736, 1));
+  hooks.objects.get('Absorption potion:Store')({ player: p, object: barrel });
+  assert.equal(varbit(p, 'nzone_potion_4'), 6);
+  assert.equal(p.inventory.getAmount(11734) + p.inventory.getAmount(11736), 0);
+  hooks.objects.get('Absorption potion:Check')({ player: p, object: barrel });
+  assert.equal(pageText(p.pages.at(-1)), 'This barrel contains 6 doses of absorption potion.');
+  hooks.objects.get('Absorption potion:Take')({ player: p, object: barrel });
+  p.amount.execute(6);
+  assert.equal(p.inventory.getAmount(11734), 1);
+  assert.equal(p.inventory.getAmount(11736), 1);
+  assert.equal(varbit(p, 'nzone_potion_4'), 0);
+});
+
+test('power-ups: one appears in a Rumble; Power surge fills the special bar; Ultimate force kills everything for no points', () => {
+  const p = dreamer();
+  ticks(Common.data.arena.firstSpawnTicks);
+  const state = Dream.dreams.get(p);
+  ticks(Common.data.powerUps.spawnEvery[1] + 1);
+  const power = PowerUps.powerState(state);
+  assert.ok(power.floor, 'a power-up is on the floor');
+  power.floor.kind = 'surge';
+  assert.ok(PowerUps.activate({ player: p, object: power.floor.object }));
+  assert.equal(p.special, 100);
+  assert.equal(power.floor, null);
+  const before = [...state.npcs];
+  PowerUps.nuke(state);
+  assert.ok(before.length > 0 && before.every((npc) => npc.__noPoints));
+  for (const npc of before) Dream.bossDied({ npc });
+  assert.equal(varbit(p, 'nzone_currentpoints'), 0, 'no points');
+  Dream.wake({ player: p });
+});
+
+test('Recurrent damage: a hit the dreamer lands brings another of 3/4 of it, a tick later', () => {
+  const p = dreamer();
+  ticks(Common.data.arena.firstSpawnTicks);
+  const state = Dream.dreams.get(p);
+  PowerUps.powerState(state).active.recurrent = state.tick + 75;
+  const [npc] = state.npcs;
+  const queued = [];
+  npc.getCombat = () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => queued.push(...hits.map((h) => h.getDamage())) }) });
+  for (const fn of hooks.npcHit) fn({ npc, hit: { getAttacker: () => p, getTotalDamage: () => 35 } });
+  ticks(1);
+  assert.deepEqual(queued, [26]);
+  Dream.wake({ player: p });
 });
 
 test('a logout during the entry fade cancels the dream: the fee back in the coffer, the dream still prepared', () => {
