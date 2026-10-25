@@ -133,7 +133,10 @@ function landed(player, destination) {
 function pull(player, object, destination) {
   const to = new core.Location(destination.to[0], destination.to[1], 0);
   if (!core.TeleportHandler.checkReqs(player, to, Infinity)) return;
-  ObstacleRunner.run({ player, object }, pullSteps(destination, () => landed(player, destination)));
+  ObstacleRunner.run({ player, object }, pullSteps(destination, () => landed(player, destination)), {
+    // A pull cut short (death, logout) never reaches the landing step's busy 0.
+    onFinish: (completed) => { if (!completed) player.getPacketSender().sendVarbit(ids.busy, 0); },
+  });
 }
 
 function skipsWarning(player) {

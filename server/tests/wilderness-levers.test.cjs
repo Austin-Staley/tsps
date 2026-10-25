@@ -61,7 +61,8 @@ function player(varbits = {}) {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     isRegistered: () => true,
-    getHitpoints: () => 10,
+    hitpoints: 10,
+    getHitpoints: () => self.hitpoints,
     getLocation: () => location,
     setLocation: (to) => { location = to; },
     moveTo: (to) => { location = to; log.push([tick, "tele", to.getX(), to.getY()]); },
@@ -137,6 +138,19 @@ test("a pull plays the captured sequence: pull, the lever's click, the cast, lan
   assert.deepEqual(who.log.find((entry) => entry[1] === "tele"), [6, "tele", 2539, 4712]);
   assert.equal(at("msg", "... and teleport into the mage's cave."), 6);
   assert.ok(who.log.some((entry) => entry[0] === 6 && entry[1] === "varbit" && entry[2] === busy && entry[3] === 0));
+});
+
+test("a pull cut short by death clears busy", () => {
+  const h = harness();
+  const who = player();
+  use(h, who, "magearena_lever_to_cellar", "Pull", 3090, 3956);
+  runTicks(h, who, 1);
+  const busy = varbit("busy");
+  assert.equal(who.sent.get(busy), 1);
+  who.hitpoints = 0;
+  runTicks(h, who, 8);
+  assert.equal(who.sent.get(busy), 0, "buff timers would stay paused");
+  assert.equal(who.log.find((entry) => entry[1] === "tele"), undefined);
 });
 
 test("the Edgeville lever warns as live, lands beside the Keep lever and skips the warning once told to", () => {
