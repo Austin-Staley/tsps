@@ -49,6 +49,11 @@ const OFFER_GUIDE_DELAY = 0.1;
 const OFFER_PRICE_SENSITIVITY = 50;
 const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
+const PLATINUM_TOKEN = ItemIdentifiers.PLATINUM_TOKEN;
+// OSRS Wiki Update:GE_Improvements:_Beyond_Max_Cash: payment mixes coins and platinum tokens,
+// coins first, with change in coins. Only the inventory is used; trades stay within MAX coins
+// (estimate: the client's quantity varbit and entry prompt are int-sized).
+const COINS_PER_TOKEN = 1000;
 const MARKET_DATA_FILE = path.join(__dirname, "data", "grand-exchange.json");
 // OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
 const usableSlots = () => (pluginApi.core.WorldDefinition.isMembersWorld() ? 8 : 3);
@@ -375,6 +380,14 @@ function start(player, sell, slot = 0, itemId = -1) {
   if (itemId < 0) chooseItem(player, offer);
 }
 
+/** Platinum tokens a buy of `total` coins needs beyond the held coins (0 if coins cover it), or null if unaffordable. */
+function tokensNeeded(inventory, total) {
+  const shortfall = total - inventory.getAmount(COINS);
+  if (shortfall <= 0) return 0;
+  const tokens = Math.ceil(shortfall / COINS_PER_TOKEN);
+  return tokens <= inventory.getAmount(PLATINUM_TOKEN) ? tokens : null;
+}
+
 function confirm(player, offer) {
   if (!active(player, offer) || !exchangeable(offer.itemId)) return;
   const amount = offer.quantity;
@@ -396,7 +409,8 @@ function confirm(player, offer) {
   const inventory = player.getInventory();
   const inputId = offer.sell ? offer.itemId : COINS;
   const inputAmount = offer.sell ? amount : total;
-  if (inventory.getAmount(inputId) < inputAmount) {
+  const tokens = offer.sell ? 0 : tokensNeeded(inventory, total);
+  if (tokens === null || (offer.sell && inventory.getAmount(inputId) < inputAmount)) {
     sender.sendMessage(offer.sell ? "You do not have enough of that item." : "You do not have enough coins.");
     return;
   }
@@ -410,10 +424,17 @@ function confirm(player, offer) {
   // Use the normal container rules on a copy: failed/full trades never remove live items.
   const result = new Inventory(player);
   result.setItems(inventory.getCopiedItems());
-  result.deleted(inputId, inputAmount, false);
-  if (result.getAmount(inputId) !== inventory.getAmount(inputId) - inputAmount) {
-    sender.sendMessage("Trade one item stack at a time.");
-    return;
+  if (tokens > 0) {
+    const shortfall = total - inventory.getAmount(COINS);
+    result.deleted(COINS, inventory.getAmount(COINS), false);
+    result.deleted(PLATINUM_TOKEN, tokens, false);
+    result.add(new Item(COINS, tokens * COINS_PER_TOKEN - shortfall), false);
+  } else {
+    result.deleted(inputId, inputAmount, false);
+    if (result.getAmount(inputId) !== inventory.getAmount(inputId) - inputAmount) {
+      sender.sendMessage("Trade one item stack at a time.");
+      return;
+    }
   }
   inventory.setItems(result.getItems()).refreshItems();
   const delay = fillDelayMs(offer);

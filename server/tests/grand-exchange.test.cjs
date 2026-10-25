@@ -392,3 +392,18 @@ test('register persists both attributes', () => {
 });
 
 setMarketData(market);
+
+test('buys use coins first, then platinum tokens with change in coins', t => {
+  const { inventory, place, messages } = exchange(t);
+  inventory.add(new Item(995, 10), false);
+  inventory.add(new Item(13204, 1), false);
+  assert.equal(place(false, PRICED, 1, 1_100), undefined);
+  assert.match(messages.at(-1), /enough coins/);
+  assert.equal(place(false, PRICED, 1, 500).total, 500);
+  assert.equal(inventory.getAmount(995), 510);
+  assert.equal(inventory.getAmount(13204), 0);
+  inventory.add(new Item(13204, 2), false);
+  assert.equal(place(false, PRICED, 1, 400, 1).total, 400);
+  assert.equal(inventory.getAmount(995), 110);
+  assert.equal(inventory.getAmount(13204), 2);
+});
