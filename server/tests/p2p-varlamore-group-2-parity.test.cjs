@@ -206,8 +206,10 @@ test('EAA charter crews and Artima follow the capture: favour flag, sails boxes,
 test("EAA Betty's notes open interface 291 and the Varrock storeroom runs pickpocket, pass-through door and crate as captured", () => {
   const { h, p } = eaa(); h.quest.setStage(p, 18);
   h.talk(p, N.BETTY); continueToMenu(h, p); h.choose(p, 'Have you seen a grey-haired man with a case?');
-  h.continueUntil(p, () => p.text.startsWith('I did take some notes')); assert.equal(h.quest.getStage(p), 20);
+  h.continueUntil(p, () => p.text.startsWith('I did take some notes')); assert.equal(h.quest.getStage(p), 18);
+  assert.equal(p.items.get(I.BETTYS_NOTES) ?? 0, 0, 'mentioning the notes does not hand them over');
   h.continueUntil(p, () => /Betty hands you the notes/.test(p.text)); assert.equal(p.items.get(I.BETTYS_NOTES), 1);
+  assert.equal(h.quest.getStage(p), 20, 'the inventory-checked handoff earns the read-notes stage');
   assert.equal(p.varbits.get(11206), 1); assert.notEqual(p.varbits.get(11202), 1, 'the capture never sets betty_told_about_note');
   p.manager.reset();
   h.itemActions.get("Betty's notes").Read({ player: p, itemId: I.BETTYS_NOTES });
@@ -1089,7 +1091,7 @@ test('DOTI holds and returns the original inventory and equipment with metadata,
   h.quest.setStage(p, 12); h.action(p, 13833, '9kVMFj'); h.tick(4);
   assert.equal(h.quest.getStage(p), 14); assert.equal(inventory.getAmount(995), 0);
   assert.ok(p.attrs.get('death-on-the-isle:held-gear'));
-  assert.equal(equipment.getItems()[core.Equipment.WEAPON_SLOT].getId(), I.BUTLERS_TRAY);
+  assert.equal(equipment.getItems()[core.Equipment.WEAPON_SLOT].getId(), I.BUTLERS_TRAY_3, 'villa entry equips the captured party tray');
   inventory.adds(29922, 1);
   h.hooks.onPlayerLogout.forEach(fn => fn({ player: p })); h.hooks.onPlayerLogin.forEach(fn => fn({ player: p }));
   h.action(p, 13833, 'GMJFxO'); h.tick(4);
