@@ -1099,7 +1099,9 @@ module.exports = {
       if (!pickVariant(record) && aliases.has(name)) record = data[aliases.get(name)];
       const forced = event.variant ? record?.variants?.[event.variant] : undefined;
       const steps = Array.isArray(forced) ? forced : pickVariant(record);
-      if (steps) return withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context });
+      // A requested variant found by name is still that variant (npc-dialogue:start's `exact`).
+      const variant = Array.isArray(forced) ? event.variant : undefined;
+      if (steps) return withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context, variant });
       // A transcript reaches the NPC but pickVariant found nothing in it to play: name it for the warning.
       const page = record ? (record === data[name] ? name : aliases.get(name)) : pages[0]?.page;
       return page ? { page } : null;

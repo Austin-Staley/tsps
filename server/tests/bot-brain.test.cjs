@@ -460,18 +460,20 @@ test('forced facing is re-sent after walking (same-coordinate setPositionToFace 
   const { UpdateFlag } = require('../dist/game/model/UpdateFlag');
   const { Location: Loc } = require('../dist/game/model/Location');
   const { Flag } = require('../dist/game/model/Flag');
-  const mobile = {
+  const { Direction } = require('../dist/game/model/Direction');
+  const mobile = Object.assign(Object.create(Mobile.prototype), {
     positionToFace: null,
     updateFlag: new UpdateFlag(),
-    getUpdateFlag() { return this.updateFlag; },
-  };
+  });
+  mobile.setLocation(new Loc(0, 0, 0));
   const tree = new Loc(2, 2, 0);
-  Mobile.prototype.setPositionToFace.call(mobile, tree);
+  mobile.setPositionToFace(tree);
   assert.ok(mobile.updateFlag.flagged(Flag.FACE_POSITION), 'the first set flags the face');
+  assert.equal(mobile.getFacingDirection(), Direction.NORTH_EAST, 'the real helper updates the heading');
   mobile.updateFlag.reset(); // the packet was sent; walking turned the visual facing
-  Mobile.prototype.setPositionToFace.call(mobile, tree);
+  mobile.setPositionToFace(tree);
   assert.equal(mobile.updateFlag.flagged(Flag.FACE_POSITION), false, 'same coordinates no-op');
-  Mobile.prototype.forcePositionToFace.call(mobile, tree);
+  mobile.forcePositionToFace(tree);
   assert.ok(mobile.updateFlag.flagged(Flag.FACE_POSITION), 'force re-sends the face');
 });
 

@@ -79,7 +79,9 @@ function player() {
     refreshItems() {},
   };
   let packet;
-  packet = new Proxy({}, { get: (_, method) => (...args) => { packets.push([method, ...args]); return packet; } });
+  packet = new Proxy({
+    getVarbit: id => packets.findLast(([method, bit]) => method === 'sendVarbit' && bit === id)?.[2] ?? 0,
+  }, { get: (target, method) => target[method] ?? ((...args) => { packets.push([method, ...args]); return packet; }) });
   const p = { attributes, items, bank, equipment, packets, messages, xp,
     getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory, getBanks: () => [{ getAmount: (id) => bank.get(id) || 0 }],
