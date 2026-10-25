@@ -193,6 +193,34 @@
     "lines": { "start": "Oh, Bees!", "done": "Come with me little bees I'll keep you safe.", "rehome": ["I'll find a nice new home for those bees.", "Another new hive."], "bye": "Well, I must be getting on now." }
   },
 
+  "leprechaun": {
+    "_recorded": "rsprox 227/01850 t8623-8847 (and 00083, 01723, 01855, 237/01104, 01098): the Woodcutting Leprechaun on a clover by the tree ('It be yer lucky day, Foresters!'); a rainbow loc within 1-9 tiles every 37 ticks from the first tick, gone 17-20 ticks later (its despawn anim 3 ticks before); standing in one: 'You feel more in touch with the trees after standing in the rainbow.' and +12 to varbit 15344 (the luck, 1 at login), its slot in 15343; each log then spends 5 of it: 'You use your leprechaun's luck to gather some Anima-infused bark.' (the last: 'You use the last of your leprechaun's luck...') and 22-23 bark; Talk-to and Bank (the menu, the deposit box, 'Some of your items cannot be stored in the bank from here.'); 'I'll have to go shortly...' at 186, 'Well, I must be getting on now.' at 223, gone at 224 with the luck drained. Wiki: six rainbows; a luck log's XP about 1.33 x level + 38.7 more [confirmation needed]; he banks everything for those who were chopping, else only woodcutting resources.",
+    "npc": 12163,
+    "locs": { "clover": 49935, "rainbow": 49934 },
+    "seqs": { "rainbowGone": 10606, "deposit": 834 },
+    "varbits": { "luck": 15344, "slot": 15343 },
+    "rainbowEvery": 37,
+    "rainbows": 6,
+    "rainbowLife": [17, 20],
+    "rainbowRange": [1, 9],
+    "luckPerRainbow": 12,
+    "luckPerLog": 5,
+    "baseLuck": 1,
+    "bark": [22, 23],
+    "xp": { "perLevel": 1.33, "plus": 38.7 },
+    "warnAt": 186,
+    "byeAt": 223,
+    "lifeTicks": 224,
+    "lines": {
+      "start": "It be yer lucky day, Foresters!",
+      "talk": "Grand job, what an obnoxious tree, spreading rumours 'bout other trees and sucking up all the water.",
+      "talkBank": "As a reward, I'll let ye use me full banking services!",
+      "warn": "I'll have to go shortly...",
+      "bye": "Well, I must be getting on now."
+    },
+    "bankMenu": ["Bank all the items in your inventory?", "Yes, bank it all", "Only bank woodcutting resources", "No, don't bank anything", "Open my bank deposit box"]
+  },
+
   "messages": {
     "bark": "You've been awarded <col=3366ff>{amount} Anima-infused bark</col>.",
     "ineligible": "<col=ff3045>As you weren't chopping near the event when it started, you aren't eligible for full rewards.</col>",
@@ -252,6 +280,10 @@
     "hiveDone": "<col=3366ff>Well done, you've completed a beehive. The bees can now be safely rehomed.</col>",
     "hiveParts": "<col=ef1020>The temporary beehive was made so well you take some parts for building a permanent hive.</col>",
     "noLogs": "You don't have any logs to add to the beehive.",
+    "rainbow": "You feel more in touch with the trees after standing in the rainbow.",
+    "luck": "You use your leprechaun's luck to gather some Anima-infused bark.",
+    "lastLuck": "You use the last of your leprechaun's luck to gather some Anima-infused bark.",
+    "cantBank": "Some of your items cannot be stored in the bank from here.",
     "ritualDone": "<col=3366ff>Well done, you completed {steps} steps of the ritual! The Dryad has left you a gift...</col>"
   }
 }
