@@ -10,6 +10,7 @@
  *   take the player down; an obelisk's Exit credits a finished floor and returns to the lobby.
  */
 const Common = require("./Common.HallowedSepulchre");
+const Traps = require("./Traps.HallowedSepulchre");
 
 const CHUNK = 8;
 const SIZE_CHUNKS = 12;
@@ -29,6 +30,7 @@ function areaClass() {
       this.run = run;
       this.floor = floor;
       this.origin = floor.source;
+      this.spawned = [];
       for (const plane of PLANES) {
         this.copySquare(SIZE_CHUNKS, floor.source[0] / CHUNK, floor.source[1] / CHUNK, plane, 0, 0, plane, 0);
       }
@@ -54,6 +56,16 @@ function areaClass() {
 
     process(mobile) {
       if (mobile.isPlayer?.() && this.run?.player === mobile) this.run.tick(this);
+    }
+
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const npc of this.spawned) {
+        npc.__skipDefaultRespawn = true;
+        if (npc.isRegistered?.()) Common.api.removeNpc(npc);
+      }
+      this.spawned = [];
+      super.destroy();
     }
 
     postLeave(mobile, logout) {
@@ -90,7 +102,7 @@ class Run {
 
   /** Starts an obstacle that takes `ticks`, unless one is still going (a second click). */
   act(ticks) {
-    if (this.transitioning || this.ticks < this.busyUntil) return false;
+    if (this.transitioning || this.ticks < this.busyUntil || Traps.holding(this)) return false;
     this.busyUntil = this.ticks + ticks;
     return true;
   }
@@ -147,6 +159,8 @@ class Run {
       this.xpEarned.clear();
       Common.varbit(player, "hallowed_time_remaining", this.remaining);
       this.setBarriers(false);
+      this.lastLanding = variant.start;
+      Traps.build(this);
       player.sendMessage(Common.message(first ? "venture" : "ventureFurther"));
       Common.song(player, "inside");
       Common.minimap(player, false);
@@ -175,6 +189,8 @@ class Run {
   /** Into a fresh instance of `floor` at its start tile; the last floor's instance goes. */
   move(floor, variant) {
     const previous = this.area;
+    Traps.clear(this);
+    this.player.getMovementQueue?.().setBlockMovement?.(false);
     const area = new (areaClass())(this, floor);
     this.moving = true;
     area.enter(this.player);
@@ -194,6 +210,7 @@ class Run {
   tick(area) {
     if (area !== this.area || this.ended) return;
     this.ticks++;
+    Traps.tick(this);
     if (this.expiring) {
       this.expiring = false;
       this.expire();
@@ -345,6 +362,8 @@ class Run {
     runs.delete(this.player);
     const { player } = this;
     player.setAttribute(Common.data.attributes.return, null);
+    Traps.clear(this);
+    player.getMovementQueue?.().setBlockMovement?.(false);
     for (const name of Common.data.runVarbits) Common.varbit(player, name, 0);
     Common.closeHud(player);
     Common.closeFade(player);

@@ -2,8 +2,7 @@
  * The Hallowed Sepulchre (https://oldschool.runescape.wiki/w/Hallowed_Sepulchre), from
  * plugins/minigames/data/hallowed-sepulchre.json and the rsprox recordings 1862 and 3299: the lobby
  * under Darkmeyer, five timed floors each in an instance of its own, their Agility and skill
- * obstacles, the coffins and the obelisks. Each part lives in ./hallowedsepulchre/. The traps
- * (statues, swords, fire, lightning and the teleport tiles) are still to come.
+ * obstacles, their traps, the coffins and the obelisks. Each part lives in ./hallowedsepulchre/.
  */
 const Common = require("./hallowedsepulchre/Common.HallowedSepulchre");
 

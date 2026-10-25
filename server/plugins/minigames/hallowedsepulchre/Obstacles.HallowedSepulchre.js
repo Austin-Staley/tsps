@@ -79,6 +79,7 @@ function drop(event) {
   Common.animate(player, "jumpDown", 15);
   run.schedule(1, () => {
     player.moveTo(run.area.at(to));
+    run.lastLanding = to;
     Common.animate(player, "jumpDown2");
   });
   run.schedule(2, () => Common.xp(player, "AGILITY", Common.data.xp.drop));
@@ -98,7 +99,10 @@ function stairs(event) {
     Common.closeHud(player);
     Common.legacyFade(player);
   });
-  run.schedule(5, () => player.moveTo(run.area.at(to)));
+  run.schedule(5, () => {
+    player.moveTo(run.area.at(to));
+    run.lastLanding = to;
+  });
   run.schedule(7, () => {
     Common.fade(player, false);
     Common.xp(player, "AGILITY", Common.data.xp.stairs);
@@ -219,7 +223,7 @@ function floorStairs(event) {
   if (!found) return false;
   const { run } = found;
   const { player } = run;
-  if (run.transitioning) return true;
+  if (run.transitioning || require("./Traps.HallowedSepulchre").holding(run)) return true;
   if (run.expired) {
     player.sendMessage(Common.message("stairsBlocked"));
     return true;

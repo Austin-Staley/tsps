@@ -19,7 +19,7 @@ let Common, Run, hooks;
 before(() => {
   CachePipeline.initialize();
   RegionManager.init();
-  hooks = { objects: new Map(), npcs: new Map(), items: {}, login: [], prompts: [] };
+  hooks = { objects: new Map(), npcs: new Map(), items: {}, login: [], prompts: [], spawned: [], removed: [] };
   const key = (ids, click) => (Array.isArray(ids) ? ids : [ids]).map((id) => `${id}:${click}`);
   const api = {
     core: PluginManager.getCoreApi(),
@@ -32,6 +32,8 @@ before(() => {
     onObjectRoute: (handler) => { hooks.route = handler; },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     emitCustomEvent() {},
+    spawnNpc: ({ id, x, y, z }) => fakeNpc(id, new Location(x, y, z)),
+    removeNpc: (npc) => { npc.registered = false; hooks.removed.push(npc); },
   };
   require('../plugins/minigames/HallowedSepulchre.plugin').register(api);
   Common = require('../plugins/minigames/hallowedsepulchre/Common.HallowedSepulchre');
@@ -43,6 +45,21 @@ beforeEach(() => {
   random = Math.random;
   hooks.prompts.length = 0;
 });
+
+/** A trap NPC: where it is, its glides and seqs. */
+function fakeNpc(id, location) {
+  const npc = {
+    id, location, registered: true, glides: [], anims: [], area: null,
+    getId: () => id, getLocation: () => npc.location, isRegistered: () => npc.registered,
+    isPlayer: () => false, isNpc: () => true, getIndex: () => 1000 + hooks.spawned.length, getAsNpc: () => npc,
+    setArea(area) { npc.area = area; }, getArea: () => npc.area,
+    getMovementQueue: () => ({ setBlockMovement() {} }),
+    exactMove(to) { npc.glides.push([npc.location, to]); npc.location = to; return npc; },
+    performAnimation(a) { npc.anims.push(a.getId()); },
+  };
+  hooks.spawned.push(npc);
+  return npc;
+}
 
 function container() {
   const slots = [];
@@ -76,8 +93,11 @@ function fakePlayer({ agility = 99, thieving = 99 } = {}) {
     performAnimation: (a) => p.anims.push(a.getId()),
     performGraphic: (g) => p.graphics.push(g.getId()),
     setRunEnergy() {},
-    getMovementQueue: () => ({ reset() {} }),
+    hits: [], blocked: false,
+    getMovementQueue: () => ({ reset() {}, setBlockMovement(v) { p.blocked = v; } }),
     getCombat: () => ({ reset() {} }),
+    decrementHealth: (hit) => hit,
+    addTickHit: (hit) => p.hits.push(hit.getDamage()),
     setForceMovement: (f) => { if (f) p.forced.push(f); },
     getForceMovement: () => null,
     getSkillManager: () => ({
@@ -95,7 +115,8 @@ function fakePlayer({ agility = 99, thieving = 99 } = {}) {
         sendSong: (id) => { p.songs.push(id); return sender; },
         sendJingle: () => sender,
         sendSound: () => sender,
-        sendObjectAnimation: () => sender,
+        sendObjectAnimation: (object, anim) => { (p.locAnims ??= []).push([object.getId(), anim.getId()]); return sender; },
+        sendGraphic: (graphic, location) => { (p.tileGraphics ??= []).push([graphic.id, location]); return sender; },
         sendInterfaceRemoval: () => sender,
       };
       return sender;
@@ -476,5 +497,168 @@ test('floor 5: the barriers by the Grand Hallowed Coffin let the player through 
   assert.equal(through(), true, 'inactive: walk on to the coffin');
   run.expire();
   assert.equal(through(), false, 'active once the barrier activates');
+  run.finish();
+});
+
+
+// ------------------------------------------------------------------ part 2: the traps
+
+const Traps = require('../plugins/minigames/hallowedsepulchre/Traps.HallowedSepulchre');
+
+/** A run on `floor` (layout `variant`) with its traps built, the player at template `tile`. */
+function trapFloor(floor, variant, tile) {
+  const p = fakePlayer();
+  const run = startRun(p);
+  onFloor(run, p, floor, variant, tile);
+  run.lastLanding = Common.data.floors[floor - 1].variants[variant].start;
+  Traps.build(run);
+  run.traps.prev = tile;
+  Traps.tick(run);
+  return { p, run };
+}
+
+/** Runs the traps until their clock reads `tick` (0 is the floor's start). */
+function trapsTo(run, tick) {
+  while (run.traps.tick < tick) Traps.tick(run);
+}
+
+test('fire: every active floor 1 statue pairs with the blast tile in front of it (recorded corridor 2281-2283)', () => {
+  const { run } = trapFloor(1, 0, [2253, 6018, 2]);
+  assert.ok(run.traps.fires.length >= 30, `${run.traps.fires.length} fire traps`);
+  const fire = run.traps.fires.find((f) => f.at.join() === '2279,5992,2');
+  assert.ok(fire, 'the north corridor statue');
+  assert.deepEqual(fire.tiles, [[2281, 5992, 2], [2282, 5992, 2], [2283, 5992, 2]]);
+  run.finish();
+});
+
+test('fire: standing in a blast on its first tick is a hit; then the death, the fade and the recorded checkpoint', () => {
+  const { p, run } = trapFloor(1, 0, [2282, 5992, 2]);
+  // Floors 1-2: ready at 1 mod 8, the blast starts 3 ticks later.
+  trapsTo(run, 3);
+  assert.equal(p.hits.length, 0);
+  Traps.tick(run);
+  assert.equal(p.hits.length, 1, 'hit on the blast start tick');
+  assert.ok(p.hits[0] >= 1 && p.hits[0] <= 3, 'tier 1 damage');
+  ticks(2);
+  assert.equal(p.anims.at(-1), Common.seq('human_death'));
+  ticks(2);
+  assert.deepEqual(run.area.templateOf(p.getLocation()), [2282, 6000, 2], 'recorded respawn (1862 T19070)');
+  run.finish();
+});
+
+test('crossbows: the recorded lane (2264,6002) shoots from 2260 to 2246 three tiles a tick', () => {
+  const { p, run } = trapFloor(1, 0, [2253, 6018, 2]);
+  const statue = run.traps.crossbows.find((c) => c.lanes.some((l) => l.tile.join() === '2264,6002,2'));
+  assert.ok(statue);
+  const random = Math.random;
+  Math.random = () => 0.5;
+  trapsTo(run, statue.ready);
+  Math.random = random;
+  statue.fired = [statue.lanes.find((l) => l.tile.join() === '2264,6002,2')];
+  const before = hooks.spawned.length;
+  trapsTo(run, statue.ready + 2);
+  const bolt = hooks.spawned.slice(before).find((n) => n.id === 9672 && run.area.templateOf(n.getLocation())[1] === 6002);
+  assert.ok(bolt, 'a bolt on the lane');
+  const path = () => bolt.glides.map(([, to]) => run.area.templateOf(to)[0]);
+  assert.deepEqual(path(), [2260]);
+  trapsTo(run, statue.ready + 7);
+  assert.deepEqual(path(), [2260, 2257, 2254, 2251, 2248, 2246], 'recorded 1862 T19065-T19070');
+  trapsTo(run, statue.ready + 8);
+  assert.equal(bolt.registered, false, 'deleted the tick after its end');
+  run.finish();
+});
+
+test("swords: the owl's sword goes out from 5997 to 6007 and back to 5995, the statue thrown meanwhile", () => {
+  const { run } = trapFloor(1, 0, [2253, 6018, 2]);
+  const owl = run.traps.swords.find((s) => s.at.join() === '2237,5992,2');
+  assert.ok(owl);
+  const before = hooks.spawned.length;
+  trapsTo(run, owl.ready + 2);
+  const sword = hooks.spawned.slice(before).find((n) => n.id === 9669 && run.area.templateOf(n.getLocation())[0] === 2237);
+  assert.ok(sword, "the owl's sword");
+  trapsTo(run, owl.ready + 2 + owl.path.length + 1);
+  const ys = sword.glides.map(([, to]) => run.area.templateOf(to)[1]);
+  assert.equal(ys[0], 5997, 'recorded add tile (1862 T19029)');
+  assert.equal(Math.max(...ys), 6007, 'the far point');
+  assert.equal(ys.at(-1), 5995, 'back at the block in front');
+  assert.equal(sword.registered, false, 'deleted 2 ticks after it is back');
+  run.finish();
+});
+
+test('lightning: the recorded floor 4 patch in front of (2496,5837) and a 2-tick stun, no damage', () => {
+  const { p, run } = trapFloor(4, 0, [2502, 5838, 2]);
+  const statue = run.traps.lightning.find((l) => l.at.join() === '2496,5837,2');
+  assert.ok(statue);
+  const tiles = statue.tiles.map((t) => t.join()).sort();
+  assert.deepEqual(tiles, ['2501,5837,2', '2501,5839,2', '2502,5838,2', '2503,5837,2', '2503,5839,2']);
+  trapsTo(run, statue.start + 2);
+  assert.ok(p.spam.includes('You are stunned!'));
+  assert.equal(p.hits.length, 0);
+  assert.equal(p.blocked, true);
+  run.finish();
+});
+
+test('pads: a forward pad pushes the player on the way they were going, a backward one back', () => {
+  const { p, run } = trapFloor(2, 0, [2532, 5984, 2]);
+  const pad = run.traps.pads.find((x) => x.forward);
+  assert.ok(pad);
+  run.traps.lastMove = [0, 0];
+  const random = Math.random;
+  Math.random = () => 0.99;
+  for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+    run.traps.prev = [pad.tile[0] - dx, pad.tile[1] - dy, pad.tile[2]];
+    p.moveTo(run.area.at(pad.tile));
+    run.traps.pendingPad = null;
+    pad.last = run.traps.tick + 1;
+    Traps.tick(run);
+    Traps.tick(run);
+    const here = run.area.templateOf(p.getLocation());
+    if (here.join() !== pad.tile.join()) {
+      assert.ok(Math.sign(here[0] - pad.tile[0]) === dx && Math.sign(here[1] - pad.tile[1]) === dy, `pushed along ${dx},${dy}`);
+      Math.random = random;
+      run.finish();
+      return;
+    }
+  }
+  Math.random = random;
+  assert.fail('no direction let the pad push');
+});
+
+test('a hit picks the nearest recorded zone, and floor 3 layout B uses the west landing', () => {
+  const { run } = trapFloor(3, 1, [2396, 5856, 2]);
+  assert.deepEqual(Traps.checkpoint(run, [2400, 5840, 1]), [2398, 5828, 1]);
+  run.variant = Common.data.floors[2].variants[0];
+  assert.deepEqual(Traps.checkpoint(run, [2400, 5840, 1]), [2402, 5828, 1]);
+  assert.deepEqual(Traps.checkpoint(run, [2360, 5900, 2]), run.lastLanding, 'no zone near: the last landing');
+  run.finish();
+});
+
+test('fire: stepping into a burning blast hits the tick after; a jump onto it does not count as stepping in', () => {
+  const { p, run } = trapFloor(1, 0, [2282, 5991, 2]);
+  trapsTo(run, 3);
+  p.moveTo(run.area.at([2282, 5992, 2]));
+  Traps.tick(run);
+  assert.equal(p.hits.length, 0, 'not on the tick of the step');
+  Traps.tick(run);
+  assert.equal(p.hits.length, 1, 'the tick after');
+  run.finish();
+
+  const second = trapFloor(1, 0, [2282, 5985, 1]);
+  trapsTo(second.run, 3);
+  second.p.moveTo(second.run.area.at([2282, 5992, 2]));
+  Traps.tick(second.run);
+  Traps.tick(second.run);
+  assert.equal(second.p.hits.length, 0, 'a plane change is a teleport, not a step through the corridor');
+  second.run.finish();
+});
+
+test("a trap's hold never carries to the next floor", () => {
+  const { p, run } = trapFloor(1, 0, [2282, 5992, 2]);
+  trapsTo(run, 4);
+  assert.equal(p.blocked, true, 'held while the hit plays out');
+  const spec = Common.data.floors[1];
+  run.move(spec, spec.variants[0]);
+  assert.equal(p.blocked, false);
+  assert.equal(run.traps, null, "the old floor's traps are gone");
   run.finish();
 });
