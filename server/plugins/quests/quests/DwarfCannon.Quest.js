@@ -6,10 +6,12 @@
  * prose-condition answers, the item hand-outs and the object legs Quest Helper
  * routes (six railings, watchtower remains, goblin-cave crate, multicannon).
  *
- * Stage machine (varp 0, ported from xrsps): 1 railings, 2 railings reported,
+ * Durable stage machine (existing saves): 1 railings, 2 railings reported,
  * 3 tower/remains, 4 find Lollk, 5 return to Lawgof, 6 repair cannon,
  * 7 inspected, 8 cannon repaired, 9 speak to Nulodion, 10 return notes,
- * 11 complete. The six repaired railings are kept in a plugin attribute; the
+ * 11 complete. Native varp 0 uses 6 for returning with Lollk rescued and 7
+ * for the repair puzzle; nativeProgress maps the existing saved stages to it.
+ * The six repaired railings are kept in a plugin attribute; the
  * cache's repair interface requires each of its three tool/part combinations.
  */
 module.exports = function registerDwarfCannonQuest(api) {
@@ -93,6 +95,12 @@ module.exports = function registerDwarfCannonQuest(api) {
     return ["Speak to <col=800000>Captain Lawgof</col> at the Coal Trucks,", "north-west of the Fishing Guild."];
   }
 
+  function nativeProgress(stage) {
+    if (stage === STAGE_RETURN_TO_LAWGOF) return 6;
+    if (stage === STAGE_REPAIR_CANNON) return 7;
+    return stage;
+  }
+
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.CRAFTING, 750);
   }
@@ -123,6 +131,7 @@ module.exports = function registerDwarfCannonQuest(api) {
     }
 
     if (npcId === NpcIdentifiers.NULODION) {
+      if (stage >= STAGE_COMPLETE) return null;
       if (stage >= STAGE_RETURN_NOTES) return page(PAGE, "fixing-the-cannon-talking-to-nulodion-again");
       if (stage === STAGE_SPEAK_TO_NULODION) return page(PAGE, "fixing-the-cannon-talking-to-nulodion");
       return null;
@@ -261,8 +270,9 @@ module.exports = function registerDwarfCannonQuest(api) {
 
   function handleCannonRepairClick(event) {
     const { player, buttonId } = event;
+    const stage = quest.getStage(player);
     if ((event.groupId ?? (buttonId >>> 16)) !== CANNON_INTERFACE_GROUP
-      || quest.getStage(player) !== STAGE_REPAIR_CANNON) return;
+      || stage < STAGE_REPAIR_CANNON || stage > STAGE_INSPECTED_CANNON) return;
     const childId = event.childId ?? (buttonId & 0xffff);
     const sender = player.getPacketSender();
     const toolVarbit = CANNON_TOOL_VARBITS.get(childId);
@@ -375,12 +385,12 @@ module.exports = function registerDwarfCannonQuest(api) {
         return;
       // Lost notes / lost ammo mould from Nulodion after the hand-out.
       case "vxwzuL":
-        if (npcId === NpcIdentifiers.NULODION && quest.getStage(player) >= STAGE_RETURN_NOTES) {
+        if (npcId === NpcIdentifiers.NULODION && quest.getStage(player) === STAGE_RETURN_NOTES) {
           addItem(player, ItemIdentifiers.NULODIONS_NOTES);
         }
         return;
       case "3LMqqz":
-        if (npcId === NpcIdentifiers.NULODION && quest.getStage(player) >= STAGE_RETURN_NOTES) {
+        if (npcId === NpcIdentifiers.NULODION && quest.getStage(player) === STAGE_RETURN_NOTES) {
           addItem(player, ItemIdentifiers.AMMO_MOULD);
         }
         return;
@@ -408,6 +418,7 @@ module.exports = function registerDwarfCannonQuest(api) {
     key: "dwarf_cannon",
     name: "Dwarf Cannon",
     varpId: VARP_DWARF_CANNON,
+    varpValue: nativeProgress,
     startedValue: STAGE_REPAIR_RAILINGS,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
