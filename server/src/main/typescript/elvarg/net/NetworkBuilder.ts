@@ -602,7 +602,7 @@ export class ClientConnection {
         case "chat":
           if (this.player) {
             if (packet.messageType === "public") {
-              ChatPacketListener.handleText(this.player, packet.text);
+              ChatPacketListener.handleText(this.player, packet.text, packet.autoChat === true);
             } else if (packet.messageType === "friends_chat") {
               PluginManager.emitSocialPacket({
                 player: this.player, packet: packet as typeof packet & { messageType: "friends_chat" }, handled: false,
