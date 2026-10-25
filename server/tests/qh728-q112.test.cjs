@@ -139,6 +139,8 @@ function makePlayer(options = {}) {
       return slots;
     },
     addItem: item => inventory.adds(item.getId(), item.getAmount()),
+    setItem: (slot, item) => { inventory.deleteNumber(inventory.getItems()[slot].getId(), 1); inventory.addItem(item); return inventory; },
+    refreshItems: () => inventory,
   };
   const sender = new Proxy({}, { get: (_target, prop) => (...args) => { log.push([String(prop), ...args]); return sender; } });
   return {
@@ -165,6 +167,7 @@ function makePlayer(options = {}) {
       addExperience: noop,
     }),
     getUsername: () => 'q112-test',
+    getIndex: () => 1,
     getPrivateArea: () => null,
     getPacketSender: () => sender,
     getDialogueManager: () => ({ isActive: () => false, getCurrent: () => null, startDialogues: noop, handleResume: noop, reset: noop }),
@@ -234,7 +237,9 @@ function harness() {
   // PluginManager registers Quests.plugin.js before skills/EnchantJewellery.plugin.js.
   // Preserve that production hook order so the quest-specific spell path can
   // claim the sickle before generic jewellery rejects it as an unsupported item.
-  require('../plugins/skills/EnchantJewellery.plugin.js').register(api);
+  // The quest runs its timers inline without a TaskManager; the enchant repeat only needs one to queue on.
+  const enchantApi = Object.assign(Object.create(api), { core: { ...api.core, TaskManager: { submit: noop } } });
+  require('../plugins/skills/EnchantJewellery.plugin.js').register(enchantApi);
   return {
     api, events, variants, conditions, itemOnObject, itemOnItem, spellOnItem, itemActions,
     objectInteraction, npcInteraction, npcDeaths, npcHitModify, npcs,
