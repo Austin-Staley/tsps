@@ -355,3 +355,127 @@ test('Nulodion gives the notes and mould atomically when two slots are needed', 
     cleanup();
   }
 });
+
+test('earned Lollk rescue and toolkit receipt mirror the pinned helper stages on bootstrap', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const player = playerFixture();
+    quest.setStage(player, 4);
+    action(player, core.NpcIdentifiers.LOLLK, 'VYQQX5');
+    assert.equal(quest.getStage(player), 5, 'the existing durable rescue stage is preserved');
+    assert.equal(player.configs.get(0), 6, 'QH stage6 returns to Lawgof');
+    player.configs.delete(0);
+    require('../plugins/quests/QuestRuntime').sendQuestVarps({ player });
+    assert.equal(player.configs.get(0), 6);
+    action(player, core.NpcIdentifiers.CAPTAIN_LAWGOF, 'dqO_5X');
+    assert.equal(quest.getStage(player), 6, 'the existing durable toolkit stage is preserved');
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.TOOLKIT), 1);
+    assert.equal(player.configs.get(0), 7, 'QH stage7 repairs the multicannon');
+    player.configs.delete(0);
+    PluginManager.emitPlayerLogin({ player });
+    require('../plugins/quests/QuestRuntime').sendQuestVarps({ player });
+    assert.equal(player.configs.get(0), 7);
+  } finally { cleanup(); }
+});
+
+test('an existing inspected-cannon stage7 save can complete the registered repair interface', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const player = playerFixture(inventoryFixture(new Map([[core.ItemIdentifiers.TOOLKIT, 1]])));
+    quest.setStage(player, 7);
+    assert.equal(PluginManager.emitItemOnObject({ player, objectId: 15597,
+      itemId: core.ItemIdentifiers.TOOLKIT, itemSlot: 0,
+      location: { x: 2562, y: 3461, z: 0 }, handled: false }), true);
+    assert.deepEqual(player.interfaces, [409]);
+    for (const child of [2, 7, 3, 8, 1, 9]) {
+      PluginManager.emitInterfaceActionClick({ player, buttonId: (409 << 16) | child, action: 1, handled: false });
+    }
+    assert.equal(quest.getStage(player), 8, 'legacy inspected state is repairable');
+    assert.equal(player.configs.get(0), 8);
+    assert.deepEqual(player.interfaces, []);
+  } finally { cleanup(); }
+});
+
+test('completed Nulodion releases his generic page and stops quest-only notes and mould recovery', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const player = playerFixture();
+    quest.setStage(player, 10);
+    action(player, core.NpcIdentifiers.NULODION, 'vxwzuL');
+    action(player, core.NpcIdentifiers.NULODION, '3LMqqz');
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.NULODIONS_NOTES), 1);
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.AMMO_MOULD), 1);
+    quest.setStage(player, 11);
+    assert.equal(variant(player, core.NpcIdentifiers.NULODION), null, 'completed quest yields the generic NPC page');
+    player.inventory.deleteNumber(core.ItemIdentifiers.NULODIONS_NOTES);
+    player.inventory.deleteNumber(core.ItemIdentifiers.AMMO_MOULD);
+    action(player, core.NpcIdentifiers.NULODION, 'vxwzuL');
+    action(player, core.NpcIdentifiers.NULODION, '3LMqqz');
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.NULODIONS_NOTES), 0);
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.AMMO_MOULD), 0);
+  } finally { cleanup(); }
+});
+
+test('real postquest Nulodion dispatch retains the shared cannon shop and lost-cannon owner', () => {
+  let quest, cleanup = () => {};
+  const customBefore = new Map([...PluginManager.customEventHooks].map(([name, hooks]) => [name, [...hooks]]));
+  const conditionBefore = PluginManager.npcDialogueConditionHooks.length;
+  const interactionBefore = PluginManager.npcAnyInteractionHooks.length;
+  const Cannon = require('../plugins/items/dwarfcannon/Common.DwarfCannon');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const api = PluginManager.createApi('q027-real-nulodion');
+  try {
+    Cannon.init(api);
+    require('../plugins/items/dwarfcannon/Nulodion.DwarfCannon')(api);
+    require('../plugins/npcs/NpcDialogues.plugin').register(api);
+    // The shared item/NPC services load before the quest plugins in production.
+    ({ quest, cleanup } = registerQuestPlugin());
+    const player = playerFixture(inventoryFixture(new Map([[core.ItemIdentifiers.COINS, 750000]])));
+    player.getPrivateArea = () => null;
+    player.inventory.add = item => player.inventory.adds(item.getId(), item.getAmount());
+    player.inventory.delete = (id, amount) => player.inventory.deleteNumber(id, amount);
+    quest.setStage(player, 11);
+    const npc = core.NPC.create(core.NpcIdentifiers.NULODION, new core.Location(3012, 3453, 0));
+    const definition = npc.getCurrentDefinition(player);
+    assert.equal(definition.getName(), 'Nulodion');
+    const talk = () => PluginManager.emitNpcInteraction({ player, npc,
+      npcId: npc.getContentId(player), definition, clickType: 1, handled: false });
+    const menu = () => {
+      for (let n = 0; n < 30 && player.getDialogueManager().isActive(); n++) player.getDialogueManager().advance();
+      const prompt = MultiChatboxPrompt.getPending(player);
+      assert.ok(prompt, 'actual transcript produces its canonical menu');
+      return prompt.options;
+    };
+    const choose = label => {
+      const options = menu();
+      const index = options.indexOf(label);
+      assert.ok(index >= 0, `missing canonical option ${label}`);
+      assert.equal(MultiChatboxPrompt.handleInterfaceActionClick({ player,
+        buttonId: (219 << 16) | 1, slot: index + 1 }), true);
+    };
+    assert.equal(talk(), true);
+    choose('I was hoping you might sell me a cannon.');
+    choose("Okay, I'll take a cannon please.");
+    for (let n = 0; n < 30 && player.getDialogueManager().isActive(); n++) player.getDialogueManager().advance();
+    for (const id of [...Cannon.KINDS.plain.parts, core.ItemIdentifiers.AMMO_MOULD, core.ItemIdentifiers.INSTRUCTION_MANUAL]) {
+      assert.equal(player.inventory.getAmount(id), 1, 'shared shop supplies every purchased item once');
+    }
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.COINS), 0);
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.NULODIONS_NOTES), 0);
+    assert.equal(quest.getStage(player), 11);
+
+    player.setAttribute(Cannon.LOST_ATTRIBUTE, { kind: 'plain', stage: 4 });
+    for (const id of Cannon.KINDS.plain.parts) player.inventory.deleteNumber(id);
+    assert.equal(talk(), true);
+    choose("I've lost my cannon.");
+    for (let n = 0; n < 30 && player.getDialogueManager().isActive(); n++) player.getDialogueManager().advance();
+    for (const id of Cannon.KINDS.plain.parts) assert.equal(player.inventory.getAmount(id), 1);
+    assert.equal(player.getAttribute(Cannon.LOST_ATTRIBUTE), null, 'the genuine shared owner consumes its recovery fact');
+    assert.equal(player.inventory.getAmount(core.ItemIdentifiers.AMMO_MOULD), 1, 'lost cannon recovery does not invoke quest mould recovery');
+  } finally {
+    cleanup();
+    PluginManager.npcDialogueConditionHooks.length = conditionBefore;
+    PluginManager.npcAnyInteractionHooks.length = interactionBefore;
+    PluginManager.customEventHooks = customBefore;
+  }
+});

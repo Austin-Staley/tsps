@@ -56,6 +56,20 @@ test('every prayer adds the drain effect the Wiki lists', () => {
   }
 });
 
+test('locked prayers report their own name and exact Prayer requirement', (t) => {
+  t.mock.method(PluginManager, 'emitPrayerDisabled', () => null);
+  const f = fixture(t);
+  f.player.getSkillManager().setMaxLevel(Skill.PRAYER, 1);
+  for (const [name, prayer] of Object.entries(PrayerData)) {
+    if (!(prayer instanceof PrayerData)) continue;
+    const formatted = name.toLowerCase().split('_').map(word => ['of', 'from'].includes(word) ? word : word[0].toUpperCase() + word.slice(1)).join(' ');
+    assert.equal(prayer.getPrayerName(), formatted);
+    if (prayer.requirement === 1) continue;
+    assert.equal(PrayerHandler.canUse(f.player, prayer, true), false);
+    assert.equal(f.messages.at(-1), `You need a Prayer level of at least ${prayer.requirement} to use ${formatted}.`);
+  }
+});
+
 test('a prayer costs a point every 60 / drain effect ticks at 0 prayer bonus', (t) => {
   for (const [prayer, ticksPerPoint] of [['PROTECT_FROM_MELEE', 5], ['THICK_SKIN', 60], ['PIETY', 2.5], ['SMITE', 10 / 3]]) {
     const f = fixture(t, { points: 99 });

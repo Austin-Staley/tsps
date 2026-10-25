@@ -101,6 +101,7 @@ test("the Rune Essence mine's portals send the player back to the wizard who sen
 // Wiki: talismans are used on ruins; a matching worn tiara reveals the Enter option.
 function runecrafter(headId = -1) {
   const player = visitor();
+  player.onEquipmentChanged = () => {};
   const bits = new Map();
   const equipment = new Equipment(player);
   equipment.setItem(Equipment.HEAD_SLOT, new Item(headId, headId === -1 ? 0 : 1));

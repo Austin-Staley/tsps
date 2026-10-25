@@ -243,7 +243,7 @@ export class PrayerHandler {
         if (player.getSkillManager().getMaxLevel(Skill.PRAYER) < (prayer.requirement)) {
             if (msg) {
                 player.getPacketSender().sendVarbit(prayer.configId, 0);
-                player.sendMessage("You need a Prayer level of at least" + prayer.requirement + " to use" + PrayerData.getPrayerName() + ".");
+                player.sendMessage(`You need a Prayer level of at least ${prayer.requirement} to use ${prayer.getPrayerName()}.`);
             }
             return false;
         }
@@ -570,9 +570,7 @@ export class PrayerData {
      *
      * @return The prayer's name
      */
-    public static getPrayerName(): string {
-        if (this.name == null)
-            return Misc.capitalizeWords(toString().toLowerCase().replace("_", " "));
+    public getPrayerName(): string {
         return this.name;
     }
 
@@ -613,7 +611,9 @@ export class PrayerData {
             return;
         }
         let prayerId = 0;
-        for (const pd of PrayerData.values()) {
+        for (const [name, pd] of Object.entries(PrayerData)) {
+            if (!(pd instanceof PrayerData)) continue;
+            pd.name = Misc.capitalizeWords(name.toLowerCase().replace(/_/g, " ")).replace(" Of ", " of ").replace(" From ", " from ");
             pd.prayerId = prayerId;
             this.prayerData.set(prayerId, pd);
             this.actionButton.set(pd.buttonId, pd);

@@ -8647,6 +8647,7 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
       getUsername: () => 'dt2-final-room-test', getInventory: () => inventory, getEquipment: () => equipment,
       getPacketSender: () => new Proxy({}, { get: () => () => {} }),
       moveTo(location) { this.location = location; }, sendMessage() {}, isRegistered: () => false,
+      onEquipmentChanged() {},
     };
     equipment = new core.Equipment(p);
     equipment.set(core.Equipment.RING_SLOT, new core.Item(core.ItemIdentifiers.RING_OF_VISIBILITY, 1));
@@ -8847,6 +8848,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       getPacketSender: () => new Proxy({}, { get: (_target, prop) => prop === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
       moveTo(location) { this.location = location; }, sendMessage(message) { (this.messages ??= []).push(message); },
       getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingAirHits.push(...hits) }) }),
+      onEquipmentChanged() {},
     };
     divingGear = new core.Equipment(player);
     quest.setStage(player, 8);
