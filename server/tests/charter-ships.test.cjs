@@ -19,7 +19,7 @@ const varpId = (name) => CacheDefinitions.getVarpId(name);
 let completeQuests = new Set();
 const dialogueStarts = [];
 const tasks = [];
-const hooks = { npcs: [], generic: [], clicks: [], events: new Map(), conditions: [], persisted: new Map() };
+const hooks = { npcs: [], generic: [], clicks: [], events: new Map(), conditions: [], persisted: new Map(), teleports: [] };
 let prompt = null;
 
 class Task {
@@ -49,6 +49,7 @@ const api = {
     ItemIdentifiers,
     Equipment,
     ChatType: { SPAM: "spam" },
+    Mobile: { onBeforeTeleport: (listener) => hooks.teleports.push(listener) },
     Task,
     TaskManager: { submit: (task) => tasks.push(task) },
     ShopManager: { open: () => true },
@@ -94,6 +95,7 @@ function createPlayer({ at, coins = 10000, ring = 0, items = [], varbits = {}, v
   let location = at;
   let interfaceId = -1;
   let blocked = false;
+  let dying = false;
   const moves = [];
   const sender = {
     getVarbit: (id) => varbitValues.get(id) ?? 0,
@@ -117,6 +119,8 @@ function createPlayer({ at, coins = 10000, ring = 0, items = [], varbits = {}, v
     moves,
     get balance() { return balance; },
     get blocked() { return blocked; },
+    /** What PlayerDeath does as hitpoints reach zero: dying, and movement locked. */
+    die() { dying = true; blocked = true; },
     varbit: (name) => varbitValues.get(varbitId(name)) ?? 0,
     getPacketSender: () => sender,
     getEquipment: () => ({ get: (slot) => equipment[slot] }),
@@ -128,7 +132,10 @@ function createPlayer({ at, coins = 10000, ring = 0, items = [], varbits = {}, v
     }),
     getLocation: () => location,
     getMovementQueue: () => movement,
-    moveTo: (target) => { location = target; moves.push(target); },
+    // Mobile.moveTo tells the teleport listeners first, as every teleport source does.
+    moveTo(target) { for (const listener of hooks.teleports) listener(this, target); location = target; moves.push(target); },
+    isPlayer: () => true,
+    isDyingReturn: () => dying,
     getInterfaceId: () => interfaceId,
     isRegistered: () => true,
     getAttribute: (key) => attributes.get(key),
@@ -378,6 +385,49 @@ test("Talk-to's transcript opens the map and answers its item conditions", () =>
   const stan = { player: clean, definition: { getName: () => "Trader Stan" }, text: "The player chooses from :File:Trade charter map.png", handled: false };
   hooks.events.get("npc-dialogue:action")(stan);
   assert.equal(stan.handled, true);
+  tasks.length = 0;
+});
+
+test("a passenger who dies before arrival stays where they died, still locked", () => {
+  tasks.length = 0;
+  const player = createPlayer({ at: CATHERBY_DOCK });
+  CharterShips._test.sail(player, row("brimhaven"), 480);
+  const [task] = tasks;
+  task.execute();
+  task.execute();
+  player.die();
+  for (let tick = 3; tick <= 6; tick++) task.execute();
+  assert.deepEqual(player.moves, [], "never put on the deck");
+  assert.equal(player.getLocation(), CATHERBY_DOCK);
+  assert.equal(player.blocked, true, "the death keeps its movement lock");
+  assert.equal(task.running, false);
+  assert.equal(player.varbit("minimap_state"), 0);
+  assert.equal(player.varbit("busy"), 0);
+  assert.ok(player.sent.closed.includes((161 << 16) | 1), "the fade overlay is taken down");
+  tasks.length = 0;
+});
+
+test("a relocated passenger's voyage ends, and its leftover ticks never touch the next one", () => {
+  tasks.length = 0;
+  const player = createPlayer({ at: CATHERBY_DOCK });
+  CharterShips._test.sail(player, row("brimhaven"), 480);
+  const [first] = tasks;
+  first.execute();
+  player.moveTo(SARIM_DOCK);
+  assert.equal(player.blocked, false, "a teleport frees the voyage's lock");
+
+  CharterShips._test.sail(player, row("catherby"), 1000);
+  assert.equal(tasks.length, 2, "a new voyage can start at once");
+  const second = tasks[1];
+  for (let tick = 2; tick <= 6; tick++) first.execute();
+  assert.equal(first.running, false);
+  assert.deepEqual(player.moves.slice(1), [], "the old voyage lands nobody");
+  assert.equal(player.blocked, true, "nor frees the new voyage's lock");
+
+  for (let tick = 1; tick <= 6; tick++) second.execute();
+  assert.equal(player.getLocation().getX(), row("catherby").deck.x);
+  assert.equal(player.blocked, false);
+  assert.equal(second.running, false);
   tasks.length = 0;
 });
 

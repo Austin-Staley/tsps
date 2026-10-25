@@ -17,6 +17,8 @@
  *   171 and fades out; the minimap goes a tick later, the player lands on the ship's deck (the
  *   row's port_coord) on the third tick, the screen fades back in on the fourth and the overlay
  *   closes on the sixth. The gangplank (Ladders) takes them ashore.
+ * - A voyage is cut short by any teleport but its own landing, by logout and by death; a dying
+ *   passenger stays where they fell and keeps the death's movement lock.
  *
  * Fares are not in the cache (chartering_costs is empty): data/charter-ships.json is the Wiki's
  * directed fare table. A worn ring of charos(a) and Cabin Fever each halve a fare; the table's
@@ -101,8 +103,8 @@ let core = null;
 let pluginApi = null;
 let rows = null;
 let fareData = null;
-/** Players on their way; a second trip waits until they land. */
-const sailing = new WeakSet();
+/** Each player's voyage under way ({ landing }); a second trip waits until it ends. */
+const voyages = new WeakMap();
 /** The trader each player is chartering with ({ npc, npcId }), for their lines. */
 const traders = new WeakMap();
 
@@ -289,7 +291,7 @@ function mapInterface() {
 }
 
 function openMap(player) {
-  if (sailing.has(player)) return;
+  if (voyages.has(player)) return;
   const sender = player.getPacketSender();
   // The server has Sailing, so the six Sailing ports are on the map.
   setVarbit(player, SAILING_CONTENT_VARBIT, 1);
@@ -323,15 +325,41 @@ function setPreviousDestination(player, destination) {
   setVarbit(player, PREVIOUS_DESTINATION_VARBIT, destination.id);
 }
 
-/** The captured trip: pay, fade out, land on the deck on the third tick, fade back in. */
+function dying(player) {
+  return player.isDyingReturn?.() === true;
+}
+
+/**
+ * Ends a voyage that did not arrive: the minimap and screen come back, and the voyage's lock is
+ * freed - unless the passenger is dying, whose lock belongs to their death.
+ */
+function cancelVoyage(player) {
+  if (!voyages.delete(player)) return;
+  setVarbit(player, MINIMAP_STATE_VARBIT, 0);
+  setVarbit(player, BUSY_VARBIT, 0);
+  player.getPacketSender().closeSubInterface(OVERLAY_ATMOSPHERE_UID);
+  if (!dying(player)) player.getMovementQueue().setBlockMovement(false);
+}
+
+/** Any teleport but the voyage's own landing ends it, wherever it sends the passenger. */
+function voyageInterrupted(mobile) {
+  const voyage = mobile.isPlayer?.() ? voyages.get(mobile) : undefined;
+  if (voyage && !voyage.landing) cancelVoyage(mobile);
+}
+
+/**
+ * The captured trip: pay, fade out, land on the deck on the third tick, fade back in. Its ticks
+ * act only while the voyage is still the player's own and they are alive and logged in.
+ */
 function sail(player, destination, fare) {
-  if (sailing.has(player)) return;
+  if (voyages.has(player)) return;
   const inventory = player.getInventory();
   if (inventory.getAmount(core.ItemIdentifiers.COINS) < fare) {
     offerFare(player, destination, fare);
     return;
   }
-  sailing.add(player);
+  const voyage = { landing: false };
+  voyages.set(player, voyage);
   setPreviousDestination(player, destination);
   inventory.deleteNumber(core.ItemIdentifiers.COINS, fare);
   inventory.refreshItems?.();
@@ -348,16 +376,30 @@ function sail(player, destination, fare) {
     }
 
     execute() {
-      tick++;
-      if (!player.isRegistered()) {
+      if (voyages.get(player) !== voyage) {
         this.stop();
         return;
       }
+      if (!player.isRegistered()) {
+        voyages.delete(player);
+        this.stop();
+        return;
+      }
+      if (dying(player)) {
+        cancelVoyage(player);
+        this.stop();
+        return;
+      }
+      tick++;
       if (tick === MINIMAP_TICKS) {
         setVarbit(player, MINIMAP_STATE_VARBIT, MINIMAP_OFF);
         setVarbit(player, BUSY_VARBIT, 1);
       }
-      if (tick === LAND_TICKS) player.moveTo(new core.Location(destination.deck.x, destination.deck.y, destination.deck.z));
+      if (tick === LAND_TICKS) {
+        voyage.landing = true;
+        player.moveTo(new core.Location(destination.deck.x, destination.deck.y, destination.deck.z));
+        voyage.landing = false;
+      }
       if (tick === FADE_IN_TICKS) {
         setVarbit(player, MINIMAP_STATE_VARBIT, 0);
         setVarbit(player, BUSY_VARBIT, 0);
@@ -366,13 +408,14 @@ function sail(player, destination, fare) {
       }
       if (tick >= CLOSE_OVERLAY_TICKS) {
         sender.closeSubInterface(OVERLAY_ATMOSPHERE_UID);
+        voyages.delete(player);
         this.stop();
       }
     }
 
+    /** Stopped from outside while still under way, the voyage is cancelled, not landed. */
     stop() {
-      sailing.delete(player);
-      movement.setBlockMovement(false);
+      if (voyages.get(player) === voyage) cancelVoyage(player);
       super.stop();
     }
   })());
@@ -409,7 +452,7 @@ function offerFare(player, destination, fare) {
 
 /** A destination picked on the map or list, or by Charter-to. */
 function choose(player, destination) {
-  if (sailing.has(player) || !destination) return false;
+  if (voyages.has(player) || !destination) return false;
   const trader = traders.get(player) ?? null;
   const port = portAt(player.getLocation()) ?? portAt(trader?.npc?.getLocation?.());
   if (destination === port || !available(player, port, destination)) return false;
@@ -472,7 +515,7 @@ function chooseOnMap(event) {
 function mapClosed({ player, interfaceId }) {
   if (interfaceId !== mapInterface()) return;
   player.getPacketSender().closeSubInterface(SIDE_MODAL);
-  if (!sailing.has(player)) setVarbit(player, BUSY_VARBIT, 0);
+  if (!voyages.has(player)) setVarbit(player, BUSY_VARBIT, 0);
 }
 
 /** Talk-to's "Charter ship" step (crew) or charter map step (Trader Stan) opens the map. */
@@ -536,6 +579,7 @@ module.exports = {
     api.persistAttribute(PREVIOUS_DESTINATION_ATTRIBUTE, 0);
     api.persistAttribute(SKIP_CONFIRMATION_ATTRIBUTE, false);
     api.onPlayerLogin(restore);
+    api.core.Mobile.onBeforeTeleport(voyageInterrupted);
     api.onNpcsInteraction(TRADERS, { Charter: charter, Trade: openTradingPost });
     api.onNpcInteraction(charterToLast);
     api.onInterfaceActionClick(chooseOnMap);
