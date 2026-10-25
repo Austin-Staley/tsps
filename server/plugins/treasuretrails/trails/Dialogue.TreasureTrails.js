@@ -128,6 +128,23 @@ function play(player, npcId, spoken, onEnd) {
   player.getDialogueManager().startDialogues(chain);
 }
 
+/**
+ * Lines, then `give` with an item box of what was given, then more lines: an NPC handing something
+ * over mid-speech (master's torn parts: "Here you go.", the part, then their compliment).
+ */
+function playHandOver(player, npcId, before, give, itemId, text, after = []) {
+  const chain = new core.DialogueChainBuilder();
+  let index = 0;
+  const say = line => chain.add(line.player != null ? new core.PlayerDialogue(index++, named(line.player, player)) :
+    new core.NpcDialogue(index++, npcId, named(line.npc, player)));
+  before.forEach(say);
+  chain.add(new core.ActionDialogue(index++, { execute: give }));
+  chain.add(new core.ItemStatementDialogue(index++, itemId, text));
+  after.forEach(say);
+  chain.add(new core.EndDialogue(index));
+  player.getDialogueManager().startDialogues(chain);
+}
+
 /** A plain message box, as live sends for a solved puzzle or light box. */
 function mesbox(player, text) {
   player.getDialogueManager().startDialogues(new core.DialogueChainBuilder()
@@ -139,4 +156,4 @@ function itemBox(player, itemId, text) {
     .add(new core.ItemStatementDialogue(0, itemId, text)).add(new core.EndDialogue(1)));
 }
 
-module.exports = { attach, transcript, againTranscript, puzzleTranscript, lines, speech, branch, wrongBranch, correctBranch, message, play, itemBox, mesbox };
+module.exports = { attach, transcript, againTranscript, puzzleTranscript, lines, speech, branch, wrongBranch, correctBranch, message, play, playHandOver, itemBox, mesbox };

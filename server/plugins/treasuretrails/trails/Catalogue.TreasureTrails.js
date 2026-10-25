@@ -134,6 +134,8 @@ function load(core, tier) {
       const step = { row: row.id, key, family, text: value(row, "clue_text", ""), requirements: values(row, "requirements"), ...target(row) };
       if (family === "emote") Object.assign(step, { emotes: values(row, "emote"), equipment: outfit(row),
         stash: value(row, "hidey_hole_loc") == null ? null : { locId: value(row, "hidey_hole_loc"), location: coordinate(value(row, "hidey_hole_coord")) } });
+      // Master's cryptics also name outfits ("Wear 3 Zamorakian items.", Sir Vyvin's white plate).
+      else if (value(row, "outfit") != null) step.equipment = outfit(row);
       if (family === "map") step.interfaceId = MAP_INTERFACES[key] == null ? null : C.getInterfaceId(MAP_INTERFACES[key]);
       if (family === "music") Object.assign(step, music(row));
       if (family === "coordinate") step.text = coordinateText(step.text);
