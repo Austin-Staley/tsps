@@ -66,6 +66,7 @@ function guide(name, tile) {
 
 module.exports = {
   name: "DorgeshuunGuides",
+  members: true,
   ROUTES,
   register(pluginApi) {
     api = pluginApi;

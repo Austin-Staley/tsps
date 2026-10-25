@@ -179,6 +179,7 @@ function sandstoneOnGrinder(event) {
 
 module.exports = {
   name: "DesertQuarry",
+  members: true,
   DATA,
   BUCKETS_KEY,
   SAND_KEY,
