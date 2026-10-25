@@ -59,11 +59,16 @@ function build(player, unit) {
   }
   const nail = nails(inventory);
   const hasSaw = [I.SAW, I.CRYSTAL_SAW, I.AMYS_SAW].some(id => count(inventory, id) > 0);
-  if (count(inventory, I.HAMMER) < 1 || !hasSaw || count(inventory, I[stash.plank]) < PLANKS_PER_UNIT || nail == null) {
-    player.sendMessage(`You need a hammer, a saw, ${PLANKS_PER_UNIT} ${core.ItemDefinition.forId(I[stash.plank]).getName().toLowerCase()}s and ${NAILS_PER_UNIT} nails of one metal to build this STASH unit.`);
+  // Master units also take a gold leaf (Wiki "STASH").
+  const extra = (stash.extra ?? []).map(([name, amount]) => [I[name], amount]);
+  const extraText = extra.map(([id, amount]) => `, ${amount} ${core.ItemDefinition.forId(id).getName().toLowerCase()}`).join("");
+  if (count(inventory, I.HAMMER) < 1 || !hasSaw || count(inventory, I[stash.plank]) < PLANKS_PER_UNIT || nail == null ||
+      extra.some(([id, amount]) => count(inventory, id) < amount)) {
+    player.sendMessage(`You need a hammer, a saw, ${PLANKS_PER_UNIT} ${core.ItemDefinition.forId(I[stash.plank]).getName().toLowerCase()}s${extraText} and ${NAILS_PER_UNIT} nails of one metal to build this STASH unit.`);
     return;
   }
   inventory.delete(I[stash.plank], PLANKS_PER_UNIT);
+  for (const [id, amount] of extra) inventory.delete(id, amount);
   inventory.delete(nail, NAILS_PER_UNIT);
   player.getSkillManager().addExperiences(core.Skill.CONSTRUCTION, stash.xp);
   player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_poh_build")));
@@ -111,6 +116,10 @@ function interact(event) {
   event.handled = true;
   const { player } = event;
   if (!built(player).includes(event.objectId)) { build(player, unit); return; }
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "stash", resume: () => interact({ ...event, handled: false }) };
+  api.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   const items = stored(player)[event.objectId];
   if (Array.isArray(items) && items.length) withdraw(player, unit, items);
   else deposit(player, unit);

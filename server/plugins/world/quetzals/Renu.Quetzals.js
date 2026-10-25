@@ -67,18 +67,25 @@ function canFly(player, site) {
   return Common.renuUnlocked(player) && Common.siteUsable(player, site);
 }
 
-/** The captured flight: fade out on the click, land four ticks later, fade back in a tick after. */
-function fly(player, site) {
+/**
+ * The captured flight: fade out on the click, land four ticks later, fade back in a tick after.
+ * Primio's trips (Primio.Quetzals.js) fly the same way without a last destination, and the first
+ * one carries on with Regulus on landing.
+ */
+function fly(player, site, { recordDestination = true, onLand } = {}) {
   if (flights.has(player)) return;
   flights.add(player);
   const sender = player.getPacketSender();
-  Common.setVarbits(player, { [Common.LAST_DESTINATION]: site.id });
+  if (recordDestination) Common.setVarbits(player, { [Common.LAST_DESTINATION]: site.id });
   Common.closeMenu(player);
   sender.sendSoundEffect(FLIGHT_SOUND, FLIGHT_SOUND_LOOPS, FLIGHT_SOUND_DELAY, 255);
   Common.fade(player, true, FADE_CYCLES);
   Common.timeline(player, {
     [MINIMAP_TICKS]: () => Common.minimap(player, true),
-    [LAND_TICKS]: () => player.moveTo(new Common.core.Location(site.x, site.y, site.z)),
+    [LAND_TICKS]: () => {
+      player.moveTo(new Common.core.Location(site.x, site.y, site.z));
+      onLand?.();
+    },
     [FADE_IN_TICKS]: () => {
       Common.minimap(player, false);
       Common.busy(player, false);

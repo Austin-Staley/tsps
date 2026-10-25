@@ -96,6 +96,7 @@
   "blueprintCost": 500,
   "freeBlueprintRumours": 10,
   "messages": {
+    "childrenOfTheSun": "You need to complete Children of the Sun before travelling to Varlamore.",
     "buildNotReady": "You're not sure how to do that.",
     "buildNeeds": "You need ten quetzal feed sacks, three limestone bricks and four soft clay to build this landing site.",
     "built": "You build a quetzal landing site.",
