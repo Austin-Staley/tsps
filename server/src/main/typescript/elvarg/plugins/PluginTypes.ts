@@ -1353,6 +1353,8 @@ export interface PluginCoreApi {
   FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
+  PrayerData: any;
+  ItemActionPacketListener: any;
   ChatType: any;
   DuelRule: any;
   RegionManager: any;
