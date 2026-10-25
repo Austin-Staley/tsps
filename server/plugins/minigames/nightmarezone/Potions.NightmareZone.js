@@ -245,4 +245,4 @@ function attachPotions(api) {
   api.onPlayerHitModify(absorb);
 }
 
-module.exports = { attachPotions, drink, absorb, dreamEnded, endOverload, check, take, store, overloads, absorbOf, stored };
+module.exports = { attachPotions, drink, absorb, dreamEnded, endOverload, check, take, store, overloads, absorbOf, stored, setStored };

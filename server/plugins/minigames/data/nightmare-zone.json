@@ -51,6 +51,26 @@
   "music": { "dream": 24 },
   "sounds": { "prepared": 2401, "unlocked": 2274, "deposited": 2115 },
   "cofferIcons": [[10000000, 1004], [0, 1003]],
+  "_rewards": "Dom Onion's Reward Shop, interface nzone_rewards (206), as recorded (234/03279 [19576]) and as its cache scripts draw it (248, 302-306, 275): Resources (enum 709) and Benefits (enum 814) priced by inv 464 (count = points), Upgrades the imbuable items carried (enum 815) priced by inv 108 (count = points / 1000). Ops: Buy-1, Buy-5, Buy-10, Buy-50, Buy-X (1-5), Examine (10); Imbue (1). Recorded prices; the rest of the stock in the recording (snape grass, red spiders' eggs, cactus potato, dragon scale dust) is not in enum 709 (a Leagues world) and is left out.",
+  "rewards": {
+    "interface": "nzone_rewards",
+    "openScript": 2524,
+    "sideScript": 915,
+    "stockInv": 464,
+    "imbueInv": 108,
+    "enums": { "resources": 709, "benefits": 814, "imbues": 815 },
+    "resourcePrices": { "1779": 75, "1783": 200, "401": 200, "6470": 5000, "556": 25, "555": 25, "557": 25, "554": 25, "1436": 60, "7936": 70, "11738": 9500, "227": 145, "11740": 775 },
+    "benefitPrices": { "11725": 250, "11729": 250, "11733": 1500, "11737": 1000 },
+    "benefitPotions": { "11725": "superRanging", "11729": "superMagic", "11733": "overload", "11737": "absorption" },
+    "imbueThousands": { "6731": 650, "6733": 650, "6735": 650, "6737": 650, "8901": 1250, "8903": 1250, "8905": 1250, "8907": 1250, "8909": 1250, "8911": 1250, "8913": 1250, "8915": 1250, "8917": 1250, "8919": 1250, "8921": 1250, "11864": 1250, "4081": 800, "10588": 800, "12601": 650, "12603": 650, "12605": 650, "19550": 725, "20655": 725, "21739": 500 },
+    "slayerHelmParam": 385,
+    "slayerHelm": 11864,
+    "herbBox": 11738,
+    "herbBoxesPerDay": 15,
+    "buyOps": { "1": 1, "2": 5, "3": 10, "4": 50 },
+    "buyXOp": 5,
+    "examineOp": 10
+  },
   "_potions": "Wiki: Absorption (50 a dose, up to 1,000), Overload (Nightmare Zone) (floor(level*15/100)+5 every 15 s for 5 min, 50 damage of its own, 50 healed at the end, not under 51 Hitpoints); barrels hold up to 255 doses. The barrel varbits are inferred from their numbering (nzone_potion_3 overload and 4 absorption match the recording's barrel_3/4). The overload's 5 hits of 10, 2 ticks apart, are inferred.",
   "potions": {
     "drinkAnimation": 829,
@@ -178,7 +198,7 @@
     "notStarted": [["npc", "You haven't started that dream I created for you. Can I help you with something?", 568]],
     "changeDream": [["player", "I want to change my dream.", 575], ["npc", "Okay, I've emptied the vial. I have not taken any money from you for that dream, since you never started it.", 568]]
   },
-  "_messages": "Recorded: welcome, nothing, cofferEmpty, cofferHolds, cofferTitle, depositPrompt, startDream, barrel, notComplete. Not recorded (wording mine): withdrawPrompt, noDream, notEnoughCoins, notEnoughQuests, cofferFull, dreamOver, onlyInDream, overloadLowHp, overloadActive, overloadEnds, barrelHolds, takePrompt.",
+  "_messages": "Recorded: welcome, nothing, cofferEmpty, cofferHolds, cofferTitle, depositPrompt, startDream, barrel, notComplete. Not recorded (wording mine): withdrawPrompt, noDream, notEnoughCoins, notEnoughQuests, cofferFull, dreamOver, onlyInDream, overloadLowHp, overloadActive, overloadEnds, barrelHolds, takePrompt, imbued, notEnoughPoints, noRoom, buyX, herbBoxLimit, herbBoxIronman, barrelFull. Recorded: imbuePrice (sent for a Slayer helmet with 0 points).",
   "messages": {
     "welcome": "Welcome to the Nightmare Zone.",
     "nothing": "Nothing interesting happens.",
@@ -200,6 +220,14 @@
     "overloadActive": "You are still under the effects of an overload.",
     "overloadEnds": "The effects of overload have worn off.",
     "barrelHolds": "This barrel contains {doses} dose{s} of {potion} potion.",
-    "takePrompt": "How many doses of {potion} potion will you withdraw? ({doses})"
+    "takePrompt": "How many doses of {potion} potion will you withdraw? ({doses})",
+    "imbuePrice": "{name}: This item costs {points} points to imbue.",
+    "imbued": "Dominic imbues your {name}.",
+    "notEnoughPoints": "You don't have enough reward points.",
+    "noRoom": "You don't have enough inventory space.",
+    "buyX": "How many would you like to buy?",
+    "herbBoxLimit": "You can only buy {limit} herb boxes a day.",
+    "herbBoxIronman": "Ironmen can't buy herb boxes.",
+    "barrelFull": "That barrel can't hold any more doses."
   }
 }
