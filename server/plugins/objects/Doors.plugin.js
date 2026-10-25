@@ -658,11 +658,19 @@ function isRemovedMapObject(snapshot) {
   return core.World.getRemovedObjects().some((removed) => sameSharedObject(removed, snapshot));
 }
 
+// Core replays World's removed objects before this hook, so a closed leaf the load placed may already
+// be gone again; RegionManager remembers those.
+function placedByLoad(snapshot) {
+  const { x, y, z } = snapshot.location;
+  return Boolean(mapObjectFor(snapshot)) ||
+    core.RegionManager.wasRemovedOnLoad(snapshot.id, snapshot.type, snapshot.face, x, y, z);
+}
+
 // A region reload rebuilt from new map data (a region replacement) that no longer has the closed
 // door: the open leaves are stale, so they go and the door is forgotten instead of re-applied.
 function isStaleAfterReload(state, regionId) {
   return state.closed.some((snapshot) => locationRegionId(snapshot.location) === regionId &&
-    isRemovedMapObject(snapshot) && !mapObjectFor(snapshot));
+    isRemovedMapObject(snapshot) && !placedByLoad(snapshot));
 }
 
 function dropStaleDoor(anchorKey, state) {

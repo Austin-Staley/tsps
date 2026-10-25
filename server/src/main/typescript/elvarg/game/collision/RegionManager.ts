@@ -34,6 +34,8 @@ export class RegionManager {
 
     public static regions: Map<number, Region> = new Map<number, Region>();
     private static loadingRegions: Set<number> = new Set<number>();
+    /** Per region: map objects its latest load placed that replayWorldObjects then took out again. */
+    private static loadRemovals: Map<number, GameObject[]> = new Map<number, GameObject[]>();
 
     public static init(): void {
         ObjectDefinition.init();
@@ -789,6 +791,8 @@ export class RegionManager {
         const regionY = regionId & 0xff;
         const shared = (object: GameObject) => object != null && !object.getPrivateArea() && !object.getOwner()
             && object.getLocation().getX() >> 6 === regionX && object.getLocation().getY() >> 6 === regionY;
+        const loadRemovals: GameObject[] = [];
+        RegionManager.loadRemovals.set(regionId, loadRemovals);
         for (const removed of World.getRemovedObjects()) {
             if (!shared(removed)) continue;
             const location = removed.getLocation();
@@ -797,11 +801,23 @@ export class RegionManager {
             if (standing?.some((object) => object.getId() === removed.getId()
                 && object.getType() === removed.getType() && object.getFace() === removed.getFace())) {
                 MapObjects.remove(removed);
+                loadRemovals.push(removed);
             }
         }
         for (const object of ObjectManager.objectsInRegion(regionX, regionY)) {
             if (shared(object)) MapObjects.add(object);
         }
+    }
+
+    /**
+     * Whether the latest load of the object's region placed this map object, which a runtime
+     * removal then took out again. Region-loaded hooks run after that replay, so this tells a
+     * load that still has the object apart from one whose map data no longer does.
+     */
+    public static wasRemovedOnLoad(id: number, type: number, face: number, x: number, y: number, z: number): boolean {
+        const removals = RegionManager.loadRemovals.get(RegionManager.regionIdForTile(x, y)) ?? [];
+        return removals.some((object) => object.getId() === id && object.getType() === type && object.getFace() === face
+            && object.getLocation().getX() === x && object.getLocation().getY() === y && object.getLocation().getZ() === z);
     }
 
     public static reloadRegion(regionId: number): boolean {
