@@ -1152,7 +1152,7 @@ test('Quetzals use cache destinations, reject closed or locked map clicks, and f
   h.emit('quetzal:unlock', { player: p });
   const sites = plugin._test.landingSites(), slot = sites.findIndex(site => site.id !== 1 && site.autoUnlocked);
   assert.ok(slot >= 0); const site = sites[slot];
-  const click = chosen => plugin._test.chooseSite({ player: p, groupId: 874, childId: 15, slot: chosen });
+  const click = chosen => plugin._test.chooseSite({ player: p, groupId: 874, childId: 12, slot: chosen });
   click(slot); assert.notEqual(p.blocked, true);
   p.setInterfaceId(874); click(sites.findIndex(site => !site.autoUnlocked)); assert.notEqual(p.blocked, true);
   click(slot); assert.equal(p.blocked, true); click(slot); assert.equal(h.tasks.length, 1);
