@@ -47,9 +47,11 @@ before(() => {
     onCustomEvent: (name, fn) => { const prior = hooks.events[name]; hooks.events[name] = prior ? (e) => { prior(e); fn(e); } : fn; },
     emitCustomEvent: (name, payload) => {
       if (name === 'quest:is-complete') payload.complete = payload.player.quests?.has(payload.key) ?? false;
+      else if (name === 'ironman:mode') payload.mode = payload.player.ironman ? 'ironman' : 'none';
       else hooks.events[name]?.(payload);
     },
     registerArea: (area) => { hooks.enclosure = area; },
+    onInterfaceActionButton: (ids, fn) => { for (const id of [].concat(ids)) (hooks.buttons ??= new Map()).set(id, fn); },
   };
   require('../plugins/minigames/NightmareZone.plugin').register(api);
   Common = require('../plugins/minigames/nightmarezone/Common.NightmareZone');
@@ -75,6 +77,8 @@ function container(capacity = 28) {
     delete(id, amount = 1) { for (const s of slots) { if (s.id !== id || amount <= 0) continue; const n = Math.min(s.amount, amount); s.amount -= n; amount -= n; } },
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
+    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount, getMeta: () => s.meta ?? null } : null)),
+    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null }; },
     refreshItems() {},
   };
 }
@@ -113,6 +117,7 @@ function fakePlayer({ quests = QUESTS().slice(0, 12), coins = 0 } = {}) {
         sendClientScript: (id, ...args) => { p.script = [id, ...args]; return sender; },
         sendInterfaceFlagsRange: () => sender, sendInterfaceRemoval: () => sender, sendSound: () => sender, sendSong: () => sender,
         sendEnterAmountPrompt: (text) => { p.prompt = text; return sender; },
+        sendInventory: (id, capacity, items) => { (p.invs ??= {})[id] = items; return sender; },
       };
       return sender;
     },
@@ -392,6 +397,49 @@ test('Recurrent damage: a hit the dreamer lands brings another of 3/4 of it, a t
   Dream.wake({ player: p });
 });
 
+// ------------------------------------------------------------------ rewards
+
+const button = (name, event) => hooks.buttons.get(core.CacheDefinitions.getComponentId(`nzone_rewards:${name}`))(event);
+
+test('the rewards chest: the recorded opening (invs 464 and 108, the modal, the panes\' ops)', () => {
+  const p = fakePlayer();
+  assert.ok(hooks.objects.get('Rewards chest:Search')({ player: p, object: { getId: () => core.CacheDefinitions.getLocId('nzone_lobby_chest') } }));
+  assert.equal(p.invs[464].find((item) => item.id === 1779).amount, 75, 'flax: 75 points');
+  assert.equal(p.invs[464].find((item) => item.id === 11737).amount, 1000, 'absorption: 1,000 a dose');
+  assert.equal(p.invs[108].find((item) => item.id === 11864).amount, 1250, 'slayer helmet: 1,250,000 / 1000');
+  assert.equal(hooks.objects.get('Rewards chest:Search')({ player: p, object: { getId: () => 1 } }), false, 'only its own chest');
+});
+
+test('Resources: Buy-10 of flax (sub 0) gives noted flax for 750 points; too few points buys nothing', () => {
+  const p = fakePlayer();
+  Common.addPoints(p, 1000);
+  button('resources', { player: p, slot: 0, opId: 3 });
+  assert.equal(p.inventory.getAmount(1780), 10);
+  assert.equal(Common.points(p), 250);
+  button('resources', { player: p, slot: 0, opId: 3 });
+  assert.ok(p.messages.includes(Common.message('notEnoughPoints')));
+  assert.equal(p.inventory.getAmount(1780), 10);
+});
+
+test('Benefits: Buy-5 of absorption (sub 9) puts 5 doses in its barrel for 5,000 points', () => {
+  const p = fakePlayer();
+  Common.addPoints(p, 6000);
+  button('benefits', { player: p, slot: 9, opId: 2 });
+  assert.equal(varbit(p, 'nzone_potion_4'), 5);
+  assert.equal(Common.points(p), 1000);
+});
+
+test('Upgrades: Imbue (sub = 2 x the backpack slot) quotes the price when short, as recorded, and imbues when not', () => {
+  const p = fakePlayer();
+  p.inventory.slots.push({ id: 995, amount: 1 }, { id: 11864, amount: 1 });
+  button('upgrades', { player: p, slot: 2, opId: 1 });
+  assert.ok(p.messages.includes('Slayer helmet: This item costs 1,250,000 points to imbue.'));
+  Common.addPoints(p, 1_300_000);
+  button('upgrades', { player: p, slot: 2, opId: 1 });
+  assert.equal(p.inventory.slots[1].id, 11865, 'the slayer helmet (i)');
+  assert.equal(Common.points(p), 50_000);
+});
+
 test('a logout during the entry fade cancels the dream: the fee back in the coffer, the dream still prepared', () => {
   const p = fakePlayer({ quests: QUESTS() });
   Common.setCoffer(p, 5000);
@@ -417,4 +465,13 @@ test('a logout on the very first tick of the fade keeps the dream prepared too',
   ticks(4);
   assert.deepEqual(Common.preparedDream(p), { mode: 'practice', difficulty: 'normal', boss: 1 });
   assert.equal(Dream.dreams.has(p), false);
+});
+
+test('Upgrades: an imbue keeps what the item carries (a charged ring of suffering, a preset)', () => {
+  const p = fakePlayer();
+  p.inventory.slots.push({ id: 20655, amount: 1, meta: { 'ring-of-suffering': 1000, preset: true } });
+  Common.addPoints(p, 725_000);
+  button('upgrades', { player: p, slot: 0, opId: 1 });
+  assert.equal(p.inventory.slots[0].id, 20657);
+  assert.deepEqual(p.inventory.slots[0].meta, { 'ring-of-suffering': 1000, preset: true });
 });

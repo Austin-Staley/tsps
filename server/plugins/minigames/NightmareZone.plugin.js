@@ -6,7 +6,8 @@
  * - Coffer: Dominic's coffer (deposit, withdraw) and the barrels' Check;
  * - Dream: the enclosure, the vial, the dream's arena, bosses, points and waking up;
  * - Potions: absorption, overload and the super potions in a dream, and the barrels;
- * - PowerUps: the Rumble's power-ups.
+ * - PowerUps: the Rumble's power-ups;
+ * - Rewards: Dom Onion's Reward Shop (the rewards chest).
  */
 const Common = require("./nightmarezone/Common.NightmareZone");
 const Dominic = require("./nightmarezone/Dominic.NightmareZone");
@@ -14,6 +15,7 @@ const Coffer = require("./nightmarezone/Coffer.NightmareZone");
 const Dream = require("./nightmarezone/Dream.NightmareZone");
 const Potions = require("./nightmarezone/Potions.NightmareZone");
 const PowerUps = require("./nightmarezone/PowerUps.NightmareZone");
+const Rewards = require("./nightmarezone/Rewards.NightmareZone");
 
 module.exports = {
   name: "Nightmare Zone",
@@ -25,5 +27,6 @@ module.exports = {
     Dream.attachDream(api);
     Potions.attachPotions(api);
     PowerUps.attachPowerUps(api);
+    Rewards.attachRewards(api);
   },
 };
