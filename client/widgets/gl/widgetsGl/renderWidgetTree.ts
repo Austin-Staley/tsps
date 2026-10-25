@@ -53,6 +53,7 @@ import { scaleLogicalPixels } from "./scaleLogicalPixels";
 import { ps } from "./profilingState";
 import { FONT_VERDANA_11, FONT_VERDANA_13, FONT_VERDANA_15 } from "../../../ui/fonts";
 import type { WorldMapLabelDraw, WorldMapLabelMetrics } from "./worldMapLabels";
+import { hasSpriteOverride } from "../spriteOverrides";
 
 export type { WidgetNode };
 type Widget = WidgetNode;
@@ -3026,7 +3027,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             }
 
             const effectiveSpriteId = isIf3
-                ? typeof w.spriteId === "number" && w.spriteId >= 0
+                ? typeof w.spriteId === "number" && (w.spriteId >= 0 || hasSpriteOverride(w.spriteId))
                     ? w.spriteId | 0
                     : -1
                 : cs1Result
@@ -3058,7 +3059,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             const itemId = typeof w.itemId === "number" ? (w.itemId as number) | 0 : -1;
             const renderItemSprite = isIf3 && itemId >= 0;
 
-            if (!renderItemSprite && effectiveSpriteId >= 0) {
+            if (!renderItemSprite && (effectiveSpriteId >= 0 || hasSpriteOverride(effectiveSpriteId))) {
                 const tex = tc.getWidgetSpriteById(effectiveSpriteId, {
                     borderType,
                     shadowColor: spriteShadow,

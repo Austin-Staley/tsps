@@ -523,6 +523,10 @@ function openGrandExchange({ player }) {
     if (request.message) player.sendMessage(request.message);
     return true;
   }
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "grand-exchange", resume: () => openGrandExchange({ player }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if ([GE, GE_COLLECT].includes(player.getInterfaceId())) player.getPacketSender().sendInterfaceRemoval();
   if (player.busy()) {
     player.sendMessage("Finish what you are doing before opening the Grand Exchange.");

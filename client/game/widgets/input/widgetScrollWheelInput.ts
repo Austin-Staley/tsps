@@ -32,7 +32,10 @@ export function processWidgetScrollWheelInput(
                 blockedByVisibleWidget = true;
             }
 
+            const jsScroll = (w as { jsListeners?: { onScrollWheel?: (event: { mouseY: number }) => void } }).jsListeners
+                ?.onScrollWheel;
             const hasScrollHandler =
+                jsScroll ||
                 w.eventHandlers?.onScroll ||
                 (Array.isArray(w.onScroll) && w.onScroll.length > 0);
             if (!hasScrollHandler) {
@@ -83,7 +86,9 @@ export function processWidgetScrollWheelInput(
                 };
             }
             try {
-                if (w.eventHandlers?.onScroll) {
+                if (jsScroll) {
+                    jsScroll({ mouseY: wheelStep });
+                } else if (w.eventHandlers?.onScroll) {
                     vm.invokeEventHandler(w, "onScroll", scrollCtx);
                 } else if (Array.isArray(w.onScroll) && w.onScroll.length > 0) {
                     deps.executeScriptListener(w, w.onScroll, scrollCtx);
