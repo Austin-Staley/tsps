@@ -2279,11 +2279,20 @@ export function encodePlayJingle(jingleId: number, delay = 0): Buffer {
   return packet(ServerPacket.PLAY_JINGLE, payload, 0);
 }
 
-export function encodePlaySong(trackId: number): Buffer {
+/** MidiSongV2 fades, in client cycles (20 ms). */
+export type SongFades = { fadeOutDelay: number; fadeOutSpeed: number; fadeInDelay: number; fadeInSpeed: number };
+/** What live sends for a region change (RSProx's MidiSongV2 defaults; every region change in the rsprox captures). */
+export const SONG_FADE_DEFAULTS: SongFades = { fadeOutDelay: 0, fadeOutSpeed: 60, fadeInDelay: 60, fadeInSpeed: 0 };
+/** What live sends with the current track right before a jingle. */
+export const SONG_NO_FADES: SongFades = { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 };
+
+export function encodePlaySong(trackId: number, fades: SongFades = SONG_FADE_DEFAULTS): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeUInt16BE(trackId & 0xffff, 0);
-  payload.writeUInt16BE(100, 4);
-  payload.writeUInt16BE(100, 6);
+  payload.writeUInt16BE(fades.fadeOutDelay & 0xffff, 2);
+  payload.writeUInt16BE(fades.fadeOutSpeed & 0xffff, 4);
+  payload.writeUInt16BE(fades.fadeInDelay & 0xffff, 6);
+  payload.writeUInt16BE(fades.fadeInSpeed & 0xffff, 8);
   return packet(ServerPacket.PLAY_SONG, payload, 0);
 }
 
