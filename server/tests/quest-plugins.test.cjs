@@ -15127,7 +15127,12 @@ test('Dragon Slayer II mirrors compact stages to the cache quest milestones in v
   sendQuestVarps({ player });
   assert.equal(varbits.get(6104), 205, 'the slain Galvek scene precedes the final Alec hand-in');
   quest.setStage(player, quest.completionValue);
-  assert.equal(varbits.get(6104), 215, 'completion matches the cache quest DB threshold');
+  const metadata = require('../plugins/quests/QuestList.QuestRuntime').metadata(api.core.CacheDefinitions);
+  const endstate = metadata.get('dragonslayerii').endstate[0];
+  assert.equal(varbits.get(6104), endstate, 'completion matches the actual cache quest DB threshold');
+  varbits.clear();
+  sendQuestVarps({ player });
+  assert.equal(varbits.get(6104), endstate, 'completed native progress is restored at login');
 });
 
 
@@ -21814,10 +21819,12 @@ test('Giant Dwarf owns its Veldaban meeting and repeats; completion releases For
     assert.equal(afterComplete.page, 'Forgettable Tale...', `completed Giant allows FFT start on ${npcId}`);
     assert.equal(afterComplete.wanted, 'starting-out-without-fishing-contest-completed');
 
-    attributes.set('quest.giant_dwarf.stage', 30);
-    assert.deepEqual(firstVariant(npcId), {
-      wanted: 'starting-off-talking-to-veldaban-again-after-agreeing-to-help', page: 'The Giant Dwarf',
-    }, `unfinished Giant Dwarf keeps its canonical repeat conversation on ${npcId}`);
+    for (const stage of [5, 10, 20, 30]) {
+      attributes.set('quest.giant_dwarf.stage', stage);
+      assert.deepEqual(firstVariant(npcId), {
+        wanted: 'starting-off-talking-to-veldaban-again-after-agreeing-to-help', page: 'The Giant Dwarf',
+      }, `Giant Dwarf stage ${stage} keeps its canonical repeat conversation on ${npcId}`);
+    }
 
     attributes.set('quest.forgettable_tale.stage', 11);
     attributes.set('quest.giant_dwarf.stage', 40);
