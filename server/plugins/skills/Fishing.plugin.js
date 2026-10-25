@@ -11,6 +11,7 @@ const Guild = require("./fishing/Guild.Fishing");
 const AnglerOutfit = require("./fishing/AnglerOutfit.Fishing");
 const MinnowPlatform = require("./fishing/MinnowPlatform.Fishing");
 const KarambwanVessel = require("./fishing/Karambwan.Fishing");
+const { pauseForLevelUp } = require("./SkillActions");
 
 // Ticks per resource roll (Wiki: Game tick/Action lengths): rods 5, net, cage and harpoon
 // spots 6, karambwan vessels 4. Spots the table leaves out keep the rods' 5.
@@ -618,6 +619,7 @@ class FishingTask extends Task {
         stopFishing(this.activeSessions, player);
         continue;
       }
+      if (session.levelUpPaused) continue;
 
       const npc = World.getNpcs().get(session.npcIndex);
       if (!npc || npc.getId() !== session.npcId ||
@@ -683,6 +685,10 @@ function isFishingActive(player) {
   return activeSessionsRef?.has(player) === true;
 }
 
+function pauseFishing(event) {
+  pauseForLevelUp(event, activeSessionsRef, (player) => stopFishing(activeSessionsRef, player, false));
+}
+
 module.exports = {
   name: "Fishing",
   register(api) {
@@ -702,9 +708,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopFishing(activeSessions, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopFishing(activeSessions, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseFishing);
 
     // Returning false leaves spots this plugin doesn't fish (aerial...) to others.
     function startFishingInteraction(event) {

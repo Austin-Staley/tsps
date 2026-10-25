@@ -244,7 +244,9 @@ function openCompletedScroll(player, quest, questPoints) {
   packet.sendInterfaceFlagsRange((COMPLETED_GROUP << 16) | COMPLETED_CLOSE_CHILD, -1, -1, 1 << 1);
   setText((COMPLETED_GROUP << 16) | COMPLETED_TITLE_CHILD, "Congratulations!");
   setText((COMPLETED_GROUP << 16) | COMPLETED_NAME_CHILD, `You have completed ${quest.name}!`);
-  const scrollItemId = quest.scrollItemId ?? quest.rewardItemId;
+  const scrollItemId = typeof quest.scrollItemId === "function"
+    ? quest.scrollItemId(player)
+    : quest.scrollItemId ?? quest.rewardItemId;
   if (scrollItemId !== undefined) {
     packet.sendItemOnInterfaces((COMPLETED_GROUP << 16) | COMPLETED_REWARD_ITEM_CHILD, scrollItemId, 1);
   }
@@ -367,7 +369,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   api.onCustomEvent("quest:get-stage", answerGetStage);
   api.onCustomEvent("npc-dialogue:shop", pickQuestShopVersion);
-  // Registered with the first quest, so this runs before every quest's own login hook.
+  // Registered before the quests, so this runs before every quest's own login hook.
   api.onPlayerLogin(holdLoginQuestList);
   api.onCustomEvent("player:bootstrap-complete", sendLoginQuestList);
   api.onPlayerLogout?.(releaseLoginQuestList);
@@ -452,6 +454,7 @@ function sendQuestVarps({ player }) {
  * @param api  the plugin api
  * @param def  { key, name, varpId, varbitId, varbitValue, startedValue, completionValue, questPoints,
  *               xpRewards?, rewardItemId?, rewardItemLabel?, otherRewards?,
+ *               scrollItemId? (item id or function of player),
  *               buildJournal?(player, quest), onReward?(player, quest),
  *               varpValue?(stage, player) }
  */
@@ -634,6 +637,7 @@ module.exports = {
   QUEST_POINTS_VARP,
   QUEST_POINTS_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,
+  registerQuestWidgets,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
   pickQuestShopVersion,

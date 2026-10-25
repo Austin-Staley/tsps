@@ -351,6 +351,7 @@ import { resolveWidgetIdentifiers, inferWidgetOpId } from "./widgets/widgetActio
 import { isPauseButtonWidget } from "../widgets/menu/utils";
 import { RenderDataWorkerPool } from "./worker/RenderDataWorkerPool";
 import { WorldMapController, type WorldMapRenderedIcon } from "./worldMap/WorldMapController";
+import type { WorldMapViewport } from "./worldMap/WorldMapTypes";
 import { WorldViewManager } from "./worldview/WorldViewManager";
 
 const DEVICE_OPTION_INTERFACE_SCALING = 27;
@@ -383,7 +384,7 @@ const KEYBINDING_TABS: ReadonlyArray<{ varbit: number; tab: number }> = [
 const TAB_SWITCH_SCRIPT = 914;
 /** Server-set widget properties held while their cache interface is not loaded. */
 const HELD_WIDGET_ACTIONS: ReadonlySet<string> = new Set([
-    "set_text", "set_hidden", "set_model", "set_colour", "set_position", "set_item",
+    "set_text", "set_hidden", "set_model", "set_angle", "set_colour", "set_position", "set_item",
     "set_npc_head", "set_animation", "set_player_head",
 ]);
 const DEFAULT_ROOT_INTERFACE = 161;
@@ -1317,6 +1318,7 @@ export class OsrsClient {
             getRenderer: () => this.renderer,
             getMinimapImageKey: (mapX, mapY, level) => this.getMinimapImageKey(mapX, mapY, level),
             loadClientScriptIfExists: (scriptId) => this.clientScripts.loadIfExists(scriptId),
+            getPluginMenuEntries: (point) => this.clientPlugins.worldMapMenuEntries(point),
             clearHostRenderCaches: () => {
                 const host = this as any;
                 delete host.__worldMapVisibleTileCache;
@@ -1693,6 +1695,17 @@ export class OsrsClient {
             sendIfClose: () => {
                 const pkt = createPacket(ClientPacketId.IF_CLOSE);
                 queuePacket(pkt);
+            },
+            sendWidgetOp: (widget, opIndex) => {
+                const uid = widget.uid | 0;
+                sendWidgetAction({
+                    widgetId: uid,
+                    groupId: (uid >>> 16) & 0xffff,
+                    childId: uid & 0xffff,
+                    opId: opIndex,
+                    option: (widget as any).actions?.[opIndex - 1] ?? undefined,
+                    slot: typeof widget.childIndex === "number" && widget.childIndex >= 0 ? widget.childIndex : undefined,
+                });
             },
             getWeight: () => {
                 // Return player weight in kg for RUNWEIGHT_VISIBLE opcode
@@ -2740,6 +2753,15 @@ export class OsrsClient {
                     w.itemQuantity = 0;
                     this.widgetManager.invalidateWidgetRender(w, "server-set-model");
                 }
+            } else if (payload?.action === "set_angle") {
+                // IF_SETANGLE: as the cs2 op, the model's x and y angles and zoom.
+                const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
+                if (w) {
+                    w.modelAngleX = w.rotationX = Number(payload.angleX) | 0;
+                    w.modelAngleY = w.rotationY = Number(payload.angleY) | 0;
+                    w.modelZoom = Number(payload.zoom) | 0;
+                    this.widgetManager.invalidateWidgetRender(w, "server-set-angle");
+                }
             } else if (payload?.action === "set_colour") {
                 // IF_SETCOLOUR: as the cs2 op, the colour of text and rectangles alike.
                 const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
@@ -2893,6 +2915,8 @@ export class OsrsClient {
                 if (fromSlot === 65535) fromSlot = -1;
                 if (toSlot === 65535) toSlot = -1;
                 const flags = Number(payload.flags) | 0;
+                // IF_SETEVENTS_V2 adds a transmit mask for ops 1-32.
+                const opMask = payload.opMask === undefined ? undefined : Number(payload.opMask) | 0;
                 if (this.widgetManager) {
                     const parent = this.widgetManager.getWidgetByUid(uid);
                     const children = Array.isArray((parent as any)?.children)
@@ -2901,7 +2925,7 @@ export class OsrsClient {
                     // Set flags for each childIndex in the range [fromSlot, toSlot]
                     // The uid becomes the 'id' component of the key (matches dynamic child's id field)
                     for (let childIndex = fromSlot; childIndex <= toSlot; childIndex++) {
-                        this.widgetManager.setWidgetFlagsByKey(uid, childIndex, flags);
+                        this.widgetManager.setWidgetFlagsByKey(uid, childIndex, flags, opMask);
                         const child = childIndex >= 0 ? children[childIndex] : parent;
                         if (child) {
                             markWidgetInteractionDirty(child);
@@ -3943,6 +3967,10 @@ export class OsrsClient {
         return this.worldMap.getWorldMapMenuEntriesAt(screenX, screenY);
     }
 
+    setWorldMapViewport(viewport: WorldMapViewport | undefined): void {
+        this.worldMap.setWorldMapViewport(viewport);
+    }
+
     getPlayerServerTile(serverId: number): { tileX: number; tileY: number } | undefined {
         return this.playerSyncManager?.getServerTile(serverId);
     }
@@ -4979,13 +5007,13 @@ export class OsrsClient {
             const fallbackSlot = this.inventory?.getSelectedSlot?.() ?? null;
             if (fallbackSlot !== null) {
                 const fallbackEntry = this.inventory.getSlot(fallbackSlot);
-                if (fallbackEntry && fallbackEntry.itemId > 0) {
+                if (fallbackEntry && fallbackEntry.itemId >= 0) {
                     selectedSlot = fallbackSlot | 0;
                     selectedItemId = fallbackEntry.itemId | 0;
                 }
             }
         }
-        if (selectedSlot === null || selectedItemId <= 0) return;
+        if (selectedSlot === null || selectedItemId < 0) return;
 
         const tile = context.tile ?? this.menuTile ?? this.hoveredTile;
         const plane = (() => {
@@ -5090,7 +5118,7 @@ export class OsrsClient {
         if (selected === null) return;
         const src = this.inventory.getSlot(selected);
         const dst = this.inventory.getSlot(targetSlot | 0);
-        if (!src || src.itemId <= 0 || !dst || dst.itemId <= 0) return;
+        if (!src || src.itemId < 0 || !dst || dst.itemId < 0) return;
         if (isServerConnected()) {
             sendInventoryUseOn({
                 slot: selected,
@@ -6816,7 +6844,7 @@ export class OsrsClient {
                 prevSel != null &&
                 prevSel >= 0 &&
                 prevSel < slots.length &&
-                (slots[prevSel]?.itemId ?? -1) > 0
+                (slots[prevSel]?.itemId ?? -1) >= 0
                     ? prevSel
                     : null;
             this.inventory.setSnapshot(slots, { selectedSlot: keepSel });
@@ -7037,11 +7065,11 @@ export class OsrsClient {
         // A worn-equipment slot (387, 84) keeps its ops on a static layer and draws the item in a
         // CC_CREATE child (script 546), so a static widget without an item examines its child's.
         const own = widget?.itemId ?? -1;
-        const itemId = own > 0 || widget?.fileId === -1
+        const itemId = own >= 0 || widget?.fileId === -1
             ? own
             : this.widgetManager?.getDynamicChildrenByParent(widget as any)
-                .find((child) => (child.itemId ?? -1) > 0)?.itemId ?? -1;
-        if (!(itemId > 0)) return false;
+                .find((child) => (child.itemId ?? -1) >= 0)?.itemId ?? -1;
+        if (!(itemId >= 0)) return false;
         try {
             const examine = this.objTypeLoader?.load?.(itemId)?.examine;
             if (typeof examine !== "string" || examine.length === 0 || examine === "null") {
@@ -7919,7 +7947,7 @@ export class OsrsClient {
         const dst = Math.max(0, Math.min(Inventory.SLOT_COUNT - 1, toSlot | 0));
         if (src === dst) return;
         const sourceEntry = this.inventory.getSlot(src);
-        if (!sourceEntry || sourceEntry.itemId <= 0) return;
+        if (!sourceEntry || sourceEntry.itemId < 0) return;
 
         const before = this.inventory.snapshotSignature();
         this.inventory.swapSlots(src, dst);
@@ -7936,7 +7964,7 @@ export class OsrsClient {
         const slot = slotIndex | 0;
         const selected = this.inventory.getSelectedSlot();
         const entry = this.inventory.getSlot(slot);
-        if (!entry || entry.itemId <= 0) {
+        if (!entry || entry.itemId < 0) {
             if (selected !== null) {
                 this.inventory.setSelectedSlot(null);
             }
@@ -7967,7 +7995,7 @@ export class OsrsClient {
     useInventoryItem(slotIndex: number, entry?: InventorySlot, actionHint?: string): void {
         const slot = slotIndex | 0;
         const data = entry ?? this.inventory.getSlot(slot);
-        if (!data || data.itemId <= 0) return;
+        if (!data || data.itemId < 0) return;
 
         try {
             console.log("[inventory] use item", { slot, item: data, actionHint });
@@ -7979,7 +8007,7 @@ export class OsrsClient {
     }
 
     private getPrimaryInventoryAction(itemId: number): string | undefined {
-        if (!(itemId > 0)) return undefined;
+        if (!(itemId >= 0)) return undefined;
         try {
             const obj = this.objTypeLoader?.load?.(itemId);
             const actions: Array<string | null | undefined> = Array.isArray(obj?.inventoryActions)
