@@ -467,6 +467,18 @@ test('vents pay once until the gas shifts; repeated clicks do not stack actions'
   assert.equal(chips, 1, 'one chip a swing, however often clicked');
 });
 
+test('a ladder click queued before a collapse starts neither escapes nor pays', () => {
+  const p = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  game.addPoints(p, 100);
+  click(p, Common.data.locs.exit, 1);
+  game.setStability(0);
+  ticks(1);
+  assert.equal(p.getAttribute(Common.data.attributes.shopPoints), undefined, 'no points paid');
+  assert.equal(game.players.has(p), true, 'still in the mine');
+});
+
 test('no way out with points once the mine is collapsing', () => {
   const p = enter();
   const game = Game.gameOf(p);

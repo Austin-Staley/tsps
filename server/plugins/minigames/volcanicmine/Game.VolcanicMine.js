@@ -174,7 +174,12 @@ class Game {
     const { data } = Common;
     Common.animate(player, "ladder");
     Common.later(1, () => {
-      if (!this.players.has(player)) return;
+      // A collapse, the eruption or a death since the click keeps them in.
+      const still = this.phase === "running" || this.phase === "lobby";
+      if (!this.players.has(player) || this.collapsing || this.ended || !still || (player.getHitpoints?.() ?? 1) <= 0) {
+        this.leaving.delete(player);
+        return;
+      }
       const points = this.points.get(player) ?? 0;
       this.remove(player);
       this.moving = true;
