@@ -137,3 +137,18 @@ test('a regen bracelet doubles each regeneration, with or without Rapid Heal', (
   f.run(101, 201);
   assert.equal(f.level('HITPOINTS'), 56, '2 Hitpoints every 30 seconds with Rapid Heal');
 });
+
+test('the regen bracelet counts while worn when the Hitpoints regen lands', (t) => {
+  const bracelet = (regen) => require('../plugins/combat/effects/RegenBracelet.EquipmentEffects')._test.applyRegenBracelet(regen);
+  const f = fixture(t, { HITPOINTS: 50 }, bracelet);
+  const equipment = f.player.getEquipment();
+  equipment.setItem(Equipment.HANDS_SLOT, new (require('../dist/game/model/Item').Item)(ItemIdentifiers.REGEN_BRACELET, 1));
+  f.run(0, 50);
+  equipment.setItem(Equipment.HANDS_SLOT, new (require('../dist/game/model/Item').Item)(-1)).refreshItems();
+  f.run(51, 100);
+  assert.equal(f.level('HITPOINTS'), 51, 'removed before the regen: 1 Hitpoint');
+  f.run(101, 150);
+  equipment.setItem(Equipment.HANDS_SLOT, new (require('../dist/game/model/Item').Item)(ItemIdentifiers.REGEN_BRACELET, 1)).refreshItems();
+  f.run(151, 200);
+  assert.equal(f.level('HITPOINTS'), 53, 'worn before the regen: 2 Hitpoints');
+});

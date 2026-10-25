@@ -522,7 +522,8 @@ export class Player extends Mobile {
         const current = skills.getCurrentLevel(Skill.HITPOINTS);
         const max = skills.getMaxLevel(Skill.HITPOINTS);
         if (current < max) {
-            // Gear answers once per countdown: { fast } halves it, { amount } is what one regen heals.
+            // Gear answers once per countdown, again after an equipment change: { fast } halves it,
+            // { amount } is what one regen heals.
             if (this.hitpointsRegen === null) {
                 this.hitpointsRegen = { player: this, fast: rapidHeal, amount: 1 };
                 PluginManager.emitCustomEvent("stats:hitpoints-regen", this.hitpointsRegen);
@@ -535,6 +536,11 @@ export class Player extends Mobile {
             skills.decreaseCurrentLevel(Skill.HITPOINTS, 1, max);
         }
         this.restartHitpointsTimer(cycle);
+    }
+
+    /** Worn items changed: the next Hitpoints regen asks gear again, keeping the countdown. */
+    public onEquipmentChanged(): void {
+        this.hitpointsRegen = null;
     }
 
     private restartHitpointsTimer(cycle: number): void {
