@@ -70,7 +70,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
     // The plugin reads its engine classes from api.core; MapObjects/Sounds/CacheDefinitions
     // are the real classes with the static methods patched above.
     core: {
-      CacheDefinitions, GameObject, Location, MapObjects, Sounds,
+      CacheDefinitions, GameObject, Location, MapObjects, RegionManager, Sounds, World,
       ObjectIdentifiers: require('../dist/util/ObjectIdentifiers').ObjectIdentifiers,
       ObjectDefinition: { forPlayer: (id) => ({ id: visibleObjectIds.get(id) ?? id }) },
       Sound: require('../dist/game/Sound').Sound,
@@ -90,7 +90,8 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
     onPlayerProcess: () => {},
   };
   delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
-  require('../plugins/objects/Doors.plugin').register(api);
+  const plugin = require('../plugins/objects/Doors.plugin');
+  plugin.register(api);
   for (const handler of startup) handler();
 
   const place = (id, x, y, face) => {
@@ -124,7 +125,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, handlers, routes, regionLoaded: (regionId) => regionLoaded({ regionId }), visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
+  return { place, click, sounds, ops, submitted, handlers, routes, internals: plugin.__internals, regionLoaded: (regionId) => regionLoaded({ regionId }), visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
 
 test('shared wall-door reach masks cover every operation and preserve other object routing', () => {
@@ -262,6 +263,235 @@ test('base-map double doors keep their records and auto-close scoped to each pri
     assert.ok(!World.getObjects().some((object) => object.getPrivateArea() === areas[1]));
   } finally {
     for (const area of areas) area.destroy();
+    h.restore();
+  }
+});
+
+// --- World-state edge cases: auto-close, runtime records, region reloads ----------------------
+
+const regionOf = (x, y) => ((x >> 6) << 8) | (y >> 6);
+const mapCopies = (id, x, y, z = 0) =>
+  (MapObjects.mapObjects.get(MapObjects.getHash(x, y, z)) ?? []).filter((object) => object.getId() === id).length;
+const clipAt = (x, y, area = null) => RegionManager.getClipping(x, y, 0, area);
+const sharedPlayer = { getPrivateArea: () => null };
+const openWith = (h, player, object, action = 'Open', name = 'Door') => h.handlers.get(name)[action]({
+  player, object, objectId: object.getId(), definition: { id: object.getId() }, location: object.getLocation(),
+});
+
+test('an untouched open double door closes itself after 500 ticks and never duplicates its records', () => {
+  const h = buildHarness();
+  const { OPEN_OBJECT_STATES: states, RUNTIME_DOUBLE_DOOR_RECORDS: records } = h.internals;
+  try {
+    h.place(1727, 3100, 3500, 1);
+    h.place(1728, 3101, 3500, 1);
+    for (let round = 0; round < 3; round++) {
+      assert.deepEqual(h.click(1728, 3101, 3500, 1).slice(2), [
+        ['register', 1571, 3100, 3501, 0], ['register', 1572, 3101, 3501, 2],
+      ]);
+      if (round === 1) {
+        // Closing and opening by hand in between reuses the same two records.
+        h.click(1571, 3100, 3501, 0, 'Close');
+        assert.equal(records.length, 2);
+        h.click(1728, 3101, 3500, 1);
+      }
+      assert.equal(records.length, 2, 'one record per leaf');
+      const task = h.submitted.at(-1);
+      assert.equal(task.getDelay(), 500);
+      task.setRunning(true);
+      for (let tick = 1; tick < 500; tick++) task.tick();
+      assert.deepEqual(h.ops, [], 'still open after 499 ticks');
+      assert.equal(states.size, 1);
+      task.tick();
+      assert.deepEqual(h.ops.splice(0), [
+        ['deregister', 1571, 3100, 3501, 0], ['deregister', 1572, 3101, 3501, 2],
+        ['register', 1727, 3100, 3500, 1], ['register', 1728, 3101, 3500, 1],
+      ], 'the 500th tick swings both leaves shut');
+      assert.ok(task.isStopped());
+      assert.equal(states.size, 0);
+      assert.equal(records.length, 0, 'auto-close leaves no records behind');
+    }
+  } finally {
+    h.restore();
+  }
+});
+
+test('a family leaf with no partner on its left or right keeps no runtime records', () => {
+  const h = buildHarness();
+  try {
+    // 1551/1552 pair by id offset (left = id - 3 a tile south at face 0), so a 1552 to the east is no partner.
+    h.place(1551, 3300, 3500, 0);
+    h.place(1552, 3301, 3500, 0);
+    for (let click = 0; click < 3; click++) {
+      assert.deepEqual(h.click(1551, 3300, 3500, 0), []);
+      assert.equal(h.internals.RUNTIME_DOUBLE_DOOR_RECORDS.length, 0);
+    }
+  } finally {
+    h.restore();
+  }
+});
+
+test('closing a door whose records are already gone leaves other doors\' records alone', () => {
+  const ops = [];
+  let duringDeregister = null;
+  const tuple = (o) => [o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()];
+  const objectManager = {
+    register: (o) => ops.push(['register', ...tuple(o)]),
+    deregister: (o) => {
+      ops.push(['deregister', ...tuple(o)]);
+      const hook = duringDeregister;
+      duringDeregister = null;
+      hook?.();
+    },
+  };
+  const h = buildHarness({ objectManager });
+  const records = h.internals.RUNTIME_DOUBLE_DOOR_RECORDS;
+  const area = new PrivateArea();
+  try {
+    for (const x of [3100, 3200]) {
+      h.place(1727, x, 3500, 1);
+      h.place(1728, x + 1, 3500, 1);
+      h.click(1728, x + 1, 3500, 1, 'Open', 'Gate', 0, area);
+    }
+    const firstAutoClose = h.submitted[0];
+    assert.equal(records.length, 4);
+    // The first gate's auto-close runs (and forgets its records) while its Close swaps the leaves.
+    duringDeregister = () => firstAutoClose.execute();
+    h.click(1571, 3100, 3501, 0, 'Close', 'Gate', 0, area);
+    assert.deepEqual(records.map((record) => record.originalX).sort(), [3200, 3201],
+      'an index of -1 must not splice the other gate\'s records');
+    ops.length = 0;
+    h.click(1571, 3200, 3501, 0, 'Close', 'Gate', 0, area);
+    assert.deepEqual(ops.filter(([op]) => op === 'register'), [
+      ['register', 1727, 3200, 3500, 1], ['register', 1728, 3201, 3500, 1],
+    ], 'the other gate still closes from its own records');
+    assert.equal(records.length, 0);
+  } finally {
+    area.destroy();
+    h.restore();
+  }
+});
+
+test('a shared door stays open with open collision across a region reload, then auto-closes', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const region = regionOf(3226, 3214);
+  const base = MapObjects.get(1535, new Location(3226, 3214, 0), null);
+  const tiles = [[3226, 3214], [3227, 3214], [3227, 3213]];
+  const clips = () => tiles.map(([x, y]) => clipAt(x, y));
+  try {
+    const closedClips = clips();
+    openWith(h, sharedPlayer, base);
+    const openClips = clips();
+    assert.notDeepEqual(openClips, closedClips);
+    for (let reload = 0; reload < 2; reload++) {
+      assert.ok(RegionManager.reloadRegion(region));
+      h.regionLoaded(region);
+      assert.equal(mapCopies(1535, 3226, 3214), 0, 'the reloaded closed door is hidden again');
+      assert.equal(mapCopies(1536, 3227, 3214), 1, 'the open leaf is back exactly once');
+      assert.deepEqual(clips(), openClips, 'collision matches the open door, not the closed one');
+    }
+    assert.ok(World.getObjects().some((object) => object.getId() === 1536), 'players still see it open');
+    h.submitted.at(-1).execute();
+    assert.equal(mapCopies(1535, 3226, 3214), 1);
+    assert.equal(mapCopies(1536, 3227, 3214), 0);
+    assert.deepEqual(clips(), closedClips, 'auto-close restores the closed collision');
+  } finally {
+    h.restore();
+  }
+});
+
+test('a door open across a region boundary is re-applied once as either region loads', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  // No cache door swings across a region edge, so place one on the last column of a region
+  // whose eastern neighbour is not loaded yet.
+  const [x, y] = [2623, 3300];
+  const west = regionOf(x, y);
+  const east = regionOf(x + 1, y);
+  RegionManager.loadMapFiles(x, y, false);
+  assert.ok(RegionManager.getRegionid(west).isLoaded() && !RegionManager.getRegionid(east).isLoaded());
+  RegionManager.addObject(1535, x, y, 0, 0, 2);
+  try {
+    openWith(h, sharedPlayer, MapObjects.get(1535, new Location(x, y, 0), null));
+    assert.equal(mapCopies(1536, x + 1, y), 1, 'the open leaf lands in the unloaded region');
+    RegionManager.loadMapFiles(x + 1, y, false);
+    h.regionLoaded(east);
+    assert.equal(mapCopies(1536, x + 1, y), 1, 'its first load adds no second copy');
+    assert.equal(mapCopies(1535, x, y), 0);
+    const openClip = clipAt(x + 1, y);
+    assert.ok(RegionManager.reloadRegion(east));
+    h.regionLoaded(east);
+    assert.equal(mapCopies(1536, x + 1, y), 1, 'reloading the open leaf\'s region puts it back once');
+    assert.equal(clipAt(x + 1, y), openClip);
+    h.submitted.at(-1).execute();
+    assert.equal(mapCopies(1536, x + 1, y), 0);
+    assert.equal(mapCopies(1535, x, y), 1);
+  } finally {
+    h.restore();
+    RegionManager.reloadRegion(west); // drop the placed door
+  }
+});
+
+test('a region replacement without the door drops its open leaves instead of restoring them', async () => {
+  await initializeMapCollisionOnce();
+  const { MapRegionReplacementManager } = require('../dist/game/collision/MapRegionReplacementManager');
+  const { CacheMaps } = require('../dist/game/cache/CacheMaps');
+  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const region = regionOf(3226, 3214);
+  const at = (object, x, y) => object.getLocation().getX() === x && object.getLocation().getY() === y;
+  const originalReplacement = MapRegionReplacementManager.getReplacementMapData;
+  try {
+    openWith(h, sharedPlayer, MapObjects.get(1535, new Location(3226, 3214, 0), null));
+    assert.ok(World.getRemovedObjects().some((object) => object.getId() === 1535 && at(object, 3226, 3214)));
+    // The replacement keeps the terrain and places no objects at all.
+    MapRegionReplacementManager.getReplacementMapData = (regionId) => regionId === region
+      ? { terrainData: CacheMaps.getRegion(regionId).terrainData, objectData: Uint8Array.of(0) }
+      : originalReplacement.call(MapRegionReplacementManager, regionId);
+    assert.ok(RegionManager.reloadRegion(region));
+    h.regionLoaded(region);
+    assert.equal(h.internals.OPEN_OBJECT_STATES.size, 0, 'the door is forgotten');
+    assert.equal(mapCopies(1536, 3227, 3214), 0, 'no stale open leaf on the new map');
+    assert.ok(!World.getObjects().some((object) => object.getId() === 1536 && at(object, 3227, 3214)),
+      'players no longer see the open leaf');
+    assert.ok(!World.getRemovedObjects().some((object) => object.getId() === 1535 && at(object, 3226, 3214)),
+      'no removal is replayed for a door the map no longer has');
+    h.submitted.at(-1).execute();
+    assert.equal(mapCopies(1535, 3226, 3214), 0, 'the old auto-close cannot bring the removed door back');
+  } finally {
+    MapRegionReplacementManager.getReplacementMapData = originalReplacement;
+    RegionManager.reloadRegion(region);
+    h.restore();
+  }
+});
+
+test('a private-area door keeps its own objects and collision through a shared region reload', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const region = regionOf(3226, 3214);
+  const base = MapObjects.get(1535, new Location(3226, 3214, 0), null);
+  const area = new PrivateArea();
+  const player = { getPrivateArea: () => area };
+  const tuple = (object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()];
+  const tiles = [[3226, 3214], [3227, 3214], [3227, 3213]];
+  try {
+    const sharedClips = tiles.map(([x, y]) => clipAt(x, y));
+    openWith(h, player, base);
+    const areaClips = tiles.map(([x, y]) => clipAt(x, y, area));
+    assert.ok(RegionManager.reloadRegion(region));
+    h.regionLoaded(region);
+    assert.deepEqual(area.getObjects().map(tuple), [[1536, 3227, 3214, 3]], 'the area still holds only its open door');
+    assert.deepEqual(tiles.map(([x, y]) => clipAt(x, y, area)), areaClips, 'the area keeps its open collision');
+    assert.equal(mapCopies(1535, 3226, 3214), 1, 'the shared map keeps one closed door');
+    assert.equal(mapCopies(1536, 3227, 3214), 0, 'the private open leaf never reaches the shared map');
+    assert.deepEqual(tiles.map(([x, y]) => clipAt(x, y)), sharedClips);
+    h.submitted.at(-1).execute();
+    assert.deepEqual(area.getObjects().map(tuple), [[1535, 3226, 3214, 2]]);
+  } finally {
+    area.destroy();
     h.restore();
   }
 });
