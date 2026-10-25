@@ -174,6 +174,15 @@ test("a frozen player still interacts with an NPC in reach, and cannot reach one
     assert.deepEqual(frozen.messages, interacts ? [] : ["I can't reach that!"]);
     assert.equal(queue.points.length, 0);
   }
+
+  // A stun on top of the freeze (a Shove keeps the freeze) still stops Talk-to in reach.
+  frozen.p.getTimers().registers(core.TimerKey.STUN, 5);
+  const npc = new core.NPC(core.NpcIdentifiers.MAN, new core.Location(3240, 3562));
+  let talked = 0;
+  frozen.messages.length = 0;
+  queue.walkToEntity(npc, () => talked++);
+  assert.equal(talked, 0, "a stunned frozen player does not interact");
+  assert.deepEqual(frozen.messages, ["You're stunned!"]);
 });
 
 test("a frozen player's attack on a player out of reach answers 'I can't reach that!' and stops", (t) => {

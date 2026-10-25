@@ -598,7 +598,7 @@ test('ladder click waits for arrival before animating and changes plane one tick
 test('a frozen player climbs a ladder in reach, and gets "I can\'t reach that!" for one further away', (t) => {
   // Wiki (Freeze): freezes do not stop interacting with adjacent ladders or cave entrances.
   // rsprox 2238: a frozen player's clicks on an exit 14 tiles away answer "I can't reach that!".
-  const events = [], messages = [];
+  const events = [], messages = [], timers = new Set([TimerKey.FREEZE]);
   let location = new Location(100, 99, 0);
   const noop = () => {};
   const player = {
@@ -607,7 +607,9 @@ test('a frozen player climbs a ladder in reach, and gets "I can\'t reach that!" 
     getLocation: () => location, setLocation: (value) => { location = value; },
     getPrivateArea: () => null, getHitpoints: () => 10, isNeedsPlacement: () => false,
     getForceMovement: () => null,
-    getTimers: () => ({ has: (key) => key === TimerKey.FREEZE }), getFollowing: () => null,
+    getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
+    getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
+    getTimers: () => ({ has: (key) => timers.has(key) }), getFollowing: () => null,
     getCombat: () => ({ setCastSpell: noop, reset: noop }),
     getSkillManager: () => ({ stopSkillable: noop }),
     setFollowing: noop, setCombatFollowing: noop, setPositionToFace: noop,
@@ -657,6 +659,17 @@ test('a frozen player climbs a ladder in reach, and gets "I can\'t reach that!" 
   assert.deepEqual(events, []);
   assert.equal(location.y, 96);
   assert.equal(queue.points.length, 0, 'nothing is queued to walk once the freeze ends');
+
+  // A stun on top of the freeze still stops the climb, even in reach.
+  events.length = 0;
+  messages.length = 0;
+  timers.add(TimerKey.STUN);
+  location = new Location(100, 99, 0);
+  queue.walkToObject(new GameObject(132, new Location(100, 100, 0), 10, 0, null), { execute: climb });
+  for (let n = 0; n < 4; n++) tick();
+  assert.deepEqual(messages, ["You're stunned!"]);
+  assert.deepEqual(events, []);
+  assert.equal(location.z, 0, 'a stunned frozen player does not climb');
 });
 
 test('an inventory item action cancels the queued object op but keeps the walk', (t) => {

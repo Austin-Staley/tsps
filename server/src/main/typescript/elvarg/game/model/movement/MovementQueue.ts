@@ -299,7 +299,11 @@ export class MovementQueue {
         if (this.character.getTimers().has(TimerKey.FREEZE)) {
             return Mobility.FROZEN_SPELL;
         }
+        return this.getMobilityIgnoringFreeze();
+    }
 
+    /** Every lock besides a freeze: a stun, a pending placement, a busy trade or duel still stops a frozen player's interactions. */
+    private getMobilityIgnoringFreeze(): Mobility {
         if (this.character.getTimers().has(TimerKey.STUN)) {
             return Mobility.STUNNED;
         }
@@ -1249,10 +1253,12 @@ export class MovementQueue {
         allowOverlappingTiles = false
     ) {
         let mobility = this.getMobility();
-        // Frozen players still interact with what they reach from their tile (see below).
+        // Frozen players still interact with what they reach from their tile (see below),
+        // unless another lock (a stun) holds them too.
         const frozen = mobility === Mobility.FROZEN_SPELL;
-        if (!mobility.canMove() && !frozen) {
-            mobility.sendMessage(this.player);
+        const blocking = frozen ? this.getMobilityIgnoringFreeze() : mobility;
+        if (!blocking.canMove()) {
+            blocking.sendMessage(this.player);
             this.reset();
             return;
         }
@@ -1461,13 +1467,15 @@ export class MovementQueue {
         const routeSpec = this.buildObjectRouteSpec(object, routeEvent.blockAccessFlags);
         // A frozen player still operates what they reach from where they stand (a ladder, a
         // cave entrance: Wiki, Freeze); anything further is "I can't reach that!" as live.
+        // Another lock (a stun) still stops a frozen player.
         let mobility = this.getMobility();
-        const frozenInReach = mobility === Mobility.FROZEN_SPELL && this.reachesObject(object, routeSpec);
-        if (!mobility.canMove() && !frozenInReach) {
-            if (mobility === Mobility.FROZEN_SPELL) {
+        const frozen = mobility === Mobility.FROZEN_SPELL;
+        const blocking = frozen ? this.getMobilityIgnoringFreeze() : mobility;
+        if (!blocking.canMove() || (frozen && !this.reachesObject(object, routeSpec))) {
+            if (blocking.canMove()) {
                 this.player.sendMessage("I can't reach that!");
             } else {
-                mobility.sendMessage(this.player);
+                blocking.sendMessage(this.player);
             }
             this.reset();
             return;
@@ -1499,7 +1507,7 @@ export class MovementQueue {
             routeSpec.routeBlockingMask
         );
 
-        if (!frozenInReach) {
+        if (!frozen) {
             queueObjectRoute();
         }
 
