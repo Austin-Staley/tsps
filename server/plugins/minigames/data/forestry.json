@@ -71,6 +71,62 @@
     "cutChance": "willow"
   },
 
+  "pheasant": {
+    "_recorded": "rsprox 227/00083 t19147-19347, 01855 t7421-7621, 237/01104: the Freaky Forester, three pheasants and four nests (nest01 49936 / nest02 49937, each flipping every 8 or 12 ticks), Retrieve-egg on a nest with the pickup seq, one egg at a time, half the time a feather too, the attack and stun, the hand-in, 'These pheasants will be finding new nesting grounds soon.' at 181 ticks, all gone at 200. Wiki: 8-9 bark an egg (9 at 9/10), Woodcutting 1.0-1.2 x level and Thieving 0.5 x level an egg. Inferred: nest01 is the occupied form; clicking it, or the nest a pheasant is flying to, brings the attack.",
+    "npcs": { "forester": 12536, "pheasant": 12537 },
+    "nests": { "occupied": 49936, "empty": 49937 },
+    "items": { "egg": 28661, "feathers": 28624 },
+    "seqs": { "launch": 10620, "land": 10621, "pickup": 827, "block": 397 },
+    "graphics": { "land": 2581, "stun": 245, "spawn": 2572 },
+    "range": 3,
+    "flightTicks": 2,
+    "cycle": [8, 12],
+    "featherChance": 0.5,
+    "stunTicks": 5,
+    "lifeTicks": 200,
+    "warnAt": 181,
+    "bark": [[0.9, 9], [1, 8]],
+    "xp": { "woodcutting": [1.0, 1.2], "thieving": 0.5 }
+  },
+
+  "poachers": {
+    "_recorded": "rsprox 227/01855 (six runs), 00083: the fox and three poachers, a trap within two tiles of the fox every 12-14 ticks, living 13-15 ticks, the disarm (9 ticks), the spring (the fox's defend seq, a 34 hitsplat), the end at 200 ticks with the poachers' lines and the gift. Wiki: up to 15 traps, a sprung trap takes 33-34 of the fox's 100 HP, 11 bark a trap, Woodcutting 1.5 x level and Hunter 0.5 x level a trap, 160 bark and 400 + 14.45 x level Woodcutting XP at the end, and the failure line.",
+    "npcs": { "fox": 12559, "poachers": [12553, 12554, 12555], "trap": 12541 },
+    "seqs": { "spawn": 10535, "arm": 10554, "disarm": 10551, "disarmEnd": 10552, "trapDisarmed": 10557, "trapSprung": 10556, "foxDefend": 6569, "leave": 10536 },
+    "graphics": { "spawn": 2571, "leave": 2369 },
+    "range": 3,
+    "trapRange": 2,
+    "trapEvery": [12, 14],
+    "trapLife": [13, 15],
+    "maxTraps": 15,
+    "disarmTicks": 9,
+    "foxHp": 100,
+    "springDamage": [33, 34],
+    "hitsplat": 17,
+    "lifeTicks": 200,
+    "trapBark": 11,
+    "lump": 160,
+    "xp": { "woodcutting": 1.5, "hunter": 0.5, "bonusBase": 400, "bonusPerLevel": 14.45 },
+    "chatter": ["This'll get that mangy fox!", "Come here little fox!", "I'll just pop this here..."],
+    "annoyed": ["Oi, leave those traps alone!", "Hey, don't touch that!", "Hey, you're not a fox!"]
+  },
+
+  "ritual": {
+    "_recorded": "rsprox 227/01850 t6292-6535 (8 of 8 steps), 01855, 01723 (4 steps): the Dryad, five ritual circles within 3 tiles a step, the odd one (its colour and its shape both unique among the five) to stand on, a step every 30 ticks scored at 27, the end after eight. Wiki: 20-21 bark a step, 2 x level + 60 XP a step, 2 x steps x level + 55 at the end; recorded lumps 143/144 for 8 steps and 72 for 4 (about 18 a step).",
+    "npc": 12519,
+    "circles": [[12520, 12521, 12522, 12523], [12524, 12525, 12526, 12527], [12528, 12529, 12530, 12531], [12532, 12533, 12534, 12535]],
+    "seqs": { "circleGone": 10546, "leave": 10543 },
+    "graphics": { "spawn": 2572, "leave": 2573 },
+    "range": 3,
+    "steps": 8,
+    "stepTicks": 30,
+    "scoreAt": 27,
+    "leaveTicks": 3,
+    "stepBark": [20, 21],
+    "lumpPerStep": 17.9,
+    "xp": { "perLevel": 2, "plus": 60, "bonusPlus": 55 }
+  },
+
   "messages": {
     "bark": "You've been awarded <col=3366ff>{amount} Anima-infused bark</col>.",
     "ineligible": "<col=ff3045>As you weren't chopping near the event when it started, you aren't eligible for full rewards.</col>",
@@ -90,6 +146,25 @@
     "withered": "<col=ff3045>The sapling withers due to lack of nutrients.</col>",
     "noMulch": "You need some mulch to add to the sapling.",
     "swingRoots": "You swing your axe at the roots.",
-    "noAxe": "You don't have an axe which you can use."
+    "noAxe": "You don't have an axe which you can use.",
+    "forester": ["Hello, what's going on?", "Hey, {name}, can you help me with some pheasants?", "Sure, how can I help?", "Sorry, I'm busy.", "Collect the eggs from the uninhabited nests and bring them to me, and I'll reward you."],
+    "egg": "You collect a pheasant egg.",
+    "eggFeather": "You collect a pheasant egg and find a feather too.",
+    "oneEgg": "You should hand in the egg you have before collecting another.",
+    "attackedEggs": "The nest's inhabitant attacks you, causing you to drop all your pheasant eggs.",
+    "attacked": "The nest's inhabitant attacks you.",
+    "stunned": "You've been stunned!",
+    "handIn": "I have an egg for you.",
+    "pheasantsLeaving": "These pheasants will be finding new nesting grounds soon.",
+    "startDisarm": "You start disarming the trap...",
+    "disarmed": "You successfully disarm the trap.",
+    "foxSaved": "<col=3366ff>Well done, you've saved the fox from the poachers! The fox has left you a gift...</col>",
+    "foxSavedNoGift": "Well done, you've saved the fox from the poachers!",
+    "foxLost": "<col=ff3045>Unfortunately you weren't able to save the fox from the poachers...</col>",
+    "poacherLeaving": "We'll get you next time, fox!",
+    "poachersLeaving": "Let's get out of here!",
+    "dryad": ["Hello, what's going on?", "Greetings, I am trying to rejuvenate the forests with a ritual. Would you like to help?", "No, I'm not interested.", "Sure, How can I help?", "If you could help block the odd ritual circles by standing on them, I will be able to power up the ritual."],
+    "ritualAll": "You all completed every ritual step, amazing!",
+    "ritualDone": "<col=3366ff>Well done, you completed {steps} steps of the ritual! The Dryad has left you a gift...</col>"
   }
 }
