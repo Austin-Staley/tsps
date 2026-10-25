@@ -1,12 +1,49 @@
 // TODO: ported from xrsps-typescript; untested.
 module.exports = function registerBurningClawsSpecialAttack(api) {
-  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod } = api.core;
+  const { Animation, CombatSpecial, Graphic, HitDamage, HitMask, ItemIdentifiers, MeleeCombatMethod, Task, TaskManager } = api.core;
 
-  const DRAIN = 30;
+  const DRAIN = 35;
   const SPECIAL_ANIMATION = new Animation(11140);
   const SPECIAL_VFX = new Graphic(2814);
   const SLASH_DEFENCE_BONUS_INDEX = 1;
   const ACCURACY_ROLLS = 3;
+  // Wiki (Burning claws): a burn deals 10 damage over 40 ticks, up to five at once. Each hitsplat
+  // burns with the chance of the accuracy roll that landed (1st, 2nd, 3rd); a full miss never burns.
+  const BURN_TOTAL_DAMAGE = 10;
+  const BURN_TICK_INTERVAL = 4;
+  const MAX_ACTIVE_BURNS = 5;
+  const BURN_CHANCE_BY_ROLL = [0.15, 0.3, 0.45];
+  const activeBurns = new WeakMap();
+
+  function applyBurn(target) {
+    const active = activeBurns.get(target) ?? 0;
+    if (active >= MAX_ACTIVE_BURNS) {
+      return;
+    }
+    activeBurns.set(target, active + 1);
+    const finish = () => activeBurns.set(target, Math.max(0, (activeBurns.get(target) ?? 1) - 1));
+    TaskManager.submit(new (class extends Task {
+      remaining = BURN_TOTAL_DAMAGE;
+
+      constructor() {
+        super(BURN_TICK_INTERVAL);
+      }
+
+      execute() {
+        if (!target.isRegistered() || target.getHitpoints() <= 0) {
+          finish();
+          this.stop();
+          return;
+        }
+        target.getCombat().getHitQueue().addPendingDamage([new HitDamage(1, HitMask.RED)]);
+        this.remaining--;
+        if (this.remaining <= 0) {
+          finish();
+          this.stop();
+        }
+      }
+    })());
+  }
 
   class BurningClawsCombatMethod extends MeleeCombatMethod {
     start(character, target) {
@@ -16,9 +53,17 @@ module.exports = function registerBurningClawsSpecialAttack(api) {
       character.performGraphic(SPECIAL_VFX);
     }
 
-    // TODO: the burn proc needs the first-successful-accuracy-roll index and a
-    // shared delayed-damage burn scheduler, neither of which is exposed to
-    // plugins yet; the trait ranges are registered for when core consumes them.
+    handleAfterHitEffects(hit) {
+      const chance = BURN_CHANCE_BY_ROLL[hit.getFirstSuccessfulRangeIndex()];
+      if (!chance) {
+        return;
+      }
+      for (let i = 0; i < hit.getHits().length; i++) {
+        if (Math.random() < chance) {
+          applyBurn(hit.getTarget());
+        }
+      }
+    }
   }
 
   api.registerCombatSpecial({

@@ -125,6 +125,7 @@ test("each melee special costs the wiki energy and carries its roll traits", () 
     dragon_claws: 50, // Slice and Dice
     shove: 25,
     dragon_halberd: 30, // Sweep
+    burning_claws: 35, // Burning barrage (raised from 30% on 22 July 2026)
   };
   for (const [id, drain] of Object.entries(expected)) {
     assert.equal(special(id).getDrainAmount(), drain, `${id} energy`);
@@ -274,8 +275,8 @@ test("dragon claws distribute the first landing roll into the 4-2-1-1 chains", (
 });
 
 /** Runs PendingHit's claws branch with scripted accuracy rolls and a fixed base damage. */
-function resolveClaws(rolls, baseDamage, random = 0.5) {
-  const traits = special("dragon_claws").getTraits();
+function resolveClaws(rolls, baseDamage, random = 0.5, id = "dragon_claws") {
+  const traits = special(id).getTraits();
   const realAccuracy = AccuracyFormulasDpsCalc.rollAccuracy;
   const realDamage = CombatFactory.getHitDamage;
   const realRandom = Math.random;
@@ -290,7 +291,7 @@ function resolveClaws(rolls, baseDamage, random = 0.5) {
     hit.combatType = CombatType.MELEE;
     hit.method = { accuracyDefenceType: () => undefined };
     const hits = hit.resolveFirstSuccessfulRanges(traits, (damage) => damage);
-    return { hits: hits.map((h) => h.getDamage()), attempts, accurate: hit.accurate };
+    return { hits: hits.map((h) => h.getDamage()), attempts, accurate: hit.accurate, hit };
   } finally {
     AccuracyFormulasDpsCalc.rollAccuracy = realAccuracy;
     CombatFactory.getHitDamage = realDamage;
@@ -323,6 +324,105 @@ test("four missed dragon claws rolls deal 0 or a 2-damage split, never anything 
     assert.ok(result.hits.reduce((a, b) => a + b, 0) <= 2);
   }
   assert.deepEqual([...outcomes].sort(), ["0-0-0-0", "0-0-1-1", "0-1-0-1", "1-0-1-0", "1-1-0-0"]);
+});
+
+// --- Burning barrage: three hitsplats from the first landing roll, then burns ------------------
+
+test("burning claws split the first landing roll over three hitsplats and name the roll", () => {
+  // Wiki (Burning claws), max hit 39: a first-roll 29 splits 7-7-14.
+  const first = resolveClaws([true], 29, 0.5, "burning_claws");
+  assert.deepEqual(first.hits, [7, 7, 14]);
+  assert.equal(first.hit.getFirstSuccessfulRangeIndex(), 0);
+
+  const second = resolveClaws([false, true], 20, 0.5, "burning_claws");
+  assert.deepEqual(second.hits, [9, 9, 2]);
+  assert.equal(second.hit.getFirstSuccessfulRangeIndex(), 1);
+
+  const third = resolveClaws([false, false, true], 20, 0.5, "burning_claws");
+  assert.deepEqual(third.hits, [1, 1, 18]);
+  assert.equal(third.hit.getFirstSuccessfulRangeIndex(), 2);
+  assert.equal(third.attempts.length, 3, "three accuracy rolls at most");
+
+  const missed = resolveClaws([], 0, 0.5, "burning_claws");
+  assert.equal(missed.hit.getFirstSuccessfulRangeIndex(), -1, "a full miss is not a landing roll");
+  assert.ok(missed.hits.reduce((a, b) => a + b, 0) <= 2);
+});
+
+/** A burn victim whose queued burn damage is counted, with Math.random scripted per hitsplat. */
+function burnVictim() {
+  // Earlier tests leave Shove tasks aimed at fakes; they would abort every TaskManager.process().
+  TaskManager.activeTasks.length = 0;
+  while (TaskManager.pendingTasks.shift()) { /* drop */ }
+  const queued = [];
+  return {
+    queued,
+    isRegistered: () => true,
+    getHitpoints: () => 100,
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => queued.push(...hits) }) }),
+  };
+}
+
+function burn(index, randoms, victim) {
+  const method = special("burning_claws").getCombatMethod();
+  const hit = { getFirstSuccessfulRangeIndex: () => index, getHits: () => [0, 0, 0], getTarget: () => victim };
+  const realRandom = Math.random;
+  let call = 0;
+  Math.random = () => randoms[call++ % randoms.length];
+  try {
+    method.handleAfterHitEffects(hit);
+  } finally {
+    Math.random = realRandom;
+  }
+}
+
+function runTicks(count) {
+  for (let i = 0; i < count; i++) TaskManager.process();
+}
+
+test("each burning claws hitsplat burns with the chance of the roll that landed, and a burn is 10 damage over 40 ticks", () => {
+  const cases = [
+    [0, 0.149, 0.15], // 15% on the first roll
+    [1, 0.299, 0.3], // 30% on the second
+    [2, 0.449, 0.45], // 45% on the third
+  ];
+  for (const [index, below, atChance] of cases) {
+    const victim = burnVictim();
+    burn(index, [below, atChance, atChance], victim);
+    runTicks(45);
+    assert.equal(victim.queued.length, 10, `roll ${index + 1}: one burn is ten 1-damage ticks`);
+    assert.ok(victim.queued.every((hitsplat) => hitsplat.getDamage() === 1));
+  }
+});
+
+test("a burn ticks every 4 ticks and a full miss never burns", () => {
+  const victim = burnVictim();
+  burn(0, [0], victim);
+  runTicks(3);
+  assert.equal(victim.queued.length, 0, "nothing in the first 3 ticks");
+  runTicks(1);
+  assert.equal(victim.queued.length, 3, "the three burns each deal 1 on tick 4");
+  runTicks(45);
+  assert.equal(victim.queued.length, 30);
+
+  const missed = burnVictim();
+  burn(-1, [0], missed);
+  burn(undefined, [0], missed);
+  runTicks(45);
+  assert.equal(missed.queued.length, 0);
+});
+
+test("burns stack up to five at once and a finished burn frees its slot", () => {
+  const victim = burnVictim();
+  burn(2, [0], victim); // three burns
+  burn(2, [0], victim); // three more: only two fit
+  runTicks(4);
+  assert.equal(victim.queued.length, 5, "five burns tick, not six");
+  runTicks(45);
+  assert.equal(victim.queued.length, 50);
+  burn(2, [0], victim);
+  runTicks(4);
+  assert.equal(victim.queued.length, 53, "all three new burns start once the old ones ended");
+  runTicks(45);
 });
 
 // --- Saradomin's lightning -----------------------------------------------------------------
