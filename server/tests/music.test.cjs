@@ -8,6 +8,7 @@ const { PlayerSession } = require('../dist/net/PlayerSession');
 const { PacketSender } = require('../dist/net/packet/PacketSender');
 const { Location } = require('../dist/game/model/Location');
 const Progress = require('../plugins/world/Progress.Music');
+const QuestUnlocks = require('../plugins/world/QuestUnlocks.Music');
 const MusicPlugin = require('../plugins/world/Music.plugin');
 
 const handlers = new Map();
@@ -17,6 +18,10 @@ let diaryAnswer;
 let catalog;
 let trackNames;
 let setupPromise;
+// Stands in for QuestRuntime's quest:is-complete: answers only for registered names, as it does.
+const registeredQuests = new Set(['Dragon Slayer II', 'While Guthix Sleeps', 'Observatory Quest', 'Monkey Madness I', 'Monkey Madness II']
+  .map(QuestUnlocks.normaliseQuestName));
+let completedQuests = new Set();
 const api = new Proxy({
   core: PluginManager.getCoreApi(),
   persistAttribute() {},
@@ -30,6 +35,11 @@ const api = new Proxy({
     }
     if (name === 'diary:all-complete') {
       if (diaryAnswer !== undefined) request.complete = diaryAnswer;
+      return;
+    }
+    if (name === 'quest:is-complete') {
+      const quest = QuestUnlocks.normaliseQuestName(request.name);
+      if (request.name !== undefined && registeredQuests.has(quest)) request.complete = completedQuests.has(quest);
       return;
     }
     for (const handler of handlers.get(name) ?? []) handler(request);
@@ -452,4 +462,126 @@ test('the next-tick restart is dropped when the track, mode or volume changed in
   } finally {
     api.core.TaskManager.submit = submit;
   }
+});
+
+function tracksNamed(name) {
+  return Object.keys(trackNames).map(Number).filter((id) => trackNames[id] === name);
+}
+
+function questHintTracks(questName) {
+  return QuestUnlocks.entriesForQuest(catalog.questUnlocks.entries, questName)
+    .filter(({ requires }) => (requires.all ?? requires.any).length === 1)
+    .map(({ trackId }) => catalog.canonicalTrackBySlot[catalog.slotByTrackId[trackId].key]);
+}
+
+test('quest unlock hints parse into the quests they need', () => {
+  assert.deepEqual(QuestUnlocks.parseQuestHint('during the Dragon Slayer II quest.'), { all: ['Dragon Slayer II'] });
+  assert.deepEqual(QuestUnlocks.parseQuestHint("during the General's Shadow miniquest."), { all: ["General's Shadow"] });
+  assert.deepEqual(QuestUnlocks.parseQuestHint('after completing the While Guthix Sleeps and Dragon Slayer II quests.'),
+    { all: ['While Guthix Sleeps', 'Dragon Slayer II'] });
+  assert.deepEqual(QuestUnlocks.parseQuestHint('during The Heart of Darkness or Perilous Moons quest.'),
+    { any: ['Heart of Darkness', 'Perilous Moons'] });
+  assert.equal(QuestUnlocks.parseQuestHint('in Varrock.'), undefined);
+  assert.equal(QuestUnlocks.parseQuestHint('while fighting the Alchemical Hydra.'), undefined);
+  assert.equal(QuestUnlocks.parseQuestHint('during a Christmas event.'), undefined);
+  // A hint's name may be the registered one, "<name> Quest" or the first of a numbered pair.
+  assert.equal(QuestUnlocks.hintNamesQuest('Observatory', 'Observatory Quest'), true);
+  assert.equal(QuestUnlocks.hintNamesQuest('Monkey Madness', 'Monkey Madness I'), true);
+  assert.equal(QuestUnlocks.hintNamesQuest('Monkey Madness', 'Monkey Madness II'), false);
+  assert.equal(QuestUnlocks.hintNamesQuest('Another Slice of H.A.M', 'Another Slice of H.A.M.'), true);
+  assert.equal(QuestUnlocks.hintNamesQuest('Blood Moon Rises', 'The Blood Moon Rises'), true);
+});
+
+test('completing a quest unlocks the tracks whose cache hint names it, with the live message, once', async () => {
+  await setup();
+  completedQuests = new Set([QuestUnlocks.normaliseQuestName('Dragon Slayer II')]);
+  const expected = [...new Set(questHintTracks('Dragon Slayer II'))].sort((a, b) => a - b);
+  for (const name of ['Oncoming Foe', 'The Dragon Slayer', 'Lucid Dream']) {
+    assert.ok(tracksNamed(name).some((id) => expected.includes(id)), `${name} is hinted by Dragon Slayer II`);
+  }
+  const player = makePlayer();
+  const completed = { player, key: 'dragon_slayer_ii', quest: { key: 'dragon_slayer_ii', name: 'Dragon Slayer II' } };
+  handlers.get('quest:completed')[0](completed);
+  assert.deepEqual(player.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE), expected);
+  assert.equal(player.messages.length, expected.length);
+  assert.ok(player.messages.includes('You have unlocked a new music track: <col=e00a19>Oncoming Foe'));
+  handlers.get('quest:completed')[0](completed);
+  assert.equal(player.messages.length, expected.length, 'an unlocked track is not announced again');
+  completedQuests = new Set();
+});
+
+test('a hint that needs two quests waits for both, and an unknown quest never counts as complete', async () => {
+  await setup();
+  const [THE_KIN] = tracksNamed('The Kin');
+  const kin = catalog.questUnlocks.entries.find(({ trackId }) => trackId === THE_KIN);
+  assert.deepEqual(kin.requires, { all: ['While Guthix Sleeps', 'Dragon Slayer II'] });
+  completedQuests = new Set([QuestUnlocks.normaliseQuestName('While Guthix Sleeps')]);
+  const player = makePlayer();
+  MusicPlugin._test.onQuestCompleted({ player, quest: { name: 'While Guthix Sleeps' } });
+  const unlocked = () => player.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE);
+  assert.ok(unlocked().includes(tracksNamed('Temple Desecrated')[0]), 'its own tracks unlock');
+  assert.ok(!unlocked().includes(THE_KIN), 'The Kin waits for Dragon Slayer II');
+  completedQuests.add(QuestUnlocks.normaliseQuestName('Dragon Slayer II'));
+  MusicPlugin._test.onQuestCompleted({ player, quest: { name: 'Dragon Slayer II' } });
+  assert.ok(unlocked().includes(THE_KIN));
+
+  // "or": either quest. Neither is registered here, so only the quest that just completed counts.
+  const [LOST_TO_TIME] = tracksNamed('Lost to Time');
+  const lost = catalog.questUnlocks.entries.find(({ trackId }) => trackId === LOST_TO_TIME);
+  assert.deepEqual(lost.requires, { any: ['Heart of Darkness', 'Perilous Moons'] });
+  const other = makePlayer();
+  assert.equal(MusicPlugin._test.questComplete(other, 'Perilous Moons'), undefined);
+  MusicPlugin._test.unlockQuestTracks(other, 'Perilous Moons');
+  assert.ok(other.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE).includes(LOST_TO_TIME));
+  completedQuests = new Set();
+});
+
+test('a hinted name reaches the quest it is an alias of, and only that one', async () => {
+  await setup();
+  completedQuests = new Set(['observatory quest', 'monkey madness ii']);
+  const player = makePlayer();
+  MusicPlugin._test.onQuestCompleted({ player, quest: { name: 'Observatory Quest' } });
+  assert.deepEqual(player.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE), tracksNamed('Look to the Stars'));
+  MusicPlugin._test.onQuestCompleted({ player, quest: { name: 'Monkey Madness II' } });
+  const unlocked = player.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE);
+  assert.ok(unlocked.includes(tracksNamed('Monkey Badness')[0]), 'Monkey Madness II unlocks its own tracks');
+  assert.ok(!unlocked.includes(tracksNamed('Showdown')[0]), '"Monkey Madness" hints mean the first quest, not the second');
+  completedQuests = new Set();
+});
+
+test('login unlocks what completed quests should have, without announcing it', async () => {
+  await setup();
+  completedQuests = new Set([QuestUnlocks.normaliseQuestName('Dragon Slayer II')]);
+  const expected = [...new Set(questHintTracks('Dragon Slayer II'))].sort((a, b) => a - b);
+  const player = makePlayer();
+  loginHandlers[0]({ player });
+  assert.deepEqual(player.attrs.get(Progress.UNLOCKED_TRACKS_ATTRIBUTE).filter((id) => expected.includes(id)), expected);
+  assert.deepEqual(player.messages, []);
+  const slot = catalog.slotByTrackId[expected[0]];
+  const sent = player.configs.find(([id]) => id === slot.varp);
+  assert.ok(sent && (sent[1] & (1 << slot.bit)) !== 0, 'the restored varps carry the quest track');
+  completedQuests = new Set();
+});
+
+test('every quest a cache hint names is a registered quest, or a known missing one', async () => {
+  await setup();
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const dir = path.join(__dirname, '..', 'plugins', 'quests', 'quests');
+  const registered = new Set();
+  for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.Quest.js'))) {
+    const source = fs.readFileSync(path.join(dir, file), 'utf8');
+    // registerQuest(api, { key, name, ... }) opens the def literal; its name is the first one in it.
+    for (const match of source.matchAll(/registerQuest\(\w+,\s*\{[^]*?\bname:\s*"([^"]+)"/g)) registered.add(match[1]);
+  }
+  assert.ok(registered.size > 100, `found ${registered.size} quest definitions`);
+  // Quests the server has not got yet; their tracks stay locked until it does.
+  const knownMissing = ['A Night at the Theatre', 'Blood Moon Rises', 'Digsite', 'Garden of Death', "General's Shadow",
+    'Lair of Tarn Razorlor', 'Song of the Elves', 'While Guthix Sleeps'];
+  const unmatched = catalog.questUnlocks.questNames
+    .filter((hint) => ![...registered].some((name) => QuestUnlocks.hintNamesQuest(hint, name)));
+  assert.deepEqual(unmatched.filter((name) => !knownMissing.includes(name)), [],
+    'a hint names a quest no definition is registered under: add an alias or the quest');
+  const nowPresent = knownMissing.filter((name) => !unmatched.includes(name));
+  if (nowPresent.length) console.log(`[music] quests once missing are now registered: ${nowPresent.join(', ')}`);
 });
