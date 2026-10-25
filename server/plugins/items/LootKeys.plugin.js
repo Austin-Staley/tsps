@@ -372,12 +372,21 @@ function openChestKey(player, slot, key) {
 
 function useKeyOnChest(event) {
   if (!LootKeys.isLootKey(event.item)) return false;
+  const { player } = event;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "loot-chest", resume: () => useKeyOnChest(event) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (LootKeys.chestItems(event.player).length) openChest(event.player);
   else openChestKey(event.player, event.itemSlot, event.item);
   return true;
 }
 
 function openKeySelection(api, player) {
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "loot-chest", resume: () => openKeySelection(api, player) };
+  api.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (LootKeys.chestItems(player).length) return openChest(player);
   const keys = inventoryKeys(player);
   if (!keys.length) {

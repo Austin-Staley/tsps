@@ -530,6 +530,7 @@ function registerPotion(definition) {
 
 // https://oldschool.runescape.wiki/w/Free-to-play_Ironman_guide#Boosts
 registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_GLASS,
+  drink: { messages: () => ["You drink the beer. You feel slightly reinvigorated...", "...and slightly dizzy too."] },
   requiresFoodPermission: true, shareable: false, effect: (player) => {
     heal(player, 1);
     boostSkill(player, Skill.STRENGTH, 1, 0.02);

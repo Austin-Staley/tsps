@@ -164,7 +164,7 @@ function campfireCheckMessage(remainingTicks) {
 function grantFiremakingLogXp(player, log) {
   const xp = log.xpReward * firemakingXpMultiplier(player);
   player.getSkillManager().addExperiences(Skill.FIREMAKING, xp);
-  pluginApi.emitCustomEvent("firemaking:success", { player, skill: Skill.FIREMAKING });
+  pluginApi.emitCustomEvent("firemaking:success", { player, skill: Skill.FIREMAKING, itemId: log.itemId });
 }
 
 function dropAshes(player, location) {
