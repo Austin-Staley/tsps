@@ -85,6 +85,7 @@ public final class BridgeEngine implements AutoCloseable {
 
   public synchronized JsonObject evaluate(JsonObject req) {
     JsonObject result = new JsonObject();
+    Session current = null;
     result.addProperty("protocol", 1);
     result.addProperty("sourceCommit", SOURCE);
     for (String k : List.of("session", "sequence", "questKey"))
@@ -131,6 +132,7 @@ public final class BridgeEngine implements AutoCloseable {
         sessions.put(id, s);
       } else s.snapshot.update(snapshot);
       s.sequence = seq;
+      current = s;
       s.services.applyClientConfig(
           req.has("config") && req.get("config").isJsonObject()
               ? req.getAsJsonObject("config")
@@ -143,6 +145,7 @@ public final class BridgeEngine implements AutoCloseable {
           s.started = true;
         }
         s.updateQuest();
+        s.syncShortestPath();
         if (req.has("lockSection") && req.get("lockSection").isJsonObject()) s.lock(req.getAsJsonObject("lockSection"));
         for (Object event : s.snapshot.deltaEvents) s.services.bus.post(event);
         s.snapshot.deltaEvents.clear();
@@ -205,6 +208,8 @@ public final class BridgeEngine implements AutoCloseable {
               () ->
                   PresentationExport.overlayPanel(
                       cur.helper.getCurrentStep(), cur.helper.getQuestHelperPlugin()));
+        if (req.has("bankTab") && req.get("bankTab").getAsBoolean())
+          PresentationExport.part(result, "bankTab", presentation, cur::bankTab);
         result.getAsJsonArray("diagnostics").addAll(presentation);
         result.addProperty(
             "status",
@@ -228,6 +233,7 @@ public final class BridgeEngine implements AutoCloseable {
       result.getAsJsonArray("requests").addAll(f.requests);
       if (!(t instanceof BridgeFailure)) t.printStackTrace();
     }
+    result.add("pluginMessages", current == null ? new JsonArray() : current.drainPluginMessages());
     return result;
   }
 
@@ -251,6 +257,8 @@ public final class BridgeEngine implements AutoCloseable {
     final QuestHelper helper;
     long sequence = -1;
     boolean started;
+    /** useShortestPath as the steps last saw it (QuestHelperPlugin.onConfigChanged's toggle). */
+    boolean shortestPath;
     final Set<String> history = new HashSet<>();
     final List<com.questhelper.panel.PanelDetails> sectionIndex = new ArrayList<>();
 
@@ -277,6 +285,7 @@ public final class BridgeEngine implements AutoCloseable {
       helper = info.getQuestHelper().getClass().getDeclaredConstructor().newInstance();
       helper.setQuest(info);
       helper.setConfig(services.config);
+      services.selectedQuest = helper;
       helper.setInjector(
           (com.google.inject.Injector) services.service(com.google.inject.Injector.class));
       helper.setQuestHelperPlugin(
@@ -301,6 +310,7 @@ public final class BridgeEngine implements AutoCloseable {
       // Rebuilt requirements need the authoritative dialogue history again.
       history.clear();
       try {
+        shortestPath = services.config.useShortestPath();
         helper.init();
         helper.startUp(services.config);
         services.bus.register(helper);
@@ -310,6 +320,90 @@ public final class BridgeEngine implements AutoCloseable {
         services.bus.unregister(helper);
         throw error;
       }
+    }
+
+    /**
+     * QuestHelperPlugin.onConfigChanged("useShortestPath"): QuestManager.activateShortestPath or
+     * disableShortestPath on the current step's active step.
+     */
+    void syncShortestPath() {
+      boolean use = services.config.useShortestPath();
+      if (use == shortestPath) return;
+      shortestPath = use;
+      QuestStep step = helper.getCurrentStep();
+      if (step == null) return;
+      step = step.getActiveStep();
+      if (use) step.setShortestPath();
+      // DetailedQuestStep.disableShortestPath reads definedPoint without a null check.
+      else if (!(step instanceof DetailedQuestStep d) || d.getDefinedPoint() != null)
+        step.disableShortestPath();
+      services.flush();
+    }
+
+    /** The "shortestpath" messages upstream posted since the last evaluation, as JSON. */
+    JsonArray drainPluginMessages() {
+      JsonArray out = new JsonArray();
+      for (var message : services.pluginMessages) {
+        JsonObject m = new JsonObject();
+        m.addProperty("namespace", message.getNamespace());
+        m.addProperty("name", message.getName());
+        JsonObject data = new JsonObject();
+        if (message.getData() != null)
+          for (var e : message.getData().entrySet()) {
+            if (e.getValue() instanceof net.runelite.api.coords.WorldPoint p) {
+              JsonObject point = new JsonObject();
+              point.addProperty("x", p.getX());
+              point.addProperty("y", p.getY());
+              point.addProperty("plane", p.getPlane());
+              data.add(e.getKey(), point);
+            } else data.add(e.getKey(), GSON.toJsonTree(e.getValue()));
+          }
+        m.add("data", data);
+        out.add(m);
+      }
+      services.pluginMessages.clear();
+      return out;
+    }
+
+    /**
+     * QuestHelperPlugin.getPluginBankTagItemsForSections: upstream's QuestHelperBankTagService
+     * sections (all items), and itemsToTag (the missing items) for the Grand Exchange search.
+     */
+    JsonObject bankTab() {
+      var service = new com.questhelper.bank.banktab.QuestHelperBankTagService();
+      services.inject(service);
+      JsonArray sections = new JsonArray();
+      for (var tab : service.getPluginBankTagItemsForSections(false)) {
+        JsonObject t = new JsonObject();
+        t.addProperty("name", tab.getName());
+        t.add("items", bankTabItems(tab.getItems()));
+        t.add("recommendedItems", bankTabItems(tab.getRecommendedItems()));
+        sections.add(t);
+      }
+      JsonObject o = new JsonObject();
+      o.add("sections", sections);
+      List<Integer> missing = new ArrayList<>();
+      for (var tab : service.getPluginBankTagItemsForSections(true))
+        for (var item : tab.getItems())
+          for (Integer id : item.getItemIDs()) if (id != null && !missing.contains(id)) missing.add(id);
+      o.add("missingItems", GSON.toJsonTree(missing));
+      return o;
+    }
+
+    JsonArray bankTabItems(List<com.questhelper.bank.banktab.BankTabItem> items) {
+      JsonArray out = new JsonArray();
+      for (var item : items) {
+        JsonObject i = new JsonObject();
+        i.addProperty("quantity", item.getQuantity());
+        if (item.getText() != null) i.addProperty("text", item.getText());
+        i.add("itemIds", GSON.toJsonTree(item.getItemIDs()));
+        i.addProperty("displayId", item.getDisplayID());
+        if (item.getDetails() != null) i.addProperty("details", item.getDetails());
+        // QuestBankTab.makeBankText's tick or cross.
+        i.addProperty("met", item.getItemRequirement().check(snapshot.client));
+        out.add(i);
+      }
+      return out;
     }
 
     void updateQuest() {
@@ -465,6 +559,9 @@ public final class BridgeEngine implements AutoCloseable {
       o.add("requirements", reqs);
       o.add("dialogueChoices", choices);
       o.add("choiceRules", PresentationExport.choiceRules(step, snapshot.client));
+      // QuestStep.getGeInterfaceIcon: the items a Grand Exchange search shows for this step.
+      if (field(step, "geInterfaceIcon") instanceof List<?> ge && !ge.isEmpty())
+        o.add("geItems", GSON.toJsonTree(ge));
       o.add("widgets", new JsonArray());
       o.add("overlays", overlays(step));
       return o;

@@ -18,6 +18,8 @@ export class QuestHelperSession {
     private pendingLock?: { section: number; locked: boolean };
     /** Settings the engine reads (QuestHelperConfig), sent with every evaluation. */
     engineConfig: () => Record<string, boolean | number> | undefined = () => undefined;
+    /** Whether the next evaluation should include the quest bank tab (the bank is open). */
+    wantsBankTab: () => boolean = () => false;
     /** Quests that went from not started to started since the last call (QuestManager's autostart). */
     private started: string[] = [];
     private state: HelperSessionState = { selected: "", catalog: null, result: null, status: "Log in to use Quest Helper.", version: 0 };
@@ -79,7 +81,7 @@ export class QuestHelperSession {
         this.lastTick = snapshot.tick;
         const lockSection = this.pendingLock;
         this.pendingLock = undefined;
-        const request = { type: "evaluate", protocol: 1, session: this.session, sequence: ++this.sequence, questKey: this.state.selected, helperVariant: this.state.variant, snapshot, events, config: this.engineConfig(), lockSection };
+        const request = { type: "evaluate", protocol: 1, session: this.session, sequence: ++this.sequence, questKey: this.state.selected, helperVariant: this.state.variant, snapshot, events, config: this.engineConfig(), lockSection, ...(this.wantsBankTab() ? { bankTab: true } : {}) };
         this.inFlight = true;
         this.send(request);
     }

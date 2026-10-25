@@ -2,7 +2,7 @@ import type { ObjType } from "../../../rs/config/objtype/ObjType";
 import { type Cs2Vm, ExecutionState } from "../../../rs/cs2/Cs2Vm";
 import type { Inventory } from "../../../rs/inventory/Inventory";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
-import type { WidgetNode } from "../../../widgets/WidgetNode";
+import type { WidgetEventType, WidgetNode } from "../../../widgets/WidgetNode";
 import { canonicalItemId } from "../inventorytags/inventoryTags";
 import { ClientState } from "../../ClientState";
 import type { OsrsClient } from "../../OsrsClient";
@@ -31,8 +31,8 @@ export interface BankTagsClient {
     getEnumIntValue(enumId: number, key: number): number;
     /** client.runScript: run now when no script is running, otherwise on the next client tick. */
     runScript(scriptId: number, ...args: (number | string)[]): void;
-    /** Runs a widget's onLoad or onInvTransmit listener (RuneLite's createScriptEventBuilder). */
-    runListener(widget: WidgetNode, event: "onLoad" | "onInvTransmit"): void;
+    /** Runs one of a widget's listeners (RuneLite's createScriptEventBuilder(listener).run()). */
+    runListener(widget: WidgetNode, event: WidgetEventType): void;
     isShiftPressed(): boolean;
     playSoundEffect(id: number): void;
     /** ChatMessageManager: a CONSOLE message in the chatbox. */

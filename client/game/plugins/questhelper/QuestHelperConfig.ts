@@ -180,6 +180,12 @@ export const QuestHelperConfig = ConfigGroup(
             section: "hintsSection",
             default: true,
         }),
+        useShortestPath: ConfigItem({
+            name: "Use 'Shortest Path' plugin",
+            description: "If you have the 'Shortest Path' plugin downloaded, it will be used to show routes to locations",
+            section: "hintsSection",
+            default: false,
+        }),
         textHighlightColor: ConfigItem({
             name: "Text highlight colour",
             description: "Change the colour of dialog choices highlighted by the helper",
@@ -280,6 +286,7 @@ export const ENGINE_CONFIG_KEYS = [
     "boostColour",
     "targetOverlayColor",
     "textHighlightColor",
+    "useShortestPath",
 ] as const;
 
 /** Keys the earlier port used, and the upstream keys that replaced them. */

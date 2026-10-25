@@ -49,7 +49,7 @@ class QuestHelperRuntime {
     const mapping=this.catalogData?.quests.find(q=>q.questKey===quest.key);
     if(data.helperVariant!==undefined&&(!mapping||![mapping.helperVariant,...(mapping.variants||[]).map(v=>v.helperVariant)].includes(data.helperVariant)))throw new Error('Unknown helper variant');
     const snapshot=this.authoritative(player,data.snapshot,quest.key);
-    const request={protocol:1,session:state.engineSession,sequence:data.sequence,questKey:quest.key,helperVariant:data.helperVariant,snapshot,events:data.events,config:helperConfig(data.config),lockSection:lockSection(data.lockSection)};
+    const request={protocol:1,session:state.engineSession,sequence:data.sequence,questKey:quest.key,helperVariant:data.helperVariant,snapshot,events:data.events,config:helperConfig(data.config),lockSection:lockSection(data.lockSection),...(data.bankTab===true?{bankTab:true}:{})};
     const response=quest.key==='learning_the_ropes'?tutorialResult(request,quest.getStage(player)):(this.nativeResult?.(request,player)??await this.bridge.evaluate(request));
     if(this.players.get(player)!==state||!state.active||state.generation!==generation)return;
     this.emit(player,{...response,type:'result',protocol:1,session:state.session,sequence:data.sequence,questKey:quest.key,questProgress:this.progress(player)});

@@ -185,6 +185,8 @@ export type HelperStep = {
     teleports?: RequirementState[];
     /** Item ids the step highlights in the inventory (teleports and highlightInInventory items). */
     inventoryHighlights?: number[];
+    /** QuestStep.getGeInterfaceIcon: items a Grand Exchange search shows for this step. */
+    geItems?: number[];
     choiceRules?: ChoiceRule[];
 };
 /** WidgetChoiceStep.highlightChoice's rule: which option of groupId:childId to recolour. */
@@ -271,7 +273,17 @@ export type HelperResponse = {
     overview?: HelperOverview;
     sections?: HelperSection[];
     overlayPanel?: OverlayLine[];
+    /** PluginMessages upstream's steps posted since the last evaluation (namespace "shortestpath"). */
+    pluginMessages?: HelperPluginMessage[];
+    /** QuestBankTab's sections and the GE search's missing items, when the request asked. */
+    bankTab?: HelperBankTab;
 };
+export type HelperPoint = { x: number; y: number; plane: number };
+export type HelperPluginMessage = { namespace: string; name: string; data: { start?: HelperPoint; target?: HelperPoint } };
+/** QuestHelperBankTagService's BankTabItem. */
+export type HelperBankTabItem = { quantity: number; text?: string; itemIds: number[]; displayId: number; details?: string; met: boolean };
+export type HelperBankTabSection = { name: string; items: HelperBankTabItem[]; recommendedItems: HelperBankTabItem[] };
+export type HelperBankTab = { sections: HelperBankTabSection[]; missingItems: number[] };
 export type QuestEligibility = {known:boolean;eligible:boolean;missing:string[];recommendedMissing:string[];difficulty:number;length:number};
 export type QuestProgress = {questKey:string;status:"NOT_STARTED"|"IN_PROGRESS"|"FINISHED";stage:number;eligibility?:QuestEligibility};
 export type HelperQuest = {
@@ -342,8 +354,16 @@ const overlay = (v: unknown): boolean => {
         return typeof v.dataUrl === "string" && v.dataUrl.length <= 350000 && /^data:image\/png;base64,[A-Za-z0-9+/]*={0,2}$/.test(v.dataUrl) && finite(v.x) && finite(v.y) && finite(v.width) && finite(v.height) && v.width > 0 && v.height > 0;
     return optional(v, "points", v => list(v, p => obj(p) && finite(p.x) && finite(p.y), 512));
 };
-const step = (v: unknown): boolean => obj(v) && str(v.id) && list(v.text, str) && list(v.targets, target) && list(v.requirements, requirement) && list(v.dialogueChoices, v => obj(v) && str(v.text) && optional(v, "index", int)) && list(v.widgets, v => obj(v) && int(v.id) && optional(v, "bounds", bounds) && optional(v, "label", str)) && list(v.overlays, overlay) && optional(v, "recommended", requirements) && optional(v, "teleports", requirements) && optional(v, "inventoryHighlights", x => list(x, int, 512)) && optional(v, "choiceRules", x => list(x, choiceRule, 64));
+const step = (v: unknown): boolean => obj(v) && str(v.id) && list(v.text, str) && list(v.targets, target) && list(v.requirements, requirement) && list(v.dialogueChoices, v => obj(v) && str(v.text) && optional(v, "index", int)) && list(v.widgets, v => obj(v) && int(v.id) && optional(v, "bounds", bounds) && optional(v, "label", str)) && list(v.overlays, overlay) && optional(v, "recommended", requirements) && optional(v, "teleports", requirements) && optional(v, "inventoryHighlights", x => list(x, int, 512)) && optional(v, "choiceRules", x => list(x, choiceRule, 64)) && optional(v, "geItems", x => list(x, int, 512));
+const point = (v: unknown): boolean => obj(v) && int(v.x) && int(v.y) && int(v.plane);
+const pluginMessage = (v: unknown): boolean =>
+    obj(v) && v.namespace === "shortestpath" && (v.name === "path" || v.name === "clear") && obj(v.data) && optional(v.data, "start", point) && optional(v.data, "target", point);
+const bankTabItem = (v: unknown): boolean =>
+    obj(v) && int(v.quantity) && optional(v, "text", str) && list(v.itemIds, int, 64) && int(v.displayId) && optional(v, "details", str) && typeof v.met === "boolean";
+const bankTab = (v: unknown): boolean =>
+    obj(v) && list(v.sections, s => obj(s) && str(s.name) && list(s.items, bankTabItem, 512) && list(s.recommendedItems, bankTabItem, 512), 256) && list(v.missingItems, int, 4096);
 export function parseHelperResponse(value: unknown): HelperResponse | null {
+    if (obj(value) && !(optional(value, "pluginMessages", v => list(v, pluginMessage, 64)) && optional(value, "bankTab", bankTab))) return null;
     if (obj(value) && !optional(value,"questProgress",v=>list(v,progress,512))) return null;
     if (obj(value) && !(optional(value, "overview", overview) && optional(value, "sections", v => list(v, x => section(x), 256)) && optional(value, "overlayPanel", v => list(v, overlayLine, 512)))) return null;
     if (!obj(value) || value.protocol !== 1 || !str(value.session) || !str(value.questKey) || !str(value.sourceCommit) || !int(value.sequence) || value.sequence < 1 || !["active", "complete", "unsupported", "unavailable"].includes(value.status as string) || !(value.activeStep === null || step(value.activeStep)) || !list(value.panels, v => obj(v) && str(v.title) && optional(v, "text", v => list(v, str)) && optional(v, "requirements", v => list(v, requirement))) || !list(value.diagnostics, diagnostic) || !optional(value, "requests", v => list(v, r => obj(r) && typeof r.kind === "string" && /^(geometry|varbit|varbitDefinition|itemDefinitions|objectDefinitions|npcDefinitions|widget|widgetBounds|questState|container)(\.[a-zA-Z][a-zA-Z0-9]{0,63})?$/.test(r.kind) && int(r.id) && r.id >= 0)))

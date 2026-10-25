@@ -45,10 +45,23 @@ plugin draws what the upstream plugin draws.
 - **Engine drawings**: world lines, widget hints and puzzle solutions follow *Display navigation paths*, *Display widget hints* and *Show Puzzle Solutions*.
 - **Quest tab menu**: right-clicking a quest gives **Start/Stop Quest Helper**, one per Shield of Arrav gang and Recipe for Disaster subquest.
 - **Auto start helper** and **Auto open sidebar**: a quest started in game becomes the guide.
+- **Use 'Shortest Path' plugin** (off by default, as upstream):
+  - Upstream's `DetailedQuestStep` posts `PluginMessage("shortestpath", "path" | "clear")` as steps start and end, and when the option is toggled.
+  - The bridge collects what upstream's steps post and returns it with each evaluation, and the client hands it to the Shortest Path plugin.
+  - The client clears the route itself when the quest is switched or Quest Helper stops, because the engine isn't asked again then.
+- **Bank tab** (`QuestBankTab`):
+  - A "quest-helper" button by the bank's tabs lays the quest's items out in sections: recommended, each part of the quest, then "Non-quest items".
+  - Missing items are placeholders with "Details".
+  - The amount needed and a tick or cross are shown, and withdrawing uses the item's real bank slot.
+  - The sections come from upstream's own `QuestHelperBankTagService`, run in the bridge while the bank is open.
+  - It uses RuneLite's patched bank scripts and Bank Tags' `BankSearch`, as upstream does.
+- **Grand Exchange** (`QuestGrandExchangeInterface`):
+  - At the Grand Exchange, "View missing items" by the item search lists the quest's missing tradeable items.
+  - Away from it, a step that names items to buy shows them at once (with *Show Puzzle Solutions*).
 
 ## Settings
 
-Group `questhelper`, with the upstream keys and sections. *Spicy stew*, *Show Puzzle Solutions*, the hint switches and the colours are sent to the engine with each evaluation.
+Group `questhelper`, with the upstream keys and sections. *Spicy stew*, *Show Puzzle Solutions*, the hint switches, *Use 'Shortest Path' plugin* and the colours are sent to the engine with each evaluation.
 
 Older keys are moved once:
 - `highlightWidgets` to `showWidgetHints`.
@@ -61,8 +74,8 @@ Older keys are moved once:
 
 | Upstream | Reason |
 |---|---|
-| "Quest Helper" bank tab, *Highlight missing items* and its three *Include …* options | The bank tab needs a Bank Tags port. The ground highlights need every unfinished quest's helper evaluated at once; the bridge runs one helper per session. |
-| *Use 'Shortest Path' plugin* | The Shortest Path plugin isn't ported. |
+| *Highlight missing items* and its three *Include …* options | These are ground highlights for every unfinished quest's items. They need every quest's helper evaluated at once, but the bridge runs one helper per session. |
+| Potion storage in the bank tab | The offline server has no potion storage. |
 | *Fan appears on quest completion*; player-made quests | Both spawn RuneliteObject models, which the browser client can't inject. |
 | Achievement diaries, skill and generic helpers | The offline server has 184 quests and no diary tasks or diary varbits. The bridge's catalog is those quests. |
 | Region filtering | Leagues-only, and there are no league worlds offline. |

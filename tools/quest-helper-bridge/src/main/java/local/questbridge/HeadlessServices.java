@@ -49,8 +49,10 @@ final class HeadlessServices {
           return InventoryItemHighlightStyle.NONE;
         }
 
+        // DetailedQuestStep posts PluginMessage("shortestpath", ...) when this is on; the
+        // bridge hands those messages to the client's Shortest Path plugin.
         public boolean useShortestPath() {
-          return false;
+          return flag("useShortestPath", QuestHelperConfig.super.useShortestPath());
         }
 
         // Sidebar and hint settings the browser client forwards with each evaluation.
@@ -121,6 +123,10 @@ final class HeadlessServices {
     }
   }
   final Map<Class<?>, Object> services = new HashMap<>();
+  /** The session's helper: QuestHelperPlugin.getSelectedQuest (the bank tag service reads it). */
+  com.questhelper.questhelpers.QuestHelper selectedQuest;
+  /** Upstream's "shortestpath" PluginMessages since the last evaluation, in order. */
+  final List<net.runelite.client.events.PluginMessage> pluginMessages = new ArrayList<>();
   final Map<String, Object> configuration = new HashMap<>();
   final Deque<Runnable> callbacks = new ArrayDeque<>();
 
@@ -129,6 +135,12 @@ final class HeadlessServices {
     bus = new EventBus(eventErrors::add);
     services.put(net.runelite.api.Client.class, snapshot.client);
     services.put(EventBus.class, bus);
+    bus.register(
+        net.runelite.client.events.PluginMessage.class,
+        message -> {
+          if ("shortestpath".equals(message.getNamespace())) pluginMessages.add(message);
+        },
+        0);
     services.put(Gson.class, new Gson());
     services.put(QuestHelperConfig.class, config);
     // Native providers own standard model outlines. In disabled headless outline rendering,
@@ -204,6 +216,8 @@ final class HeadlessServices {
         return false;
       case "QuestHelperPlugin.getClient":
         return snapshot.client;
+      case "QuestHelperPlugin.getSelectedQuest":
+        return selectedQuest;
       case "SpriteManager.getSprite":
         return new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
       case "ItemManager.getImage":

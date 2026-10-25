@@ -44,6 +44,7 @@ tools/quest-helper-bridge/build/install/offline-quest-helper-bridge/bin/offline-
 - `sequence` must increase.
 - `config` holds flat upstream `QuestHelperConfig` keys with boolean or ARGB values (puzzle solutions, hints, colours).
 - `lockSection` is `{section, locked}`, the sidebar's "mark section as complete" box.
+- `bankTab: true` asks for the quest bank tab (sent while the bank is open, or near the Grand Exchange).
 
 **Snapshot:**
 - **Vars:** sparse nonzero `varps`, observed `varbits` (or `varbitDefinitions`), and `questStates`.
@@ -58,6 +59,11 @@ Missing state produces `MISSING_STATE` with a structured request, and an unimple
 - Dialogue choices and `choiceRules`, recommended items, teleports, inventory highlights, and the portable draw commands from upstream's custom overlays.
 - `overview`: the QuestOverviewPanel contents.
 - `sections`: the QuestStepPanel PanelDetails, with the current step and lock state.
+- `pluginMessages`: the `PluginMessage("shortestpath", "path" | "clear")`s upstream's steps posted since the last evaluation, with WorldPoints as `{x, y, plane}`. Toggling `useShortestPath` calls the active step's `setShortestPath` or `disableShortestPath`, as QuestManager does.
+- `bankTab` (when asked):
+  - `sections`: upstream `QuestHelperBankTagService.getPluginBankTagItemsForSections(false)`, each item's `quantity`, `text`, `itemIds`, `displayId`, `details` and `met`.
+  - `missingItems`: `itemsToTag`, for the Grand Exchange search.
+- `activeStep.geItems`: the step's `getGeInterfaceIcon`, when it names any.
 - `overlayPanel`: the QuestHelperOverlay lines.
 
 **Catalog rows** carry difficulty, type, release, optimal and ironman order, quest points and skill-filter data.

@@ -65,4 +65,9 @@ test('helper settings and section locks are forwarded only in their bounded shap
  const f=fixture();await f.send({type:'select',questKey:f.quest.key});
  await f.send({type:'evaluate',questKey:f.quest.key,sequence:1,snapshot:{},events:[],config:{showWorldLines:false},lockSection:{section:0,locked:false}});
  assert.deepEqual(f.calls[0].config,{showWorldLines:false});assert.deepEqual(f.calls[0].lockSection,{section:0,locked:false});
+ assert.equal(f.calls[0].bankTab,undefined,'no bank tab unless asked');
+ await f.send({type:'evaluate',questKey:f.quest.key,sequence:2,snapshot:{},events:[],bankTab:true});
+ assert.equal(f.calls[1].bankTab,true,'the bank tab while the bank is open');
+ await f.send({type:'evaluate',questKey:f.quest.key,sequence:3,snapshot:{},events:[],bankTab:'yes'});
+ assert.equal(f.calls[2].bankTab,undefined,'only a boolean true');
 });

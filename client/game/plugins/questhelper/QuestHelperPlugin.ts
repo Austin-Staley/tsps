@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from "react";
 import { ChatMessage, ConfigChanged, GameStateChanged, PluginMessage } from "@runelite/api/events";
 import { GameState } from "@runelite/api/GameState";
 import { ConfigManager } from "@runelite/client/config/ConfigManager";
+import { EventBus } from "@runelite/client/eventbus/EventBus";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
 import { ClientToolbar } from "@runelite/client/ui/ClientToolbar";
@@ -13,7 +14,13 @@ import type { OsrsClient } from "../../OsrsClient";
 import { ClientState } from "../../ClientState";
 import type { OrderedClientEvent, ReadonlyClientSnapshot } from "./QuestHelperProtocol";
 import { ENGINE_CONFIG_KEYS, LEGACY_CONFIG_KEYS, QuestHelperConfig } from "./QuestHelperConfig";
-import type { LocOutline, NpcOutline, WidgetOverlay } from "../ClientPluginManager";
+import type { LocOutline, NpcOutline, ScriptCallbackEvent, WidgetOverlay } from "../ClientPluginManager";
+import type { Cs2Vm } from "../../../rs/cs2/Cs2Vm";
+import type { WidgetActionEvent } from "../../widgets/widgetActionPayload";
+import { osrsBankTagsClient } from "../banktags/bankClient";
+import { QuestHelperBankTab } from "./QuestHelperBankTab";
+import { QuestHelperGrandExchange, SEARCHBOX_LOADED } from "./QuestHelperGrandExchange";
+import { MESLAYERINPUT } from "@runelite/api/gameval/VarClientID";
 import type { SimpleMenuEntry } from "../../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../../ui/menu/menuTransforms";
 import { applyChoiceRules, QuestHelperItemOverlay, QuestHelperPanelOverlay, QuestHelperSceneOverlay, questLocOutlines, questNpcOutlines, type OverlaySettings, type OverlaySource } from "./QuestHelperOverlays";
@@ -33,7 +40,7 @@ const BACKGROUND_GROUP = "questhelpervars";
 export type QuestHelperSettings = OverlaySettings & {
     autoStartQuests: boolean; autoOpenSidebar: boolean; stewBoosts: boolean; showFullRequirements: boolean; hideQuestRewards: boolean;
     outlineFeathering: number; showMiniMapArrow: boolean; haveMinimapArrowFlash: boolean; showWorldLines: boolean; showWidgetHints: boolean;
-    solvePuzzles: boolean; showWorldMapPoint: boolean; passColour: number; failColour: number; partialSuccessColour: number; boostColour: number;
+    solvePuzzles: boolean; showWorldMapPoint: boolean; useShortestPath: boolean; passColour: number; failColour: number; partialSuccessColour: number; boostColour: number;
     orderListBy: string; filterListBy: string; difficulty: string; showCompletedQuests: boolean;
 };
 export class QuestHelperPlugin extends Plugin {
@@ -41,7 +48,31 @@ export class QuestHelperPlugin extends Plugin {
     static config = QuestHelperConfig;
     private readonly client = inject<OsrsClient>(CLIENT_TOKEN);
     private readonly configManager = inject(ConfigManager);
+    private readonly eventBus = inject(EventBus);
     private readonly toolbar = inject(ClientToolbar);
+    /** Whether the engine last asked Shortest Path for a route (so stopping can clear it). */
+    private routeShown = false;
+    /** QuestBankTab: the "quest-helper" bank tab. */
+    private readonly bankTab = new QuestHelperBankTab(osrsBankTagsClient(this.client), {
+        selectedQuestName: () => this.bankTabQuestName(),
+        bankTab: () => this.getState().result?.bankTab,
+        sendChatMessage: message => this.client.addGameMessage?.(message),
+    });
+    private lastBankTab = "";
+    /** QuestGrandExchangeInterface: "View missing items" by the Grand Exchange's item search. */
+    private readonly grandExchange = new QuestHelperGrandExchange(osrsBankTagsClient(this.client), {
+        selectedQuestName: () => this.bankTabQuestName(),
+        solvePuzzles: () => this.getConfig().solvePuzzles,
+        stepItems: () => this.getState().result?.activeStep?.geItems,
+        missingItems: () => this.getState().result?.bankTab?.missingItems,
+        playerLocation: () => {
+            const tile = this.client.getControlledPlayerMovementTile?.();
+            return tile ? { x: tile.tileX, y: tile.tileY, plane: ClientState.plane } : undefined;
+        },
+    });
+    private readonly onItemSearch = () => (this.isStarted() && this.isEnabled() ? this.guardBankTab(() => this.grandExchangeSearched()) ?? false : false);
+    private scriptVm?: Cs2Vm;
+    private readonly onScriptPre = (id: number) => { if (this.isStarted() && this.isEnabled()) this.guardBankTab(() => this.bankTab.onScriptPreFired(id)); };
     private readonly session = new QuestHelperSession(data => this.signal(data));
     private readonly assembly = new ChunkedPluginMessageAssembler();
     private readonly events = new QuestHelperEvents();
@@ -85,6 +116,7 @@ export class QuestHelperPlugin extends Plugin {
         return questDirection(this.getState().result?.activeStep,{...this.snapshot,npcs,localPlayer:{...this.snapshot.localPlayer,x:tile.tileX,y:tile.tileY,plane:ClientState.plane}});
     }
     onPostClientTick():void {
+        this.listenForScripts();
         this.refreshNavigation();
         const config=this.getConfig();
         const step=this.overlaySource.active()?this.getState().result?.activeStep:undefined;
@@ -115,7 +147,7 @@ export class QuestHelperPlugin extends Plugin {
             highlightStyleGroundItems: String(c.highlightStyleGroundItems()), highlightStyleInventoryItems: String(c.highlightStyleInventoryItems()),
             outlineThickness: Number(c.outlineThickness()), outlineFeathering: Number(c.outlineFeathering()), showMiniMapArrow: c.showMiniMapArrow(),
             haveMinimapArrowFlash: c.haveMinimapArrowFlash(), showWorldLines: c.showWorldLines(), showWidgetHints: c.showWidgetHints(), solvePuzzles: c.solvePuzzles(),
-            showWorldMapPoint: c.showWorldMapPoint(), textHighlightColor: c.textHighlightColor() >>> 0, targetOverlayColor: c.targetOverlayColor() >>> 0,
+            showWorldMapPoint: c.showWorldMapPoint(), useShortestPath: c.useShortestPath(), textHighlightColor: c.textHighlightColor() >>> 0, targetOverlayColor: c.targetOverlayColor() >>> 0,
             passColour: c.passColour() >>> 0, failColour: c.failColour() >>> 0, partialSuccessColour: c.partialSuccessColour() >>> 0, boostColour: c.boostColour() >>> 0,
             orderListBy: String(c.orderListBy()), filterListBy: String(c.filterListBy()), difficulty: String(c.difficulty()), showCompletedQuests: c.showCompletedQuests(),
         };
@@ -169,6 +201,9 @@ export class QuestHelperPlugin extends Plugin {
     protected async startUp(): Promise<void> {
         this.migrateLegacyConfig();
         this.session.engineConfig = () => this.engineConfig();
+        // The quest bank tab (and its missing items) is evaluated while the bank is open, or by the
+        // Grand Exchange for its item search.
+        this.session.wantsBankTab = () => !this.bankTab.isHidden() || !this.grandExchange.notAtGE();
         const config = this.configManager.getConfig(QuestHelperConfig);
         this.session.select(config.selectedQuest(), config.helperVariant() || undefined);
         this.nav = createQuestHelperNavigationButton(this);
@@ -177,6 +212,12 @@ export class QuestHelperPlugin extends Plugin {
         this.faulted = false;
     }
     protected async shutDown(): Promise<void> {
+        this.clearRoute();
+        this.bankTab.destroy();
+        this.grandExchange.destroy();
+        this.scriptVm?.scriptPreListeners.delete(this.onScriptPre);
+        this.scriptVm?.itemSearchListeners.delete(this.onItemSearch);
+        this.scriptVm = undefined;
         this.session.close();
         this.clearRuntime();
         for (const cleanup of this.cleanup)
@@ -198,8 +239,89 @@ export class QuestHelperPlugin extends Plugin {
         this.objectDefinitionIds.clear();
         this.npcDefinitionIds.clear();
         this.geometryRequested = false;
+        // The old quest's steps shut down: DetailedQuestStep.removeShortestPath.
+        this.clearRoute();
         this.session.select(key, variant);
         this.refreshHighlights();
+        // QuestBankTab.shutDown, then startUp for the new quest.
+        this.lastBankTab = "";
+        this.bankTab.destroy();
+        this.bankTab.init();
+        this.grandExchange.destroy();
+    }
+    /** QuestHelperPlugin.getSelectedQuest().getQuest().getName(), or null with no quest selected. */
+    private bankTabQuestName(): string | null {
+        const state = this.getState();
+        if (!state.selected) return null;
+        return state.result?.overview?.name ?? state.catalog?.quests.find(q => q.questKey === state.selected)?.name ?? state.selected;
+    }
+    /** QuestBankTab.onGrandExchangeSearched: "quest-helper" searches list the quest's items. */
+    private grandExchangeSearched(): boolean {
+        const vm = this.scriptVm;
+        if (!vm) return false;
+        const input = String(this.client.varManager.getVarcString?.(MESLAYERINPUT) ?? "");
+        const results = this.grandExchange.searchResults(input, id => this.client.objTypeLoader?.load?.(id)?.isTradable === true);
+        if (!results) return false;
+        vm.itemSearchIndex = 0;
+        vm.itemSearchCount = results.length;
+        vm.itemSearchResults = results;
+        return true;
+    }
+    /** ScriptPreFired on the client's current VM (it builds its VM after plugins start). */
+    private listenForScripts(): void {
+        const vm = (this.client as any).cs2Vm as Cs2Vm | undefined;
+        if (!vm || vm === this.scriptVm) return;
+        this.scriptVm?.scriptPreListeners.delete(this.onScriptPre);
+        this.scriptVm?.itemSearchListeners.delete(this.onItemSearch);
+        vm.scriptPreListeners.add(this.onScriptPre);
+        vm.itemSearchListeners.add(this.onItemSearch);
+        this.scriptVm = vm;
+    }
+    onScriptFinished(scriptId: number): void {
+        if (!this.isStarted() || !this.isEnabled()) return;
+        this.guardBankTab(() => this.bankTab.onScriptPostFired(scriptId));
+        if (scriptId === SEARCHBOX_LOADED) this.guardBankTab(() => this.grandExchange.init());
+    }
+    onScriptCallback(event: ScriptCallbackEvent): void {
+        if (this.isStarted() && this.isEnabled()) this.guardBankTab(() => this.bankTab.onScriptCallback(event.eventName));
+    }
+    handleWidgetAction(event: WidgetActionEvent): boolean {
+        if (!this.isStarted() || !this.isEnabled()) return false;
+        return this.guardBankTab(() => this.bankTab.onMenuOptionClicked(event)) ?? false;
+    }
+    /** QuestHelperPlugin.refreshBank: the tab is laid out again when the quest's items change. */
+    private refreshBankTab(): void {
+        const tab = this.getState().result?.bankTab;
+        if (!tab) return;
+        const json = JSON.stringify(tab);
+        if (json === this.lastBankTab) return;
+        this.lastBankTab = json;
+        this.guardBankTab(() => this.bankTab.refreshTab());
+    }
+    /** The bank tab never breaks the bank's own scripts. */
+    private guardBankTab<T>(fn: () => T): T | undefined {
+        try {
+            return fn();
+        } catch (error) {
+            console.warn("[questhelper] bank tab failed", error);
+            return undefined;
+        }
+    }
+    /**
+     * DetailedQuestStep's PluginMessage("shortestpath", "path" | "clear"): the engine runs upstream's
+     * steps and returns what they posted, which goes to the Shortest Path plugin here.
+     */
+    private forwardPluginMessages(): void {
+        for (const message of this.getState().result?.pluginMessages ?? []) {
+            this.eventBus.post(new PluginMessage(message.namespace, message.name, message.data));
+            this.routeShown = message.name === "path";
+        }
+    }
+    /** A route this helper asked for, cleared when its quest is closed (the engine isn't asked again). */
+    private clearRoute(): void {
+        if (!this.routeShown) return;
+        this.routeShown = false;
+        this.eventBus.post(new PluginMessage("shortestpath", "clear"));
     }
     retry(): void { this.faulted = false; this.events.clear(); this.assembly.clear(); this.lastSent = 0; this.session.restart("Reconnecting to Quest Helper…"); }
     onConfigChanged(event: ConfigChanged): void {
@@ -235,6 +357,8 @@ export class QuestHelperPlugin extends Plugin {
             else if (data.type === "result") {
                 const wasComplete=this.getState().result?.status==='complete';
                 if(!this.session.accept(data))return;
+                this.forwardPluginMessages();
+                this.refreshBankTab();
                 if(!wasComplete&&this.getState().result?.status==='complete'&&this.nav)this.toolbar.openPanel(this.nav);
                 this.autoStart();
                 this.pendingSince = 0;
@@ -367,8 +491,14 @@ export class QuestHelperPlugin extends Plugin {
             }
         });
         this.listen(this.client.groundItems.mutationListeners, event => this.record({ type: event.kind === "spawn" ? "itemSpawned" : event.kind === "despawn" ? "itemDespawned" : "itemQuantityChanged", tick: this.tick, oldQuantity: event.oldQuantity, item: { id: event.stack.itemId, quantity: event.stack.quantity, x: event.stack.tile.x, y: event.stack.tile.y, plane: event.stack.tile.level } }));
-        this.listen(this.client.widgetManager.groupLoadedListeners, (groupId: number) => this.record({ type: "widgetLoaded", tick: this.tick, groupId }));
-        this.listen(this.client.widgetManager.interfaceClosedListeners, (groupId: number) => this.record({ type: "widgetClosed", tick: this.tick, groupId }));
+        this.listen(this.client.widgetManager.groupLoadedListeners, (groupId: number) => {
+            this.record({ type: "widgetLoaded", tick: this.tick, groupId });
+            if (groupId === 12) this.guardBankTab(() => this.bankTab.init());
+        });
+        this.listen(this.client.widgetManager.interfaceClosedListeners, (groupId: number, _modal: number, unload: boolean) => {
+            this.record({ type: "widgetClosed", tick: this.tick, groupId });
+            if (groupId === 12 && unload) this.bankTab.onBankClosed();
+        });
     }
     private detachSources(): void { for (const cleanup of this.cleanupSources)
         cleanup(); this.cleanupSources = []; }
