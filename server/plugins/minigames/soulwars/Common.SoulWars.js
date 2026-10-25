@@ -43,9 +43,19 @@ function varbit(player, name, value) {
   if (id != null) player.getPacketSender().sendVarbit(id, value);
 }
 
+/** The saved figures' attribute keys (kebab-case), by their varp's name after `soul_wars_`. */
+const FIGURE_ATTRIBUTES = {
+  zeal: "soul-wars:zeal",
+  zeal_tokens: "soul-wars:zeal-tokens",
+  total_games: "soul-wars:total-games",
+  total_wins: "soul-wars:total-wins",
+  total_kills: "soul-wars:total-kills",
+  total_deaths: "soul-wars:total-deaths",
+};
+
 /** A saved counter on a varp (Zeal, games, kills...): the attribute is the truth, the varp shows it. */
 function addVarp(player, name, amount) {
-  const key = `soul-wars:${name}`;
+  const key = FIGURE_ATTRIBUTES[name];
   const value = (Number(player.getAttribute(key)) || 0) + amount;
   player.setAttribute(key, value);
   const id = varpId(`soul_wars_${name}`);
@@ -54,7 +64,7 @@ function addVarp(player, name, amount) {
 }
 
 function getVarp(player, name) {
-  return Number(player.getAttribute(`soul-wars:${name}`)) || 0;
+  return Number(player.getAttribute(FIGURE_ATTRIBUTES[name])) || 0;
 }
 
 function text(player, name, value) {
@@ -121,6 +131,7 @@ module.exports = {
   get data() {
     return data;
   },
+  FIGURE_ATTRIBUTES,
   TEAMS,
   TEAM_VALUE,
   COLOURS,

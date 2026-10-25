@@ -75,8 +75,13 @@ function areaClass() {
       return false;
     }
 
+    /** Logging out mid-game saves the player in the lobby, never on the instance's tiles. */
     postLeave(mobile, logout) {
-      if (mobile.isPlayer?.()) this.game.left(mobile.getAsPlayer?.() ?? mobile, logout);
+      const player = mobile.isPlayer?.() ? mobile.getAsPlayer?.() ?? mobile : null;
+      if (player) {
+        this.game.left(player, logout);
+        if (logout) player.setLocation?.(Common.toLocation(Common.data.lobby.afterGame));
+      }
       super.postLeave(mobile, logout);
     }
   };
@@ -239,7 +244,7 @@ class Game {
     const stats = this.statsOf(player);
     const share = Object.entries(zeal.caps).reduce((sum, [key, cap]) => sum + Math.min(1, (stats[key] ?? 0) / cap), 0);
     const time = Math.min(1, this.elapsed / zeal.fullTicks);
-    return Math.max(1, Math.round(zeal[result] * Math.min(1, share) * time));
+    return Math.max(1, Math.round(zeal[result] * Math.min(1, share / zeal.sharesForFull) * time));
   }
 
   finish(winner) {
@@ -251,7 +256,9 @@ class Game {
       const team = this.teamOf(player);
       if (winner) player.sendMessage(Common.message("won", { colour: Common.COLOURS[winner], team: winner }));
       else player.sendMessage(Common.message("draw"));
-      const result = !winner ? "draw" : winner === team ? "win" : "loss";
+      // A side that never had anyone (a lowered minimum, everyone gone) makes no real game.
+      const real = this.starters.blue > 0 && this.starters.red > 0;
+      const result = !real ? null : !winner ? "draw" : winner === team ? "win" : "loss";
       this.release(player, result);
     }
     for (const npc of [...this.npcs]) this.despawn(npc);

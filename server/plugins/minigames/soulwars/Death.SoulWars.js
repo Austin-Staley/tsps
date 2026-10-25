@@ -17,6 +17,9 @@ const Control = require("./Control.SoulWars");
 /** Each player's ghost and immunity ends, in game ticks. */
 const ghosts = new Map();
 const immune = new Map();
+/** Players whose death began in a game: it ends there too, even if the game ends meanwhile. */
+const dying = new Map();
+const NORMAL_BONES = 526;
 
 function started(game) {
   game.isGhost = (player) => (ghosts.get(player) ?? 0) > game.elapsed;
@@ -37,20 +40,46 @@ function dropOnDeath(game, player, where) {
   const { bones, fragment } = Common.data.items;
   const inventory = player.getInventory();
   const carried = { [bones]: inventory.getAmount(bones), [fragment]: inventory.getAmount(fragment) };
+  // Anyone may take them at once (the enemy's bones are the point).
   const drop = (id, amount) => {
-    if (amount > 0) Common.core.ItemOnGroundManager.registerLocation(player, new Common.core.Item(id, amount), where.clone(), game.area);
+    if (amount > 0) Common.core.ItemOnGroundManager.registerGlobal(player, new Common.core.Item(id, amount));
   };
   for (const id of [bones, fragment]) if (carried[id] > 0) inventory.delete(id, carried[id]);
   drop(bones, carried[bones] + 1);
   drop(fragment, carried[fragment]);
 }
 
+function dyingStarts(event) {
+  const game = Match.gameOf(event.player);
+  if (game) dying.set(event.player, game);
+}
+
+/** The core drops ordinary bones at every death; the arena's own are Soul Wars bones. */
+function takeNormalBones(player, killer, where) {
+  const { ItemOnGroundManager } = Common.core;
+  for (const owner of [killer?.getUsername?.(), player.getUsername(), null]) {
+    const bones = ItemOnGroundManager.getGroundItem?.(owner, NORMAL_BONES, where, player.getPrivateArea?.() ?? null);
+    if (bones) {
+      ItemOnGroundManager.deregister(bones);
+      return;
+    }
+  }
+}
+
 /** Recorded: the death never leaves the arena; the player wakes a ghost in a graveyard. */
 function died(event) {
   const player = event.player;
-  const game = Match.gameOf(player);
+  const began = dying.get(player);
+  dying.delete(player);
+  const game = Match.gameOf(player) ?? (began?.over ? began : null);
   if (!game) return;
   event.handled = true;
+  if (game.over) {
+    // The game ended while they were dying: they're already out, with everything.
+    player.moveTo(Common.toLocation(Common.data.lobby.afterGame));
+    return;
+  }
+  takeNormalBones(player, event.killer?.getAsPlayer?.() ?? event.killer, player.getLocation());
   const team = game.teamOf(player);
   const where = player.getLocation().clone();
   dropOnDeath(game, player, where);
@@ -68,7 +97,7 @@ function died(event) {
 }
 
 function keepItems(event) {
-  if (Match.gameOf(event.player)) event.shouldDrop = false;
+  if (Match.gameOf(event.player) || dying.has(event.player)) event.shouldDrop = false;
 }
 
 /** Barriers: base ones let their team through, sanctuary ones the living out. */
@@ -130,6 +159,7 @@ function attachDeath(api) {
   Match.onStart(started);
   Match.onEnd(ended);
   Match.onAttackRule(attackRule);
+  api.onPlayerBeforeDeath(dyingStarts);
   api.onPlayerDeath(died);
   api.onShouldDropItemsOnDeath(keepItems);
   for (const name of ["Blue Barrier", "Red Barrier", "Neutral Barrier"]) api.onObjectInteraction(name, { Pass: pass });

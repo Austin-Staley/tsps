@@ -59,9 +59,10 @@ function step(game, place) {
     if (state.alignment === target && state.holder !== gaining) capture(game, place, gaining, blue, red);
   } else {
     state.gaining = null;
-    if (!gaining && state.holder && state.alignment !== Common.ALIGNMENT[state.holder]) {
-      const target = Common.ALIGNMENT[state.holder];
-      state.alignment = state.holder === "blue" ? Math.max(target, state.alignment - drift) : Math.min(target, state.alignment + drift);
+    // Left alone it drifts back to its holder's end, or to neutral when nobody holds it.
+    const target = Common.ALIGNMENT[state.holder ?? "neutral"];
+    if (!gaining && state.alignment !== target) {
+      state.alignment = state.alignment > target ? Math.max(target, state.alignment - drift) : Math.min(target, state.alignment + drift);
     }
   }
   if (before.alignment !== state.alignment || before.gaining !== state.gaining || before.holder !== state.holder) show(game, place);
@@ -76,7 +77,7 @@ function capture(game, place, team) {
   for (const player of game.players()) {
     if (game.teamOf(player) !== team || game.isGhost?.(player)) continue;
     const at = game.area.templateOf(player.getLocation());
-    if (at[0] >= zone[0] && at[0] <= zone[2] && at[1] >= zone[1] && at[1] <= zone[3]) game.statsOf(player).areas++;
+    if (at[2] === 0 && at[0] >= zone[0] && at[0] <= zone[2] && at[1] >= zone[1] && at[1] <= zone[3]) game.statsOf(player).areas++;
   }
   recolour(game, place, team);
 }

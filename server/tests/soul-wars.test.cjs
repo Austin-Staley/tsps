@@ -35,6 +35,8 @@ before(() => {
     onNpcHitModify: (fn) => { hooks.hit = fn; },
     onNpcDeath: (fn) => { (hooks.npcDeath ??= []).push(fn); },
     onPlayerDeath: (fn) => hooks.death.push(fn),
+    onPlayerBeforeDeath: (fn) => { hooks.beforeDeath = fn; },
+    registerArea: (area) => { hooks.lobbyArea = area; },
     onShouldDropItemsOnDeath: (fn) => hooks.drops.push(fn),
     onPlayerLogin() {},
     onPlayerLogout() {},
@@ -84,7 +86,7 @@ function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 
     location: at, messages: [], varbits: new Map(), varps: new Map(), texts: new Map(), subs: [], scripts: [], anims: [], graphics: [], hp: 99,
     inventory: container(), worn: [],
     getIndex: () => id, getUsername: () => `Soul${id}`, isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true,
-    getLocation: () => p.location, moveTo(l) { p.location = l; }, getArea: () => p.area, setArea(a) { p.area = a; },
+    getLocation: () => p.location, moveTo(l) { p.location = l; }, setLocation(l) { p.location = l; }, getArea: () => p.area, setArea(a) { p.area = a; },
     getPrivateArea: () => null,
     getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
     getInventory: () => p.inventory,
@@ -451,4 +453,74 @@ test('a side with nobody left concedes', () => {
   ticks(1);
   assert.equal(game.over, true);
   assert.ok(blue.messages.includes('<col=3366ff>The blue team was victorious!</col>'));
+});
+
+// ------------------------------------------------------------------ review fixes
+
+test('logging out mid-game saves the player in the lobby, not on the instance', () => {
+  const { game, players } = startGame(4);
+  const [a] = players;
+  game.area.leave(a, true);
+  assert.deepEqual([a.location.getX(), a.location.getY()], Common.data.lobby.afterGame.slice(0, 2));
+  assert.equal(Match.gameOf(a), null);
+  assert.equal(a.worn[1], null, 'the team cape went with the game');
+});
+
+test('a death that began in the game ends there, even if the game ends meanwhile', () => {
+  const { game, players } = startGame(2);
+  const [a] = players;
+  hooks.beforeDeath({ player: a });
+  game.finish('red');
+  const keep = { player: a, shouldDrop: true };
+  for (const fn of hooks.drops) fn(keep);
+  assert.equal(keep.shouldDrop, false, 'nothing is lost');
+  const event = { player: a, killer: null, handled: false };
+  for (const fn of hooks.death) fn(event);
+  assert.equal(event.handled, true, 'not to Lumbridge');
+  assert.deepEqual([a.location.getX(), a.location.getY()], Common.data.lobby.afterGame.slice(0, 2));
+});
+
+test('a cape put on while waiting keeps that player out of the game, and the cape on them', () => {
+  config['SoulWars:minPlayers'] = 2;
+  const players = [fakePlayer(), fakePlayer(), fakePlayer()];
+  online.push(...players);
+  ticks(2);
+  players[2].worn[1] = new core.Item(6570, 1);
+  ticks(290);
+  assert.ok(Match.current);
+  assert.equal(Match.gameOf(players[2]), null);
+  assert.equal(players[2].worn[1].getId(), 6570);
+  assert.equal(players[2].messages.at(-1), "You can't enter a waiting area while wearing something on your back.");
+});
+
+test('a finished game lets go of its avatars and creatures', () => {
+  const { game } = startGame(2);
+  assert.ok([...Avatars.AVATAR_OF.values()].some((f) => f.game === game));
+  game.finish(null);
+  assert.equal([...Avatars.AVATAR_OF.values()].some((f) => f.game === game), false);
+  assert.equal([...Souls.CREATURE_OF.values()].some((f) => f.game === game), false);
+});
+
+test('the minimum is never under 2, and one category alone does not make full Zeal', () => {
+  config['SoulWars:minPlayers'] = 1;
+  assert.equal(Lobby.minPlayers(), 2);
+  const { game, players } = startGame(2);
+  const [a] = players;
+  game.elapsed = 2000;
+  game.statsOf(a).bones = 15;
+  assert.ok(game.zealFor(a, 'win') < 60);
+  Object.assign(game.statsOf(a), { fragments: 30, areas: 6, damage: 260 });
+  assert.equal(game.zealFor(a, 'win'), 60);
+});
+
+test('a ghost cannot charge the obelisk; an unheld, uncontested place drifts back to neutral', () => {
+  const { game, players } = startGame(2);
+  const [a] = players;
+  for (const fn of hooks.death) fn({ player: a, killer: null, handled: false });
+  a.inventory.add(new core.Item(25201, 2));
+  hooks.objects.get('Soul Obelisk:Sacrifice-fragments')({ player: a, object: null });
+  assert.equal(a.inventory.getAmount(25201), 2);
+  game.control.obelisk.alignment = 70;
+  ticks(5);
+  assert.equal(game.control.obelisk.alignment, 60);
 });

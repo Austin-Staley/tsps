@@ -111,8 +111,13 @@ function adjust(game, team, change) {
   return avatar.strength;
 }
 
+function ended(game) {
+  for (const [npc, found] of [...AVATAR_OF]) if (found.game === game) AVATAR_OF.delete(npc);
+}
+
 function attachAvatars(api) {
   Match.onStart(started);
+  Match.onEnd(ended);
   Match.onAttackRule(attackRule);
   Match.onAggressionRule(aggressionRule);
   api.onNpcHitModify(blockDamage);

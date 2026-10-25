@@ -5,7 +5,7 @@
  */
 const Common = require("./Common.SoulWars");
 
-const FIGURES = ["zeal", "zeal_tokens", "total_games", "total_wins", "total_kills", "total_deaths"];
+const FIGURES = Object.keys(Common.FIGURE_ATTRIBUTES);
 
 function loggedIn({ player }) {
   for (const name of FIGURES) {
@@ -15,7 +15,7 @@ function loggedIn({ player }) {
 }
 
 function attachStats(api) {
-  for (const name of FIGURES) api.persistAttribute(`soul-wars:${name}`, 0);
+  for (const key of Object.values(Common.FIGURE_ATTRIBUTES)) api.persistAttribute(key, 0);
   api.onPlayerLogin(loggedIn);
 }
 

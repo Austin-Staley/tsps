@@ -68,6 +68,7 @@ function sacrifice({ player }) {
     player.sendMessage(Common.message("gameEnded"));
     return true;
   }
+  if (game.isGhost?.(player)) return true;
   const team = game.teamOf(player);
   const enemy = Common.other(team);
   const avatar = game.avatars[enemy];
@@ -96,8 +97,13 @@ function sacrifice({ player }) {
   return true;
 }
 
+function ended(game) {
+  for (const [npc, found] of [...CREATURE_OF]) if (found.game === game) CREATURE_OF.delete(npc);
+}
+
 function attachSouls(api) {
   Match.onStart(started);
+  Match.onEnd(ended);
   api.onNpcDeath(creatureDied);
   api.onCustomEvent("npc-drops:roll", rollDrops);
   api.onObjectInteraction("Soul Obelisk", { "Sacrifice-fragments": sacrifice });

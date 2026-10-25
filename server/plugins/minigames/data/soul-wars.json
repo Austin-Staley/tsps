@@ -1384,7 +1384,7 @@
     "from": 18,
     "banTicks": 1000
   },
-  "_zeal": "Wiki: at most 40 for a loss, 50 a draw, 60 a win; full only with 10:15 played; contributions capped at fragments 30, areas 6, avatar damage 260, bones 15. Calibrated: each contribution counts as a share of its cap, and the shares add up to the whole.",
+  "_zeal": "Wiki: at most 40 for a loss, 50 a draw, 60 a win; full only with 10:15 played; contributions capped at fragments 30, areas 6, avatar damage 260, bones 15. Calibrated: player kills capped at 10, and each contribution's share of its cap adding up, with 2.5 shares (a mix, not one category) for the most.",
   "zeal": {
     "loss": 40,
     "draw": 50,
@@ -1396,7 +1396,8 @@
       "damage": 260,
       "bones": 15,
       "kills": 10
-    }
+    },
+    "sharesForFull": 2.5
   },
   "music": {
     "lobby": 686,
@@ -1441,5 +1442,6 @@
     "zealFirst": "You earned {zeal} Zeal.",
     "zeal": "You earned {zeal} Zeal. You now have {tokens} Zeal Tokens to spend.",
     "inactive": "You have been removed from the game for inactivity."
-  }
+  },
+  "minPlayersFloor": 2
 }

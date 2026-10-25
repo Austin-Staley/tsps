@@ -22,12 +22,16 @@ const ENTRY_PORTALS = ["soul_wars_edgeville_portal", "soul_wars_enclave_portal"]
 
 /** Players with the lobby HUD up. */
 const hud = new Set();
-/** Who's online (the world's players; a test can swap it). */
-const source = { players: () => Common.core.World.getPlayers() };
+/** The lobby's registered Area (so only its own players are looked at). */
+let lobbyArea = null;
+/** Who's in the lobby (the area's players; a test can swap it). */
+const source = { players: () => lobbyArea?.getPlayers?.() ?? [] };
 let countdown = null;
 
+/** The Wiki's 20, or a world's own (never under 2: a game needs both sides). */
 function minPlayers() {
-  return Number(Common.api.getPluginConfig?.(MIN_PLAYERS_CONFIG, Common.data.minPlayers)) || Common.data.minPlayers;
+  const configured = Number(Common.api.getPluginConfig?.(MIN_PLAYERS_CONFIG, Common.data.minPlayers)) || Common.data.minPlayers;
+  return Math.max(Common.data.minPlayersFloor, configured);
 }
 
 function locId(name) {
@@ -136,8 +140,16 @@ function tick() {
     if (countdown === Common.data.shortlyAt) for (const player of queued) player.sendMessage(Common.message("shortly"));
     if (countdown <= 0) {
       countdown = null;
-      for (const player of queued) closeHud(player);
-      new Match.Game(queued).start();
+      // Whatever they've put on or picked up while waiting is checked again (a cape would be lost).
+      const ready = queued.filter((player) => {
+        const refused = refusal(player);
+        if (refused) player.sendMessage(refused);
+        return !refused;
+      });
+      if (ready.length >= min) {
+        for (const player of ready) closeHud(player);
+        new Match.Game(ready).start();
+      }
     }
   }
   const players = queued.length >= min ? String(queued.length) : `${queued.length}/${min}`;
@@ -158,7 +170,26 @@ function forget({ player }) {
   hud.delete(player);
 }
 
+function lobbyAreaClass() {
+  return class SoulWarsLobby extends Common.core.Area {
+    getName() {
+      return "Soul Wars lobby";
+    }
+
+    postEnter(mobile) {
+      if (mobile.isPlayer?.()) openHud(mobile.getAsPlayer());
+    }
+
+    postLeave(mobile) {
+      if (mobile.isPlayer?.()) closeHud(mobile.getAsPlayer());
+    }
+  };
+}
+
 function attachLobby(api) {
+  const [x0, y0, x1, y1] = Common.data.lobby.bounds;
+  lobbyArea = new (lobbyAreaClass())([new Common.core.Boundary(x0, x1, y0, y1, 0)]);
+  api.registerArea(lobbyArea);
   api.onObjectInteraction("Soul Wars Portal", { Enter: enterPortal });
   api.onObjectInteraction("Portal", { Enter: leavePortal, Edgeville: leavePortal, "Ferox Enclave": leavePortal });
   api.onObjectInteraction("Barrier", { Pass: barrier });
