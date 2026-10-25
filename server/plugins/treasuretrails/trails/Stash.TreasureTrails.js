@@ -111,6 +111,10 @@ function interact(event) {
   event.handled = true;
   const { player } = event;
   if (!built(player).includes(event.objectId)) { build(player, unit); return; }
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "stash", resume: () => interact({ ...event, handled: false }) };
+  api.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   const items = stored(player)[event.objectId];
   if (Array.isArray(items) && items.length) withdraw(player, unit, items);
   else deposit(player, unit);
