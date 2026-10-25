@@ -703,6 +703,7 @@ module.exports = {
   },
   register(api) {
     pluginApi = api;
+    require("./grandexchange/Sets.GrandExchange")(api);
     loadMarketData();
     api.persistAttribute(OFFERS_ATTRIBUTE, {});
     api.persistAttribute(LIMITS_ATTRIBUTE, {});

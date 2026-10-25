@@ -10,6 +10,7 @@ const CrystalHarpoon = require("./fishing/CrystalHarpoon.Fishing");
 const Guild = require("./fishing/Guild.Fishing");
 const AnglerOutfit = require("./fishing/AnglerOutfit.Fishing");
 const MinnowPlatform = require("./fishing/MinnowPlatform.Fishing");
+const { pauseForLevelUp } = require("./SkillActions");
 
 const FISHING_ACTION_INTERVAL_TICKS = 5;
 const FISHING_ANIMATION_INTERVAL_TICKS = 5;
@@ -535,6 +536,7 @@ class FishingTask extends Task {
         stopFishing(this.activeSessions, player);
         continue;
       }
+      if (session.levelUpPaused) continue;
 
       const npc = World.getNpcs().get(session.npcIndex);
       if (!npc || npc.getId() !== session.npcId ||
@@ -597,6 +599,10 @@ function isFishingActive(player) {
   return activeSessionsRef?.has(player) === true;
 }
 
+function pauseFishing(event) {
+  pauseForLevelUp(event, activeSessionsRef, (player) => stopFishing(activeSessionsRef, player, false));
+}
+
 module.exports = {
   name: "Fishing",
   register(api) {
@@ -615,9 +621,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopFishing(activeSessions, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopFishing(activeSessions, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseFishing);
 
     // Returning false leaves spots this plugin doesn't fish (aerial, karambwan...) to others.
     function startFishingInteraction(event) {

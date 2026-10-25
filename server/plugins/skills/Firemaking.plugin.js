@@ -10,6 +10,7 @@ const { RegionManager } = require("../../src/main/typescript/elvarg/game/collisi
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { pauseForLevelUp } = require("./SkillActions");
 
 const SESSION_MODE = Object.freeze({
   INVENTORY: "inventory",
@@ -594,6 +595,7 @@ function processFiremakingTick(activeSessions, currentTick) {
       stopFiremaking(activeSessions, player);
       continue;
     }
+    if (session.levelUpPaused) continue;
 
     if (!player.getLocation().isWithinInteractionDistance(session.location)) {
       stopFiremaking(activeSessions, player);
@@ -885,9 +887,9 @@ function handlePlayerDisconnect({ player }) {
   stopFiremaking(activeSessionsRef, player, false);
 }
 
-/** A level-up pop-up interrupts lighting, whichever skill it is for. */
-function handlePlayerLevelUp({ player }) {
-  stopFiremaking(activeSessionsRef, player, false);
+/** A level-up pop-up pauses lighting, whichever skill it is for. */
+function handlePlayerLevelUp(event) {
+  pauseForLevelUp(event, activeSessionsRef, (player) => stopFiremaking(activeSessionsRef, player, false));
 }
 
 function onItemOnItemEvent(event) {

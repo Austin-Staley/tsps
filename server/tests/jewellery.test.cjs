@@ -275,6 +275,9 @@ test("the ring of wealth's Rub submenu and worn options follow the cache's order
   const { ACTIONS } = require("../plugins/items/RingOfWealth.plugin");
   assert.deepEqual(ACTIONS.slice(0, 4).map((action) => action.teleport.label),
     ["Miscellania", "Grand Exchange", "Falador Park", "Dondakan"], "sub-op 2 is the Grand Exchange");
+  const landing = ACTIONS[1].teleport.destination;
+  assert.deepEqual([landing.getX(), landing.getY(), landing.getZ()], [3163, 3478, 0],
+    'land on the southern approach, clear of the bank');
   assert.deepEqual(ACTIONS.slice(4).map((action) => action.type), ["boss-log", "coin-collection"]);
 });
 

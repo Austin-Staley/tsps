@@ -316,7 +316,7 @@ for (const piece of JEWELLERY) {
 
 /** The ring of wealth's teleports; RingOfWealth.plugin.js handles the ring itself. */
 const RING_OF_WEALTH_DESTINATIONS = [
-  { label: "Grand Exchange", tile: [3163, 3485, 0] },
+  { label: "Grand Exchange", tile: [3163, 3478, 0] },
   { label: "Miscellania", tile: [2539, 3864, 0] },
   { label: "Falador Park", tile: [2994, 3377, 0] },
   { label: "Dondakan", tile: [2824, 10168, 0] },
