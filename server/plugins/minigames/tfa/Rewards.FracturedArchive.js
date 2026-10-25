@@ -3,9 +3,9 @@
 /**
  * The Fractured Archive's reward items that do something when used (docs/fractured-archive.md).
  *
- * Horn of Bran (https://oldschool.runescape.wiki/w/Horn_of_Bran): taken to King Arthur in Camelot
- * it unlocks the Zeal prayer for good (varbit prayer_zeal_unlocked). The Wiki has a cutscene and
- * dialogue there; this is the unlock without them. Zeal itself is core's PrayerData.ZEAL: Prayer 84,
+ * Horn of Bran (https://oldschool.runescape.wiki/w/Horn_of_Bran; options Inspect and Drop): entering
+ * Camelot Castle with it unlocks the Zeal prayer for good (varbit prayer_zeal_unlocked), without the
+ * Wiki's cutscene. Zeal itself is core's PrayerData.ZEAL: Prayer 84,
  * Attack 75, Strength 75 and, from the cache's unlock table (dbrow 17168), Defence 70.
  *
  * Archivist's folio (https://oldschool.runescape.wiki/w/Archivist%27s_folio): Read teleports to
@@ -21,6 +21,8 @@ const ZEAL_STRENGTH = 75;
 const ZEAL_DEFENCE = 70;
 const CHARGES_PER_SHARD = 5;
 const WILDERNESS_LIMIT = 20;
+// Estimate: the castle's walls around King Arthur (2764,3515).
+const CAMELOT = { minX: 2745, maxX: 2776, minY: 3489, maxY: 3524 };
 const LOBBY = { x: 4127, y: 5508, z: 0 };
 
 let core = null;
@@ -34,18 +36,30 @@ function syncZeal({ player }) {
   player.getPacketSender().sendVarbit(ZEAL_UNLOCKED_VARBIT, player.getAttribute(ZEAL_UNLOCKED_ATTRIBUTE) === true ? 1 : 0);
 }
 
-function showHornToArthur(event) {
-  const { player, definition } = event;
-  if (event.itemId !== core.ItemIdentifiers.HORN_OF_BRAN || definition?.getName?.() !== "King Arthur") return;
-  event.handled = true;
-  if (player.getAttribute(ZEAL_UNLOCKED_ATTRIBUTE) === true) {
-    player.sendMessage("You have already unlocked that prayer.");
-    return;
-  }
-  player.getInventory().deleteNumber(core.ItemIdentifiers.HORN_OF_BRAN, 1);
+/** Wiki: "Upon entering Camelot, a cutscene begins" - the cutscene is not built, a message stands in. */
+function enterCamelot(mobile) {
+  const player = mobile.isPlayer?.() ? mobile.getAsPlayer() : null;
+  const inventory = player?.getInventory();
+  if (!inventory?.contains(core.ItemIdentifiers.HORN_OF_BRAN) || player.getAttribute(ZEAL_UNLOCKED_ATTRIBUTE) === true) return;
+  // Estimate: the Wiki doesn't say whether the (tradeable) horn is used up.
+  inventory.deleteNumber(core.ItemIdentifiers.HORN_OF_BRAN, 1);
   player.setAttribute(ZEAL_UNLOCKED_ATTRIBUTE, true);
   syncZeal({ player });
-  player.sendMessage("You have unlocked the Zeal prayer.");
+  player.sendMessage("You present the Horn of Bran to King Arthur. You have unlocked the Zeal prayer.");
+}
+
+function createCamelotArea(api) {
+  const { Area, Boundary } = api.core;
+  class CamelotCastle extends Area {
+    getName() {
+      return "Camelot Castle";
+    }
+
+    postEnter(mobile) {
+      enterCamelot(mobile);
+    }
+  }
+  return new CamelotCastle([new Boundary(CAMELOT.minX, CAMELOT.maxX, CAMELOT.minY, CAMELOT.maxY, 0)]);
 }
 
 function zealRequirements(event) {
@@ -118,10 +132,10 @@ module.exports = function registerFracturedArchiveRewards(api) {
   api.persistAttribute(FOLIO_CHARGES_ATTRIBUTE, 0);
   api.onPlayerLogin(syncZeal);
   api.onPrayerDisabled(zealRequirements);
-  api.onItemOnNpc(showHornToArthur);
+  api.registerArea(createCamelotArea(api));
   for (const folio of ["Archivist's folio", "Archivist's folio (inert)"]) {
     api.onItemAction(folio, { Read: readFolio, Charge: chargeFolio, Check: checkFolio });
     api.onItemOnItem("Ascension shards", folio, chargeWithShards);
   }
 };
-module.exports._test = { zealRequirements, readFolio, chargeFolio, showHornToArthur, chargeWithShards };
+module.exports._test = { zealRequirements, readFolio, chargeFolio, enterCamelot, chargeWithShards };

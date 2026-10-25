@@ -198,6 +198,8 @@ export class EquipPacketListener {
 
     if (equipmentSlot === Equipment.WEAPON_SLOT) {
       EquipPacketListener.resetWeapon(player, true);
+    } else if (equipmentSlot === Equipment.SHIELD_SLOT) {
+      EquipPacketListener.resetWeapon(player, false); // a shield can carry a special (Rondache)
     }
 
     getBonusManager().update(player);
@@ -236,6 +238,8 @@ export class EquipPacketListener {
     if (slot === Equipment.WEAPON_SLOT) {
       EquipPacketListener.resetWeapon(player, true);
       getCombatSpecial().updateBar(player);
+    } else if (slot === Equipment.SHIELD_SLOT) {
+      EquipPacketListener.resetWeapon(player, false);
     }
 
     equipment.refreshItems();

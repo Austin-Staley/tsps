@@ -14,8 +14,8 @@ const rewards = require("../plugins/minigames/tfa/Rewards.FracturedArchive");
 const rondache = require("../plugins/combat/effects/Rondache.EquipmentEffects");
 
 rewards({
-  core: { PrayerData, Skill },
-  persistAttribute() {}, onPlayerLogin() {}, onPrayerDisabled() {}, onItemAction() {}, onItemOnNpc() {}, onItemOnItem() {},
+  core: { PrayerData, Skill, ItemIdentifiers: ItemIds, Area: class {}, Boundary: class {} },
+  persistAttribute() {}, registerArea() {}, onPlayerLogin() {}, onPrayerDisabled() {}, onItemAction() {}, onItemOnNpc() {}, onItemOnItem() {},
 });
 
 function player(levels = {}, attributes = {}, shield = 0) {
@@ -25,6 +25,9 @@ function player(levels = {}, attributes = {}, shield = 0) {
   return {
     isPlayer: () => true,
     getAsPlayer() { return this; },
+    getPacketSender: () => ({ sendVarbit() {} }),
+    sendMessage() {},
+    getInventory: () => ({ contains: (id) => attrs.get("horn") && id === ItemIds.HORN_OF_BRAN, deleteNumber() { attrs.set("horn", false); } }),
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getSkillManager: () => ({ getMaxLevel: (skill) => levels[skill] ?? 99 }),
@@ -58,7 +61,16 @@ test("Rondache takes 2 off each hit and charges by what it took", () => {
   rondache._test.applyRondache(p, small);
   assert.deepEqual([big.damage, small.damage], [8, 0]);
   assert.equal(p.getAttribute(rondache._test.CHARGES_ATTRIBUTE), 3);
+  for (let i = 0; i < 30; i++) rondache._test.applyRondache(p, hit(10));
+  assert.equal(p.getAttribute(rondache._test.CHARGES_ATTRIBUTE), 20, "capped at 20");
   const bare = hit(10);
   rondache._test.applyRondache(player(), bare);
   assert.equal(bare.damage, 10);
+});
+
+test("Entering Camelot with the Horn of Bran unlocks Zeal and uses the horn up", () => {
+  const p = player({}, { horn: true });
+  rewards._test.enterCamelot(p);
+  assert.equal(p.getAttribute("prayer:zeal-unlocked"), true);
+  assert.equal(p.getAttribute("horn"), false);
 });
