@@ -118,6 +118,15 @@ function give(player, id, amount) {
   else for (let i = 0; i < amount; i++) inventory.add(new Common.core.Item(id, 1));
 }
 
+/** The slots these rewards take: a stack the inventory already holds takes none. */
+function slotsFor(inventory, rewards) {
+  return rewards.reduce((total, [id, amount]) => {
+    const stacks = Common.core.ItemDefinition.forId(id)?.isStackable?.() === true;
+    if (!stacks) return total + amount;
+    return total + (inventory.getAmount(id) > 0 ? 0 : 1);
+  }, 0);
+}
+
 function talk(player, pages) {
   const { DialogueChainBuilder, ItemStatementDialogue, ActionDialogue } = Common.core;
   const manager = player.getDialogueManager();
@@ -138,15 +147,18 @@ function chest({ player, object }) {
     sound(player, cat().sounds.locked);
     return true;
   }
-  if (inventory.getFreeSlots() < 2) {
-    player.sendMessage(Common.message("noRoom"));
-    return true;
-  }
-  inventory.delete(keyId, 1);
   const loot = rollLoot(found.metal);
   const coins = coinsFor(found.metal, loot);
   const [pasteLow, pasteHigh] = Common.data.chests.swampPaste[found.metal];
   const paste = Common.randomInt(pasteLow, pasteHigh);
+  const rewards = [loot && [loot.id, loot.amount], coins > 0 && [COINS, coins], [Common.objId(SWAMP_PASTE), paste]].filter(Boolean);
+  // The key's own slot is free once it dissolves, so it counts towards the room.
+  const room = inventory.getFreeSlots() + (inventory.getAmount(keyId) === 1 ? 1 : 0);
+  if (slotsFor(inventory, rewards) > room) {
+    player.sendMessage(Common.message("noRoom"));
+    return true;
+  }
+  inventory.delete(keyId, 1);
   if (loot) give(player, loot.id, loot.amount);
   if (coins > 0) give(player, COINS, coins);
   give(player, Common.objId(SWAMP_PASTE), paste);

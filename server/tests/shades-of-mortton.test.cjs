@@ -240,3 +240,25 @@ test('the reward (Wiki): a key from the remains\' groups, else 21% coins', () =>
     Math.random = random;
   }
 });
+
+test('a chest without room for all its treasure (3 mithril bars, coins, paste) keeps the key and gives nothing', () => {
+  const p = fakePlayer(new Location(3510, 9723, 0));
+  for (let i = 0; i < 25; i++) p.inventory.add(new core.Item(1511, 1));
+  p.inventory.add(new core.Item(key('bronze', 'bloodred'), 1));
+  const open = () => hooks.objects.get('Bronze Chest:Open')({ player: p, object: loc('shadechest_bronze_bloodred', 3511, 9724) });
+  const random = Math.random;
+  Math.random = () => 0.43; // the mithril bars on the bronze table
+  try {
+    open();
+    assert.equal(p.messages.at(-1), Common.message('noRoom'));
+    assert.equal(p.inventory.getAmount(key('bronze', 'bloodred')), 1, 'the key is kept');
+    assert.equal(p.inventory.getAmount(2359), 0);
+    for (let i = 0; i < 3; i++) p.inventory.delete(1511, 1);
+    open();
+  } finally {
+    Math.random = random;
+  }
+  assert.equal(p.inventory.getAmount(key('bronze', 'bloodred')), 0, 'with room, the key dissolves');
+  assert.equal(p.inventory.getAmount(2359), 3);
+  assert.ok(p.inventory.getAmount(Common.objId('swamppaste')) > 0);
+});
