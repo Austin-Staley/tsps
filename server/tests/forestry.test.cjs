@@ -370,6 +370,18 @@ test('chopping a root: the swing line, a roll every 4 ticks, then the root goes 
   assert.equal(Math.round(xp(p, 'Woodcutting')), Math.round(70 * 0.55));
 });
 
+test('a boosted Woodcutting level past 99 still pays the top band', () => {
+  const p = fakePlayer({ level: 105 });
+  const event = startEvent('roots', [p]);
+  const root = [...event.roots][0];
+  Math.random = () => 0;
+  hooks.objects.get('Tree roots:Chop down')({ player: p, object: root.object });
+  ticks(4);
+  Math.random = random;
+  assert.equal(event.roots.has(root), false);
+  assert.equal(bark(p), 3, 'the 41+ band');
+});
+
 test('an anima root pays more; a late joiner gets 1 XP and no bark', () => {
   const p = fakePlayer({ level: 30 });
   const late = fakePlayer({ level: 30 });
