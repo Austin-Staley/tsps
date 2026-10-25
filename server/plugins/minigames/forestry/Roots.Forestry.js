@@ -116,9 +116,11 @@ function cutChance(player, axe) {
   return Woodcutting.calculateCutChance(Common.level(player, "WOODCUTTING"), willow, axe);
 }
 
+/** The bark band for the player's level; a boost past 99 stays in the top band. */
 function rootReward(player, kind) {
   const level = Common.level(player, "WOODCUTTING");
-  const [, low, high] = R().bark[kind].find(([upTo]) => level <= upTo);
+  const bands = R().bark[kind];
+  const [, low, high] = bands.find(([upTo]) => level <= upTo) ?? bands[bands.length - 1];
   return Common.randomInt(low, high);
 }
 
