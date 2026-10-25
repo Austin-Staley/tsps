@@ -125,7 +125,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
   const { Skill } = require('../dist/game/model/Skill');
   const { Location: Loc } = require('../dist/game/model/Location');
   const real = { cooking: Cooking.isCookingActive, firemaking: Firemaking.isFiremakingActive,
-    light: Firemaking.startBotInventoryFiremaking, canBurn: Firemaking.canPlayerBurnLog };
+    light: Firemaking.startBotInventoryFiremaking, canBurn: Firemaking.canPlayerBurnLog, logs: Firemaking.LIGHTABLE_LOGS };
   const RAW_SHRIMPS = 317;
   const LOGS = 1511;
   const items = new Map([[RAW_SHRIMPS, 27]]);
@@ -137,6 +137,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
     Cooking.isCookingActive = () => false;
     Firemaking.isFiremakingActive = () => false;
     Firemaking.canPlayerBurnLog = () => true;
+    Firemaking.LIGHTABLE_LOGS = [{ itemId: LOGS }];
     Firemaking.startBotInventoryFiremaking = (_, logId) => { lit = logId; return true; };
     const world = {
       core: { Skill, World: { getObjects: () => objects } },
@@ -167,7 +168,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
     assert.equal(a.update({ player, nowMs: 9000 }), 'success', 'nothing left to cook');
   } finally {
     Object.assign(Cooking, { isCookingActive: real.cooking });
-    Object.assign(Firemaking, { isFiremakingActive: real.firemaking, startBotInventoryFiremaking: real.light, canPlayerBurnLog: real.canBurn });
+    Object.assign(Firemaking, { isFiremakingActive: real.firemaking, startBotInventoryFiremaking: real.light, canPlayerBurnLog: real.canBurn, LIGHTABLE_LOGS: real.logs });
   }
 });
 
