@@ -408,6 +408,18 @@ test('buys use coins first, then platinum tokens with change in coins', t => {
   assert.equal(inventory.getAmount(13204), 2);
 });
 
+test('a token payment whose change has no free slot is refused and takes nothing', t => {
+  const { inventory, place, messages } = exchange(t);
+  inventory.add(new Item(13204, 5), false);
+  for (let slot = 1; slot < 28; slot++) inventory.add(new Item(5000 + slot, 1), false);
+  assert.equal(place(false, PRICED, 1, 500), undefined);
+  assert.match(messages.at(-1), /inventory space/);
+  assert.equal(inventory.getAmount(13204), 5);
+  assert.equal(place(false, PRICED, 1, 1_000).total, 1_000);
+  assert.equal(inventory.getAmount(13204), 4);
+  assert.equal(inventory.getAmount(995), 0);
+});
+
 test('trades above the coin stack pay with tokens and collect as tokens plus coins', t => {
   const { MAX_TRADE, payout } = plugin._test;
   assert.equal(MAX_TRADE, 2_149_631_130_647);

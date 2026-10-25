@@ -438,8 +438,14 @@ function confirm(player, offer) {
     const shortfall = total - inventory.getAmount(COINS);
     result.deleted(COINS, inventory.getAmount(COINS), false);
     result.deleted(PLATINUM_TOKEN, tokens, false);
-    // The coin stack was emptied and the change is under 1,000, so it cannot overflow.
-    result.add(new Item(COINS, tokens * COINS_PER_TOKEN - shortfall), false);
+    // The coin stack was emptied and the change is under 1,000, so it cannot overflow; it can
+    // still have no slot to land in when the inventory is full.
+    const change = tokens * COINS_PER_TOKEN - shortfall;
+    result.add(new Item(COINS, change), false);
+    if (result.getAmount(COINS) !== change) {
+      sender.sendMessage("You don't have enough inventory space for your change.");
+      return;
+    }
   } else {
     result.deleted(inputId, inputAmount, false);
     if (result.getAmount(inputId) !== inventory.getAmount(inputId) - inputAmount) {
