@@ -422,6 +422,33 @@ test('a shared door stays open with open collision across a region reload, then 
   }
 });
 
+test('an ordinary reload whose world-object replay already hid the closed door keeps the open door', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const region = regionOf(3226, 3214);
+  const at = (object, x, y) => object.getLocation().getX() === x && object.getLocation().getY() === y;
+  try {
+    openWith(h, sharedPlayer, MapObjects.get(1535, new Location(3226, 3214, 0), null));
+    assert.ok(RegionManager.reloadRegion(region));
+    // Core's replay ran during the load, before the doors hook below.
+    assert.equal(mapCopies(1535, 3226, 3214), 0, 'the replay already took the closed leaf out');
+    const closed = World.getRemovedObjects().find((object) => object.getId() === 1535 && at(object, 3226, 3214));
+    assert.ok(closed && RegionManager.wasRemovedOnLoad(1535, closed.getType(), closed.getFace(), 3226, 3214, 0),
+      'the region remembers that its load placed the closed leaf');
+    h.regionLoaded(region);
+    assert.equal(h.internals.OPEN_OBJECT_STATES.size, 1, 'the door is not mistaken for a map replacement');
+    assert.equal(mapCopies(1536, 3227, 3214), 1, 'the open leaf stays exactly once');
+    assert.ok(World.getRemovedObjects().some((object) => object.getId() === 1535 && at(object, 3226, 3214)),
+      'the closed leaf stays removed for players');
+    h.submitted.at(-1).execute();
+    assert.equal(mapCopies(1535, 3226, 3214), 1, 'auto-close still brings the closed leaf back');
+    assert.equal(mapCopies(1536, 3227, 3214), 0);
+  } finally {
+    h.restore();
+  }
+});
+
 test('a door open across a region boundary is re-applied once as either region loads', async () => {
   await initializeMapCollisionOnce();
   const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
