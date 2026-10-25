@@ -2141,6 +2141,26 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     glr.drawRect(dot.x - dotSize / 2, dot.y - dotSize / 2, dotSize, dotSize,
                         isBot ? [1, 1, 1, 1] : [1, 1, 0, 1]);
                 }
+                // Plugin WorldMapPoints (e.g. Quest Helper's step location), edge-snapped when asked.
+                const pluginPoints: any[] = worldMapRenderHost?.pluginWorldMapPoints ?? [];
+                const pointSize = 16 * renderScale;
+                for (const point of pluginPoints) {
+                    const displayPos = currentArea.position(point.plane, point.x, point.y);
+                    if (!displayPos) continue;
+                    const at = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
+                    const inside = at.x >= x && at.y >= y && at.x <= x + width && at.y <= y + height;
+                    if (!inside && !point.snapToEdge) continue;
+                    const half = pointSize / 2;
+                    const px = Math.min(Math.max(at.x, x + half), x + width - half);
+                    const py = Math.min(Math.max(at.y, y + half), y + height - half);
+                    const texture = point.texture ? glr.getTexture(point.texture) : undefined;
+                    if (texture) glr.drawTexture(texture, px - half, py - half, pointSize, pointSize);
+                    else {
+                        const c = point.color >>> 0;
+                        glr.drawRect(px - half / 2, py - half / 2, half, half,
+                            [((c >>> 16) & 0xff) / 255, ((c >>> 8) & 0xff) / 255, (c & 0xff) / 255, 1]);
+                    }
+                }
                 osrsClient?.setWorldMapViewport?.({
                     x, y, width, height, displayX, displayY, pixelsPerTileX, pixelsPerTileY,
                 });

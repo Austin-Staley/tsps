@@ -3,7 +3,7 @@ import { createElement } from "react";
 import type { NavigationIcon } from "./NavigationButton";
 
 /**
- * The URL of one of the sidebar's images in `public/runelite/` (RuneLite's
+ * The URL of one of the sidebar's images in `public/runelite/` (RuneLite's and Quest Helper's
  * resources, see its LICENSE.md). Served next to the client, so tests can name them without a
  * bundler.
  */

@@ -1,6 +1,6 @@
-# Sidebar images
+# Sidebar and Quest Helper images
 
-These images are used by the RuneLite-style sidebar.
+These images are used by the RuneLite-style sidebar and the Quest Helper panels.
 
 From RuneLite (https://github.com/runelite/runelite, `runelite-client/src/main/resources/`):
 
@@ -14,14 +14,27 @@ From RuneLite (https://github.com/runelite/runelite, `runelite-client/src/main/r
 | `search.png` | `net/runelite/client/ui/components/search.png` |
 | `open_rs.png` | `net/runelite/client/ui/open_rs.png` |
 | `xp_overall.png` | `skill_icons/overall.png` |
+| `skill_icons_small/*.png` (the 24 skills) | `skill_icons_small/*.png` |
 
 Drawn for this client: `menu_swapper_icon.png`, `tile_packs_icon.png`.
 
-RuneLite is distributed under the BSD 2-Clause License:
+From Quest Helper (https://github.com/Zoinkwiz/quest-helper, commit `06da90f`, `src/main/resources/`):
+
+| File | Source path |
+|---|---|
+| `quest_icon.png` | `quest_icon.png` |
+| `quest_helper_close.png` | `close.png` |
+| `quest_helper_collapsed.png` | `collapsed.png` |
+| `quest_helper_expanded.png` | `expanded.png` |
+| `quest_helper_settings_icon.png` | `settings_icon.png` |
+| `quest_helper_start.png` | `start.png` |
+
+Both projects are distributed under the BSD 2-Clause License:
 
 > BSD 2-Clause License
 >
-> Copyright (c) 2016-2017, Adam <Adam@sigterm.info>
+> Copyright (c) 2016-2017, Adam <Adam@sigterm.info> (RuneLite)
+> Copyright (c) 2020, Zoinkwiz (Quest Helper)
 > All rights reserved.
 >
 > Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:

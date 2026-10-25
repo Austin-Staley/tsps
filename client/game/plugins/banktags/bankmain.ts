@@ -11,6 +11,7 @@ export const Bankmain = {
     ITEMS_CONTAINER: component(0x09),
     ITEMS: component(0x0c),
     SCROLLBAR: component(0x0d),
+    SEARCH_BUTTON: component(0x2a),
     DEPOSITINV: component(0x2f),
     DEPOSITWORN: component(0x31),
     POPUP_BUTTON_OUT: component(0x34),
