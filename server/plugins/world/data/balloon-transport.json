@@ -56,6 +56,7 @@
   "messages": {
     "_recorded": "rsprox 3225: boarded (a game message), alreadyThere (a message box), usedLast, storageLeft and storageOne (spam, as the logs are taken; [type] is the log's name: Logs, Oak logs...). usedLast is recorded for inventory trips only; used for storage's last set too, uncalibrated.",
     "boarded": "You board the balloon and fly to [place].",
+    "boardControls": "You board the balloon.",
     "alreadyThere": "You're already there!",
     "usedLast": "You used the last of your [type].",
     "storageLeft": "You have [amount] sets of [type] left in storage.",

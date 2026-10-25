@@ -12,7 +12,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Travel, Storage, tasks, prompts;
+let Common, Travel, Storage, Controls, tasks, prompts;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -20,6 +20,7 @@ before(async () => {
   Common = require('../plugins/world/balloontransport/Common.BalloonTransport');
   Travel = require('../plugins/world/balloontransport/Travel.BalloonTransport');
   Storage = require('../plugins/world/balloontransport/Storage.BalloonTransport');
+  Controls = require('../plugins/world/balloontransport/Controls.BalloonTransport');
   const api = new Proxy({
     core: {
       ...core,
@@ -89,8 +90,9 @@ function fakePlayer({ at = [2938, 3421], items = {} } = {}) {
       sendSong: (id) => { (player.songs ??= []).push(id); },
       sendTypedMessage: (type, line) => player.messages.push(line),
       sendInterfaceRawModel() {}, sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
-      sendInterfaceDisplayState() {},
+      sendInterfaceDisplayState() {}, sendInterfacePosition() {}, sendSound() {}, sendTabInterface() {},
     }),
+    getSpellbook: () => ({ getInterfaceId: () => 218 }),
   };
   return player;
 }
@@ -220,13 +222,14 @@ test('"ask" with logs in both offers the choice; preferring storage does not ask
   assert.equal(flown, Storage.STORAGE);
 });
 
-test('a route opened from Entrana with stored logs; a trip that does not happen refunds the stock', () => {
+test('a route opened from Entrana is paid from stored logs at take-off; a trip that does not happen refunds the stock', () => {
   const player = fakePlayer({ at: [2808, 3354] });
   player.attributes[Storage.STORED_ATTRIBUTE] = { willow: 12 };
   Travel.travel(player, station('entrana'), station('varrock'));
-  tick(4);
-  assert.equal(Common.opened(player, station('varrock')), true);
-  assert.equal(Storage.stored(player, 'willow'), 2);
+  assert.equal(player.boxes.at(-1), 'You board the balloon.');
+  player.lastChain.getDialogues().get(1).action.execute();
+  assert.equal(Storage.stored(player, 'willow'), 2, 'paid from the crate at take-off');
+  assert.equal(Controls.inFlight(player), true, 'the controls fly the route open');
 
   const moved = fakePlayer();
   moved.attributes[Storage.STORED_ATTRIBUTE] = { oak: 3 };

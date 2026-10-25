@@ -2,8 +2,9 @@
 //
 // The balloon transport system against the OSRS Wiki (Balloon_transport_system, Enlightened
 // Journey) and the assistants' transcripts: the map and its buttons, the quest gate, a trip's
-// log, level, weight and pet checks, the Entrana search, opening routes from Entrana, the saved
-// routes' varbits, and logging out or dying mid-flight.
+// log, level, weight and pet checks, the Entrana search, opening routes from Entrana at the
+// balloon controls (rsprox 226/01702 and the Wiki's solutions), the saved routes' varbits, and
+// logging out or dying mid-flight.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { before, beforeEach, test } = require('node:test');
@@ -13,12 +14,13 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Travel, tasks, questDone, pets;
+let Common, Travel, Controls, tasks, questDone, pets;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   Common = require('../plugins/world/balloontransport/Common.BalloonTransport');
   Travel = require('../plugins/world/balloontransport/Travel.BalloonTransport');
+  Controls = require('../plugins/world/balloontransport/Controls.BalloonTransport');
   const api = new Proxy({
     core: {
       ...core,
@@ -71,6 +73,8 @@ function fakePlayer({ at = [2808, 3354], firemaking = 99, items = {}, worn = {} 
     }),
     inventory,
     getEquipment: () => ({ get: (slot) => equipment[slot], getItems: () => equipment }),
+    getSpellbook: () => ({ getInterfaceId: () => 218 }),
+    setInterfaceId: (id) => { player.interface = id; },
     getMovementQueue: () => ({ setBlockMovement(v) { player.blocked = v; return this; }, reset() { return this; } }),
     getDialogueManager: () => ({
       startDialogues: (chain) => {
@@ -87,8 +91,12 @@ function fakePlayer({ at = [2808, 3354], firemaking = 99, items = {}, worn = {} 
       sendJingle: (id) => { (player.jingles ??= []).push(id); },
       sendSong: (id) => { (player.songs ??= []).push(id); },
       sendTypedMessage: (type, line) => player.messages.push(line),
-      sendInterfaceRawModel() {}, sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
+      sendInterfaceRawModel: (uid, model) => { (player.models ??= []).push([uid, model]); },
+      sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
       sendInterfaceDisplayState() {},
+      sendInterfacePosition: (uid, x, y) => { (player.positions ??= []).push([uid, x, y]); },
+      sendSound: (id) => { (player.sounds ??= []).push(id); },
+      sendTabInterface() {},
     }),
   };
   return player;
@@ -110,6 +118,45 @@ function lastLine(player) {
 /** Runs the chain's follow-up action (the Entrana search's outcome). */
 function continueChain(player) {
   player.lastChain.getDialogues().get(1)?.action?.execute();
+}
+
+
+/** Presses a control on zep_interface_side, by gameval. */
+function press(player, button) {
+  const uid = core.CacheDefinitions.getComponentId(`zep_interface_side:${button}`);
+  const event = { player, buttonId: uid, groupId: uid >>> 16, childId: uid & 0xffff, handled: false };
+  Controls.controlClick(event);
+  return event;
+}
+
+const MOVES = { S: 'zep_btn_sandbags', L: 'zep_btn_logs', R: 'zep_btn_relax', N: 'zep_btn_tug', E: 'zep_btn_tug_emerg' };
+
+/** Flies a Wiki/captured solution ("R3 L2 ...", screens split by |), one move per two ticks. */
+function flySolution(player, solution) {
+  for (const step of solution.replace(/\|/g, ' ').split(/\s+/).filter(Boolean)) {
+    for (let i = 0; i < Number(step.slice(1)); i++) {
+      press(player, MOVES[step[0]]);
+      tick(2);
+    }
+  }
+}
+
+/** The captured Crafting Guild flight (rsprox 226/01702), as the Wiki's route gives it. */
+const CRAFTING = 'R3 L2 R2 E1 R4 L1 E1 R2 N1 R1 L1 R1 | R1 N1 R1 L1 R4 N1 R3 L1 R6 | R2 S1 R6 E1 R3 N1 R3 N1';
+
+/** The Wiki's solutions (Balloon_transport_system), one per route. */
+const SOLUTIONS = {
+  craft: CRAFTING,
+  varrock: 'L4 R2 N3 R2 N1 L1 R2 N1 L2 R2 | R6 L2 R1 E2 R3 S1 R4 | R3 S1 R1 N2 S1 R1 N2 S1 R1 E1 R2 E1 N1',
+  castle: 'S2 L1 R5 E1 L1 R2 E1 R2 L2 R3 | L1 R2 E1 N1 R7 S1 R2 E1 L1 N1 R1 | L1 R2 N1 R3 L1 E1 R4 S1 E1 R2 N1',
+  gnome: 'R7 N1 R12 | L1 N1 L1 N1 L1 R2 L1 N1 R2 S1 R2 E1 R1 N1 R2 | L3 R2 N1 L1 R5 E1 R1 E1 N1 R2',
+};
+
+/** Starts opening a route from Entrana: the "You board the balloon." box, then take-off. */
+function takeOff(player, key) {
+  Travel.travel(player, station('entrana'), station(key));
+  assert.equal(lastLine(player), 'You board the balloon.');
+  continueChain(player);
 }
 
 const pick = (player, key) => {
@@ -216,16 +263,17 @@ test('to Entrana the player is searched: no weapons or armour worn', () => {
   assert.deepEqual(xy(clean.getLocation()), [2808, 3354]);
 });
 
-test('opening a route from Entrana: its 10 logs (3 magic), 2,000 Firemaking XP, saved and shown', () => {
+test('opening a route from Entrana: its 10 logs (3 magic), the controls flown, 2,000 Firemaking XP, saved and shown', () => {
   const player = fakePlayer({ items: { oak: 12 } });
-  Travel.travel(player, station('entrana'), station('craft'));
-  assert.equal(player.inventory.get(1521), 2, '10 oak logs');
+  takeOff(player, 'craft');
+  assert.equal(player.inventory.get(1521), 2, '10 oak logs, paid at take-off');
+  flySolution(player, CRAFTING);
   tick(4);
   assert.deepEqual(xy(player.getLocation()), [2923, 3302]);
   assert.equal(Common.opened(player, station('craft')), true);
   assert.equal(player.xp, 2000);
   assert.equal(player.varbits[2871], 1, "the Crafting Guild's basket and Brock shown");
-  assert.deepEqual(player.messages, ['You board the balloon and fly to the Crafting Guild.', 'You open the balloon route to the Crafting Guild.']);
+  assert.equal(player.messages.at(-1), 'You arrive safely at the Crafting Guild.');
   // Opened: one log from then on, from anywhere opened.
   Travel.travel(player, station('craft'), station('entrana'));
   continueChain(player);
@@ -234,9 +282,11 @@ test('opening a route from Entrana: its 10 logs (3 magic), 2,000 Firemaking XP, 
   assert.equal(player.inventory.get(1521), 1);
 
   const gnome = fakePlayer({ items: { magic: 3 } });
-  Travel.travel(gnome, station('entrana'), station('gnome'));
+  takeOff(gnome, 'gnome');
   assert.equal(gnome.inventory.get(1513), 0, '3 magic logs');
+  flySolution(gnome, SOLUTIONS.gnome);
   tick(4);
+  assert.equal(gnome.messages.at(-1), 'You arrive safely at the Grand Tree.');
   assert.deepEqual([gnome.varbits[2870], gnome.varbits[5032]], [1, 1], 'the Grand Tree basket and Le Smith');
 
   const short = fakePlayer({ items: { yew: 9 } });
@@ -330,4 +380,93 @@ test("the map opens only at a station the player has open, and with a speaker wh
   Travel.flyNpc({ player: brock, npc: { getLocation: () => loc(2925, 3303), getId: () => 4731 }, npcId: 4720 });
   Travel.chooseDestination({ player: brock, groupId: Common.ids.map, childId: 17, handled: false });
   assert.equal(brock.lastChain.getDialogues().get(0).getNpcId(), 4720, 'Brock, not his blank multinpc');
+});
+
+test("take-off as captured: the counters 8 and 10, the route's first map and height, the interfaces, song 206", () => {
+  const player = fakePlayer({ items: { oak: 10 } });
+  takeOff(player, 'craft');
+  const varbit = (name) => player.varbits[core.CacheDefinitions.getVarbitId(name)];
+  assert.deepEqual(['zep_if_current_map', 'zep_if_screen_dist', 'zep_if_balloon_height', 'zep_if_sandbags', 'zep_if_logs'].map(varbit), [4, 0, 8, 8, 10]);
+  assert.equal(player.interface, core.CacheDefinitions.getInterfaceId('zep_interface'));
+  assert.deepEqual(player.songs, [206]);
+  assert.deepEqual(player.positions.slice(-2).map(([, x, y]) => [x, y]), [[13, 104], [13, 128]], 'the envelope and the basket below it');
+  assert.ok(player.blocked);
+  assert.ok(Controls.inFlight(player));
+});
+
+test('each control moves a column: sandbags +2 and logs +1 spend their counter; the ropes come down', () => {
+  const player = fakePlayer({ items: { oak: 10 } });
+  takeOff(player, 'craft');
+  const varbit = (name) => player.varbits[core.CacheDefinitions.getVarbitId(name)];
+  press(player, 'zep_btn_relax');
+  assert.deepEqual([varbit('zep_if_screen_dist'), varbit('zep_if_balloon_height')], [1, 8]);
+  assert.deepEqual(player.sounds.slice(-2), [3242, 3246]);
+  press(player, 'zep_btn_logs');
+  assert.equal(varbit('zep_if_screen_dist'), 1, 'one move per two ticks: the click waits');
+  tick(2);
+  assert.deepEqual([varbit('zep_if_screen_dist'), varbit('zep_if_balloon_height'), varbit('zep_if_logs')], [2, 9, 9]);
+  press(player, 'zep_btn_tug');
+  tick(2);
+  assert.equal(varbit('zep_if_balloon_height'), 8);
+  assert.deepEqual(player.positions.slice(-2).map(([, x, y]) => [x, y]), [[13 + 24 * 3, 296 - 24 * 8], [13 + 24 * 3, 320 - 24 * 8]]);
+});
+
+test("an obstacle in the balloon's two cells crashes it: no route, no XP, the logs gone", () => {
+  const player = fakePlayer({ items: { oak: 10 } });
+  takeOff(player, 'craft');
+  // Map 4 has a cloud at row 7, columns 4-6: four relaxes at height 8 fly the basket into it.
+  flySolution(player, 'R4');
+  assert.equal(Controls.inFlight(player), false);
+  assert.ok(player.messages.includes('The balloon crashes.'));
+  tick(2);
+  assert.deepEqual(xy(player.getLocation()), [2808, 3354], 'down on Entrana from the first screen');
+  assert.equal(Common.opened(player, station('craft')), false);
+  assert.equal(player.xp, 0);
+  assert.equal(player.inventory.get(1521), 0);
+  assert.equal(player.blocked, false);
+});
+
+test('bailing over Entrana lands safely there; a logout at the controls loses the logs', () => {
+  const bailer = fakePlayer({ items: { oak: 10 } });
+  takeOff(bailer, 'craft');
+  flySolution(bailer, 'R2');
+  press(bailer, 'zep_btn_close');
+  assert.ok(bailer.messages.includes('You bail, but land safely on Entrana.'));
+  assert.equal(Controls.inFlight(bailer), false);
+
+  const leaver = fakePlayer({ items: { oak: 10 } });
+  takeOff(leaver, 'craft');
+  flySolution(leaver, 'R2');
+  Controls.logout({ player: leaver });
+  assert.equal(Controls.inFlight(leaver), false);
+  assert.equal(leaver.inventory.get(1521), 0, 'the logs are gone');
+  assert.equal(Common.opened(leaver, station('craft')), false);
+});
+
+test('every route with screens lands its Wiki solution without touching an obstacle', () => {
+  const logs = { craft: 'oak', varrock: 'willow', castle: 'yew', gnome: 'magic' };
+  assert.deepEqual(Object.keys(Controls.data().routes).sort(), ['castle', 'craft', 'gnome', 'varrock']);
+  for (const key of Object.keys(Controls.data().routes)) {
+    const player = fakePlayer({ items: { [logs[key]]: 10 } });
+    takeOff(player, key);
+    flySolution(player, SOLUTIONS[key]);
+    tick(4);
+    assert.equal(Common.opened(player, station(key)), true, key);
+    assert.deepEqual(xy(player.getLocation()), station(key).land, key);
+  }
+});
+
+test('with no sandbags left a sandbag click does nothing: no move, no counter, no sound', () => {
+  const player = fakePlayer({ items: { yew: 10 } });
+  takeOff(player, 'castle');
+  const varbit = (name) => player.varbits[core.CacheDefinitions.getVarbitId(name)];
+  // All eight sandbags spent clear of Castle Wars' first screen.
+  flySolution(player, [...'SSEESSRRNEENSSESS'].map((move) => `${move}1`).join(' '));
+  assert.equal(Controls.inFlight(player), true);
+  assert.deepEqual([varbit('zep_if_sandbags'), varbit('zep_if_screen_dist'), varbit('zep_if_balloon_height')], [0, 17, 9]);
+  const sounds = player.sounds.length;
+  flySolution(player, 'S1');
+  assert.deepEqual([varbit('zep_if_sandbags'), varbit('zep_if_screen_dist'), varbit('zep_if_balloon_height')], [0, 17, 9]);
+  assert.equal(player.sounds.length, sounds);
+  assert.equal(Controls.inFlight(player), true);
 });

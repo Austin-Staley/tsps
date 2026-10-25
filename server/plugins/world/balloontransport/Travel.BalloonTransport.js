@@ -6,9 +6,9 @@
  * - a trip to an opened station costs one log of its type ("You need 1 [type] logs to make this
  *   trip.") and needs its Firemaking level; to Entrana the player is searched first, and no
  *   weapons or armour may be worn;
- * - from Entrana a station not yet opened is opened by flying there with 10 of its logs (3
- *   magic), for 2,000 Firemaking XP - the Wiki's flight minigame for it is not played (as the
- *   quest's own flight); from anywhere else it is refused;
+ * - from Entrana a station not yet opened is opened by flying the balloon controls there with
+ *   10 of its logs (3 magic), for 2,000 Firemaking XP (Controls.BalloonTransport.js; rsprox
+ *   226/01702 boards with "You board the balloon."); from anywhere else it is refused;
  * - no more than 40kg carried, the log aside, and no pet out (the quest's lines);
  * - the flight as recorded (rsprox 3225, rev 232; balloon-transport.json `flight`): the jingle,
  *   the map again with the balloon flying the route, the teleport to the recorded landing tile
@@ -20,6 +20,7 @@
  */
 const Common = require("./Common.BalloonTransport");
 const Storage = require("./Storage.BalloonTransport");
+const Controls = require("./Controls.BalloonTransport");
 
 const OPEN_MAP_TARGET = "Balloon transport system";
 const BALLOONISTS = ["Auguste", "Assistant Stan", "Assistant Brock", "Assistant Serf", "Assistant Marrow", "Assistant Le Smith", "Assistant Lori"];
@@ -36,7 +37,7 @@ const openMaps = new WeakMap();
 const flights = new WeakMap();
 
 function flying(player) {
-  return flights.has(player);
+  return flights.has(player) || Controls.inFlight(player);
 }
 
 function say(player, npcId, text, then = null) {
@@ -165,12 +166,16 @@ function travel(player, from, to, npcId = null) {
   // The logs' source may be asked for: the trip is checked again once it's chosen, and the
   // player must still be at the station they started from.
   const startedAt = Common.stationAt(player.getLocation());
+  // Opening a route flies the balloon controls where its screens are known.
+  const controls = opening && Controls.hasRoute(to);
   const go = () => Storage.chooseSource(player, to, cost, (source) => {
     if (Common.stationAt(player.getLocation()) !== startedAt) return;
     const after = refusal();
     if (after) return say(player, npcId, after);
-    if (!fly(player, to, cost, arrived, source, from) && !flying(player)) say(player, npcId, refusal() ?? fill(messages.needLog, { type: to.logName ?? "normal" }));
+    const started = controls ? Controls.takeOff(player, to, cost, source) : fly(player, to, cost, arrived, source, from);
+    if (!started && !flying(player)) say(player, npcId, refusal() ?? fill(messages.needLog, { type: to.logName ?? "normal" }));
   });
+  if (controls) return say(player, null, messages.boardControls, go);
   if (to.key !== ENTRANA) return go();
   // Entrana: searched first (the assistants' transcript); the trip is checked again after it.
   say(player, npcId, messages.entranaSearch, () => {
