@@ -284,12 +284,13 @@ export function deriveMenuEntriesForWidget(
     onlyBasic?: boolean,
     getWidgetFlags?: (w: any) => number,
     getWidgetByUid?: (uid: number) => any,
+    getWidgetOpMask?: (w: any) => number,
 ): SimpleMenuEntry[] {
     if (!onlyBasic) {
         const selectionEntries = getSelectionTargetEntries(w);
         if (selectionEntries) return selectionEntries;
     }
-    const entries = deriveRawMenuEntriesForWidget(w, onlyBasic, getWidgetFlags, getWidgetByUid);
+    const entries = deriveRawMenuEntriesForWidget(w, onlyBasic, getWidgetFlags, getWidgetByUid, getWidgetOpMask);
     return onlyBasic ? entries : transformWidgetMenuEntries(w, entries);
 }
 
@@ -299,6 +300,7 @@ export function deriveRawMenuEntriesForWidget(
     onlyBasic?: boolean,
     getWidgetFlags?: (w: any) => number,
     getWidgetByUid?: (uid: number) => any,
+    getWidgetOpMask?: (w: any) => number,
 ): SimpleMenuEntry[] {
     const entries: SimpleMenuEntry[] = [];
     if (onlyBasic) {
@@ -312,6 +314,8 @@ export function deriveRawMenuEntriesForWidget(
     // Get widget flags for transmit checks
     const flags =
         typeof getWidgetFlags === "function" ? getWidgetFlags(w) | 0 : (w?.flags ?? 0) | 0;
+    // Transmit bits for ops 11-32 (IF_SETEVENTS_V2).
+    const opMask = typeof getWidgetOpMask === "function" ? getWidgetOpMask(w) | 0 : 0;
     const targetMask = (flags >>> 11) & 0x3f;
     const verb = getWidgetTargetVerb(w, targetMask);
 
@@ -334,7 +338,7 @@ export function deriveRawMenuEntriesForWidget(
             const p = sanitizeText(actions[i]);
             // Only include action if transmit flag is set OR widget has onOp handler
             // Action flag and onOp check
-            if (p && shouldShowMenuOption(flags, i, hasOnOpHandler)) {
+            if (p && shouldShowMenuOption(flags, i, hasOnOpHandler, opMask)) {
                 ops.push({ text: p, index: i });
             }
         }
@@ -366,7 +370,7 @@ export function deriveRawMenuEntriesForWidget(
         for (let i = 0; i < actions.length; i++) {
             const p = sanitizeText(actions[i]);
             // Only include action if transmit flag is set OR widget has onOp handler
-            if (shouldShowMenuOption(flags, i, hasOnOpHandler)) {
+            if (shouldShowMenuOption(flags, i, hasOnOpHandler, opMask)) {
                 if (p) ops.push({ text: p, index: i });
                 else if (verb) ops.push({ text: verb, index: -1 });
             }

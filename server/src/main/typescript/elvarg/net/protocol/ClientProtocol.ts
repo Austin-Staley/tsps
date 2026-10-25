@@ -262,7 +262,7 @@ export type ClientMessage =
   | { type: "npc_option"; index: number; clickType: number }
   | { type: "object_option"; id: number; x: number; y: number; clickType?: number; action?: string }
   | { type: "world_entity_option"; index: number; clickType: number }
-  | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat" }
+  | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat"; autoChat?: boolean }
   | { type: "friends_chat_action"; action: FriendsChatAction }
   | { type: "private_message"; recipient: string; text: string }
   | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
@@ -410,6 +410,9 @@ function clientPacketLength(opcode: number): number | undefined {
   return CLIENT_PACKET_LENGTHS[opcode as keyof typeof CLIENT_PACKET_LENGTHS]
     ?? NATIVE_CLIENT_PACKET_LENGTHS[opcode];
 }
+
+/** The CHAT packet's kind byte for public autochat (0 public, 1 game, 2 friends chat). */
+const CHAT_KIND_AUTOCHAT = 3;
 
 export function decodeClientPackets(frame: Buffer): ClientMessage[] {
   const messages: ClientMessage[] = [];
@@ -624,6 +627,15 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         y: reader.short(),
         spellItemId: (reader.byte(), reader.shortAddLE()),
       };
+    case NativeClientPacket.IF_BUTTONX: {
+      // Ops 11-32 carry their op index (live OSRS: a bank item's Examine is IF_BUTTONX op=11).
+      const widgetId = reader.int(), slot = reader.short(), itemId = reader.signedShort();
+      return {
+        type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff,
+        buttonNum: reader.byte(), slot: slot === 0xffff ? undefined : slot,
+        itemId: itemId >= 0 ? itemId : undefined,
+      };
+    }
     case NativeClientPacket.IF_BUTTON1:
     case NativeClientPacket.IF_BUTTON2:
     case NativeClientPacket.IF_BUTTON3:
@@ -771,12 +783,14 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       const clickType = reader.byte() || undefined;
       return { type: "object_option", id, x, y, clickType, action };
     }
-    case ClientPacket.CHAT:
-      return {
-        type: "chat",
-        messageType: (["public", "game", "friends_chat"] as const)[reader.byte()] ?? "public",
-        text: reader.string(),
-      };
+    case ClientPacket.CHAT: {
+      // Kind 3 is public chat the client's autochat timer repeats (chat_sendpublic type 1).
+      const kind = reader.byte();
+      const messageType = (["public", "game", "friends_chat"] as const)[kind] ?? "public";
+      return kind === CHAT_KIND_AUTOCHAT
+        ? { type: "chat", messageType: "public", autoChat: true, text: reader.string() }
+        : { type: "chat", messageType, text: reader.string() };
+    }
     case HighClientPacket.FRIENDS_CHAT_ACTION: {
       const actionCode = reader.byte();
       const name = reader.string();
@@ -1000,6 +1014,10 @@ function string(value: string): Buffer {
 /** Chatbox channels a game message can go to (the cache's chat types, as rsprox names them). */
 export const ChatType = {
   GAME: 0,
+  /** Autochat: a phrase the sender's client repeats; the chatbox colours it as "Auto chat". */
+  AUTOTYPER: 90,
+  /** Autochat from a player with a mod crown. */
+  MODAUTOTYPER: 91,
   /** Filtered out with "Filter: on" (the Game tab's filter). */
   SPAM: 105,
   /** An NPC's overhead line, shown as "Name: text"; the NPC's name goes in `from`. */
@@ -1917,6 +1935,17 @@ export function encodeWidgetSetFlagsRange(uid: number, fromSlot: number, toSlot:
   payload.writeUInt16BE(toSlot & 0xffff, 6);
   payload.writeInt32BE(flags | 0, 8);
   return encodeServerPacket(ServerPacketId.WIDGET_SET_FLAGS_RANGE, payload);
+}
+
+/** IF_SETEVENTS_V2: the flags plus a transmit mask for ops 1-32 (bit N for op N+1). */
+export function encodeWidgetSetFlagsRangeV2(uid: number, fromSlot: number, toSlot: number, flags: number, ops: number): Buffer {
+  const payload = Buffer.alloc(16);
+  payload.writeInt32BE(uid | 0);
+  payload.writeUInt16BE(fromSlot & 0xffff, 4);
+  payload.writeUInt16BE(toSlot & 0xffff, 6);
+  payload.writeInt32BE(flags | 0, 8);
+  payload.writeInt32BE(ops | 0, 12);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_FLAGS_RANGE_V2, payload);
 }
 
 export function encodeWidgetSetAnimation(uid: number, animationId: number): Buffer {

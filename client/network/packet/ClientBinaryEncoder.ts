@@ -11,6 +11,9 @@ import {
     type FriendsChatAction,
 } from "../../common/social/FriendsChat";
 
+/** chat_sendpublic's "autotyper" type (MESSAGE_PUBLIC types: 0 normal, 1 autotyper, 2 friends, 3/4 clan). */
+const AUTOCHAT_CHAT_TYPE = 1;
+
 /**
  * Binary packet buffer for client encoding
  */
@@ -481,9 +484,14 @@ export class ClientBinaryEncoder {
     // CHAT/VARPS
     // ========================================
 
-    encodeChat(text: string, messageType?: "public" | "game" | "friends_chat"): Uint8Array {
+    /**
+     * Kind byte: 0 public, 1 game, 2 friends chat, 3 public autochat (chat_sendpublic type 1,
+     * the phrase the cache's autochat timer repeats; listeners see it as message type 90/91).
+     */
+    encodeChat(text: string, messageType?: "public" | "game" | "friends_chat", autoChat = false): Uint8Array {
         this.buffer.reset();
-        this.buffer.writeByte(messageType === "friends_chat" ? 2 : messageType === "game" ? 1 : 0);
+        const kind = messageType === "friends_chat" ? 2 : messageType === "game" ? 1 : autoChat ? 3 : 0;
+        this.buffer.writeByte(kind);
         this.buffer.writeString(text);
         return this.buffer.toPacket(ClientPacketId.CHAT);
     }
@@ -673,7 +681,7 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
             return clientEncoder.encodeTradeAction(payload);
 
         case "chat":
-            return clientEncoder.encodeChat(payload.text, payload.messageType);
+            return clientEncoder.encodeChat(payload.text, payload.messageType, payload.chatType === AUTOCHAT_CHAT_TYPE);
 
         case "friends_chat_action":
             return clientEncoder.encodeFriendsChatAction(payload);

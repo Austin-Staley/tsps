@@ -81,6 +81,9 @@ export class Bank extends ItemContainer {
      * DRAGTARGET and TARGET. No pause button (bit 0): with it, an empty slot offered "Continue".
      */
     public static readonly ITEM_SLOT_FLAGS = 0x7fe | (2 << 17) | (1 << 20) | (1 << 21);
+    /** The same slots' ops, as IF_SETEVENTS_V2 sends them: OP1-OP11, op 11 being Examine. */
+    public static readonly ITEM_SLOT_OPS = 0x7ff;
+    public static readonly EXAMINE_OP = 11;
 
     constructor(public player: Player) {
         super(player);
@@ -574,6 +577,11 @@ export class Bank extends ItemContainer {
         if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === Bank.ITEMS_CHILD && packet.slot != null) {
             const entry = Bank.resolveDisplaySlot(player, packet.slot);
             if (!entry || (packet.itemId != null && packet.itemId !== Bank.displayItemId(entry.item))) return true;
+            if (packet.buttonNum === Bank.EXAMINE_OP) {
+                const definition = ItemDefinition.forId(entry.item.getId());
+                player.sendMessage(definition.getExamine() || definition.getName());
+                return true;
+            }
             if (entry.item.getAmount() === 0) {
                 if (packet.buttonNum === 8 || packet.option?.trim().toLowerCase() === "release") {
                     Bank.releasePlaceholder(player, entry.tab, entry.slot);
@@ -978,7 +986,7 @@ export class Bank extends ItemContainer {
         sender.sendInterfaceScript(917, [-1, -2])
             .sendSubInterface((161 << 16) | 16, Bank.MAIN_INTERFACE_ID, 0, { varps, varbits })
             .sendSubInterface((161 << 16) | 74, Bank.SIDE_INTERFACE_ID, 3, { varps, varbits })
-            .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD, 0, 1409, Bank.ITEM_SLOT_FLAGS)
+            .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD, 0, 1409, Bank.ITEM_SLOT_FLAGS, Bank.ITEM_SLOT_OPS)
             // The empty space after each tab's items is a drop target (one per tab).
             .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD,
                 Bank.TAB_DROP_SLOT_OFFSET, Bank.TAB_DROP_SLOT_OFFSET + 9, 1 << 20)

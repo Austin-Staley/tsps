@@ -584,14 +584,7 @@ function autoCloseDoor(anchorKey) {
       core.ObjectManager.register(objectFromSnapshot(snapshot), true);
     }
   }
-  for (let i = RUNTIME_DOUBLE_DOOR_RECORDS.length - 1; i >= 0; i--) {
-    const record = RUNTIME_DOUBLE_DOOR_RECORDS[i];
-    if (state.closed.some((snapshot) => snapshot.id === record.originalId &&
-      snapshot.location.x === record.originalX && snapshot.location.y === record.originalY &&
-      snapshot.location.z === record.z && snapshot.privateArea === record.privateArea)) {
-      RUNTIME_DOUBLE_DOOR_RECORDS.splice(i, 1);
-    }
-  }
+  forgetDoubleDoorRecords(doubleDoorRecordsFor(state));
   OPEN_OBJECT_STATES.delete(anchorKey);
   const closedSample = state.closed?.[0];
   if (closedSample && !destroyed) {
@@ -609,8 +602,52 @@ function scheduleAutoClose(anchorKey) {
   core.TaskManager.submit(task);
 }
 
+// The shared map's own copy of a snapshot, read without loading the region it is in.
+function mapObjectFor(snapshot) {
+  const { x, y, z } = snapshot.location;
+  return core.MapObjects.mapObjects.get(core.MapObjects.getHash(x, y, z))?.find((object) =>
+    object.getId() === snapshot.id && object.getType() === snapshot.type && object.getFace() === snapshot.face
+  ) ?? null;
+}
+
+function sameSharedObject(object, snapshot) {
+  return !object.getPrivateArea?.() && object.getId() === snapshot.id && object.getType() === snapshot.type &&
+    object.getFace() === snapshot.face && locationKey(object.getLocation()) === locationKey(snapshot.location);
+}
+
+// Opening a map door leaves its closed loc in World's removed objects; a runtime-spawned door has none.
+function isRemovedMapObject(snapshot) {
+  return core.World.getRemovedObjects().some((removed) => sameSharedObject(removed, snapshot));
+}
+
+// A region reload rebuilt from new map data (a region replacement) that no longer has the closed
+// door: the open leaves are stale, so they go and the door is forgotten instead of re-applied.
+function isStaleAfterReload(state, regionId) {
+  return state.closed.some((snapshot) => locationRegionId(snapshot.location) === regionId &&
+    isRemovedMapObject(snapshot) && !mapObjectFor(snapshot));
+}
+
+function dropStaleDoor(anchorKey, state) {
+  const removed = core.World.getRemovedObjects();
+  for (let i = removed.length - 1; i >= 0; i--) {
+    if (state.closed.some((snapshot) => sameSharedObject(removed[i], snapshot))) removed.splice(i, 1);
+  }
+  for (const snapshot of state.current) {
+    core.ObjectManager.deregister(objectFromSnapshot(snapshot), true);
+    // The despawn cleared the leaf's edges, which the new map may use too.
+    const { x, y, z } = snapshot.location;
+    for (const object of core.MapObjects.mapObjects.get(core.MapObjects.getHash(x, y, z)) ?? []) {
+      core.RegionManager.addObjectClipping(object);
+    }
+  }
+  forgetDoubleDoorRecords(doubleDoorRecordsFor(state));
+  clearOpenDoor(anchorKey);
+}
+
+// A loaded region holds the map's closed doors again: hide those of open doors and put their open
+// leaves back. Idempotent, so a door across two regions is not added twice to the loaded one.
 function reapplyOpenDoorsForRegion(regionId) {
-  for (const state of OPEN_OBJECT_STATES.values()) {
+  for (const [anchorKey, state] of [...OPEN_OBJECT_STATES]) {
     // Private overlays already own their removals; this hook reloads the shared map.
     if (state.closed?.[0]?.privateArea) continue;
     const inRegion = [...(state.closed ?? []), ...(state.current ?? [])].some(
@@ -619,11 +656,16 @@ function reapplyOpenDoorsForRegion(regionId) {
     if (!inRegion) {
       continue;
     }
+    if (isStaleAfterReload(state, regionId)) {
+      dropStaleDoor(anchorKey, state);
+      continue;
+    }
     for (const snapshot of state.closed ?? []) {
-      core.MapObjects.remove(objectFromSnapshot(snapshot));
+      const placed = mapObjectFor(snapshot);
+      if (placed) core.MapObjects.remove(placed);
     }
     for (const snapshot of state.current ?? []) {
-      core.MapObjects.add(objectFromSnapshot(snapshot));
+      if (!mapObjectFor(snapshot)) core.MapObjects.add(objectFromSnapshot(snapshot));
     }
   }
 }
@@ -846,6 +888,22 @@ function findDoubleDoorRecord(id, x, y, z, privateArea) {
   ) ?? null;
 }
 
+// Removes records by identity; one already gone (indexOf -1) must not splice the last record.
+function forgetDoubleDoorRecords(records) {
+  for (const record of records) {
+    const index = RUNTIME_DOUBLE_DOOR_RECORDS.indexOf(record);
+    if (index >= 0) RUNTIME_DOUBLE_DOOR_RECORDS.splice(index, 1);
+  }
+}
+
+// The records of the leaves an open-door state closes back to.
+function doubleDoorRecordsFor(state) {
+  return RUNTIME_DOUBLE_DOOR_RECORDS.filter((record) => state.closed.some((snapshot) =>
+    snapshot.id === record.originalId && snapshot.location.x === record.originalX &&
+    snapshot.location.y === record.originalY && snapshot.location.z === record.z &&
+    snapshot.privateArea === record.privateArea));
+}
+
 function createDynamicDoubleDoorRecord(object, location, originalId, privateArea) {
   return {
     originalId,
@@ -891,13 +949,14 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
         Number(object.getId?.() ?? object.id ?? objectId),
         privateArea
       );
-      const partnerRecord = createDynamicDoubleDoorRecord(
-        partnerObject,
-        candidateLocation,
-        Number(partnerObject.getId?.() ?? partnerObject.id ?? partnerId),
-        privateArea
-      );
-      RUNTIME_DOUBLE_DOOR_RECORDS.push(clickedRecord, partnerRecord);
+      const partnerCurrentId = Number(partnerObject.getId?.() ?? partnerObject.id ?? partnerId);
+      // A leaf already paired with another neighbour keeps its one record.
+      const existingPartner = findDoubleDoorRecord(partnerCurrentId, candidateLocation.getX(),
+        candidateLocation.getY(), candidateLocation.getZ(), privateArea);
+      const partnerRecord = existingPartner
+        ?? createDynamicDoubleDoorRecord(partnerObject, candidateLocation, partnerCurrentId, privateArea);
+      RUNTIME_DOUBLE_DOOR_RECORDS.push(clickedRecord);
+      if (!existingPartner) RUNTIME_DOUBLE_DOOR_RECORDS.push(partnerRecord);
       return [clickedRecord, partnerRecord];
     }
   }
@@ -998,6 +1057,7 @@ function handleDoubleDoor(player, object, objectId, location) {
   const y = location?.getY?.() ?? location?.y;
   const z = location?.getZ?.() ?? location?.z ?? 0;
   const privateArea = player?.getPrivateArea?.() ?? null;
+  const recordCount = RUNTIME_DOUBLE_DOOR_RECORDS.length;
   const clickedDoor = findDoubleDoorRecord(objectId, x, y, z, privateArea)
     ?? ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea)?.[0];
   if (!clickedDoor) {
@@ -1006,6 +1066,8 @@ function handleDoubleDoor(player, object, objectId, location) {
 
   const pair = resolveDoubleDoorPair(clickedDoor);
   if (!pair) {
+    // No partner on its left or right after all: drop the records this click made.
+    forgetDoubleDoorRecords(RUNTIME_DOUBLE_DOOR_RECORDS.slice(recordCount));
     return false;
   }
 
@@ -1028,9 +1090,7 @@ function handleDoubleDoor(player, object, objectId, location) {
     rememberOpenObjects(anchorKey, previousObjects, currentObjects);
   } else {
     clearOpenDoor(anchorKey);
-    if (privateArea) {
-      for (const record of pair) RUNTIME_DOUBLE_DOOR_RECORDS.splice(RUNTIME_DOUBLE_DOOR_RECORDS.indexOf(record), 1);
-    }
+    if (privateArea) forgetDoubleDoorRecords(pair);
   }
 
   core.Sounds.sendSound(
@@ -1082,4 +1142,5 @@ module.exports = {
     api.onRegionLoaded(({ regionId }) => reapplyOpenDoorsForRegion(regionId));
     api.onServerStartup(registerWallDoorRoutes);
   },
+  __internals: { OPEN_OBJECT_STATES, RUNTIME_DOUBLE_DOOR_RECORDS },
 };

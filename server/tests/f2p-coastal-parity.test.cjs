@@ -394,6 +394,18 @@ test('X Marks preserves old saved stages, native clue/map interfaces, and captur
   q.emit('npc-dialogue:action',{player:p,npcId:8484,stepId:'03vD77'});assert.equal(p.items.get(995),200);
 });
 
+test('Port Sarim Veos leaves once Cabin Boy Herbert takes over in A Kingdom Divided, as captured at akd 150', () => {
+  const q = register('XMarksTheSpot', 'x_marks_the_spot'), akd = register('AKingdomDivided', 'a_kingdom_divided'), p = player();
+  const sarim = () => p.packets.filter(([m, id]) => m === 'sendVarbit' && id === 12148).at(-1)?.[2];
+  q.call('onPlayerLogin', { player: p }); assert.equal(sarim(), 3);
+  q.quest.setStage(p, 6); q.call('onPlayerLogin', { player: p }); assert.equal(sarim(), 1);
+  for (const [stage, visibility] of [[11, 1], [12, 0], [150, 0], [0, 1]]) {
+    akd.quest.setStage(p, stage); q.emit('quest:stage-changed', { player: p, key: 'a_kingdom_divided', stage });
+    assert.equal(sarim(), visibility, `akd ${stage}`);
+  }
+  akd.quest.setStage(p, 150); q.call('onPlayerLogin', { player: p }); assert.equal(sarim(), 0, 'login keeps him gone');
+});
+
 test('X Marks orb reproduces captured distances, temperatures, comparisons and helper packets', () => {
   const q=register('XMarksTheSpot','x_marks_the_spot'),p=player();q.quest.setStage(p,3);p.items.set(23069,1);
   for(const [x,y,distance,text] of [[3203,3212,95,'The orb is cold.'],[3194,3216,86,'The orb is warm, and warmer than last time.'],[3184,3219,76,'The orb is warm, and warmer than last time.'],[3181,3222,73,'The orb is warm, and warmer than last time.'],[3184,3221,76,'The orb is warm, but colder than last time.'],[3155,3237,47,'The orb is hot, and warmer than last time.'],[3130,3265,22,'The orb is very hot, and warmer than last time.']]){

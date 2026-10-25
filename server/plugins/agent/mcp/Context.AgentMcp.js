@@ -294,6 +294,7 @@ function createContext(core, server) {
         animation: animation.id, animationTick: animation.tick,
         chat: animation.chat, chatTick: animation.chatTick,
         options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
+        spawnedBy: npc.getSpawnLineage?.()?.owner ?? null,
       };
     });
 
