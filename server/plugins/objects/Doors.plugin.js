@@ -187,6 +187,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.LARGE_DOOR_24, O.LARGE_DOOR_25, O.LARGE_DOOR_26, O.LARGE_DOOR_27]),
     Object.freeze([O.LARGE_DOOR_28, O.LARGE_DOOR_29, O.LARGE_DOOR_30, O.LARGE_DOOR_31]),
     Object.freeze([O.GATE_40, O.GATE_41, O.GATE_29, O.GATE_30]),
+    // Sinclair Mansion: model-639 open leaves have a null cache name but a Close action.
+    Object.freeze([O.LARGE_DOOR_79, O.LARGE_DOOR_80, 25749, 25751]),
     // Sins of the Father Arboretum: closed 39251/39253 "Large door" (Open, model
     // 40489) swing east into the nameless/actionless 39252/39254 leaves on the
     // adjacent tiles (capture 1637; matching cache pair).
@@ -248,6 +250,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
     [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
+    [O.LARGE_DOOR_79, O.LARGE_DOOR_80],
+    [25749, 25751],
     // Sins of the Father Arboretum double door (capture 1637).
     [O.LARGE_DOOR_100, O.LARGE_DOOR_101],
   ]);
@@ -369,6 +373,21 @@ function buildDoorCatalog() {
       closedToOpen.set(id, id);
       continue;
     }
+    // Gameval names can identify the open leaf even when its id comes first
+    // (canafis_door_ground_open / canafis_door_ground). Keep paired gates with
+    // their family handler and require a matching, Close-only cache definition.
+    const namedOpenId = namedOpenLeaf(id);
+    const namedOpen = namedOpenId == null ? null : core.CacheDefinitions.getObject(namedOpenId);
+    if (
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id) &&
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(namedOpenId) &&
+      namedOpen?.name === def.name &&
+      hasAction(namedOpen.actions, "close") && !hasAction(namedOpen.actions, "open")
+    ) {
+      closedToOpen.set(id, namedOpenId);
+      openToClosed.set(namedOpenId, id);
+      continue;
+    }
     const partner = core.CacheDefinitions.getObject(id + 1);
     if (!partner || partner.name !== def.name) {
       continue;
@@ -412,6 +431,25 @@ function buildDoorCatalog() {
     ) {
       closedToOpen.set(id, id + 2);
       openToClosed.set(id + 2, id);
+    }
+    // Some pairs interleave: closed A, closed B, open B, open A. Require both
+    // matching model pairs so the neighbouring door is never used as A's open leaf.
+    const outerOpen = core.CacheDefinitions.getObject(id + 3);
+    if (
+      !closedToOpen.has(id) && !openToClosed.has(id + 3) &&
+      Array.isArray(def.models) && def.models.length > 0 &&
+      Array.isArray(partner.models) && partner.models.length > 0 &&
+      hasAction(partner.actions, "open") && !hasAction(partner.actions, "close") &&
+      skipped?.name === def.name &&
+      hasAction(skipped.actions, "close") && !hasAction(skipped.actions, "open") &&
+      JSON.stringify(partner.models) === JSON.stringify(skipped.models) &&
+      outerOpen?.name === def.name &&
+      hasAction(outerOpen.actions, "close") && !hasAction(outerOpen.actions, "open") &&
+      JSON.stringify(outerOpen.models) === JSON.stringify(def.models) &&
+      ![id, id + 1, id + 2, id + 3].some((candidate) => DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(candidate))
+    ) {
+      closedToOpen.set(id, id + 3);
+      openToClosed.set(id + 3, id);
     }
   }
   for (const [closedId, openId] of SINGLE_DOOR_OPEN_IDS) {
