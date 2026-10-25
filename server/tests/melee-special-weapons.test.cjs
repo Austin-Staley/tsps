@@ -28,9 +28,15 @@ const items = JSON.parse(
   fs.readFileSync(path.join(__dirname, "..", "data", "definitions", "item-gameplay.json"), "utf8"),
 );
 
+/** Death and logout handlers the specials register, by hook name. */
+const hooks = {};
+
 before(() => {
-  // Only the specials registry matters here; other hooks the specials register are no-ops.
+  // Only the specials registry and the death/logout hooks matter here; other hooks are no-ops.
   const api = {
+    onPlayerDeath: (handler) => (hooks.onPlayerDeath ??= []).push(handler),
+    onPlayerLogout: (handler) => (hooks.onPlayerLogout ??= []).push(handler),
+    onNpcDeath: (handler) => (hooks.onNpcDeath ??= []).push(handler),
     core: PluginManager.getCoreApi(),
     registerCombatSpecial: CombatSpecial.register,
     getBonusManager: () => require("../dist/game/model/equipment/BonusManager").BonusManager,
@@ -356,8 +362,9 @@ function burnVictim() {
   const queued = [];
   return {
     queued,
+    hitpoints: 100,
     isRegistered: () => true,
-    getHitpoints: () => 100,
+    getHitpoints() { return this.hitpoints; },
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => queued.push(...hits) }) }),
   };
 }
@@ -423,6 +430,42 @@ test("burns stack up to five at once and a finished burn frees its slot", () => 
   runTicks(4);
   assert.equal(victim.queued.length, 53, "all three new burns start once the old ones ended");
   runTicks(45);
+});
+
+test("burns end with the target's life: a death before the next burn tick, a logout, an npc death", () => {
+  // PlayerDeathTask restores hitpoints on its third run, before the burn's 4-tick check sees 0.
+  const player = burnVictim();
+  burn(2, [0], player);
+  runTicks(4);
+  assert.equal(player.queued.length, 3);
+  player.hitpoints = 0; // killed on tick 5
+  runTicks(2);
+  player.hitpoints = 99; // respawned on tick 7, the restore emits onPlayerDeath
+  hooks.onPlayerDeath.forEach((handler) => handler({ player, killer: null, handled: false }));
+  runTicks(45);
+  assert.equal(player.queued.length, 3, "no burn damage after respawn");
+  burn(2, [0], player);
+  runTicks(4);
+  assert.equal(player.queued.length, 6, "a new life burns afresh with all five slots free");
+  runTicks(45);
+
+  const leaver = burnVictim();
+  burn(2, [0], leaver);
+  hooks.onPlayerLogout.forEach((handler) => handler({ player: leaver, username: "leaver" }));
+  runTicks(45);
+  assert.equal(leaver.queued.length, 0, "a logout ends the burns");
+
+  const npc = burnVictim();
+  burn(2, [0], npc);
+  hooks.onNpcDeath.forEach((handler) => handler({ npc, killer: null }));
+  runTicks(45);
+  assert.equal(npc.queued.length, 0, "an npc death ends the burns");
+
+  const dying = burnVictim();
+  dying.isDyingFunction = () => true; // killed with no killer: no onNpcDeath
+  burn(2, [0], dying);
+  runTicks(45);
+  assert.equal(dying.queued.length, 0, "a dying target takes no burns");
 });
 
 // --- Saradomin's lightning -----------------------------------------------------------------

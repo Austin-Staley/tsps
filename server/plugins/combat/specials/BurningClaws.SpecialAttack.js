@@ -13,16 +13,34 @@ module.exports = function registerBurningClawsSpecialAttack(api) {
   const BURN_TICK_INTERVAL = 4;
   const MAX_ACTIVE_BURNS = 5;
   const BURN_CHANCE_BY_ROLL = [0.15, 0.3, 0.45];
+  // A target's running burn tasks; a death or logout ends them so none reach the next life.
   const activeBurns = new WeakMap();
 
-  function applyBurn(target) {
-    const active = activeBurns.get(target) ?? 0;
-    if (active >= MAX_ACTIVE_BURNS) {
+  function endBurns(target) {
+    const burns = activeBurns.get(target);
+    if (!burns) {
       return;
     }
-    activeBurns.set(target, active + 1);
-    const finish = () => activeBurns.set(target, Math.max(0, (activeBurns.get(target) ?? 1) - 1));
-    TaskManager.submit(new (class extends Task {
+    activeBurns.delete(target);
+    for (const task of burns) {
+      task.stop();
+    }
+  }
+
+  function isDying(target) {
+    return target.getHitpoints() <= 0 || target.isDyingReturn?.() === true || target.isDyingFunction?.() === true;
+  }
+
+  function applyBurn(target) {
+    let burns = activeBurns.get(target);
+    if (!burns) {
+      burns = new Set();
+      activeBurns.set(target, burns);
+    }
+    if (burns.size >= MAX_ACTIVE_BURNS) {
+      return;
+    }
+    const task = new (class extends Task {
       remaining = BURN_TOTAL_DAMAGE;
 
       constructor() {
@@ -30,19 +48,20 @@ module.exports = function registerBurningClawsSpecialAttack(api) {
       }
 
       execute() {
-        if (!target.isRegistered() || target.getHitpoints() <= 0) {
-          finish();
-          this.stop();
+        if (!target.isRegistered() || isDying(target)) {
+          endBurns(target);
           return;
         }
         target.getCombat().getHitQueue().addPendingDamage([new HitDamage(1, HitMask.RED)]);
         this.remaining--;
         if (this.remaining <= 0) {
-          finish();
+          burns.delete(this);
           this.stop();
         }
       }
-    })());
+    })();
+    burns.add(task);
+    TaskManager.submit(task);
   }
 
   class BurningClawsCombatMethod extends MeleeCombatMethod {
@@ -65,6 +84,10 @@ module.exports = function registerBurningClawsSpecialAttack(api) {
       }
     }
   }
+
+  api.onPlayerDeath(({ player }) => endBurns(player));
+  api.onPlayerLogout(({ player }) => endBurns(player));
+  api.onNpcDeath(({ npc }) => endBurns(npc));
 
   api.registerCombatSpecial({
     id: "burning_claws",
