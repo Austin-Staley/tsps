@@ -9,7 +9,7 @@ The owner authorized the 108-PR split merge batch on 25 October 2026; the
 full suites on the earlier repaired snapshot separately from latest-main delta checks.
 The repaired Another Slice of H.A.M. runtime now passes its focused regressions and has
 a bounded stage-9-to-10 native checkpoint recorded below. Neither those repairs nor
-publication changes the accepted **24/106** scoped natural-route count. Unplayed routes,
+publication changes the accepted **25/106** scoped natural-route count. Unplayed routes,
 alternate/recovery branches and visual Quest Helper overlay parity remain unverified.
 
 ## Active 106: accepted natural main-route proofs

@@ -176,6 +176,8 @@ percentages from PR counts or source-only tests.
 
 ## Follow-up fixes
 
-- [tribal-totem-lock #1237](https://github.com/RSPSApp/tsps/pull/1237) — draft; live delta verification pending.
-- [baraek-fur-sale #1238](https://github.com/RSPSApp/tsps/pull/1238) — draft; live delta verification pending.
-- [making-history-progress #1239](https://github.com/RSPSApp/tsps/pull/1239) — draft; live delta verification pending.
+- [tribal-totem-lock #1237](https://github.com/RSPSApp/tsps/pull/1237) — merged after source review and a bounded native checkpoint: wrong/correct combination, ordinary crossing and persisted unlock after relog. No full natural route is claimed.
+- [baraek-fur-sale #1238](https://github.com/RSPSApp/tsps/pull/1238) — open, ready for review. The epoch27 completed-account 20-coin purchase delta is verified; no additional quest completion is counted.
+- [making-history-progress #1239](https://github.com/RSPSApp/tsps/pull/1239) — merged after source review, actual transcript-runner checks and bounded native payment/cancel/full-bag/banked-key/relog checks. Full natural main-route completion remains pending.
+- [horror-lighthouse-entry #1242](https://github.com/RSPSApp/tsps/pull/1242) — merged after source review and a bounded native checkpoint of the key/bridge gates, bridge crossings, lighthouse entry/exit and repeat access after relog. Full natural quest completion remains pending.
+- [dwarf-cannon-helper-recovery #1246](https://github.com/RSPSApp/tsps/pull/1246) — merged after source review and bounded native helper replay, legacy saved-stage repair, completed Nulodion purchase and relog checks. This is not a full natural route or current-source quest-reward proof.
