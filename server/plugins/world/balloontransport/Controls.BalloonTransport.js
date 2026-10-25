@@ -17,9 +17,15 @@
  *   and the landing; the fade back in a tick later.
  * - Bail over Entrana (screen 1) lands safely there; anything else is a crash (Wiki): the logs
  *   are gone, no XP, the route still shut. A logout mid-flight loses the logs too.
+ * - Enlightened Journey's own flight to Taverley ("balloon-transport:quest-flight") flies the same
+ *   controls without opening a route or giving XP; a landing is told to the quest
+ *   ("balloon-transport:flight-landed") once the player is moved, a crash
+ *   ("balloon-transport:flight-crashed") as the screen fades back in, and a route's crashSites can
+ *   name where each screen's crash comes down.
  *
  * The routes' screens are plugins/world/data/balloon-routes.json: the Crafting Guild's captured,
- * Varrock's, Castle Wars' and the Grand Tree's transcribed from the Wiki's Balloon path images.
+ * Varrock's, Castle Wars', the Grand Tree's and Taverley's transcribed from the Wiki's Balloon
+ * path images.
  */
 const fs = require("fs");
 const path = require("path");
@@ -128,13 +134,16 @@ function sideTabs(player, open) {
   }
 }
 
-/** Takes off from Entrana to open `station`'s route; `logs` were checked by the caller. */
-function takeOff(player, station, logs, source) {
+/**
+ * Takes off from Entrana to open `station`'s route (or, with `opensRoute` false, only to fly
+ * there); `logs` were checked by the caller.
+ */
+function takeOff(player, station, logs, source, { opensRoute = true } = {}) {
   const route = data().routes[station.key];
   if (!route || inFlight(player)) return false;
   if (!Storage.pay(player, station, logs, source)) return false;
   Storage.tellPaid(player, station, source);
-  const flight = { station, route, screen: 0, dist: 0, height: route.startHeight, sandbags: START.sandbags, logs: START.logs, queue: [], waiting: 0, done: false };
+  const flight = { station, route, opensRoute, screen: 0, dist: 0, height: route.startHeight, sandbags: START.sandbags, logs: START.logs, queue: [], waiting: 0, done: false };
   flights.set(player, flight);
   const sender = player.getPacketSender();
   setVarbit(player, VARBITS.map, route.maps[0]);
@@ -261,6 +270,7 @@ function land(player, flight) {
     flight.opened = true;
     sideTabs(player, true);
     release(player);
+    if (!flight.opensRoute) return;
     Common.openRoute(player, station);
     player.getSkillManager().addExperience(Common.core.Skill.FIREMAKING, Common.data.unlockXp, false);
   };
@@ -270,6 +280,7 @@ function land(player, flight) {
     flight.arrived = true;
     player.sendMessage(flight.route.arrive);
     player.moveTo(Common.tile(station.land));
+    Common.api.emitCustomEvent("balloon-transport:flight-landed", { player, station: station.key });
   };
   Common.later(SUCCESS.routeAt, () => owns(player, flight) && open());
   Common.later(SUCCESS.landAt, () => owns(player, flight) && flight.arrive());
@@ -280,8 +291,8 @@ function land(player, flight) {
   });
 }
 
-/** Coming down off the route (Wiki): the logs are gone, nothing opens. */
-function comeDown(player, flight, message, site) {
+/** Coming down off the route (Wiki): the logs are gone, nothing opens. `crashed` is told on. */
+function comeDown(player, flight, message, site, crashed) {
   end(player, flight);
   closeControls(player);
   Common.fade(player, BLACK_OUT);
@@ -294,15 +305,22 @@ function comeDown(player, flight, message, site) {
     player.moveTo(Common.tile(data().crashSites[site]));
   };
   Common.later(SUCCESS.routeAt, () => owns(player, flight) && flight.arrive());
-  Common.later(SUCCESS.landAt, () => owns(player, flight) && Common.fade(player, FADE_IN));
+  // Told as the screen fades back in: a conversation started on the teleport's tick is cleared.
+  Common.later(SUCCESS.landAt, () => {
+    if (!owns(player, flight)) return;
+    Common.fade(player, FADE_IN);
+    if (crashed) Common.api.emitCustomEvent("balloon-transport:flight-crashed", { player, station: flight.station.key, screen: flight.screen, site });
+  });
   Common.later(SUCCESS.overlayAt, () => {
     if (owns(player, flight)) Common.closeFade(player);
     finish(player, flight);
   });
 }
 
+/** Down on Entrana from the first screen, else the route's crash site (per screen where given). */
 function crash(player, flight) {
-  comeDown(player, flight, CRASHED, flight.screen === 0 ? "entrana" : flight.route.crashSite);
+  const { route, screen } = flight;
+  comeDown(player, flight, CRASHED, route.crashSites?.[screen] ?? (screen === 0 ? "entrana" : route.crashSite), true);
 }
 
 /** Bail: over Entrana it lands safely; past it the balloon crashes. */
@@ -341,9 +359,25 @@ function logout({ player }) {
   finish(player, flight);
 }
 
+/**
+ * Enlightened Journey's flight ({ player, station, logs, source }): the quest checked the logs and
+ * tinderbox; they are paid from `source`, or the other place if it hasn't enough. Its conversation
+ * closes the main interface as it ends, so the balloon takes off the tick after.
+ */
+function questFlight({ player, station: key, logs, source }) {
+  const station = Common.data.stations.find((entry) => entry.key === key);
+  if (!station) return;
+  const other = source === Storage.STORAGE ? Storage.INVENTORY : Storage.STORAGE;
+  const options = { opensRoute: false };
+  Common.later(1, () => {
+    if (player.isRegistered()) takeOff(player, station, logs, source, options) || takeOff(player, station, logs, other, options);
+  });
+}
+
 function attach(api) {
   api.onInterfaceActionClick(controlClick);
   api.onPlayerLogout(logout);
+  api.onCustomEvent("balloon-transport:quest-flight", questFlight);
 }
 
-module.exports = { attach, takeOff, controlClick, logout, inFlight, hasRoute, data, CONTROLS, ROWS, COLUMNS };
+module.exports = { attach, takeOff, controlClick, logout, questFlight, inFlight, hasRoute, data, CONTROLS, ROWS, COLUMNS };
