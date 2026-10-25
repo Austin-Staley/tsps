@@ -3,7 +3,7 @@
 **Opening a PR is not completing a quest.** This split contains 103 quest PRs and
 five shared-code, regression and documentation PRs. The owner authorized a merge batch
 for all 108; the per-quest PR links below show live publication state. The accepted
-natural main-route count at this checkpoint is **25/106 active quests (23.58%)**;
+natural main-route count at this checkpoint is **26/106 active quests (24.53%)**;
 22 long quests remain deferred. No full branch, recovery or Java overlay parity is implied.
 
 The split supersedes [PR753](https://github.com/RSPSApp/tsps/pull/753). Existing
@@ -181,3 +181,7 @@ percentages from PR counts or source-only tests.
 - [making-history-progress #1239](https://github.com/RSPSApp/tsps/pull/1239) — merged after source review, actual transcript-runner checks and bounded native payment/cancel/full-bag/banked-key/relog checks. Full natural main-route completion remains pending.
 - [horror-lighthouse-entry #1242](https://github.com/RSPSApp/tsps/pull/1242) — merged after source review and a bounded native checkpoint of the key/bridge gates, bridge crossings, lighthouse entry/exit and repeat access after relog. Full natural quest completion remains pending.
 - [dwarf-cannon-helper-recovery #1246](https://github.com/RSPSApp/tsps/pull/1246) — merged after source review and bounded native helper replay, legacy saved-stage repair, completed Nulodion purchase and relog checks. This is not a full natural route or current-source quest-reward proof.- [tourist-trap-shared-object-owners #1250](https://github.com/RSPSApp/tsps/pull/1250) — draft; live delta verification pending.
+
+## Community-tested replay exclusions
+
+Follow the user-approved [community completion exclusions](quest-helper-728-community-completions.md) from issue1257 before starting any new manual actor. The21 listed completions skip full replay; caveats and targeted bug checks remain. None overlaps the original106 active jobs.

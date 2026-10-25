@@ -14,6 +14,11 @@ Agree these before touching an account. They stop most time loss.
 
 - **One account, one actor.** You own a single test account and its one MCP client. Do not run a
   second driver, drain its `messages`, or poll `observe` from another loop.
+- **User-approved community completion exemptions.** Before choosing a new full playthrough,
+  check [the issue1257 exclusions](../quest-helper-728-community-completions.md). The user
+  accepts these21 reported completions as sufficient to skip repeat manual runs. Preserve
+  their caveats; use bounded checks for known regressions instead of restarting a listed
+  quest. Do not treat this as full Quest Helper parity or extend it to unlisted quests.
 - **One scope.** Either source review, focused test, or live playthrough per owner. Do not
   rewrite a quest while someone is proving it; batch source fixes, then reload once.
 - **Fresh or checkpoint, stated.** Record whether the run starts fresh or from an exported save
