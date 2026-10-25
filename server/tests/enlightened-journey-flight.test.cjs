@@ -91,7 +91,7 @@ function fakePlayer({ stage = BALLOON_READY, logs = 10, stored = 0 } = {}) {
     getEquipment: () => ({ get: (slot) => equipment[slot], getItems: () => equipment }),
     getBanks: () => [],
     getSpellbook: () => ({ getInterfaceId: () => 218 }),
-    setInterfaceId: noop,
+    setInterfaceId: (id) => { if (id === -1) player.down = true; },
     getMovementQueue: () => ({ setBlockMovement() { return this; }, reset() { return this; } }),
     getDialogueManager: () => ({ startDialogues: (chain) => player.chains.push(chain), getCurrent: () => player.chains.at(-1) }),
     getPacketSender: () => new Proxy({
@@ -127,9 +127,14 @@ function playThrough(player) {
 function fly(player, stepId = '_G1qps') {
   const event = { player, npcId: AUGUSTE, stepId, handled: false };
   for (const fn of bus.get('npc-dialogue:action')) fn(event);
-  assert.equal(Controls.inFlight(player), false, 'not while the conversation closes');
+  assert.equal(atControls(player), false, 'not while the conversation closes');
   tick(1);
   return event;
+}
+
+/** Flying the balloon: the flight outlasts the controls until it has set the player down. */
+function atControls(player) {
+  return Controls.inFlight(player) && !player.down;
 }
 
 function press(player, button) {
@@ -144,7 +149,7 @@ function flySolution(player, solution) {
   for (const step of solution.replace(/\|/g, ' ').split(/\s+/).filter(Boolean)) {
     for (let i = 0; i < Number(step.slice(1)); i++) {
       press(player, MOVES[step[0]]);
-      if (!Controls.inFlight(player)) return;
+      if (!atControls(player)) return;
       tick(2);
     }
   }
@@ -159,10 +164,10 @@ test("the Wiki's solution lands on Taverley's target: stage 7, Auguste there, no
   const player = fakePlayer();
   const event = fly(player);
   assert.equal(event.handled, true);
-  assert.equal(Controls.inFlight(player), true, 'at the controls');
+  assert.equal(atControls(player), true, 'at the controls');
   assert.equal(player.inventory.get(I.LOGS), 0, 'the ten logs on the fire');
   flySolution(player, `${FIRST} | ${SECOND} | ${THIRD}`);
-  assert.equal(Controls.inFlight(player), false);
+  assert.equal(atControls(player), false);
   assert.equal(player.attributes[STAGE_KEY], BALLOON_READY, 'still in the air until the landing');
   tick(5);
   assert.ok(player.messages.includes('You arrive safely in Taverley.'));
@@ -171,19 +176,21 @@ test("the Wiki's solution lands on Taverley's target: stage 7, Auguste there, no
   assert.equal(player.varbits[PICCARD_VARBIT], 1, 'Auguste at Taverley');
   assert.equal(player.xp, 0, 'the quest gives its XP at the end');
   assert.equal(Number(player.attributes[Common.ROUTES_ATTRIBUTE]) || 0, 0, 'no route bit');
+  tick(3);
+  assert.equal(Controls.inFlight(player), false, 'set down');
 });
 
 test('the logs come from storage when chosen, from the inventory if storage has too few', () => {
   const stored = fakePlayer({ stored: 12 });
   fly(stored, 'UrzuZs');
-  assert.equal(Controls.inFlight(stored), true);
+  assert.equal(atControls(stored), true);
   assert.equal(stored.inventory.get(I.LOGS), 10, 'the carried logs kept');
   assert.equal(stored.attributes['balloon-transport:stored-logs'].logs, 2);
   Controls.logout({ player: stored });
 
   const short = fakePlayer({ stored: 3 });
   fly(short, 'RS5ufp');
-  assert.equal(Controls.inFlight(short), true);
+  assert.equal(atControls(short), true);
   assert.equal(short.inventory.get(I.LOGS), 0);
   assert.equal(short.attributes['balloon-transport:stored-logs'].logs, 3);
   Controls.logout({ player: short });
@@ -192,7 +199,7 @@ test('the logs come from storage when chosen, from the inventory if storage has 
 test('no flight before the balloon is ready, after landing, or without the logs', () => {
   for (const player of [fakePlayer({ stage: 5 }), fakePlayer({ stage: LANDED }), fakePlayer({ logs: 9 })]) {
     fly(player);
-    assert.equal(Controls.inFlight(player), false);
+    assert.equal(atControls(player), false);
   }
 });
 
@@ -213,7 +220,7 @@ test('a crash on the second screen comes down at sea with Auguste; the plank swi
   const player = fakePlayer();
   fly(player);
   flySolution(player, `${FIRST} | ${DIVE}`);
-  assert.equal(Controls.inFlight(player), false);
+  assert.equal(atControls(player), false);
   tick(1);
   assert.deepEqual(xy(player.getLocation()), crashSite('ocean'));
   assert.equal(player.chains.length, 0, 'Auguste waits for the fade back in');
