@@ -445,8 +445,9 @@ test('bailing over Entrana lands safely there; a logout at the controls loses th
 
 test('every route with screens lands its Wiki solution without touching an obstacle', () => {
   const logs = { craft: 'oak', varrock: 'willow', castle: 'yew', gnome: 'magic' };
-  assert.deepEqual(Object.keys(Controls.data().routes).sort(), ['castle', 'craft', 'gnome', 'varrock']);
-  for (const key of Object.keys(Controls.data().routes)) {
+  assert.deepEqual(Object.keys(Controls.data().routes).sort(), ['castle', 'craft', 'gnome', 'taverley', 'varrock']);
+  // Taverley is Enlightened Journey's flight (tests/enlightened-journey-flight.test.cjs).
+  for (const key of Object.keys(logs)) {
     const player = fakePlayer({ items: { [logs[key]]: 10 } });
     takeOff(player, key);
     flySolution(player, SOLUTIONS[key]);
