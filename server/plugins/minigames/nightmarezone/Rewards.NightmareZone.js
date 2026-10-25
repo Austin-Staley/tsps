@@ -186,7 +186,9 @@ function upgrades({ player, slot, opId }) {
     return true;
   }
   Common.addPoints(player, -price);
-  inventory.setItem(at, new Common.core.Item(imbued, 1));
+  // The item keeps what it carries (a ring of suffering's charges, a preset's restriction).
+  const meta = item.getMeta?.();
+  inventory.setItem(at, new Common.core.Item(imbued, 1, meta ? { ...meta } : null));
   inventory.refreshItems?.();
   player.sendMessage(Common.message("imbued", { name }));
   return true;

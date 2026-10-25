@@ -77,8 +77,8 @@ function container(capacity = 28) {
     delete(id, amount = 1) { for (const s of slots) { if (s.id !== id || amount <= 0) continue; const n = Math.min(s.amount, amount); s.amount -= n; amount -= n; } },
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
-    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount } : null)),
-    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount() }; },
+    getItems: () => slots.map((s) => (s.amount > 0 ? { getId: () => s.id, getAmount: () => s.amount, getMeta: () => s.meta ?? null } : null)),
+    setItem(slot, item) { slots[slot] = { id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null }; },
     refreshItems() {},
   };
 }
@@ -465,4 +465,13 @@ test('a logout on the very first tick of the fade keeps the dream prepared too',
   ticks(4);
   assert.deepEqual(Common.preparedDream(p), { mode: 'practice', difficulty: 'normal', boss: 1 });
   assert.equal(Dream.dreams.has(p), false);
+});
+
+test('Upgrades: an imbue keeps what the item carries (a charged ring of suffering, a preset)', () => {
+  const p = fakePlayer();
+  p.inventory.slots.push({ id: 20655, amount: 1, meta: { 'ring-of-suffering': 1000, preset: true } });
+  Common.addPoints(p, 725_000);
+  button('upgrades', { player: p, slot: 0, opId: 1 });
+  assert.equal(p.inventory.slots[0].id, 20657);
+  assert.deepEqual(p.inventory.slots[0].meta, { 'ring-of-suffering': 1000, preset: true });
 });
