@@ -209,7 +209,7 @@ export class ItemOnGroundManager {
     public static inventoryCapacity(player: Player, item: Item): number {
         const inventory = player.getInventory();
         const definition = ItemDefinition.forId(item.getId());
-        if (item.getId() <= 0 || definition === ItemDefinition.DEFAULT || definition.getId() !== item.getId()) return 0;
+        if (item.getId() < 0 || definition === ItemDefinition.DEFAULT || definition.getId() !== item.getId()) return 0;
         const stackable = definition.isStackable();
         const metadata = JSON.stringify(item.getMeta() ?? null);
         const matchingStack = stackable ? inventory.getItems().find(item =>

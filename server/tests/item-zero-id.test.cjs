@@ -28,6 +28,7 @@ test('cache item zero is valid inventory content and can be handed in', async ()
 
   assert.equal(ItemDefinition.forId(0).getName(), 'Dwarf remains');
   assert.equal(remains.isValid(), true);
+  assert.equal(inventory.getAddableAmount(remains), 1, 'capacity agrees that item 0 is valid');
   inventory.addItem(remains);
   assert.equal(inventory.containsNumber(0), true);
   assert.equal(inventory.getAmount(0), 1);
@@ -87,4 +88,34 @@ test('MCP inventory option and item-use accept a real item-0 slot', async () => 
   await handlers.get('use_item')({ player: 'item-zero-mcp', slot: 0, on: 'loc', id: 1, maxTicks: 1 });
   assert.equal(sent[0].type, 'inventory_use_on');
   assert.equal(sent[0].itemId, 0);
+});
+
+test('a dropped item zero can return to its owner without losing the source', async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
+  const { Location } = require('../dist/game/model/Location');
+  const { World } = require('../dist/game/World');
+  const location = new Location(3222, 3218, 0);
+  const player = {
+    getUsername: () => 'item-zero-ground',
+    getPacketSender: () => ({ sendItemContainer() {} }),
+    getInventory: () => inventory,
+    getPrivateArea: () => null,
+    getLocation: () => location,
+    sendMessage() {},
+  };
+  const inventory = new Inventory(player);
+  const pile = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), location, new Item(0, 1), true, -1, null);
+  World.getItems().push(pile);
+  try {
+    assert.equal(ItemOnGroundManager.transferToInventory(player, pile), 1);
+    assert.equal(inventory.getAmount(0), 1);
+    assert.equal(pile.isPendingRemoval(), true, 'the credited source is removed exactly once');
+    assert.equal(ItemOnGroundManager.transferToInventory(player, pile), 0);
+    assert.equal(inventory.getAmount(0), 1, 'a repeated request cannot duplicate the item');
+  } finally {
+    const index = World.getItems().indexOf(pile);
+    if (index >= 0) World.getItems().splice(index, 1);
+  }
 });

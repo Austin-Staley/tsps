@@ -472,7 +472,7 @@ export abstract class ItemContainer {
   /** How much of an item add() can accept, without changing either item or container. */
   public getAddableAmount(item: Item): number {
     const requested = Math.max(0, Math.floor(item.getAmount()));
-    if (item.getId() <= 0 || !Number.isFinite(requested) || requested <= 0) return 0;
+    if (item.getId() < 0 || !Number.isFinite(requested) || requested <= 0) return 0;
     if (getItemDefinition().forId(item.getId()).isStackable() || this.stackType() == StackType.STACKS) {
       const meta = JSON.stringify(item.getMeta() ?? null);
       const existing = this.items.find((held) => held.getId() === item.getId() &&

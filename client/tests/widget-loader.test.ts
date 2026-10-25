@@ -50,10 +50,7 @@ const location = new Location(3222, 3222, 0);
 const attributes = new Map<string, unknown>();
 const persistedAttributes = new Map<string, unknown>();
 let npc: any, interfaceId = -1;
-const attributes = new Map<string, unknown>();
 const player = {
-    getAttribute: (key: string) => attributes.get(key),
-    setAttribute(key: string, value: unknown) { attributes.set(key, value); },
     isRegistered: () => true, getHitpoints: () => 10, busy: () => false,
     getLocation: () => location, getUsername: () => "WidgetTest",
     getAttribute: (key: string) => attributes.get(key),
