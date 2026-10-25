@@ -69,6 +69,7 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   ]);
 
   const LIGHTHOUSE_DOOR_ID = ObjectIdentifiers.DOORWAY_6; // 4577
+  const LIGHTHOUSE_DOOR_TILE = { x: 2509, y: 3636, z: 0 };
   const BOOKCASE_ID = ObjectIdentifiers.BOOKCASE_15; // 4617
   const BRIDGE_IDS = new Set([ObjectIdentifiers.BROKEN_BRIDGE, ObjectIdentifiers.BROKEN_BRIDGE_2]);
   const LIGHTING_MECHANISM_IDS = new Set([
@@ -619,24 +620,33 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   }
 
   function handleLighthouseDoor(event) {
-    const { player } = event;
-    if (quest.getStage(player) >= STAGE_ENTERED_LIGHTHOUSE) return; // door is open + walkable
+    const { player, location } = event;
+    const from = player.getLocation();
+    const tile = LIGHTHOUSE_DOOR_TILE;
+    if (location?.x !== tile.x || location?.y !== tile.y || location?.z !== tile.z
+      || from.getX() !== tile.x || from.getZ() !== tile.z
+      || (from.getY() !== tile.y - 1 && from.getY() !== tile.y)) return;
     event.handled = true;
-    if (!hasFlag(player, FLAG_DOOR_UNLOCKED)) {
-      if (hasItem(player, LIGHTHOUSE_KEY)) {
-        player.getInventory().deleteNumber(LIGHTHOUSE_KEY, 1);
-        setFlag(player, FLAG_DOOR_UNLOCKED, true);
-        player.sendMessage("You unlock the Lighthouse front door.");
-      } else {
-        player.sendMessage("This door is locked securely shut.");
+    if (quest.getStage(player) < STAGE_ENTERED_LIGHTHOUSE) {
+      if (!hasFlag(player, FLAG_DOOR_UNLOCKED)) {
+        if (hasItem(player, LIGHTHOUSE_KEY)) {
+          player.getInventory().deleteNumber(LIGHTHOUSE_KEY, 1);
+          setFlag(player, FLAG_DOOR_UNLOCKED, true);
+          player.sendMessage("You unlock the Lighthouse front door.");
+        } else {
+          player.sendMessage("This door is locked securely shut.");
+        }
+        return;
       }
-      return;
+      if (!bridgesFixed(player)) {
+        player.sendMessage("Please adventurer... We are both curious as to what has happened in that lighthouse, but you need to fix the bridge for me!");
+        return;
+      }
+      quest.setStage(player, STAGE_ENTERED_LIGHTHOUSE);
     }
-    if (!bridgesFixed(player)) {
-      player.sendMessage("Please adventurer... We are both curious as to what has happened in that lighthouse, but you need to fix the bridge for me!");
-      return;
-    }
-    quest.setStage(player, STAGE_ENTERED_LIGHTHOUSE);
+    // The cache Walk-through doorway remains a wall, so cross its threshold
+    // for this player without changing the shared clipping or other players' gates.
+    player.moveTo(new Location(tile.x, from.getY() < tile.y ? tile.y : tile.y - 1, tile.z));
   }
 
   function handleBookcase(event) {
