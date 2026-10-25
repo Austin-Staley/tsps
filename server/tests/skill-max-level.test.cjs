@@ -260,6 +260,55 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     assert.equal(q.counts.get(I.BUTTERFLY_JAR),1,"level drain during the catch preserves the jar");
     q.levels.clear();q.equipment.clear();q.counts.clear();Math.random=()=>0.5;
 
+    // Implings (rsprox captures 1342/1389/1510/2520 + Leagues; Wiki Implings): the catch lands on the
+    // click's tick with live messages, sound 2623 and the caught animation; Puro-Puro spawns return in 7/50.
+    const N=core.NpcIdentifiers,said=[],sounds=[],grabs=[];
+    const iq=player(),packets=iq.getPacketSender();
+    iq.sendMessage=m=>said.push(m);iq.getPacketSender=()=>({...packets,sendSound:id=>sounds.push(id)});
+    iq.performAnimation=a=>grabs.push(a.getId());
+    const puroTile=new core.Location(2567,4320,0),outsideTile=new core.Location(3000,3000,0);
+    iq.moveTo(puroTile);iq.equipment.set(core.Equipment.WEAPON_SLOT,I.BUTTERFLY_NET);iq.counts.set(I.IMPLING_JAR,2);
+    Math.random=()=>0;
+    const baby=prey(N.BABY_IMPLING_2,puroTile.clone());
+    Catching.catchNpc({player:iq,npc:baby,npcId:baby.getId()});
+    assert.equal(iq.counts.get(I.BABY_IMPLING_JAR),1,"the jar is filled on the click's tick, not two ticks later");
+    assert.equal(iq.counts.get(I.IMPLING_JAR),1);
+    assert.deepEqual(said,["You manage to catch the impling and squeeze it into a jar."]);
+    assert.deepEqual(sounds,[2623]);assert.deepEqual(grabs,[6606]);
+    assert.equal(iq.experience.get(Skill.HUNTER),18,"Puro-Puro XP");
+    assert.deepEqual(baby.animations.map(a=>a.getId()),[6615]);
+    assert.equal(baby.isVisible(),true,"the caught impling stays for its animation");
+    advance(2);assert.equal(baby.isVisible(),false,"and is gone two ticks after the catch");
+    advance(6);assert.equal(baby.isVisible(),false);
+    advance(1);assert.equal(baby.isVisible(),true,"a Puro-Puro baby impling returns 7 ticks after it is removed");
+    const earth=prey(N.EARTH_IMPLING_2,puroTile.clone());
+    Catching.catchNpc({player:iq,npc:earth,npcId:earth.getId()});
+    assert.equal(iq.counts.get(I.EARTH_IMPLING_JAR),1);
+    advance(51);assert.equal(earth.isVisible(),false);
+    advance(1);assert.equal(earth.isVisible(),true,"earth and essence implings return after 50 ticks");
+    said.length=0;
+    Catching.catchNpc({player:iq,npc:baby,npcId:baby.getId()});
+    assert.deepEqual(said,["You don't have an empty impling jar in which to keep an impling."]);
+    iq.equipment.clear();iq.counts.set(I.IMPLING_JAR,1);iq.levels.set(Skill.HUNTER,45);said.length=0;
+    Catching.catchNpc({player:iq,npc:earth,npcId:earth.getId()});
+    assert.deepEqual(said,["You need a Hunter level of at least 46 to catch this impling barehanded."]);
+    iq.equipment.set(core.Equipment.WEAPON_SLOT,I.BUTTERFLY_NET);iq.levels.set(Skill.HUNTER,35);said.length=0;
+    Catching.catchNpc({player:iq,npc:earth,npcId:earth.getId()});
+    assert.deepEqual(said,["You need a Hunter level of at least 36 to catch this impling."]);
+    assert.equal(iq.counts.get(I.IMPLING_JAR),1,"a refused catch keeps the jar");
+    iq.equipment.clear();iq.levels.delete(Skill.HUNTER);iq.counts.clear();iq.moveTo(outsideTile);
+    iq.setSize(0);said.length=0;
+    const wild=prey(N.EARTH_IMPLING,outsideTile.clone());
+    Catching.catchNpc({player:iq,npc:wild,npcId:wild.getId()});
+    assert.deepEqual(said,["You'll need to clear some space in your pack to catch this impling without a jar."]);
+    iq.setSize(28);said.length=0;grabs.length=0;iq.experience.clear();
+    Catching.catchNpc({player:iq,npc:wild,npcId:wild.getId()});
+    assert.deepEqual(said,["You manage to catch the impling and acquire some loot."]);
+    assert.deepEqual(grabs,[7171],"barehanded catches play hunting_impling_catch");
+    assert.ok(iq.counts.size>0,"barehanded loot arrives on the same tick");
+    assert.equal(iq.experience.get(Skill.HUNTER),27,"Gielinor XP");
+    advance(102);
+
     const crabId=[...Crabs.bases].find(([id])=>Crabs.species(new core.GameObject(id,q.getLocation(),10,0,null)).level===21)[0];
     const crabObject=new core.GameObject(crabId,q.getLocation().clone(),10,0,null);
     for(const[id,n]of[[I.PLANK,1],[I.BUCKET,1],[I.STEEL_NAILS,2],[I.HAMMER,1],[I.SAW,1]])q.counts.set(id,n);
