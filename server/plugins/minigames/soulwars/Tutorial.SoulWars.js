@@ -372,7 +372,21 @@ function wear(player, slot, id) {
   player.getUpdateFlag?.().flag?.(Common.core.Flag?.APPEARANCE);
 }
 
+/**
+ * The fade gives the player 5 ticks to equip something (a cape) or pick it back up: the
+ * admission rules are checked again before anything of theirs is touched, and entry stops.
+ */
+function admissionChanged(player) {
+  if (player.isRegistered?.() === false) return true;
+  if (!restricted(player)) return false;
+  player.getMovementQueue?.().setBlockMovement?.(false);
+  closeFade(player);
+  player.sendMessage(Common.message("restricted"));
+  return true;
+}
+
 function enter(player) {
+  if (admissionChanged(player)) return;
   const area = instance();
   states.set(player, { area, imp: null, cutscene: true });
   setStep(player, 0);
