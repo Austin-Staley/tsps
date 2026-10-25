@@ -297,7 +297,8 @@ export class BankTagsPlugin extends Plugin implements ClientPlugin, BankTagsServ
                 break;
             }
             case "getSearchingTagTab":
-                intStack[intStackSize - 1] = this.activeBankTag !== null ? 1 : 0;
+                // The script pushes 0; only set it, so another plugin's tab (Quest Helper's) can too.
+                if (this.activeBankTag !== null) intStack[intStackSize - 1] = 1;
                 break;
             case "bankBuildTab":
                 // The single-tab view hides the separators without repositioning the items.
