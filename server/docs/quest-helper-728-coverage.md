@@ -287,7 +287,7 @@ deferred quest. No deferred quest is counted as complete.
 | Devious Minds | `DeviousMinds` | Pending | Pending | Pending |
 | The Dig Site | `DigSite` | Pending | Pending | Pending |
 | Dream Mentor | `DreamMentor` | Pending | Pending | Pending |
-| Druidic Ritual | `DruidicRitual` | Pending | Pending | Accepted captured main route; later edits and uncovered recovery still need rechecks ([ledger](quest-helper-728-verification.md)) |
+| Druidic Ritual | `DruidicRitual` | Prison-door interaction name repaired for #1080 | Real-map gate opening, passage and closing regressions | Earlier completion used an alternate dungeon entrance after both prison leaves failed. A separate bounded gate checkpoint now verifies both leaves, passage, all four meat dips and relog; it is not a new full quest route. See the corrected [ledger](quest-helper-728-verification.md). |
 | Dwarf Cannon | `DwarfCannon` | Pending | Pending | Pending |
 | Eadgar's Ruse | `EadgarsRuse` | Pending | Pending | Pending |
 | Eagles' Peak | `EaglesPeak` | Pending | Pending | Pending |

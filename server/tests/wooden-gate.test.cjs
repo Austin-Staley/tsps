@@ -299,6 +299,77 @@ const openWith = (h, player, object, action = 'Open', name = 'Door') => h.handle
   player, object, objectId: object.getId(), definition: { id: object.getId() }, location: object.getLocation(),
 });
 
+test('Cauldron of Thunder prison doors open both cache leaves and restore their collision', async () => {
+  await initializeMapCollisionOnce();
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const ids = [O.PRISON_DOOR_3, O.PRISON_DOOR_4];
+  const definitions = new Map(ids.map(id => [id, CacheDefinitions.getObject(id)]));
+  RegionManager.loadMapFiles(2889, 9831);
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const finder = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  const route = (srcX, srcY, destX, destY) => finder.findRoute({
+    level: 0, srcX, srcY, srcSize: 1, destX, destY, destWidth: 1, destLength: 1, privateArea: null, moveNear: false,
+  }).success;
+  const leaf = (id, x, y) => MapObjects.get(id, new Location(x, y, 0), null);
+  try {
+    assert.ok(h.handlers.get('Prison door')?.Open, 'the cache interaction name must be registered');
+    for (const id of ids) {
+      assert.equal(definitions.get(id).name, 'Prison door');
+      assert.equal(definitions.get(id).actions[0], 'Open');
+    }
+    for (const y of [9830, 9831]) assert.equal(route(2888, y, 2892, y), false, 'the closed gate blocks the cauldron room');
+    for (const clickedId of ids) {
+      const y = clickedId === O.PRISON_DOOR_3 ? 9831 : 9830;
+      const closed = leaf(clickedId, 2889, y);
+      assert.ok(closed, 'the clicked leaf is on the actual dungeon map');
+      openWith(h, sharedPlayer, closed, 'Open', 'Prison door');
+      const north = leaf(O.PRISON_DOOR_3, 2888, 9831);
+      const south = leaf(O.PRISON_DOOR_4, 2888, 9830);
+      assert.equal(north?.getFace(), 1);
+      assert.equal(south?.getFace(), 3);
+      for (const y of [9830, 9831]) {
+        assert.equal(route(2888, y, 2892, y), true, 'ordinary pathfinding reaches the cauldron side');
+        assert.equal(route(2892, y, 2888, y), true, 'ordinary pathfinding can leave the room');
+      }
+      assert.equal(h.internals.OPEN_OBJECT_STATES.size, 1);
+      if (clickedId === ids[0]) {
+        // These cache leaves retain Open while swung out, so the next Open closes them.
+        openWith(h, sharedPlayer, south, 'Open', 'Prison door');
+      } else {
+        assert.equal(h.submitted.at(-1).getDelay(), 500);
+        h.submitted.at(-1).execute();
+      }
+      assert.equal(leaf(ids[0], 2889, 9831)?.getFace(), 0);
+      assert.equal(leaf(ids[1], 2889, 9830)?.getFace(), 0);
+      assert.equal(mapCopies(ids[0], 2889, 9831), 1);
+      assert.equal(mapCopies(ids[1], 2889, 9830), 1);
+      assert.equal(h.internals.OPEN_OBJECT_STATES.size, 0);
+      assert.equal(route(2888, 9831, 2892, 9831), false, 'closing restores the wall collision');
+    }
+  } finally {
+    if (h.internals.OPEN_OBJECT_STATES.size) h.submitted.at(-1).execute();
+    h.restore();
+  }
+});
+
+test('other prison doors retain their dedicated unlock handlers', async () => {
+  await initializeMapCollisionOnce();
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const ids = [O.PRISON_DOOR_3, O.PRISON_DOOR_4, O.PRISON_DOOR_5, O.PRISON_DOOR_6];
+  const h = buildHarness({ cacheObjects: new Map(ids.map(id => [id, CacheDefinitions.getObject(id)])) });
+  try {
+    for (const id of [O.PRISON_DOOR_5, O.PRISON_DOOR_6]) {
+      const object = new GameObject(id, new Location(3297, 3124, 0), 0, 2, null);
+      const event = { player: sharedPlayer, object, objectId: id, location: object.getLocation() };
+      assert.equal(h.handlers.get('Prison door').Open(event), false, 'no generic prison unlock is invented');
+      h.setDoorToggleHandler(request => { request.handled = true; });
+      assert.equal(h.handlers.get('Prison door').Open(event), true, 'a dedicated door handler still owns its gate');
+      assert.deepEqual(h.ops, [], 'ordinary door handling does not move a dedicated gate');
+      h.setDoorToggleHandler(null);
+    }
+  } finally { h.restore(); }
+});
+
 test('an untouched open double door closes itself after 500 ticks and never duplicates its records', () => {
   const h = buildHarness();
   const { OPEN_OBJECT_STATES: states, RUNTIME_DOUBLE_DOOR_RECORDS: records } = h.internals;
