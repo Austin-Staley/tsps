@@ -674,23 +674,6 @@ function slashWeb(api, event, usedItem) {
   api.getTaskManager().submit(new api.core.CountdownTask({}, WEB_SLASHED_DELAY_TICKS, () => turnWebSlashed(api, object, key)));
 }
 
-function pullLever(api, event) {
-  const { player, location } = event;
-  if (location.z !== 0) return false;
-  let destination;
-  if (location.x === 3153 && location.y === 3923) {
-    destination = new Location(3090, 3475);
-  } else if (location.x === 3090 && location.y === 3956) {
-    destination = new Location(2539, 4712);
-  } else if (location.x === 2539 && location.y === 4712) {
-    destination = new Location(3090, 3956);
-  } else {
-    return false;
-  }
-  event.handled = true;
-  api.emitCustomEvent("lever:teleport", { player, destination });
-}
-
 module.exports = {
   name: "Wilderness",
   _test: { canAttack, webCutChance, webTool, webSlashAnimation, slashWeb, websBeingSlashed },
@@ -701,7 +684,6 @@ module.exports = {
     api.onCustomEvent("wilderness:rules", (request) => answerRules(api, state, request));
     api.onPlayerLogin(({ player }) => onPlayerLogin(state, api, player));
     api.onPlayerDisconnect(({ player }) => onPlayerDisconnect(state, player));
-    api.onObjectInteraction("Lever", { Pull: (event) => pullLever(api, event) });
     api.onObjectInteraction("Web", { Slash: (event) => slashWeb(api, event) });
     api.onItemOnObject("Knife", "Web", (event) => slashWeb(api, event, event.item), { noted: false });
     api.onItemOnObject((event) => {
