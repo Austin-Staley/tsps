@@ -90,6 +90,8 @@ const PVP_PHASE = Object.freeze({
   DEAD: "dead",
 });
 const MANAGED_PVP_PRAYERS = Object.freeze([
+  PrayerHandler.PROTECT_ITEM,
+  PrayerHandler.SMITE,
   PrayerHandler.PROTECT_FROM_MAGIC,
   PrayerHandler.PROTECT_FROM_MISSILES,
   PrayerHandler.PROTECT_FROM_MELEE,
@@ -216,9 +218,6 @@ class PvpController {
     // Support nodes run before every brain action through tickSupport.
     this.eatFoodActionNode = new EatFoodActionNode(botStatesByName, api, {
       lowHpRatio: options.botEatLowHpRatio,
-      minHeal: options.botEatHealMin,
-      maxHeal: options.botEatHealMax,
-      maxCharges: options.botEatMaxCharges,
     });
     this.maintainCombatBoostsActionNode = new MaintainCombatBoostsActionNode(
       botStatesByName
