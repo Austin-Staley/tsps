@@ -856,6 +856,8 @@ export interface PluginRangedCombatModifier {
 }
 
 export interface PluginApi {
+  /** Attributes registered hook/area timings to this label while retaining plugin ownership. */
+  withProfileLabel(label: string): PluginApi;
   onPlayerLogin(handler: (event: PluginPlayerLoginEvent) => void): void;
   /** Fires per map square crossed, not per tile: content spread over the map (patches, bird
    * houses) syncs here instead of checking every player every tick. */
@@ -1416,6 +1418,7 @@ export interface PluginCoreApi {
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
+  NpcSpawnDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;

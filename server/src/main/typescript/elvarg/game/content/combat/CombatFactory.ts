@@ -617,9 +617,12 @@ export class CombatFactory {
         }
         const attackerArea = attacker.getArea();
         const targetArea = target.getArea();
-        const areaCanAttack = (attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null)
-            ?? (targetArea && targetArea !== attackerArea ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null);
-        if (areaCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const attackerCanAttack = attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null;
+        if (attackerCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const targetCanAttack = targetArea && targetArea !== attackerArea
+            ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null;
+        if (targetCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const areaCanAttack = attackerCanAttack ?? targetCanAttack;
         const globalCanAttack = PluginManager.emitCanAttack(attacker, target, method);
         if (globalCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
         const pluginCanAttack = areaCanAttack ?? globalCanAttack;

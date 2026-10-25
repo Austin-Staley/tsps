@@ -165,7 +165,7 @@ function attachEntry(api) {
   api.onObjectClick(data.locs.entrance, 1, climbDown);
   api.onObjectClick(data.locs.entrance, 2, payAtEntrance);
   api.onNpcClick(data.npcs.pete, 1, talk);
-  api.onNpcClick(data.npcs.pete, 3, ({ player }) => { payAtEntrance({ player }); return true; });
+  api.onNpcClick(data.npcs.pete, 3, payAtEntrance);
   api.onPlayerLogin(restoreVarbits);
 }
 

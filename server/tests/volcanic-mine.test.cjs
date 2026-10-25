@@ -153,6 +153,34 @@ function locOf(game, id, tile) {
 
 const here = (game, p) => game.area.templateOf(p.getLocation());
 
+test("Pete's Pay and Retrieve have distinct editor methods that dispatch to the correct actions", (t) => {
+  const { NpcInteractionManager } = require('../dist/game/entity/impl/npc/NpcInteractionManager');
+  const { NpcInteractionDefinition } = require('../dist/game/definition/NpcInteractionDefinition');
+  const warn = t.mock.method(console, 'warn', () => {});
+  const pete = Common.data.npcs.pete;
+  const pay = NpcInteractionManager.registerPluginInteraction('VolcanicMine', [pete], 3, hooks.npcs.get(`${pete}:3`));
+  const retrieve = NpcInteractionManager.registerPluginInteraction('VolcanicMine', [pete], 5, hooks.npcs.get(`${pete}:5`));
+  assert.notEqual(pay, retrieve);
+  assert.equal(warn.mock.callCount(), 0, 'registration must not report ambiguous handlers');
+
+  const previous = NpcInteractionDefinition.all();
+  try {
+    NpcInteractionDefinition.replace([new NpcInteractionDefinition(pete,
+      { method: pay, args: {}, source: 'editor' },
+      { method: retrieve, args: {}, source: 'editor' }, null)]);
+    const npc = { getContentId: () => pete, getLocation: () => new Location(3816, 3808, 0) };
+    const paying = fakePlayer();
+    paying.inventory.adds(Common.data.items.numulite, Common.data.entry.fee);
+    assert.equal(NpcInteractionManager.handle(paying, npc, 1, 1), true);
+    assert.ok(hooks.prompts.at(-1).args.includes(Common.message('payMenuOne')));
+    const retrieving = fakePlayer();
+    assert.equal(NpcInteractionManager.handle(retrieving, npc, 1, 2), true);
+    assert.equal(lines(retrieving.boxes.at(-1))[0], Common.message('nothingStored'));
+  } finally {
+    NpcInteractionDefinition.replace(previous);
+  }
+});
+
 /** A paid player down the entrance, in the dormant lobby. */
 function enter(p = fakePlayer(), { hazards = false } = {}) {
   p.setAttribute(Common.data.attributes.paid, true);

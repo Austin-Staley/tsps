@@ -124,6 +124,8 @@ import {
 
 type PluginHook<T> = {
   pluginName: string;
+  profileName?: string;
+  handlerName?: string | ((event: T) => string);
   handler: (event: T) => void;
 };
 
@@ -159,6 +161,8 @@ type PluginPerfStat = {
   errors: number;
   totalNs: bigint;
   maxNs: bigint;
+  maxEventName: string;
+  maxHandlerName: string;
   events: Map<string, PluginPerfEventStat>;
 };
 
@@ -384,6 +388,16 @@ export class PluginManager {
       return;
     }
 
+    let handlerName = typeof hook.handlerName === "string"
+      ? hook.handlerName
+      : hook.handler.name || "anonymous";
+    if (typeof hook.handlerName === "function") {
+      try {
+        handlerName = hook.handlerName(event);
+      } catch {
+        // Profiling metadata must not prevent the registered hook from running.
+      }
+    }
     const start = process.hrtime.bigint();
     let failed = false;
     try {
@@ -394,10 +408,11 @@ export class PluginManager {
     } finally {
       PluginContext.exit(previousPlugin);
       PluginManager.recordHookTiming(
-        hook.pluginName,
+        hook.profileName ?? hook.pluginName,
         profileEventName,
         process.hrtime.bigint() - start,
-        failed
+        failed,
+        handlerName
       );
     }
   }
@@ -431,10 +446,11 @@ export class PluginManager {
     } finally {
       PluginContext.exit(previousPlugin);
       PluginManager.recordHookTiming(
-        area.pluginName ?? area.getName(),
+        area.profileName ?? area.pluginName ?? area.getName(),
         `area:${method}`,
         process.hrtime.bigint() - start,
-        failed
+        failed,
+        `${area.constructor?.name || area.getName()}.${method}`
       );
     }
   }
@@ -443,7 +459,8 @@ export class PluginManager {
     pluginName: string,
     eventName: string,
     durationNs: bigint,
-    failed: boolean
+    failed: boolean,
+    handlerName = "anonymous"
   ): void {
     let pluginStat = PluginManager.pluginPerfStats.get(pluginName);
     if (!pluginStat) {
@@ -452,6 +469,8 @@ export class PluginManager {
         errors: 0,
         totalNs: 0n,
         maxNs: 0n,
+        maxEventName: "n/a",
+        maxHandlerName: "n/a",
         events: new Map<string, PluginPerfEventStat>(),
       };
       PluginManager.pluginPerfStats.set(pluginName, pluginStat);
@@ -459,8 +478,10 @@ export class PluginManager {
 
     pluginStat.calls++;
     pluginStat.totalNs += durationNs;
-    if (durationNs > pluginStat.maxNs) {
+    if (pluginStat.calls === 1 || durationNs > pluginStat.maxNs) {
       pluginStat.maxNs = durationNs;
+      pluginStat.maxEventName = eventName;
+      pluginStat.maxHandlerName = handlerName;
     }
     if (failed) {
       pluginStat.errors++;
@@ -530,6 +551,8 @@ export class PluginManager {
     totalMs: number;
     avgMs: number;
     maxMs: number;
+    maxEventName: string;
+    maxHandlerName: string;
     topEventName: string;
     topEventCalls: number;
     topEventTotalMs: number;
@@ -543,6 +566,8 @@ export class PluginManager {
       totalMs: number;
       avgMs: number;
       maxMs: number;
+      maxEventName: string;
+      maxHandlerName: string;
       topEventName: string;
       topEventCalls: number;
       topEventTotalMs: number;
@@ -572,6 +597,8 @@ export class PluginManager {
         totalMs,
         avgMs: stat.calls > 0 ? totalMs / stat.calls : 0,
         maxMs: Number(stat.maxNs) / 1_000_000,
+        maxEventName: stat.maxEventName,
+        maxHandlerName: stat.maxHandlerName,
         topEventName,
         topEventCalls,
         topEventTotalMs: Number(topEventTotalNs) / 1_000_000,
@@ -2347,6 +2374,7 @@ export class PluginManager {
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       RsmodRouteFinding: require(`${model}/movement/path/RsmodRouteFinding`).RsmodRouteFinding,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
+      NpcSpawnDefinition: require("../game/definition/NpcSpawnDefinition").NpcSpawnDefinition,
       ObjectDefinition: require("../game/definition/ObjectDefinition").ObjectDefinition,
       MagicSpellbook: require(`${model}/MagicSpellbook`).MagicSpellbook,
       Spell: require(`${combat}/magic/Spell`).Spell,
@@ -2398,11 +2426,19 @@ export class PluginManager {
     return PluginManager.pluginCoreApi;
   }
 
-  private static createApi(pluginName: string): PluginApi {
-    const npcInteractionDefinitions: Array<
-      PluginNpcInteractionDefinition & { npcId: number }
-    > = [];
-    let npcInteractionSourceRegistered = false;
+  private static createApi(
+    pluginName: string,
+    profileName = pluginName,
+    npcInteractions: {
+      definitions: Array<PluginNpcInteractionDefinition & { npcId: number }>;
+      sourceRegistered: boolean;
+    } = { definitions: [], sourceRegistered: false }
+  ): PluginApi {
+    const hookProfile = (handler: Function) => ({
+      pluginName,
+      profileName,
+      handlerName: handler.name || "anonymous",
+    });
 
     const registerNpcInteractionDefinition = (
       npcIds: number | number[],
@@ -2495,20 +2531,20 @@ export class PluginManager {
         );
         return;
       }
-      if (!npcInteractionSourceRegistered) {
+      if (!npcInteractions.sourceRegistered) {
         DefinitionLoader.registerSource(
           NpcInteractionDefinitionLoader.DEFINITION_TYPE,
           pluginName,
           {
             name: pluginName,
             priority: 100,
-            load: () => npcInteractionDefinitions,
+            load: () => npcInteractions.definitions,
           }
         );
-        npcInteractionSourceRegistered = true;
+        npcInteractions.sourceRegistered = true;
       }
       for (const npcId of normalizedNpcIds) {
-        npcInteractionDefinitions.push({ npcId, ...normalized });
+        npcInteractions.definitions.push({ npcId, ...normalized });
       }
     };
 
@@ -2550,7 +2586,7 @@ export class PluginManager {
         handler
       );
       PluginManager.npcInteractionHooks.push({
-        pluginName,
+        ...hookProfile(handler),
         handler: (event) => {
           if (
             !event ||
@@ -2592,7 +2628,7 @@ export class PluginManager {
       }
 
       const hook: ObjectInteractionHook = {
-        pluginName,
+        ...hookProfile(handler),
         order: PluginManager.nextObjectHookOrder++,
         handler: (event) => {
           if (handler(event) !== false) event.handled = true;
@@ -2632,7 +2668,7 @@ export class PluginManager {
       const itemIdSet = new Set(validIds);
 
       PluginManager.groundItemInteractionHooks.push({
-        pluginName,
+        ...hookProfile(handler),
         handler: (event) => {
           if (!event || event.handled || event.clickType !== clickType) {
             return;
@@ -2674,7 +2710,7 @@ export class PluginManager {
       const buttonIdSet = new Set(validIds);
 
       PluginManager.buttonClickHooks.push({
-        pluginName,
+        ...hookProfile(handler),
         handler: (event) => {
           if (!event || event.handled || !buttonIdSet.has(event.buttonId)) {
             return;
@@ -2713,7 +2749,7 @@ export class PluginManager {
       const buttonIdSet = new Set(validIds);
 
       PluginManager.interfaceActionClickHooks.push({
-        pluginName,
+        ...hookProfile(handler),
         handler: (event) => {
           if (!event || event.handled || !buttonIdSet.has(event.buttonId)) {
             return;
@@ -2737,20 +2773,31 @@ export class PluginManager {
       const hookList = names === null
         ? PluginManager.npcAnyInteractionHooks
         : PluginManager.npcInteractionHooks;
-      hookList.push({ pluginName, handler: (event) => {
-        if (event.handled || !Number.isInteger(event.clickType) || event.clickType < 1 || event.clickType > 5) return;
-        const definition = event.definition;
-        if (!definition || (nameSet !== null && !nameSet.has(definition.getName()))) return;
-        const action = handlers.get(definition.getActions()?.[event.clickType - 1]);
-        if (action && action(event) !== false) event.handled = true;
-      } });
+      hookList.push({
+        pluginName,
+        profileName,
+        handlerName: (event) =>
+          handlers.get(event.definition?.getActions()?.[event.clickType - 1])?.name || "anonymous",
+        handler: (event) => {
+          if (event.handled || !Number.isInteger(event.clickType) || event.clickType < 1 || event.clickType > 5) return;
+          const definition = event.definition;
+          if (!definition || (nameSet !== null && !nameSet.has(definition.getName()))) return;
+          const action = handlers.get(definition.getActions()?.[event.clickType - 1]);
+          if (action && action(event) !== false) event.handled = true;
+        },
+      });
     };
 
     return {
       core: PluginManager.getCoreApi(),
+      withProfileLabel: (label) => PluginManager.createApi(
+        pluginName,
+        typeof label === "string" && label.trim() ? label.trim() : profileName,
+        npcInteractions
+      ),
       onPlayerMapSquareChange: (handler) => {
         if (typeof handler === "function") {
-          PluginManager.mapSquareChangeHooks.push({ pluginName, handler });
+          PluginManager.mapSquareChangeHooks.push({ ...hookProfile(handler), handler });
         }
       },
       onPlayerLogin: (handler) => {
@@ -2758,7 +2805,7 @@ export class PluginManager {
           return;
         }
         PluginManager.loginHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.username) {
               return;
@@ -2772,7 +2819,7 @@ export class PluginManager {
           return;
         }
         PluginManager.disconnectHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.username) {
               return;
@@ -2786,7 +2833,7 @@ export class PluginManager {
           return;
         }
         PluginManager.logoutHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.username) {
               return;
@@ -2800,7 +2847,7 @@ export class PluginManager {
           return;
         }
         PluginManager.socialPacketHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.packet) {
               return;
@@ -2813,20 +2860,20 @@ export class PluginManager {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.serverStartupHooks.push({ pluginName, handler });
+        PluginManager.serverStartupHooks.push({ ...hookProfile(handler), handler });
       },
       onServerShutdown: (handler) => {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.serverShutdownHooks.push({ pluginName, handler });
+        PluginManager.serverShutdownHooks.push({ ...hookProfile(handler), handler });
       },
       onFriendAdd: (handler) => {
         if (typeof handler !== "function") {
           return;
         }
         PluginManager.friendAddHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.other) {
               return;
@@ -2840,7 +2887,7 @@ export class PluginManager {
           return;
         }
         PluginManager.friendRemoveHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.other) {
               return;
@@ -2854,7 +2901,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerProcessHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player) {
               return;
@@ -2882,7 +2929,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerLevelUpHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -2906,7 +2953,7 @@ export class PluginManager {
         }
         const hooks = PluginManager.customEventHooks.get(eventName) ?? [];
         hooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler,
         });
         PluginManager.customEventHooks.set(eventName, hooks);
@@ -2916,7 +2963,7 @@ export class PluginManager {
           return;
         }
         PluginManager.regionLoadedHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -2935,7 +2982,7 @@ export class PluginManager {
           return;
         }
         PluginManager.activeRegionsHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !Array.isArray(event.regions) || !Array.isArray(event.regionKeys)) {
               return;
@@ -2949,7 +2996,7 @@ export class PluginManager {
           return;
         }
         PluginManager.pathBlockedHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.entity || !event.from || !event.to) {
               return;
@@ -2963,7 +3010,7 @@ export class PluginManager {
           return;
         }
         PluginManager.pathBlockedHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.isPlayer || !event.entity || !event.username) {
               return;
@@ -2981,13 +3028,17 @@ export class PluginManager {
         }
         const order = PluginManager.nextObjectHookOrder++;
         if (typeof handler === "function") {
-          PluginManager.objectInteractionHooks.push({ pluginName, order, handler });
+          PluginManager.objectInteractionHooks.push({ ...hookProfile(handler), order, handler });
           return;
         }
         const namedActions = new Map(Object.entries(actions).filter(([, action]) => typeof action === "function"));
         const hooks = PluginManager.objectHooksByName.get(handler) ?? [];
         hooks.push({
           pluginName,
+          profileName,
+          handlerName: (event) => namedActions.get(
+            event.definition?.getInteractions()?.[event.clickType - 1]
+          )?.name || "anonymous",
           order,
           handler: (event) => {
             if (!Number.isInteger(event.clickType) || event.clickType < 1 || event.clickType > 5) return;
@@ -3001,33 +3052,33 @@ export class PluginManager {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.objectRouteHooks.push({ pluginName, handler });
+        PluginManager.objectRouteHooks.push({ ...hookProfile(handler), handler });
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {
-          PluginManager.walkRouteHooks.push({ pluginName, handler });
+          PluginManager.walkRouteHooks.push({ ...hookProfile(handler), handler });
         }
       },
       onNpcRoute: (handler) => {
-        if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.npcRouteHooks.push({ ...hookProfile(handler), handler });
       },
       onWorldEntityInteraction: (handler: (event: PluginWorldEntityInteractionEvent) => void) => {
         if (typeof handler === "function") {
-          PluginManager.worldEntityInteractionHooks.push({ pluginName, handler });
+          PluginManager.worldEntityInteractionHooks.push({ ...hookProfile(handler), handler });
         }
       },
       onBeforeNpcInteraction: (handler) => {
-        if (typeof handler === "function") PluginManager.beforeNpcInteractionHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.beforeNpcInteractionHooks.push({ ...hookProfile(handler), handler });
       },
       onBeforeObjectInteraction: (handler) => {
-        if (typeof handler === "function") PluginManager.beforeObjectInteractionHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.beforeObjectInteractionHooks.push({ ...hookProfile(handler), handler });
       },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),
         actions?: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
       ) => {
         if (typeof handler === "function") {
-          PluginManager.npcInteractionHooks.push({ pluginName, handler });
+          PluginManager.npcInteractionHooks.push({ ...hookProfile(handler), handler });
         } else if (typeof handler === "string" && actions) {
           registerNpcActions(handler, actions);
         }
@@ -3059,6 +3110,7 @@ export class PluginManager {
       registerNpcInteraction: registerNpcInteractionDefinition,
       registerArea: (area) => {
         area.pluginName = pluginName;
+        area.profileName = profileName;
         require("../game/model/areas/AreaManager").AreaManager.areas.push(area);
       },
       onNpcDeath: (handler) => {
@@ -3066,7 +3118,7 @@ export class PluginManager {
           return;
         }
         PluginManager.npcDeathHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.killer || !event.npc) {
               return;
@@ -3080,7 +3132,7 @@ export class PluginManager {
           return;
         }
         PluginManager.npcBeforeDeathHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (event?.npc) {
               handler(event);
@@ -3093,7 +3145,7 @@ export class PluginManager {
           return;
         }
         PluginManager.npcHitModifyHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (event?.npc && event?.hit) {
               handler(event);
@@ -3106,7 +3158,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canAttackHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.attacker || !event.target) {
               return;
@@ -3120,7 +3172,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canTeleportHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player) {
               return;
@@ -3134,7 +3186,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canLogoutHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player) {
               return;
@@ -3148,7 +3200,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canEatHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3166,7 +3218,7 @@ export class PluginManager {
           return;
         }
         PluginManager.firemakingBlockedHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.location) {
               return;
@@ -3180,7 +3232,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canDrinkHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3198,7 +3250,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canTradeHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.target) {
               return;
@@ -3212,7 +3264,7 @@ export class PluginManager {
           return;
         }
         PluginManager.tradeRequestHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.target) {
               return;
@@ -3226,7 +3278,7 @@ export class PluginManager {
           return;
         }
         PluginManager.tradeCompletedHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.partner || !Array.isArray(event.received)) {
               return;
@@ -3240,7 +3292,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerFollowHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.leader) {
               return;
@@ -3254,7 +3306,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerAttackHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.target) {
               return;
@@ -3268,7 +3320,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canBankHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player) {
               return;
@@ -3280,7 +3332,7 @@ export class PluginManager {
       onCanBankItem: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.canBankItemHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event?.player || !event.item) return;
             handler(event);
@@ -3292,7 +3344,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canShopHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player) {
               return;
@@ -3306,7 +3358,7 @@ export class PluginManager {
           return;
         }
         PluginManager.shouldDropItemsOnDeathHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player) {
               return;
@@ -3320,7 +3372,7 @@ export class PluginManager {
           return;
         }
         PluginManager.shouldKeepItemOnDeathHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.item) {
               return;
@@ -3333,14 +3385,14 @@ export class PluginManager {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.playerDeathDropsHooks.push({ pluginName, handler });
+        PluginManager.playerDeathDropsHooks.push({ ...hookProfile(handler), handler });
       },
       onPlayerDeathItemDrop: (handler) => {
         if (typeof handler !== "function") {
           return;
         }
         PluginManager.playerDeathItemDropHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.item) {
               return;
@@ -3350,29 +3402,29 @@ export class PluginManager {
         });
       },
       onCanUseItem: (handler) => {
-        if (typeof handler === "function") PluginManager.canUseItemHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.canUseItemHooks.push({ ...hookProfile(handler), handler });
       },
       onCanGainExperience: (handler) => {
-        if (typeof handler === "function") PluginManager.canGainExperienceHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.canGainExperienceHooks.push({ ...hookProfile(handler), handler });
       },
       onCanSpawnNpc: (handler) => {
-        if (typeof handler === "function") PluginManager.canSpawnNpcHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.canSpawnNpcHooks.push({ ...hookProfile(handler), handler });
       },
       onCanStockItem: (handler) => {
-        if (typeof handler === "function") PluginManager.canStockItemHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.canStockItemHooks.push({ ...hookProfile(handler), handler });
       },
       onPrayerDisabled: (handler) => {
-        if (typeof handler === "function") PluginManager.prayerDisabledHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.prayerDisabledHooks.push({ ...hookProfile(handler), handler });
       },
       onSpecialAttackDisabled: (handler) => {
-        if (typeof handler === "function") PluginManager.specialAttackDisabledHooks.push({ pluginName, handler });
+        if (typeof handler === "function") PluginManager.specialAttackDisabledHooks.push({ ...hookProfile(handler), handler });
       },
       onCanEquip: (handler) => {
         if (typeof handler !== "function") {
           return;
         }
         PluginManager.canEquipHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3391,7 +3443,7 @@ export class PluginManager {
           return;
         }
         PluginManager.canUnequipHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3410,7 +3462,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerDeathHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || event.handled) {
               return;
@@ -3424,7 +3476,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerBeforeDeathHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (event?.player) {
               handler(event);
@@ -3437,7 +3489,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerOptionHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3457,7 +3509,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerDealtDamageHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.target || !event.hit) {
               return;
@@ -3468,30 +3520,30 @@ export class PluginManager {
       },
       onCombatHitRoll: (handler) => {
         if (typeof handler !== "function") return;
-        PluginManager.combatHitRollHooks.push({ pluginName, handler });
+        PluginManager.combatHitRollHooks.push({ ...hookProfile(handler), handler });
       },
       onCombatHitDamage: (handler) => {
         if (typeof handler !== "function") return;
-        PluginManager.combatHitDamageHooks.push({ pluginName, handler });
+        PluginManager.combatHitDamageHooks.push({ ...hookProfile(handler), handler });
       },
       onAttackTiming: (handler) => {
         if (typeof handler !== "function") return;
-        PluginManager.attackTimingHooks.push({ pluginName, handler });
+        PluginManager.attackTimingHooks.push({ ...hookProfile(handler), handler });
       },
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;
-        PluginManager.combatHitResolvedHooks.push({ pluginName, handler });
+        PluginManager.combatHitResolvedHooks.push({ ...hookProfile(handler), handler });
       },
       onCombatAttackDistance: (handler) => {
         if (typeof handler !== "function") return;
-        PluginManager.combatAttackDistanceHooks.push({ pluginName, handler });
+        PluginManager.combatAttackDistanceHooks.push({ ...hookProfile(handler), handler });
       },
       onSpellDisabled: (handler) => {
         if (typeof handler !== "function") {
           return;
         }
         PluginManager.spellDisabledHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3509,7 +3561,7 @@ export class PluginManager {
           return;
         }
         PluginManager.spellRuneBypassHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3527,7 +3579,7 @@ export class PluginManager {
           return;
         }
         PluginManager.npcAggressionToleranceHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.player || !event.npc) {
               return;
@@ -3541,7 +3593,7 @@ export class PluginManager {
           return;
         }
         PluginManager.playerDefeatedHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || !event.victim) {
               return;
@@ -3578,7 +3630,7 @@ export class PluginManager {
       onGroundItemPickup: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.groundItemPickupHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.groundItem) return;
             handler(event);
@@ -3599,7 +3651,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemOnObjectHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.object) {
               return;
@@ -3630,7 +3682,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemOnItemHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3659,7 +3711,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemOnNpcHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.target || !event.item) {
               return;
@@ -3674,7 +3726,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemOnPlayerHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3699,7 +3751,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemOnGroundItemHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.inventoryItem) {
               return;
@@ -3714,7 +3766,7 @@ export class PluginManager {
           return;
         }
         PluginManager.spellOnObjectHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.object) {
               return;
@@ -3726,7 +3778,7 @@ export class PluginManager {
       onSpellOnNpc: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.spellOnNpcHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.npc || !event.spell) return;
             handler(event);
@@ -3738,7 +3790,7 @@ export class PluginManager {
           return;
         }
         PluginManager.spellOnItemHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player) {
               return;
@@ -3752,7 +3804,7 @@ export class PluginManager {
           return;
         }
         PluginManager.spellCastHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player) {
               return;
@@ -3771,6 +3823,11 @@ export class PluginManager {
         const namedActions = new Map(Object.entries(actions ?? {}).filter(([, action]) => typeof action === "function"));
         PluginManager.itemActionHooks.push({
           pluginName,
+          profileName,
+          handlerName: typeof handler === "function" ? handler.name || "anonymous" : (event) => {
+            const definition = CacheDefinitions.getItem(event.itemId);
+            return namedActions.get(PluginManager.itemActionOption(definition, event))?.name || "anonymous";
+          },
           handler: (event) => {
             if (
               !event ||
@@ -3800,7 +3857,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemDropHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3822,7 +3879,7 @@ export class PluginManager {
           return;
         }
         PluginManager.itemActionHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3845,7 +3902,7 @@ export class PluginManager {
           return;
         }
         PluginManager.buttonClickHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3883,7 +3940,7 @@ export class PluginManager {
           return;
         }
         PluginManager.interfaceActionClickHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3910,7 +3967,7 @@ export class PluginManager {
           return;
         }
         PluginManager.commandHooks.push({
-          pluginName,
+          ...hookProfile(handler),
           handler: (event) => {
             if (
               !event ||
@@ -3958,7 +4015,7 @@ export class PluginManager {
         );
 
         const wrapper: PluginHook<PluginCommandEvent> & { description: string } = {
-          pluginName,
+          ...hookProfile(handler),
           description: typeof description === "string" ? description.trim() : "",
           handler: (event) => {
             if (!event || event.handled) {

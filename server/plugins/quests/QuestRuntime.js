@@ -369,7 +369,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   api.onCustomEvent("quest:get-stage", answerGetStage);
   api.onCustomEvent("npc-dialogue:shop", pickQuestShopVersion);
-  // Registered with the first quest, so this runs before every quest's own login hook.
+  // Registered before the quests, so this runs before every quest's own login hook.
   api.onPlayerLogin(holdLoginQuestList);
   api.onCustomEvent("player:bootstrap-complete", sendLoginQuestList);
   api.onPlayerLogout?.(releaseLoginQuestList);
@@ -637,6 +637,7 @@ module.exports = {
   QUEST_POINTS_VARP,
   QUEST_POINTS_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,
+  registerQuestWidgets,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
   pickQuestShopVersion,
