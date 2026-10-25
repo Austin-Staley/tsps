@@ -726,19 +726,20 @@ test("the Nomad's Trade opens interface 442 in place of the generic shop, with t
   assert.equal(other.allow, null, 'other shops are left alone');
 });
 
-test('experience: floor(L*L/600) * 30 a token at 99, from level 30; tokens checked again', () => {
+test('experience: floor(L*L/600) * 30 a token at 99, from level 30; tokens and level checked again, quietly', () => {
   const p = fakePlayer();
   Common.addVarp(p, 'zeal_tokens', 15);
   // Strength (row 1), 10 tokens: child 1*4+1.
   button('confirm_xp')({ player: p, slot: 5 });
   assert.equal(zealTokens(p), 5);
   assert.deepEqual(p.xp, [['Strength', Math.floor((99 * 99) / 600) * 30 * 10]]);
+  const said = p.messages.length;
   button('confirm_xp')({ player: p, slot: 6 });
   assert.equal(zealTokens(p), 5, '100 tokens refused');
-  assert.equal(p.messages.at(-1), 'You need 100 Tokens to claim that reward.');
+  assert.equal(p.messages.length, said, 'the client has already said why');
   p.getSkillManager = () => ({ getMaxLevel: () => 29, getCurrentLevel: () => 29, addExperience() { throw new Error('no'); } });
   button('confirm_xp')({ player: p, slot: 24 });
-  assert.equal(p.messages.at(-1), 'You need to be at least level 30 in a skill to buy experience in it.');
+  assert.equal(zealTokens(p), 5, 'under level 30 refused');
 });
 
 test('experience X: the amount comes from the prompt, and Prayer pays 14 a token', () => {
@@ -793,6 +794,6 @@ test('other rewards: Buy 1 of a blighted sack gives its batch; the Soul cape wan
   p.getSkillManager = () => ({ getMaxLevel: () => 60, getCurrentLevel: () => 60 });
   button('other_rewards')({ player: p, slot: 1, opId: 1 });
   button('confirm_other')({ player: p, slot: 0 });
-  assert.equal(p.messages.at(-1), 'A Prayer level of at least 70 is required to purchase a Soul cape.');
-  assert.equal(zealTokens(p), 2990);
+  assert.equal(zealTokens(p), 2990, 'Prayer 60 refused');
+  assert.equal(p.inventory.getAmount(25346), 0);
 });

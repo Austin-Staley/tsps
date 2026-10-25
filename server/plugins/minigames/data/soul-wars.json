@@ -1478,7 +1478,6 @@
     "quantityVarp": 3426,
     "xpAmountVarp": 2971,
     "synths": {
-      "select": 2266,
       "refused": 2277,
       "bought": 2304,
       "imbued": 2655
@@ -1489,10 +1488,6 @@
       "bought": "You purchase some {name} for {cost} Tokens.",
       "imbued": "<col=3366ff>You sense a newfound power emanating from your {name}...</col>",
       "xp": "You receive {xp} {skill} experience.",
-      "needTokens": "You need {cost} Tokens to claim that reward.",
-      "needAtLeast": "You need at least {cost} Tokens to claim that reward.",
-      "needLevel": "You need to be at least level 30 in a skill to buy experience in it.",
-      "needPrayer": "A Prayer level of at least {level} is required to purchase {article} {name}.",
       "noItem": "You don't have that item to imbue.",
       "noRoom": "You don't have enough inventory space."
     }

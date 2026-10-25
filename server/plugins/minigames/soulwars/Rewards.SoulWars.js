@@ -55,11 +55,18 @@ function synth(player, name) {
   player.getPacketSender().sendSound?.(rewards().synths[name], 100, 0);
 }
 
+/** A refusal the client can't foresee (no room, the item gone): said, with the refusal sound. */
 function refuse(player, line) {
   player.sendMessage(line);
   synth(player, "refused");
   return true;
 }
+
+/**
+ * A refusal the client already gave (script 846: its line and sound, then the click is sent
+ * anyway): nothing more is said.
+ */
+const clientRefused = () => true;
 
 function open(player) {
   const sender = player.getPacketSender();
@@ -103,7 +110,7 @@ function xpList({ player, slot }) {
   const column = XP_TOKEN_CHILDREN[slot % XP_CHILDREN];
   if (column !== 3) return true;
   const have = tokens(player);
-  if (have < 1) return refuse(player, message("needAtLeast", { cost: 1 }));
+  if (have < 1) return clientRefused();
   amountPrompt(player, message("howManyTokens", { max: have }), have, (amount) => {
     choiceOf(player).xpTokens = amount;
     player.getPacketSender().sendConfig(rewards().xpAmountVarp, amount);
@@ -117,8 +124,7 @@ function buyXp({ player, slot }) {
   const cost = slot % 4 === 3 ? choiceOf(player).xpTokens : enumOf("xpTokens").get(slot);
   if (!(cost > 0)) return true;
   const per = xpPerToken(player, row);
-  if (per <= 0) return refuse(player, message("needLevel"));
-  if (tokens(player) < cost) return refuse(player, message(slot % 4 === 3 ? "needAtLeast" : "needTokens", { cost }));
+  if (per <= 0 || tokens(player) < cost) return clientRefused();
   const [skill] = rewards().xpRows[row];
   Common.addVarp(player, "zeal_tokens", -cost);
   const xp = per * cost;
@@ -139,7 +145,7 @@ function imbue({ player, slot }) {
   const inventory = player.getInventory();
   const at = inventory.getItems().findIndex((item) => item?.getId?.() === base);
   if (at < 0) return refuse(player, message("noItem"));
-  if (tokens(player) < cost) return refuse(player, message("needTokens", { cost }));
+  if (tokens(player) < cost) return clientRefused();
   Common.addVarp(player, "zeal_tokens", -cost);
   inventory.setItem(at, new Common.core.Item(imbued, 1));
   inventory.refreshItems?.();
@@ -167,7 +173,7 @@ function otherList({ player, slot, opId }) {
   }
   if (child !== OTHER_X) return true;
   const max = Math.floor(tokens(player) / cost);
-  if (max < 1) return refuse(player, message("needAtLeast", { cost }));
+  if (max < 1) return clientRefused();
   amountPrompt(player, message("howMany", { max }), max, (amount) => {
     choice.quantity = amount;
     player.getPacketSender().sendConfig(rewards().quantityVarp, amount);
@@ -189,11 +195,8 @@ function buyOther({ player, slot }) {
   const definition = Common.core.CacheDefinitions.getItem(item);
   const name = definition?.name ?? "item";
   const prayer = rewards().prayerFor[item];
-  if (prayer && Common.maxLevel(player, "PRAYER") < prayer) {
-    return refuse(player, message("needPrayer", { level: prayer, article: /^[aeiou]/i.test(name) ? "an" : "a", name }));
-  }
   const cost = quantity * each;
-  if (tokens(player) < cost) return refuse(player, message("needTokens", { cost }));
+  if ((prayer && Common.maxLevel(player, "PRAYER") < prayer) || tokens(player) < cost) return clientRefused();
   const count = quantity * (enumOf("otherBatch").get(item) ?? 1);
   const inventory = player.getInventory();
   const stackable = Common.core.ItemDefinition.forId(item)?.isStackable?.() === true;
