@@ -161,7 +161,46 @@ async function main(): Promise<void> {
 
     await plugin.stop();
     assert.deepEqual(plugin.worldMapMenuEntries({ x: 3250, y: 3205, plane: 0 }), [], "no entries once stopped");
+    await lazyBackendFollowsLifecycle();
     console.log("shortest-path-plugin: ok");
+}
+
+/** Enabling then disabling before the lazy worker import settles must not leave a live worker behind. */
+async function lazyBackendFollowsLifecycle(): Promise<void> {
+    const workers: { terminated: boolean }[] = [];
+    const g = globalThis as any;
+    const saved = { Worker: g.Worker, location: g.location };
+    g.location = { href: "http://localhost/" };
+    g.Worker = class {
+        terminated = false;
+        onmessage: unknown = null;
+        constructor() { workers.push(this); }
+        postMessage(): void {}
+        terminate(): void { this.terminated = true; }
+    };
+    const live = () => workers.filter((w) => !w.terminated).length;
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+    try {
+        const plugin = new ShortestPathPlugin(client, { configManager: config, readText: async () => "", player: () => player });
+        await plugin.start();
+        await plugin.stop();
+        await settle();
+        assert.equal(plugin.isStarted(), false);
+        assert.equal(live(), 0, "start then stop leaves no live worker");
+        assert.equal((plugin as any).backend, undefined, "start then stop leaves no backend");
+
+        await plugin.start();
+        await plugin.stop();
+        await plugin.start();
+        await settle();
+        assert.equal(live(), 1, "start, stop, start leaves exactly one live worker");
+        assert.ok((plugin as any).backend, "the restarted plugin has its backend");
+        await plugin.stop();
+        assert.equal(live(), 0, "stopping terminates it");
+    } finally {
+        g.Worker = saved.Worker;
+        g.location = saved.location;
+    }
 }
 
 main().catch((error) => {

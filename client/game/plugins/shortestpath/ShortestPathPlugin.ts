@@ -119,6 +119,8 @@ export class ShortestPathPlugin extends Plugin {
     private readonly overlays: WidgetOverlay[];
     private backend: PathSearchBackend | undefined;
     private backendLoading: Promise<PathSearchBackend> | undefined;
+    /** Bumped on every start and stop, so a backend that finishes loading after either is discarded. */
+    private lifecycle = 0;
     /** Every loaded transport; a PathTransport's index points into this. */
     transports: Transport[] = [];
     private transportsLoading: Promise<void> | undefined;
@@ -150,10 +152,12 @@ export class ShortestPathPlugin extends Plugin {
     }
 
     protected async startUp(): Promise<void> {
+        this.lifecycle++;
         this.ensureLoaded();
     }
 
     protected async shutDown(): Promise<void> {
+        this.lifecycle++;
         this.setTarget(UNDEFINED);
         this.overrides.clear();
         this.backend?.dispose();
@@ -168,10 +172,20 @@ export class ShortestPathPlugin extends Plugin {
         }).catch((error) => {
             console.warn("[shortest-path] transports failed to load", error);
         });
-        this.backendLoading ??= (this.deps.backend ? Promise.resolve(this.deps.backend) : createWorkerBackend()).then((backend) => {
-            this.backend = backend;
-            return backend;
-        });
+        if (!this.backendLoading) {
+            const lifecycle = this.lifecycle;
+            const loading = (this.deps.backend ? Promise.resolve(this.deps.backend) : createWorkerBackend()).then((backend) => {
+                // Stopped or restarted while the import was in flight: this backend belongs to no one.
+                if (lifecycle !== this.lifecycle || !this.isStarted() || this.backendLoading !== loading) {
+                    backend.dispose();
+                    return backend;
+                }
+                if (this.backend !== backend) this.backend?.dispose();
+                this.backend = backend;
+                return backend;
+            });
+            this.backendLoading = loading;
+        }
         return Promise.all([this.transportsLoading, this.backendLoading.then((b) => b.ready)]).then(() => {});
     }
 
