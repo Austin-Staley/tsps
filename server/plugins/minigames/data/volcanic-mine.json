@@ -143,6 +143,11 @@
     "payMenuPermanent": "Pay 3,000 Numulites for permanent access.",
     "payMenuKeep": "Keep your Numulites.",
 
+    "earthquake": "A sudden earthquake strikes the cavern!",
+    "retrieved": "Petrified Pete has retrieved some of your items. You can collect them from him on Fossil Island.",
+    "retrieveTooPoor": "You need 150 x Numulite to retrieve your items.",
+    "retrieveCharged": "Death charges you 150 x Numulite.",
+
     "_calibrated": "Not in any recording.",
     "mustPay": "You'll need to pay Pete before heading in.",
     "level": "You need a Mining level of 50 to enter the Volcanic Mine.",
@@ -168,8 +173,27 @@
     "insideTooPoor": [["player", "I don't have 30 Numulites with me unfortunately."]]
   },
 
+  "_hazards": "rsprox 1858 (research section 2.7): lava beasts (65 HP, the attack seq, projectile 1403 and the hit 5 ticks after, 0-12 seen; Wiki max 18), one at a time solo, the next 0-20 ticks after one dies, at the recorded tiles; earthquakes at multiples of 5 ticks, a stalactite (1406) 2-15 ticks later on a player's tile and the hit a tick after (13-22 seen; Wiki up to 25); meteors (projectile 660, the blast 659 8 ticks later, 15-17 seen, a 3x3 splash per the Wiki). Calibrated: a beast per 5 players, the chances rising as stability falls.",
+  "hazards": {
+    "beast": {
+      "npc": 7817, "hp": 65, "maxHit": 18, "attackTicks": 6, "distance": 10, "hitDelay": 5,
+      "projectile": { "id": 1403, "delay": 35, "speed": 130, "startHeight": 43, "endHeight": 31 },
+      "_projectile": "Recorded: start 35, end 122-142 cycles, the hit 5 ticks after.",
+      "seqs": { "spawn": "fossil_npc_lavabeast_spawn", "attack": 7678 },
+      "respawn": [0, 20], "perPlayers": 5, "killPoints": 3, "pointsPer": 10, "instability": 0,
+      "_instability": "Pete says creatures cause instability, but recorded G1 rose 50 -> 100 with beasts out, so none is charged.",
+      "tiles": [[3807, 10173], [3821, 10177], [3821, 10183], [3806, 10163], [3824, 10163], [3807, 10161], [3821, 10161], [3823, 10173], [3805, 10169], [3808, 10162], [3811, 10200], [3821, 10180], [3822, 10168], [3827, 10158], [3805, 10161], [3808, 10157], [3813, 10197], [3825, 10200], [3822, 10187], [3809, 10171], [3807, 10156], [3792, 10141]],
+      "plane": 1
+    },
+    "earthquake": { "every": 5, "chance": 0.06, "lowStabilityChance": 0.12, "stalactiteDelay": [2, 15], "graphic": 1406, "damage": [13, 25] },
+    "meteor": { "every": 7, "chance": 0.5, "lowStabilityChance": 0.4, "graphic": 659, "projectile": 660, "blastTicks": 8, "damage": [15, 17], "reach": 6, "spread": 4,
+      "_spread": "Calibrated: the blast lands within 4 tiles of the player (364 blasts in the recordings, 3 hits)." }
+  },
+  "retrieval": { "fee": 150 },
+
   "attributes": {
     "paid": "volcanic-mine:paid",
+    "stored": "volcanic-mine:stored",
     "permanent": "volcanic-mine:permanent",
     "visited": "volcanic-mine:visited",
     "shopPoints": "shop-currency:Volcanic Mine points",

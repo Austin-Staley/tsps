@@ -3,8 +3,7 @@
  * plugins/minigames/data/volcanic-mine.json and the rsprox recordings 1858 and 1854: Petrified
  * Pete and the fee, one game a world in an instance of the mine, its vents, chambers, gas holes and
  * lava, the boulder down the central channel, and the reward on the way out. Each part lives in
- * ./volcanicmine/. The hazards (lava beasts, stalactites, meteors) and Pete's item retrieval are
- * still to come.
+ * ./volcanicmine/, the hazards (lava beasts, earthquakes, meteors) and Pete's item retrieval among them.
  */
 const Common = require("./volcanicmine/Common.VolcanicMine");
 
@@ -17,5 +16,7 @@ module.exports = {
     require("./volcanicmine/Entry.VolcanicMine").attachEntry(api);
     require("./volcanicmine/Mine.VolcanicMine").attachMine(api);
     require("./volcanicmine/Boulder.VolcanicMine").attachBoulder(api);
+    require("./volcanicmine/Hazards.VolcanicMine").attachHazards(api);
+    require("./volcanicmine/Retrieval.VolcanicMine").attachRetrieval(api);
   },
 };

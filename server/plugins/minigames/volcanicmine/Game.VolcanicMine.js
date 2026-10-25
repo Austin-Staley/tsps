@@ -308,6 +308,7 @@ class Game {
     if (this.ticks % timing.timeEvery === 0) this.sendAll("time", this.remaining);
     if (since % timing.ventEvery === 0) this.driftVents();
     if (since === timing.shift) this.shiftGas();
+    if (!this.collapsing && this.phase === "running") for (const hook of tickHooks) hook(this, since);
     if (!this.warned && since % timing.stabilityEvery === 0) this.updateStability();
     if (!this.warned && this.remaining <= timing.warning) this.warn();
     if (this.remaining <= 0) this.erupt();
@@ -432,6 +433,7 @@ class Game {
     this.ended = true;
     this.phase = "over";
     if (current === this) current = null;
+    for (const hook of endHooks) hook(this);
     const { ObjectManager } = Common.core;
     for (const object of this.placed.values()) ObjectManager.deregister(object, false);
     this.placed.clear();
@@ -471,6 +473,8 @@ function beforeDeath(event) {
 
 const startHooks = [];
 const stabilityHooks = [];
+const tickHooks = [];
+const endHooks = [];
 
 function gameOf(player) {
   return current && current.players.has(player) ? current : null;
@@ -501,6 +505,8 @@ module.exports = {
   attachGame, gameOf, joinable, Game, VENTS,
   onStart: (hook) => startHooks.push(hook),
   onStability: (hook) => stabilityHooks.push(hook),
+  onTick: (hook) => tickHooks.push(hook),
+  onEnd: (hook) => endHooks.push(hook),
   get current() {
     return current;
   },

@@ -108,7 +108,10 @@ function mainMenu(player) {
       Common.closeChat(player);
       openShop(player);
     }],
-    [picked, () => Common.chat(player, [["npc", Common.message("nothingStored")]])],
+    [picked, () => {
+      Common.closeChat(player);
+      require("./Retrieval.VolcanicMine").retrieve(player);
+    }],
     [leave, () => Common.closeChat(player)],
   ]);
 }
@@ -148,11 +151,6 @@ function openShop(player) {
   Common.core.ShopManager.open(player, Common.data.shop);
 }
 
-function retrieve({ player }) {
-  Common.chat(player, [["npc", Common.message("nothingStored")]]);
-  return true;
-}
-
 /** The shop currency (Shopkeepers' "Volcanic Mine points") and the visit flag, sent on login. */
 function restoreVarbits({ player }) {
   if (player.getAttribute(Common.data.attributes.visited)) Common.varbit(player, "visited", 1);
@@ -168,7 +166,6 @@ function attachEntry(api) {
   api.onObjectClick(data.locs.entrance, 2, payAtEntrance);
   api.onNpcClick(data.npcs.pete, 1, talk);
   api.onNpcClick(data.npcs.pete, 3, ({ player }) => { payAtEntrance({ player }); return true; });
-  api.onNpcClick(data.npcs.pete, 5, retrieve);
   api.onPlayerLogin(restoreVarbits);
 }
 

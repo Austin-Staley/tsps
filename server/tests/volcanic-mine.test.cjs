@@ -31,6 +31,11 @@ before(() => {
     onItemAction: (name, actions) => { hooks.items[name] = actions; },
     onPlayerLogin: (handler) => hooks.login.push(handler),
     onWalkRoute() {},
+    registerNpcCombatMethodProvider: (ids, method) => { hooks.combat = { ids, method }; },
+    onNpcHitModify: (handler) => { hooks.npcHit = handler; },
+    onNpcDeath: (handler) => { hooks.npcDeath = handler; },
+    onPlayerBeforeDeath: (handler) => { (hooks.beforeDeath ??= []).push(handler); },
+    onPlayerDeathDrops: (handler) => { (hooks.deathDrops ??= []).push(handler); },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     emitCustomEvent: (name, request) => {
       if (name === 'mining:best-pickaxe') request.pickaxe = { id: 11920, animation: new core.Animation(7139) };
@@ -38,10 +43,12 @@ before(() => {
     spawnNpc: ({ id, x, y, z }) => {
       const npc = { id, location: new Location(x, y, z), glides: [], registered: true, area: null };
       Object.assign(npc, {
+        hp: 0, setHitpoints(v) { npc.hp = v; }, getHitpoints: () => npc.hp, anims: [],
+        getCombat: () => ({ getTarget: () => npc.target ?? null, attack: (t) => { npc.target = t; } }),
         getId: () => id, getLocation: () => npc.location, isPlayer: () => false, isNpc: () => true, getIndex: () => 5000 + hooks.spawned.length,
         getAsNpc: () => npc, setArea(a) { npc.area = a; }, getArea: () => npc.area, isRegistered: () => npc.registered,
         getMovementQueue: () => ({ setBlockMovement() {} }),
-        exactMove(to) { npc.glides.push(to); npc.location = to; }, performAnimation() {},
+        exactMove(to) { npc.glides.push(to); npc.location = to; }, performAnimation(an) { npc.anims.push(an.getId()); },
       });
       hooks.spawned.push(npc);
       return npc;
@@ -68,10 +75,16 @@ function container() {
   return {
     slots,
     adds(id, amount = 1) { const slot = slots.find((s) => s.id === id); if (slot) slot.amount += amount; else slots.push({ id, amount }); },
+    add(item) { slots.push({ id: item.getId(), amount: item.getAmount(), meta: item.getMeta?.() ?? null }); },
     delete(id, amount = 1) { const slot = slots.find((s) => s.id === id); if (slot) slot.amount -= amount; },
     contains: (id) => slots.some((s) => s.id === id && s.amount > 0),
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => 20,
+    getAddableAmount: (item) => item.getAmount(),
+    getItems: () => [],
+    getValidItems: () => slots.filter((x) => x.amount > 0).map((x) => ({ getId: () => x.id, getAmount: () => x.amount, getMeta: () => x.meta ?? null })),
+    resetItems() { slots.length = 0; },
+    refreshItems() {},
   };
 }
 
@@ -89,6 +102,9 @@ function fakePlayer({ mining = 99 } = {}) {
     getArea: () => p.area, setArea(a) { p.area = a; },
     getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
     getInventory: () => p.inventory,
+    equipment: container(),
+    getEquipment: () => p.equipment,
+    getUpdateFlag: () => ({ flag() {} }),
     sendMessage: (m) => p.messages.push(m),
     performAnimation: (a) => p.anims.push(a.getId()),
     forceChat: (t) => p.said.push(t),
@@ -138,9 +154,12 @@ function locOf(game, id, tile) {
 const here = (game, p) => game.area.templateOf(p.getLocation());
 
 /** A paid player down the entrance, in the dormant lobby. */
-function enter(p = fakePlayer()) {
+function enter(p = fakePlayer(), { hazards = false } = {}) {
   p.setAttribute(Common.data.attributes.paid, true);
   click(p, Common.data.locs.entrance, 1);
+  // The hazards are random: only their own tests let them run.
+  const game = Game.gameOf(p);
+  if (game && !hazards) game.quiet = true;
   return p;
 }
 
@@ -470,4 +489,168 @@ test('no way out with points once the mine is collapsing', () => {
   click(p, Common.data.locs.exit, 1);
   ticks(1);
   assert.equal(p.getAttribute(Common.data.attributes.shopPoints), undefined);
+});
+
+
+// ------------------------------------------------------------------ part 2: hazards and retrieval
+
+const Hazards = require('../plugins/minigames/volcanicmine/Hazards.VolcanicMine');
+const Retrieval = require('../plugins/minigames/volcanicmine/Retrieval.VolcanicMine');
+
+test('lava beasts: one comes out with 65 HP and its own ranged attack; hits and the kill pay points', () => {
+  const p = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  assert.deepEqual(hooks.combat.ids, [7817], 'the lava beast attack is registered');
+  const before = hooks.spawned.length;
+  Hazards.spawnBeast(game);
+  const beast = hooks.spawned.slice(before).find((n) => n.id === 7817);
+  assert.ok(beast);
+  assert.equal(beast.hp, 65);
+  assert.ok(game.beasts.has(beast));
+  const hit = { getAttacker: () => p, getTotalDamage: () => 20 };
+  hooks.npcHit({ npc: beast, hit });
+  assert.equal(varbit(p, 'points'), 2, 'a point a 10 damage (recorded 20 -> 2)');
+  hooks.npcHit({ npc: beast, hit: { getAttacker: () => p, getTotalDamage: () => 9 } });
+  assert.equal(varbit(p, 'points'), 3, 'at least one a hit (recorded 9 -> 1)');
+  hooks.npcDeath({ npc: beast, killer: p });
+  assert.equal(varbit(p, 'points'), 6, '+3 for the kill');
+  assert.equal(game.beasts.has(beast), false);
+});
+
+test('earthquakes: the line, a stalactite on the tile, and the hit only for a player still on it', () => {
+  const p = enter();
+  const stays = p;
+  const moves = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  for (const q of [stays, moves]) q.moveTo(game.area.at([3813, 10165, 1]));
+  Math.random = () => 0;
+  Hazards.earthquake(game);
+  Math.random = random;
+  assert.ok(p.messages.includes('A sudden earthquake strikes the cavern!'));
+  ticks(2);
+  moves.moveTo(game.area.at([3814, 10165, 1]));
+  ticks(1);
+  assert.equal(stays.hits.length, 1);
+  assert.ok(stays.hits[0] >= 13 && stays.hits[0] <= 25);
+  assert.equal(moves.hits.length, 0, 'stepped off');
+});
+
+test('meteors: the blast 8 ticks later hurts inside its 3x3 and nobody outside', () => {
+  const p = enter();
+  const far = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  p.moveTo(game.area.at([3816, 10194, 1]));
+  far.moveTo(game.area.at([3820, 10194, 1]));
+  Math.random = () => 0.5;
+  Hazards.meteor(game, p);
+  Math.random = random;
+  ticks(7);
+  assert.equal(p.hits.length, 0, 'not before the blast');
+  ticks(1);
+  assert.equal(p.hits.length, 1);
+  assert.ok(p.hits[0] >= 15 && p.hits[0] <= 17);
+  assert.equal(far.hits.length, 0);
+});
+
+test('no hazards in the lobby, even with every roll going their way', () => {
+  const p = enter(fakePlayer(), { hazards: true });
+  const game = Game.gameOf(p);
+  Math.random = () => 0;
+  ticks(50);
+  Math.random = random;
+  assert.equal(game.beasts?.size ?? 0, 0);
+  assert.equal(p.messages.includes('A sudden earthquake strikes the cavern!'), false);
+  assert.equal(p.hits.length, 0);
+  game.end();
+});
+
+test("the lava beast's attack: the bomb, a ranged hit 5 ticks later, at most 18", () => {
+  const { method } = hooks.combat;
+  const npc = { getLocation: () => new Location(3810, 10165, 1), getSize: () => 2, performAnimation: (a) => { npc.anim = a.getId(); }, getPrivateArea: () => null };
+  const target = { getLocation: () => new Location(3813, 10165, 1), getSize: () => 1 };
+  const attack = new method(npc);
+  assert.equal(attack.attackSpeed(), 6);
+  assert.equal(attack.attackDistance(), 10);
+  assert.doesNotThrow(() => attack.start(npc, target));
+  assert.equal(npc.anim, 7678);
+});
+
+test("a death in the mine: Pete keeps the items; Retrieve wants 150 Numulite, then hands them back", () => {
+  const p = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  p.inventory.adds(11920, 1);
+  p.inventory.adds(21555, 40);
+  p.equipment.adds(1704, 1);
+  for (const handler of hooks.beforeDeath) handler({ player: p, preventDeath: false });
+  assert.equal(p.inventory.getAmount(11920), 0, 'nothing for the grave');
+  assert.equal(p.inventory.getAmount(21539), 0, "the mine's vessel is gone, not kept");
+  const stored = Retrieval.stored(p);
+  assert.deepEqual(stored.map((i) => i.id).sort(), [1704, 11920, 21555].sort());
+  ticks(8);
+  assert.ok(p.messages.includes('Petrified Pete has retrieved some of your items. You can collect them from him on Fossil Island.'));
+  game.area.leave(p, false);
+  hooks.npcs.get('7776:5')({ player: p });
+  assert.equal(lines(p.boxes.at(-1))[0], 'You need 150 x Numulite to retrieve your items.');
+  p.inventory.adds(21555, 150);
+  hooks.npcs.get('7776:5')({ player: p });
+  assert.ok(p.messages.includes('Death charges you 150 x Numulite.'));
+  assert.equal(p.inventory.getAmount(11920), 1);
+  assert.equal(p.inventory.getAmount(1704), 1);
+  assert.equal(p.inventory.getAmount(21555), 40, 'the 40 he held came back; the 150 paid');
+  assert.equal(Retrieval.stored(p), null);
+});
+
+test("Retrieve pays from the Numulite Pete holds; items keep their meta; a second death replaces the lot; none outside", () => {
+  const p = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  p.inventory.add(new (PluginManager.getCoreApi().Item)(11920, 1, { charges: 7 }));
+  p.inventory.adds(21555, 200);
+  for (const handler of hooks.beforeDeath) handler({ player: p, preventDeath: false });
+  game.area.leave(p, false);
+  hooks.npcs.get('7776:5')({ player: p });
+  assert.equal(p.inventory.getAmount(21555), 50, '150 of his 200 paid');
+  assert.deepEqual(p.inventory.slots.find((s) => s.id === 11920).meta, { charges: 7 });
+
+  const q = enter();
+  const second = Game.gameOf(q);
+  ticks(51);
+  q.inventory.adds(1704, 1);
+  for (const handler of hooks.beforeDeath) handler({ player: q, preventDeath: false });
+  q.inventory.adds(4151, 1);
+  for (const handler of hooks.beforeDeath) handler({ player: q, preventDeath: false });
+  assert.deepEqual(Retrieval.stored(q).map((i) => i.id), [4151], 'the newer lot only');
+  second.area.leave(q, false);
+  const outside = fakePlayer();
+  outside.inventory.adds(1704, 1);
+  for (const handler of hooks.beforeDeath) handler({ player: outside, preventDeath: false });
+  assert.equal(Retrieval.stored(outside), null);
+  assert.equal(outside.inventory.getAmount(1704), 1);
+});
+
+test('a live game brings out a lava beast once it starts, none in the lobby', () => {
+  const p = enter(fakePlayer(), { hazards: true });
+  const game = Game.gameOf(p);
+  ticks(50);
+  assert.equal(game.beasts?.size ?? 0, 0);
+  ticks(1 + 22);
+  assert.ok(game.beasts.size >= 1, 'a beast within the respawn window');
+  game.end();
+});
+
+test("Pete's lot is lost to an unsafe death outside the mine, but not to the mine death's own drop", () => {
+  const p = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  p.inventory.adds(4151, 1);
+  for (const handler of hooks.beforeDeath) handler({ player: p, preventDeath: false });
+  game.area.leave(p, false);
+  for (const handler of hooks.deathDrops) handler({ player: p, killer: null, items: [], untradeables: [] });
+  assert.deepEqual(Retrieval.stored(p).map((i) => i.id), [4151], "the mine death's own drop keeps it");
+  for (const handler of hooks.deathDrops) handler({ player: p, killer: null, items: [], untradeables: [] });
+  assert.equal(Retrieval.stored(p), null, 'a later unsafe death elsewhere loses it');
 });
