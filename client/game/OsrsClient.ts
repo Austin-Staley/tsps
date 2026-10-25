@@ -383,7 +383,7 @@ const KEYBINDING_TABS: ReadonlyArray<{ varbit: number; tab: number }> = [
 const TAB_SWITCH_SCRIPT = 914;
 /** Server-set widget properties held while their cache interface is not loaded. */
 const HELD_WIDGET_ACTIONS: ReadonlySet<string> = new Set([
-    "set_text", "set_hidden", "set_model", "set_colour", "set_position", "set_item",
+    "set_text", "set_hidden", "set_model", "set_angle", "set_colour", "set_position", "set_item",
     "set_npc_head", "set_animation", "set_player_head",
 ]);
 const DEFAULT_ROOT_INTERFACE = 161;
@@ -2739,6 +2739,15 @@ export class OsrsClient {
                     w.itemId = -1;
                     w.itemQuantity = 0;
                     this.widgetManager.invalidateWidgetRender(w, "server-set-model");
+                }
+            } else if (payload?.action === "set_angle") {
+                // IF_SETANGLE: as the cs2 op, the model's x and y angles and zoom.
+                const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
+                if (w) {
+                    w.modelAngleX = w.rotationX = Number(payload.angleX) | 0;
+                    w.modelAngleY = w.rotationY = Number(payload.angleY) | 0;
+                    w.modelZoom = Number(payload.zoom) | 0;
+                    this.widgetManager.invalidateWidgetRender(w, "server-set-angle");
                 }
             } else if (payload?.action === "set_colour") {
                 // IF_SETCOLOUR: as the cs2 op, the colour of text and rectangles alike.

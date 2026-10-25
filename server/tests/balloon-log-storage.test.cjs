@@ -90,7 +90,7 @@ function fakePlayer({ at = [2938, 3421], items = {} } = {}) {
       sendSong: (id) => { (player.songs ??= []).push(id); },
       sendTypedMessage: (type, line) => player.messages.push(line),
       sendInterfaceRawModel() {}, sendInterfaceAnimation: (uid, seq) => { player.journey = seq; },
-      sendInterfaceDisplayState() {}, sendInterfacePosition() {}, sendSound() {}, sendTabInterface() {},
+      sendInterfaceDisplayState() {}, sendInterfacePosition() {}, sendInterfaceAngle() {}, sendSound() {}, sendTabInterface() {},
     }),
     getSpellbook: () => ({ getInterfaceId: () => 218 }),
   };

@@ -942,6 +942,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             return { type: "widget", payload: { action: "set_colour", uid, colour } };
         }
 
+        case ServerPacketId.WIDGET_SET_ANGLE:
+            // IF_SETANGLE: the model's x and y angles and zoom, as the cs2 op sets them.
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_angle",
+                    uid: reader.readInt(),
+                    angleX: reader.readShort(),
+                    angleY: reader.readShort(),
+                    zoom: reader.readShort(),
+                },
+            };
+
         case ServerPacketId.WIDGET_SET_POSITION:
             return {
                 type: "widget",

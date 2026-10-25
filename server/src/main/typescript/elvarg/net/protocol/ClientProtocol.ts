@@ -1885,6 +1885,16 @@ export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buff
   return encodeServerPacket(ServerPacketId.WIDGET_SET_POSITION, payload);
 }
 
+/** IF_SETANGLE: a model component's camera, its x and y angles and zoom, as the game sends it. */
+export function encodeWidgetSetAngle(uid: number, angleX: number, angleY: number, zoom: number): Buffer {
+  const payload = Buffer.alloc(10);
+  payload.writeInt32BE(uid | 0, 0);
+  payload.writeUInt16BE(angleX & 0xffff, 4);
+  payload.writeUInt16BE(angleY & 0xffff, 6);
+  payload.writeUInt16BE(zoom & 0xffff, 8);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_ANGLE, payload);
+}
+
 export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeInt32BE(uid | 0);

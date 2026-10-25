@@ -68,6 +68,7 @@ import {
   encodeWidgetSetItem,
   encodeWidgetSetModel,
   encodeWidgetSetPosition,
+  encodeWidgetSetAngle,
   encodeWidgetSetNpcHead,
   encodeWidgetSetPlayerHead,
   encodeWidgetSetQuestList,
@@ -380,6 +381,12 @@ export class PacketSender {
 
   public sendInterfacePosition(uid: number, x: number, y: number): this {
     this.player.getSession().sendClientPacket(encodeWidgetSetPosition(uid, x, y));
+    return this;
+  }
+
+  /** IF_SETANGLE: a model component's x and y angles and zoom. */
+  public sendInterfaceAngle(uid: number, angleX: number, angleY: number, zoom: number): this {
+    this.player.getSession().sendClientPacket(encodeWidgetSetAngle(uid, angleX, angleY, zoom));
     return this;
   }
 
