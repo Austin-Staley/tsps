@@ -60,7 +60,7 @@ export class ItemOnGroundManager {
             createdTick,
             privateUntilTick: item.getState() === State.SEEN_BY_PLAYER && item.getgoesGlobal()
                 ? tick(createdTick + this.PUBLIC_REVEAL_DELAY) : 0,
-            expiresTick: item.respawns() || item.isStaticSpawn() ? 0 : tick(createdTick + this.DESPAWN_DELAY),
+            expiresTick: item.respawns() || item.isStaticSpawn() ? 0 : tick(createdTick + item.getDespawnDelay()),
         };
     }
 
@@ -136,6 +136,10 @@ export class ItemOnGroundManager {
                 continue;
             }
             if (item_.getPrivateArea() !== item.getPrivateArea()) {
+                continue;
+            }
+            // A stack with its own lifetime keeps it rather than joining a shorter-lived one.
+            if (item_.getDespawnDelay() !== item.getDespawnDelay()) {
                 continue;
             }
 
@@ -288,9 +292,12 @@ export class ItemOnGroundManager {
         return this.registerLocation(player, item, player.getLocation().clone());
     }
 
-    public static registerLocation(player: Player, item: Item, position: Location, privateArea = player.getPrivateArea()): ItemOnGround {
-        let i = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true,
+    /** `goesGlobal: false` keeps the stack owner-only; `despawnDelay` replaces {@link DESPAWN_DELAY}. */
+    public static registerLocation(player: Player, item: Item, position: Location, privateArea = player.getPrivateArea(),
+        options: { goesGlobal?: boolean; despawnDelay?: number } = {}): ItemOnGround {
+        let i = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, options.goesGlobal ?? true,
             -1, privateArea);
+        if (options.despawnDelay != null) i.setDespawnDelay(options.despawnDelay);
         this.register(i);
         return i;
     }
