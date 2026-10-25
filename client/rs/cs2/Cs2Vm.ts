@@ -47,6 +47,15 @@ export const ScriptArgMagic = {
     OP_SUBINDEX: -2147483638, // Integer.MIN_VALUE + 10
 } as const;
 
+/** The plugin listener (widgets/custom/dynamicWidgets.ts) a script's listener of each type replaces. */
+const JS_LISTENER_FOR_EVENT: Partial<Record<WidgetEventType, string>> = {
+    onOp: "onOp",
+    onMouseOver: "onMouseOver",
+    onMouseLeave: "onMouseLeave",
+    onScroll: "onScrollWheel",
+    onDragComplete: "onDragComplete",
+};
+
 /** Magic string for target name substitution */
 export const EVENT_OPBASE = "event_opbase";
 
@@ -1728,6 +1737,9 @@ export class Cs2Vm {
                             break;
                         }
 
+                        // RuneLite's ScriptPreFired: the args are still on the stacks, where a listener
+                        // may read or change them (intStack[intStackSize - n]).
+                        for (const listener of this.scriptPreListeners) listener(subScript.id, null);
                         const subFrame = allocateFrameLocals(subScript);
                         for (let i = subScript.intArgCount - 1; i >= 0; i--) {
                             subFrame.localInts[i] = this.intStack[--this.intStackSize];
@@ -1770,7 +1782,6 @@ export class Cs2Vm {
                         pc = 0;
                         this.currentScriptId = currentScript.id;
                         this.currentLocalStrings = localStrings;
-                        for (const listener of this.scriptPreListeners) listener(currentScript.id, null);
                         this.traceScriptEnter(currentScript);
                         continue;
                     }
@@ -1778,6 +1789,11 @@ export class Cs2Vm {
                     case Opcodes.RUNELITE_CALLBACK: {
                         const eventName = this.popString();
                         if (typeof eventName !== "string") throw new Error("RuneLite callback name must be a string");
+                        if (eventName === "debug") {
+                            // RuneLite's client logs and pops the message (TriggerBankLayout uses it).
+                            console.debug(`[cs2] ${this.popString()}`);
+                            break;
+                        }
                         for (const listener of this.scriptCallbackListeners) listener(currentScript, eventName);
                         break;
                     }
@@ -2004,6 +2020,10 @@ export class Cs2Vm {
 
         // setting/clearing any listener marks the widget as having listeners
         widget.hasListener = true;
+
+        // A plugin's JavaScriptCallback was the widget's listener of this type: a script's replaces it.
+        const jsListener = JS_LISTENER_FOR_EVENT[eventType];
+        if (jsListener) delete (widget as any).jsListeners?.[jsListener];
 
         if (isClear) {
             delete widget.eventHandlers[eventType];
