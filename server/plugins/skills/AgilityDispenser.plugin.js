@@ -80,8 +80,24 @@ function lapDone({ player, course }) {
 
 // ---------------------------------------------------------------- the dispenser
 
+/**
+ * A medium clue on 1/40 laps, through the shared clue services (one per tier, banked ones count; a
+ * scroll box after X Marks the Spot), or null.
+ */
+function rollClue(player) {
+  if (Math.floor(Math.random() * DATA.clueChance) !== 0) return null;
+  const allowed = { player, tier: "medium", allowed: null };
+  api.emitCustomEvent("treasure-trails:can-receive", allowed);
+  if (allowed.allowed === false) return null;
+  if (allowed.allowed !== true && player.getInventory().getAmount(DATA.clue) > 0) return null;
+  const award = { player, itemId: DATA.clue, box: false };
+  api.emitCustomEvent("treasure-trails:clue-item", award);
+  return award.itemId;
+}
+
 function tag({ player }) {
   player.setRunEnergy(100);
+  player.getPacketSender().sendRunEnergy();
   if (!get(player, "ticket")) return void player.sendMessage(message("needLap"));
   const rewarded = get(player, "reward") === 1;
   const loot = rewarded ? rollReward(get(player, "streak")) : null;
@@ -99,18 +115,26 @@ function tag({ player }) {
   api.emitCustomEvent("looting-bag:store", { player, items: loot, result: "no-bag" });
   const values = { a: loot[0].amount, first: itemName(loot[0].id), b: loot[1].amount, second: itemName(loot[1].id) };
   const inventory = player.getInventory();
-  if (inventory.getFreeSlots() > 0) {
+  // A clue comes before the extra: with one slot left it is the clue's (Wiki).
+  const clue = rollClue(player);
+  const clueStacks = clue != null && inventory.getAmount(clue) > 0 && core().ItemDefinition.forId(clue).isStackable();
+  const slotsForExtra = inventory.getFreeSlots() - (clue != null && !clueStacks ? 1 : 0);
+  if (clue != null) give(player, clue, 1);
+  if (slotsForExtra > 0) {
     const [extra] = weighted(DATA.extra, 1);
     inventory.add(new (core().Item)(extra, 1));
     player.sendMessage(message("awardedExtra", { ...values, extra: itemName(extra) }));
   } else {
     player.sendMessage(message("awarded", values));
   }
-  if (Math.floor(Math.random() * DATA.clueChance) === 0 && inventory.getAmount(DATA.clue) <= 0) give(player, DATA.clue, 1);
 }
 
+/** Carried or banked, open or closed (Wiki: the fee gives a bag only to a player who has none). */
 function ownsLootingBag(player) {
-  return DATA.lootingBags.some((id) => player.getInventory().getAmount(id) > 0);
+  const { Bank } = core();
+  const containers = [player.getInventory(),
+    ...(player.getBanks?.() ?? []).filter((bank, tab) => bank && tab !== Bank.BANK_SEARCH_TAB_INDEX)];
+  return containers.some((container) => DATA.lootingBags.some((id) => container.getAmount(id) > 0));
 }
 
 function payFee(player) {

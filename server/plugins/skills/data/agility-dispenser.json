@@ -43,8 +43,8 @@
       "armour": [[1161, 1], [1123, 2], [1073, 1], [1071, 1], [1085, 1], [1113, 6], [1201, 6], [1147, 2]]
     }
   ],
-  "_extra": "Wiki: with a free inventory slot, one unnoted blighted food or super restore(4) as well (recorded: anglerfish, karambwan, super restore). Weighted as the resources.",
-  "extra": [[24592, 8], [24589, 8], [24595, 8], [24598, 7]],
+  "_extra": "Wiki: with a free inventory slot, one unnoted blighted food (5/16 each) or super restore(4) (1/16) as well (recorded: anglerfish, karambwan, super restore).",
+  "extra": [[24592, 5], [24589, 5], [24595, 5], [24598, 1]],
   "_messages": "All recorded.",
   "messages": {
     "streak": "Your Wilderness Agility reward streak is: <col=ff0000>{streak}</col>",

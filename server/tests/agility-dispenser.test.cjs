@@ -64,7 +64,9 @@ function player() {
     getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
     getInventory: () => p.inv, getLocation: () => p.location, isRegistered: () => true,
     sendMessage: (m) => p.messages.push(m), setRunEnergy(e) { p.energy = e; },
-    getPacketSender: () => ({ sendVarbit: (id, v) => p.varbits.set(id, v), sendSoundEffect: (id) => p.sounds.push(id) }),
+    energySent: 0, banks: [],
+    getBanks: () => p.banks,
+    getPacketSender: () => ({ sendVarbit: (id, v) => p.varbits.set(id, v), sendSoundEffect: (id) => p.sounds.push(id), sendRunEnergy() { p.energySent++; } }),
     getDialogueManager: () => ({ startDialogues: (b) => { for (const d of b.getDialogues().values()) p.boxes.push(d.getText()); } }),
     getSkillManager: () => ({ addExperiences: (skill, xp) => p.xp.push(xp) }),
     choose(text) { const i = p.prompt.pairs.indexOf(text); p.prompt.pairs[i + 1](); },
@@ -81,6 +83,7 @@ test('Tag before a lap: the recorded line; an unpaid lap gives just the ticket, 
   op(p, 'Tag');
   assert.deepEqual(p.messages, ['You need to complete one full lap to receive a ticket and pay 150,000 coins to receive a reward after each lap.']);
   assert.equal(p.energy, 100);
+  assert.equal(p.energySent, 1, 'the client is told');
   lap(p);
   assert.equal(p.varbits.get(varbit('wildy_agility_token_available')), 1);
   assert.equal(p.messages.length, 1, 'no streak line when unpaid');
@@ -169,4 +172,68 @@ test('reward tiers by streak (Wiki): steel and mithril at 1-15, rune chainbodies
   const ids = (streak) => new Set(Array.from({ length: 400 }, () => core.ItemDefinition.forId(Dispenser.rollReward(streak)[1].id).getName()));
   assert.ok(!ids(1).has('Rune chainbody') && ids(1).has('Steel platebody'));
   assert.ok(ids(61).has('Rune kiteshield') && !ids(61).has('Steel platebody'));
+});
+
+function paidLap(p) {
+  p.inv.add(new core.Item(995, 150000));
+  p.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  op(p, 'Pay');
+  lap(p);
+}
+
+test('Pay gives no second looting bag to a player with one in the bank', () => {
+  const p = player();
+  const bank = inventory();
+  bank.add(new core.Item(11941, 1));
+  p.banks = [bank];
+  p.inv.add(new core.Item(995, 150000));
+  p.setAttribute(Dispenser.ATTRIBUTE('paymentWarning'), 1);
+  op(p, 'Pay');
+  assert.equal(p.inv.getAmount(11941), 0);
+  assert.deepEqual(p.messages, ['You have paid 150,000 coins to receive a reward after each lap.']);
+});
+
+test('the extra (Wiki): 5/16 for each blighted food, 1/16 for the super restore, apart from the noted resources', () => {
+  assert.deepEqual(Dispenser.DATA.extra.map(([, weight]) => weight), [5, 5, 5, 1]);
+  assert.deepEqual(Dispenser.DATA.tiers[0].resources.map((row) => row[3]), [8, 8, 8, 7]);
+});
+
+test('the clue goes through the clue services: refused when one is held anywhere, a scroll box after X Marks the Spot', (t) => {
+  const random = Math.random;
+  t.after(() => { Math.random = random; delete hooks.events['treasure-trails:can-receive']; delete hooks.events['treasure-trails:clue-item']; });
+  Math.random = () => 0;
+  hooks.events['treasure-trails:can-receive'] = (event) => { event.allowed = false; };
+  const refused = player();
+  paidLap(refused);
+  refused.inv.deleteNumber(11941, 1);
+  refused.inv.add(new core.Item(OPEN_BAG, 1));
+  op(refused, 'Tag');
+  assert.equal(refused.inv.getAmount(2801), 0, 'a medium clue already held (here, banked) blocks another');
+  hooks.events['treasure-trails:can-receive'] = (event) => { event.allowed = true; };
+  hooks.events['treasure-trails:clue-item'] = (event) => { event.itemId = 24363; event.box = true; };
+  const boxed = player();
+  paidLap(boxed);
+  boxed.inv.deleteNumber(11941, 1);
+  boxed.inv.add(new core.Item(OPEN_BAG, 1));
+  op(boxed, 'Tag');
+  assert.equal(boxed.inv.getAmount(24363), 1, 'the scroll box the service resolves');
+  assert.equal(boxed.inv.getAmount(2801), 0);
+});
+
+test('with one slot left the clue takes it, not the extra (Wiki)', (t) => {
+  const random = Math.random;
+  t.after(() => { Math.random = random; delete hooks.events['treasure-trails:can-receive']; });
+  Math.random = () => 0;
+  hooks.events['treasure-trails:can-receive'] = (event) => { event.allowed = true; };
+  const p = player();
+  paidLap(p);
+  p.inv.deleteNumber(11941, 1);
+  p.inv.add(new core.Item(OPEN_BAG, 1));
+  p.inv.add(new core.Item(TICKET, 1));
+  for (let i = 0; p.inv.getFreeSlots() > 1; i++) p.inv.add(new core.Item(1511, 1));
+  op(p, 'Tag');
+  assert.equal(p.inv.getAmount(2801), 1, 'the clue is carried, not dropped');
+  assert.equal(p.inv.getFreeSlots(), 0);
+  assert.match(p.messages.at(-1), /^You have been awarded .+ from the Agility dispenser\.$/);
+  assert.doesNotMatch(p.messages.at(-1), /an extra/, 'no extra without a slot for it');
 });
