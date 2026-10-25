@@ -69,6 +69,16 @@ This is **not a verified 1:1 implementation**. In particular:
 
 ## Verification
 
+Ordinary tree stumps yield one to four roots at eight-level intervals above
+the crop's planting level: oak 15/23/31/39, willow 30/38/46/54, maple
+45/53/61/69, yew 60/68/76/84 and magic 75/83/91/99. The current Farming
+level when digging includes temporary boosts and drains. Inventory capacity
+is checked for the complete reward before clearing the stump.
+Source: [Tree roots (Farming)](https://oldschool.runescape.wiki/w/Tree_roots_(Farming)).
+Regression checks drive the object interaction with real inventories and
+cache definitions, including every threshold, boost/drain, repeat clicks,
+missing spades, full inventory and dead/fruit-tree exclusions.
+
 Coral yields use the post-19-August-2026 six harvest lives and the published
 low/high calculator endpoints: Elkhorn 85/182, Pillar 25/180 and Umbral -50/178.
 Sources: [Elkhorn frag](https://oldschool.runescape.wiki/w/Elkhorn_frag),
