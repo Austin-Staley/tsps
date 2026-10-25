@@ -15,6 +15,8 @@ const Control = require("./Control.SoulWars");
 const Avatars = require("./Avatars.SoulWars");
 
 const CREATURE_OF = new Map();
+/** Run after a creature's drop is set (bots pocket theirs). */
+const dropHooks = [];
 
 function spawnCreature(game, kind) {
   const creature = Common.data.creatures[kind];
@@ -46,6 +48,7 @@ function rollDrops(event) {
   const [itemId, amount] = Common.data.creatures[found.kind].drop;
   event.drops.length = 0;
   event.drops.push({ itemId, amount });
+  for (const hook of dropHooks) hook(event);
 }
 
 /** Another creature of its kind comes in its place. */
@@ -109,4 +112,12 @@ function attachSouls(api) {
   api.onObjectInteraction("Soul Obelisk", { "Sacrifice-fragments": sacrifice });
 }
 
-module.exports = { attachSouls, sacrifice, creatureDied, rollDrops, spawnCreature, CREATURE_OF };
+module.exports = {
+  attachSouls,
+  sacrifice,
+  creatureDied,
+  rollDrops,
+  spawnCreature,
+  CREATURE_OF,
+  onDrops: (hook) => dropHooks.push(hook),
+};

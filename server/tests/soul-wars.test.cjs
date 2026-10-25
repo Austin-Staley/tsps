@@ -16,8 +16,9 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 
-let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, hooks, core;
+let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, hooks, core;
 const online = [];
+const walks = [];
 let config = {};
 
 before(() => {
@@ -44,6 +45,8 @@ before(() => {
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
   };
   require('../plugins/minigames/SoulWars.plugin').register(api);
+  // Food knows what food is once registered (bots leave theirs behind).
+  require('../plugins/items/Food.plugin').register({ ...api, onItemAction() {} });
   Common = require('../plugins/minigames/soulwars/Common.SoulWars');
   Lobby = require('../plugins/minigames/soulwars/Lobby.SoulWars');
   Match = require('../plugins/minigames/soulwars/Match.SoulWars');
@@ -52,6 +55,9 @@ before(() => {
   Souls = require('../plugins/minigames/soulwars/Souls.SoulWars');
   Death = require('../plugins/minigames/soulwars/Death.SoulWars');
   Supplies = require('../plugins/minigames/soulwars/Supplies.SoulWars');
+  Bots = require('../plugins/minigames/soulwars/Bots.SoulWars');
+  // Fake players don't walk: the bots' routes are recorded instead.
+  Bots.engine.walk = (player, to) => walks.push({ player, to });
   Lobby.source.players = () => online;
 });
 
@@ -531,4 +537,163 @@ test('a ghost cannot charge the obelisk; an unheld, uncontested place drifts bac
   game.control.obelisk.alignment = 70;
   ticks(5);
   assert.equal(game.control.obelisk.alignment, 60);
+});
+
+// ------------------------------------------------------------------ bots
+
+function fakeBot(options) {
+  const bot = fakePlayer(options);
+  bot.isPlayerBot = () => true;
+  bot.setPlayerBot = () => {};
+  bot.setAttribute(Bots.BOT_ATTRIBUTE, true);
+  return bot;
+}
+
+test('bots: with seeding on, a waiting player is joined by bots up to the minimum (lobby ones first)', () => {
+  config = { 'SoulWars:seedBots': true, 'SoulWars:minPlayers': 4 };
+  const made = [];
+  const create = Bots.engine.create;
+  const gear = Bots.engine.gear;
+  Bots.engine.create = (username, at) => { const bot = fakeBot({ at }); bot.isRegistered = () => false; bot.name = username; made.push(bot); return bot; };
+  Bots.engine.gear = () => true;
+  try {
+    const idle = fakeBot({ at: new Location(2206, 2858, 0) });
+    online.push(fakePlayer(), idle);
+    ticks(1);
+    assert.ok(Common.inBox(idle.location, Common.data.lobby.waiting), 'the idle lobby bot joins');
+    assert.equal(made.length, 2);
+    ticks(3);
+    assert.equal(made.length, 2, 'bots on their way count as waiting');
+    for (const bot of made) bot.isRegistered = () => true;
+    ticks(2);
+    assert.equal(made.length, 2, 'registered but not yet seen in the lobby');
+    online.push(...made);
+    ticks(1);
+    assert.equal(made.length, 2);
+    assert.equal(Lobby.waitingPlayers().length, 4);
+  } finally {
+    Bots.engine.create = create;
+    Bots.engine.gear = gear;
+  }
+});
+
+test('bots: nothing is seeded with it off, or with only bots waiting', () => {
+  let made = 0;
+  const create = Bots.engine.create;
+  Bots.engine.create = () => { made++; return null; };
+  try {
+    config = { 'SoulWars:minPlayers': 4 };
+    online.push(fakePlayer());
+    ticks(2);
+    config = { 'SoulWars:seedBots': true, 'SoulWars:minPlayers': 4 };
+    online.length = 0;
+    online.push(fakeBot());
+    ticks(2);
+    assert.equal(made, 0);
+  } finally {
+    Bots.engine.create = create;
+  }
+});
+
+test("bots skip the entry rules at the start (they're made to fill the game)", () => {
+  config = { 'SoulWars:minPlayers': 2 };
+  const bot = fakeBot({ combat: 3, total: 32 });
+  online.push(fakePlayer(), bot);
+  ticks(Common.data.countdownTicks + 2);
+  assert.ok(Match.gameOf(bot));
+});
+
+test("a bot leaves its base through its own barrier, and a ghost's sanctuary when it can", () => {
+  const players = [fakePlayer(), fakeBot()];
+  const game = new Match.Game(players);
+  game.start();
+  const bot = players[1];
+  const team = game.teamOf(bot);
+  walks.length = 0;
+  const route = () => game.area.templateOf(walks.at(-1).to);
+  {
+    const exit = Bots.BASE_EXITS[team];
+    Bots.act(game, bot);
+    assert.equal(Bots.states.get(bot).route.goal, exit.inside.join(','), 'it walks to the barrier');
+    assert.ok(route());
+    place(game, bot, ...exit.inside);
+    Bots.act(game, bot);
+    assert.equal(exit.within(game.area.templateOf(bot.location)), false, 'and through it');
+    const yard = Common.data.graveyards.east;
+    place(game, bot, ...yard.respawn[2]);
+    Bots.act(game, bot);
+    assert.equal(yard.respawn.some(([x, y]) => game.area.templateOf(bot.location)[0] === x && game.area.templateOf(bot.location)[1] === y), false);
+  }
+});
+
+test('a fragments bot pockets its kills and charges the obelisk with six', () => {
+  const players = [fakePlayer(), fakeBot()];
+  const game = new Match.Game(players);
+  game.start();
+  const bot = players[1];
+  Bots.states.set(bot, { role: 'fragments', nextWalk: 0 });
+  const [soul] = [...Souls.CREATURE_OF].find(([, c]) => c.game === game && c.kind === 'weak');
+  for (let i = 0; i < 3; i++) {
+    const roll = { player: bot, npc: soul, drops: [] };
+    hooks.events['npc-drops:roll'](roll);
+    assert.deepEqual(roll.drops, []);
+  }
+  assert.equal(bot.inventory.getAmount(Common.data.items.fragment), 6);
+  const [x, y] = Common.data.obelisk.tile;
+  place(game, bot, x, y - 2);
+  const enemy = Common.other(game.teamOf(bot));
+  Bots.act(game, bot);
+  assert.equal(bot.inventory.getAmount(Common.data.items.fragment), 0);
+  assert.ok(game.avatars[enemy].strength < 100);
+  const roll = { player: players[0], npc: soul, drops: [] };
+  hooks.events['npc-drops:roll'](roll);
+  assert.deepEqual(roll.drops, [{ itemId: 25201, amount: 2 }], "a player's still fall to the floor");
+});
+
+test('a capture bot heads for the first place its team does not hold; bots are never idle', () => {
+  const players = [fakePlayer(), fakeBot()];
+  const game = new Match.Game(players);
+  game.start();
+  const bot = players[1];
+  Bots.states.set(bot, { role: 'capture', nextWalk: 0 });
+  walks.length = 0;
+  const route = () => game.area.templateOf(walks.at(-1).to);
+  {
+    place(game, bot, 2206, 2895);
+    Bots.act(game, bot);
+    const [x0, y0, x1, y1] = Common.data.control.obelisk.zone;
+    const state = Bots.states.get(bot);
+    const [px, py] = state.post.tile;
+    assert.equal(state.post.place, 'obelisk');
+    assert.ok(px >= x0 && px <= x1 && py >= y0 && py <= y1, 'its post is in the zone');
+    // South of the island is water: the way on is round by a bridge.
+    const legs = state.route.waypoints.map(({ x, y }) => game.area.templateOf(new Location(x, y, 0)));
+    assert.ok(legs.some(([x, y]) => (y === 2913 && x >= 2180 && x <= 2191) || (y === 2911 && x >= 2222 && x <= 2233)), JSON.stringify(legs));
+    assert.ok(route());
+    game.elapsed = 400;
+    game.activity.set(bot, 10);
+    Bots.act(game, bot);
+    assert.equal(game.activity.get(bot), Common.data.activity.max);
+  }
+});
+
+test("a new bot is geared, but brings no food or potions; in a game it starts with bandages", () => {
+  const create = Bots.engine.create;
+  const gear = Bots.engine.gear;
+  let made = null;
+  Bots.engine.create = (username, at) => { made = fakeBot({ at }); return made; };
+  Bots.engine.gear = (bot) => { for (const id of [1333, 385, 2436]) bot.inventory.add(new core.Item(id, 1)); };
+  try {
+    Bots.spawnBot(new Location(2192, 2842, 0));
+    assert.equal(made.inventory.getAmount(1333), 1, 'its weapon');
+    assert.equal(made.inventory.getAmount(385), 0, 'no shark');
+    assert.equal(made.inventory.getAmount(2436), 0, 'no super attack');
+    const game = new Match.Game([fakePlayer(), made]);
+    game.start();
+    assert.equal(made.inventory.getAmount(Common.data.items.bandages), Bots.START_BANDAGES);
+    assert.equal(game.players()[0].inventory.getAmount(Common.data.items.bandages), 0, "a player's own come from the table");
+  } finally {
+    Bots.engine.create = create;
+    Bots.engine.gear = gear;
+  }
 });
