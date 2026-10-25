@@ -3,27 +3,20 @@
 **Opening a PR is not completing a quest.** This split contains 103 quest PRs and
 five shared-code, regression and documentation PRs. The owner authorized a merge batch
 for all 108; the per-quest PR links below show live publication state. The accepted
-natural main-route count at this checkpoint is **24/106 active quests (22.64%)**;
+natural main-route count at this checkpoint is **25/106 active quests (23.58%)**;
 22 long quests remain deferred. No full branch, recovery or Java overlay parity is implied.
 
 The split supersedes [PR753](https://github.com/RSPSApp/tsps/pull/753). Existing
 committed changes are preserved; unpublished quest/dumper work remains in the original
 worktree. Test accounts, saves and raw evidence were not reset.
 
-## Merge order
+## Merge status
 
-1. [Core/client/API support](https://github.com/RSPSApp/tsps/pull/1086).
-2. [Canonical dialogue data and renderer](https://github.com/RSPSApp/tsps/pull/1087), based on the core support branch.
-3. [Doors, Entrana and world services](https://github.com/RSPSApp/tsps/pull/1088), based on the dialogue branch.
-4. Individual quest PRs, targeting `split/728/shared-world` for small review diffs.
-   Retarget them to `main` after the shared foundation merges. Related quest ownership
-   dependencies are linked in the individual descriptions; merge those before accepting
-   the corresponding shared-NPC scenarios. Cross-quest regressions and documentation
-   follow their implementation dependencies and final integration checks.
-
-The foundation and canonical transcript consumers were reviewed together for the
-owner-authorized batch. Generated data provenance and shared API compatibility remain
-required; publication does not certify unplayed quest branches.
+All 108 original split PRs have merged, including the three shared foundation PRs.
+Their links below preserve scope and review history. Merged code is not proof that
+all branches have passed natural verification; use the evidence column and ledger.
+Further fixes target current `main` in new quest/shared follow-up PRs. Do not push
+new work to the closed split PRs or superseded PR753.
 
 ## Evidence and ongoing verification
 
@@ -77,7 +70,7 @@ percentages from PR counts or source-only tests.
 | [#1088](https://github.com/RSPSApp/tsps/pull/1088) | Repair shared quest doors, Entrana admission and world services | Shared support / evidence; not a completed quest |
 | [#1089](https://github.com/RSPSApp/tsps/pull/1089) | A Kingdom Divided | Shared appearance fix only; full implementation unpublished |
 | [#1090](https://github.com/RSPSApp/tsps/pull/1090) | ANight At The Theatre | Deferred quest; existing committed work preserved |
-| [#1091](https://github.com/RSPSApp/tsps/pull/1091) | A Ruff Situation | Pending natural verification |
+| [#1091](https://github.com/RSPSApp/tsps/pull/1091) | A Ruff Situation | Scoped main-route evidence recorded; paid-fur branch fix pending |
 | [#1092](https://github.com/RSPSApp/tsps/pull/1092) | Animal Magnetism | Pending natural verification |
 | [#1093](https://github.com/RSPSApp/tsps/pull/1093) | The Ascent of Arceuus | Scoped main-route evidence recorded; full parity pending |
 | [#1094](https://github.com/RSPSApp/tsps/pull/1094) | At First Light | Pending natural verification |
@@ -180,3 +173,9 @@ percentages from PR counts or source-only tests.
 | [#1191](https://github.com/RSPSApp/tsps/pull/1191) | Zogre Flesh Eaters | Pending natural verification |
 | [#1192](https://github.com/RSPSApp/tsps/pull/1192) | Preserve cross-quest dialogue and ownership regressions | Shared support / evidence; not a completed quest |
 | [#1193](https://github.com/RSPSApp/tsps/pull/1193) | Document quest review evidence and independent PR tracking | Shared support / evidence; not a completed quest |
+
+## Follow-up fixes
+
+- [tribal-totem-lock #1237](https://github.com/RSPSApp/tsps/pull/1237) — draft; live delta verification pending.
+- [baraek-fur-sale #1238](https://github.com/RSPSApp/tsps/pull/1238) — draft; live delta verification pending.
+- [making-history-progress #1239](https://github.com/RSPSApp/tsps/pull/1239) — draft; live delta verification pending.

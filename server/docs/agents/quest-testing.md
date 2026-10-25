@@ -23,6 +23,13 @@ Agree these before touching an account. They stop most time loss.
   dungeons, puzzles, boat boarding/landing and scene handoffs must be played normally.
 - **Cheats are a scalpel, not the route.** Use them only after the real encounter/phase has
   started, and never to skip a mandatory threshold, scene, dialogue chain or the final step.
+- **Observe after the action settles.** An interaction packet being sent does not mean its
+  handler has run. Compare `worldTick` before and after; an immediate observation in the same
+  tick cannot prove a no-op. Wait through the actual movement/dialogue/obstacle task before
+  diagnosing failure or sending another action. For example, the Horror bridge Cross had
+  reached the opposite bank by the next settled observation despite its first same-tick
+  observation being unchanged. Approach ordinary doors from a reachable adjacent tile,
+  rather than standing on the door anchor, and inspect the final landing before retrying.
 - **Stop rule.** Two equivalent attempts that fail the same way means stop, inspect the exact
   cause (message, tile, object/menu, collision, source predicate), then report or fix. Do not
   retry the same click, do not "recover" with a relog and call it a pass.

@@ -14,13 +14,20 @@ alternate/recovery branches and visual Quest Helper overlay parity remain unveri
 
 ## Active 106: accepted natural main-route proofs
 
-Twenty-four quests have accepted scoped main-route completion evidence: **24 / 106 active quests (22.64%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
+Twenty-five quests have accepted scoped main-route completion evidence: **25 / 106 active quests (23.58%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q099, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084, q099 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
-long or complex quests; all 24 accepted routes are within the retained 106. Against
-the original inventory the count is 24/128 (18.75%). Deferral changes scope,
+long or complex quests; all 25 accepted routes are within the retained 106. Against
+the original inventory the count is 25/128 (19.53%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
+
+### q099 — A Ruff Situation
+
+- **Revision:** epoch26 loaded/source `c8dba4ef8c76ec3cc75b4924e6334ea7cd7042fdc573443774c3fa63c03d1e02`; focused test `8b7530030f7d263402dede17cc3f2cfe452b3bd0b92179e00ad654b1c6a6cd04`. Fresh stage0/QP0 baseline at the actual quest Talia before target interaction; ordinary skills/gear/food/tools/travel declared.
+- **Natural route/reward:** Talia, Gertrude, guard/den, actual dog routes, three puppies, Picklenose trade and the outlaws completed normally. Grain was picked; bear fur was dropped by a real grizzly and picked up, then crafted into the stuffed dog. Stage15889=120; QP +1 and Crafting +1,000 XP. Combat aid followed real encounters/player hits; not unassisted-combat proof.
+- **Audit/persistence:** Talia follow-up did not repeat rewards; same-account relog retained stage120/QP1/XP13,035,431 and no quest puppies/stuffed dog; final normal logout confirmed offline. Root checked raw SHA `c88b1d0d6ea8cc95bcd9a92329b695d62907630e488b8ff2415a4ef498450ac2`, relog SHA `ce77ee8e227e9792e21ae44e14752e70d0d831d6fe4a1a807cc048a182b59531`, and read-only saves2037–2039. Sanitized artifact `/tmp/tsps-728/native/evidence/q099-root-accepted-20261025.json`.
+- **Limit:** Baraek's paid-fur dialogue gave neither fur nor payment on this runtime. The accepted route used the natural grizzly alternative; it does not certify that shop route, all recovery or visual overlay parity. The shared Baraek transaction fix has its own follow-up PR and live delta check.
 
 ### q080 — Murder Mystery
 
