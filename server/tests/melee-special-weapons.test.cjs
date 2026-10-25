@@ -34,7 +34,7 @@ const hooks = {};
 before(() => {
   // Only the specials registry and the death/logout hooks matter here; other hooks are no-ops.
   const api = {
-    onPlayerDeath: (handler) => (hooks.onPlayerDeath ??= []).push(handler),
+    onPlayerDefeated: (handler) => (hooks.onPlayerDefeated ??= []).push(handler),
     onPlayerLogout: (handler) => (hooks.onPlayerLogout ??= []).push(handler),
     onNpcDeath: (handler) => (hooks.onNpcDeath ??= []).push(handler),
     core: PluginManager.getCoreApi(),
@@ -440,8 +440,10 @@ test("burns end with the target's life: a death before the next burn tick, a log
   assert.equal(player.queued.length, 3);
   player.hitpoints = 0; // killed on tick 5
   runTicks(2);
-  player.hitpoints = 99; // respawned on tick 7, the restore emits onPlayerDeath
-  hooks.onPlayerDeath.forEach((handler) => handler({ player, killer: null, handled: false }));
+  // Respawned on tick 7: the restore emits onPlayerDefeated. onPlayerDeath is never reached here,
+  // as when a safe-death respawn (Ferox free-for-all) handles it first.
+  player.hitpoints = 99;
+  hooks.onPlayerDefeated.forEach((handler) => handler({ killer: null, victim: player }));
   runTicks(45);
   assert.equal(player.queued.length, 3, "no burn damage after respawn");
   burn(2, [0], player);

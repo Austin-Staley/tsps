@@ -85,7 +85,8 @@ module.exports = function registerBurningClawsSpecialAttack(api) {
     }
   }
 
-  api.onPlayerDeath(({ player }) => endBurns(player));
+  // onPlayerDefeated sees every death; onPlayerDeath stops at the first handler that takes it (a safe-death respawn).
+  api.onPlayerDefeated(({ victim }) => endBurns(victim));
   api.onPlayerLogout(({ player }) => endBurns(player));
   api.onNpcDeath(({ npc }) => endBurns(npc));
 
