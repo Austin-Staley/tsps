@@ -111,7 +111,7 @@ function makeInventory(initial = {}) {
   return inv;
 }
 function makeEquipment(ids = []) {
-  const equipment = new Equipment({ getUsername: () => "museum-test" });
+  const equipment = new Equipment({ getUsername: () => "museum-test", onEquipmentChanged() {} });
   const slots = [Equipment.HANDS_SLOT, Equipment.FEET_SLOT];
   ids.forEach((id, index) => equipment.set(slots[index] ?? index, new Item(id, 1)));
   return equipment;
