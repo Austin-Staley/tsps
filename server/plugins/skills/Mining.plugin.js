@@ -8,6 +8,7 @@ const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/Id
 const InfernalPickaxe = require("./mining/InfernalPickaxe.Mining");
 const CrystalPickaxe = require("./mining/CrystalPickaxe.Mining");
 const ClueGeodes = require("./mining/ClueGeodes.Mining");
+const { pauseForLevelUp } = require("./SkillActions");
 
 // rsprox recordings: a mined-out rock becomes "rocks1"/"rocks2" (the digit of the rock's own gameval,
 // copperrock2 -> rocks2) and the miner is sent a respawn timer by the cache's add_overlaytimer_loc.
@@ -281,6 +282,7 @@ class MiningTask extends Task {
         stopMining(this.activeSessions, player);
         continue;
       }
+      if (state.levelUpPaused) continue;
 
       const rockObject = MapObjects.get(
         state.objectId,
@@ -448,6 +450,10 @@ function handleMine(event) {
   }
 }
 
+function pauseMining(event) {
+  pauseForLevelUp(event, activeSessions, (player) => stopMining(activeSessions, player, false));
+}
+
 module.exports = {
   name: "Mining",
   PICKAXES,
@@ -467,9 +473,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopMining(activeSessions, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopMining(activeSessions, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseMining);
     api.onCustomEvent("mining:best-pickaxe", answerBestPickaxe);
     api.persistAttribute(ORE_MINED_ATTRIBUTE, 0);
     api.onPlayerLogin(sendOresMined);

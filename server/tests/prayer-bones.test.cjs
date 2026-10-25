@@ -399,6 +399,29 @@ test("a level-up caused by resolving a bone stops before consuming the next bone
   assert.equal(burialTasks.some(task => task.isRunning()), false);
 });
 
+test("an acknowledged level-up resumes sequential burial at the next bone without repeating its XP", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
+  const who = burialPlayer([Items.BONES, Items.BONES]);
+  const skills = who.getSkillManager(), resumes = [];
+  let levelled = false;
+  who.getSkillManager = () => ({ ...skills, addExperiences(skill, amount) {
+    skills.addExperiences(skill, amount);
+    if (!levelled) {
+      levelled = true;
+      api.emitCustomEvent("level-up:popup-opened", { player: who, pause: (_, resume) => resumes.push(resume) });
+    }
+  } });
+  clickBury(who);
+  tickBurials(8);
+  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.slots[1].getId(), Items.BONES, "the next bone remains while the popup is open");
+  assert.equal(resumes.length, 1);
+  resumes[0]();
+  tickBurials(6);
+  assert.equal(who.xp.get(Skill.PRAYER), 10);
+  assert.equal(burialTasks.some(task => task.isRunning()), false);
+});
+
 test("loss of skilling ownership cancels burial without resetting another action's animation", () => {
   pluginConfig["Prayer:sequentialBurying"] = true;
   const who = burialPlayer([Items.BONES, Items.BONES]);

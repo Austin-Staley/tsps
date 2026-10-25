@@ -16,6 +16,7 @@ const EntTrunk = require("./woodcutting/EntTrunk.Woodcutting");
 const ThickVines = require("./woodcutting/ThickVines.Woodcutting");
 const Shrine = require("./woodcutting/Shrine.Woodcutting");
 const FarmedRedwood = require("./farming/Redwood.Farming");
+const { pauseForLevelUp } = require("./SkillActions");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -999,6 +1000,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       stopWoodcutting(activeSessions, player);
       continue;
     }
+    if (state.levelUpPaused) continue;
 
     const activeTree = MapObjects.get(
       state.objectId,
@@ -1147,6 +1149,10 @@ function requestedAxe(event) {
   event.axe = event.itemId == null ? findBestUsableAxe(event.player) : candidate && canUseAxe(event.player, candidate) ? candidate : null;
 }
 
+function pauseWoodcutting(event) {
+  pauseForLevelUp(event, activeSessionsRef, (player) => stopWoodcutting(activeSessionsRef, player, false));
+}
+
 module.exports = {
   name: "Woodcutting",
   register(api) {
@@ -1171,9 +1177,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopWoodcutting(activeSessions, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
 
     api.onItemFirstAction((event) => {
       if (searchBirdNest(event.player, event.itemId)) {

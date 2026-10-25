@@ -462,7 +462,9 @@ export class PacketSender {
     // chat_onsubchange/script 113 resizes to fit dialogs) - confirmed by
     // decoding group 162 directly from the cache. Child 9 of 161 is an
     // unrelated 0x0 icon-cluster anchor nested under the sidebar tree.
+    const previous = this.chatboxGroupId;
     this.chatboxGroupId = id;
+    if (previous >= 0 && previous !== id) this.emitInterfaceClosed(previous);
     // A (re)mounted group starts with its cache text, so resend everything written to it. The
     // client also rewrites some itself (a dialogue's "Click here to continue" becomes "Please
     // wait..." when clicked), which this per-player cache never sees.
@@ -735,7 +737,7 @@ export class PacketSender {
   }
 
   /**
-   * "interface:closed" { player, interfaceId }: the player's main interface closed, by any route
+   * "interface:closed" { player, interfaceId }: the player's main or chatbox interface closed, by any route
    * (its own close, the client's IF_CLOSE, walking away), so content can undo what it set up.
    */
   private emitInterfaceClosed(interfaceId: number): void {
@@ -748,7 +750,8 @@ export class PacketSender {
     const closable = [...this.subInterfaceTargets.entries()]
       .filter(([, entry]) => entry.type === 0 || entry.type === 3);
     const targets = new Set(closable.map(([, entry]) => entry.targetUid));
-    const hadChatbox = this.chatboxGroupId >= 0;
+    const chatbox = this.chatboxGroupId;
+    const hadChatbox = chatbox >= 0;
     if (hadChatbox) {
       targets.add(CHATBOX_MODAL_TARGET_UID);
       this.chatboxGroupId = -1;
@@ -757,6 +760,7 @@ export class PacketSender {
     for (const target of targets) this.player.getSession().sendClientPacket(encodeWidgetCloseSub(target));
     if (hadChatbox) this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
     for (const [groupId] of closable) this.subInterfaceTargets.delete(groupId);
+    if (hadChatbox) this.emitInterfaceClosed(chatbox);
     return true;
   }
 
@@ -796,6 +800,7 @@ export class PacketSender {
       this.player.getDialogueManager?.()?.reset?.();
       this.player.getSession().sendClientPacket(encodeWidgetCloseSub(CHATBOX_MODAL_TARGET_UID));
       this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
+      this.emitInterfaceClosed(groupId);
       return this;
     }
     const target = this.subInterfaceTargets.get(groupId);

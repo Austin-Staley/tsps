@@ -267,6 +267,19 @@ for (const course of COURSES) {
   });
 }
 
+test("a Draynor lap completes the Lumbridge & Draynor easy diary task", () => {
+  hooks.events.length = 0;
+  const draynor = COURSES.find((course) => course.key === "draynor");
+  const player = createPlayer(3103, 3279, 0);
+  runLap(draynor, player);
+  const task = hooks.events.find((event) => event.name === "diary:task");
+  assert.deepEqual(task?.payload, {
+    player,
+    diary: "lumbridge",
+    task: "complete-a-lap-of-the-draynor-village-agility-co",
+  });
+});
+
 test("every shortcut plays out from either side without leaving the player locked", () => {
   const random = Math.random;
   Math.random = () => 0.5;

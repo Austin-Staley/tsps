@@ -1058,6 +1058,57 @@ test('the PvP action and controller retaliate against bot attacks without a play
   assert.equal(attacks.length, 0);
 });
 
+test('PvP brains retaliate before eating consumes the turn, including an assigned attacker', () => {
+  const { PvpValidateEngagementNode } = require('../plugins/bots/behaviours/nodes/pvp/PvpValidateEngagementNode.PlayerBots');
+  const { CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
+  const actor = (name) => ({ ...fakePlayer(name), isPlayer: () => true,
+    isRegistered: () => true, getHitpoints: () => 99, busy: () => false });
+  const player = actor('defender'), quarry = actor('assigned-target'), attacker = actor('incoming');
+  let combatTarget = null, permitted = true, fleeing = false, actions = 0;
+  const attacks = [];
+  player.getCombat = () => ({ getTarget: () => combatTarget, getAttacker: () => attacker,
+    attack: (target) => { attacks.push(target); combatTarget = target; } });
+  const state = { mode: 'pvp', pvp: { targetPlayer: quarry, targetUsername: quarry.getUsername() } };
+  const controller = Object.create(PvpController.prototype);
+  Object.assign(controller, {
+    botStatesByName: new Map([[player.getUsername(), state]]), behaviorMode: { PVP: 'pvp' },
+    maintainCombatBoostsActionNode: { tick: () => 'failure' },
+    defensiveActionNode: { tick: () => ({ handled: fleeing }) },
+    eatFoodActionNode: { tick: () => 'success' },
+    resolveTargetPlayer: (state) => state.pvp.targetPlayer,
+    CombatFactory: { getMethod: () => null, canAttackPermission: () => permitted
+      ? CanAttackResponse.CAN_ATTACK : CanAttackResponse.CANT_ATTACK_IN_AREA },
+  });
+  controller.validateEngagementNode = new PvpValidateEngagementNode({
+    api: { getAreaManager: () => ({ inMulti: () => false }), getCombatFactory: () => controller.CombatFactory },
+    isValidTarget: controller.isValidTarget.bind(controller),
+  });
+  const brain = new BotBrain({ player, state, registry: fakeRegistry(),
+    activity: { id: 'pvp', mode: 'pvp', actions: [{ id: 'fight', update: () => { actions++; return 'running'; } }] },
+    world: { supportTick: (context) => controller.tickSupport(context) },
+  });
+  brain.tick(1000);
+  assert.equal(actions, 0, 'eating holds the normal action');
+  assert.deepEqual(attacks, [attacker], 'support still establishes a legal return attack');
+  assert.equal(state.pvp.targetPlayer, attacker, 'an unrelated assignment cannot hide the actual attacker');
+  assert.equal(state.pvp.targetUsername, attacker.getUsername());
+  assert.equal(state.pvp.endsAt, 31000);
+  brain.tick(1600);
+  assert.equal(attacks.length, 1, 'established combat is not reissued each turn');
+  combatTarget = null;
+  brain.tick(2200);
+  assert.equal(attacks.length, 2, 'the assigned target is re-engaged if combat was interrupted');
+  combatTarget = null;
+  permitted = false;
+  brain.tick(2800);
+  assert.equal(attacks.length, 2, 'area and single-combat permissions still apply');
+  permitted = true;
+  fleeing = true;
+  state.pvp.retreat = {};
+  brain.tick(3400);
+  assert.equal(attacks.length, 2, 'a committed retreat remains in control');
+});
+
 test('idle pvp walking stays inside its hotspot and pauses for movement or combat', () => {
   const hotspot = getWildernessHotspot('edge_mains');
   const { x: spotX, y: spotY } = hotspot.anchor;
