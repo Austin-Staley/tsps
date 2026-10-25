@@ -244,11 +244,25 @@ const NO_FADES = { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed
  * varp rises from 0 the server sends silence with zero fades on that tick and the area track with
  * zero fades on the next, so the client starts the track over; dropping to 0 sends nothing.
  */
+/** The latest restart queued for each player; an older one that fires later is stale. */
+const restartGeneration = new WeakMap();
+
+/** The track a restart may send now: still the session's current track, in auto mode, with volume. */
+function restartStillWanted(player, track) {
+  const settings = player.getAudioSettings?.() ?? {};
+  return player.isRegistered?.() !== false
+    && (settings[MUSIC_MODE_VARP] ?? 0) === 0
+    && (settings[MUSIC_VOLUME_VARP] ?? 0) > 0
+    && (player.getSession?.()?.getCurrentMusicTrack?.() ?? -1) === track;
+}
+
 function restartMusicAfterVolumeRaised({ player, varpId, previous, value }) {
   if (varpId !== MUSIC_VOLUME_VARP || previous !== 0 || !(value > 0)) return;
   if ((player.getAudioSettings?.()?.[MUSIC_MODE_VARP] ?? 0) !== 0) return;
   const track = player.getSession?.()?.getCurrentMusicTrack?.() ?? -1;
   if (track < 0) return;
+  const generation = (restartGeneration.get(player) ?? 0) + 1;
+  restartGeneration.set(player, generation);
   player.getPacketSender().sendSong(SILENCE_TRACK, NO_FADES);
   core.TaskManager.submit(new (class extends core.Task {
     constructor() {
@@ -256,7 +270,10 @@ function restartMusicAfterVolumeRaised({ player, varpId, previous, value }) {
     }
     execute() {
       this.stop();
-      if (player.isRegistered?.() !== false) player.getPacketSender().sendSong(track, NO_FADES);
+      // A region change, a later rise, manual mode or volume 0 since then: the session already
+      // sent what is current, so this restart must not put an older track back.
+      if (restartGeneration.get(player) !== generation || !restartStillWanted(player, track)) return;
+      player.getPacketSender().sendSong(track, NO_FADES);
     }
   })());
 }

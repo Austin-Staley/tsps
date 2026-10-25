@@ -404,3 +404,52 @@ test('a music volume varp from the client announces audio:setting-changed with t
     PluginManager.emitCustomEvent = emit;
   }
 });
+
+// Review on #1077: the next-tick restart must not send a track that is no longer current. Raise the
+// volume from 0 with track 454 current, change the region track to 999 before the queued tick runs:
+// the session already sent 999, so the restart must not put 454 back. The same goes for a music
+// volume dropped to 0 again, manual mode, and a second rise that queued its own restart.
+test('the next-tick restart is dropped when the track, mode or volume changed in between', async () => {
+  await setup();
+  const [changed] = handlers.get('audio:setting-changed');
+  let current = 454;
+  let settings = { 18: 0, 168: 5 };
+  const songs = [];
+  const player = {
+    getAudioSettings: () => settings,
+    getSession: () => ({ getCurrentMusicTrack: () => current }),
+    getPacketSender: () => ({ sendSong: (id) => { songs.push(id); } }),
+    isRegistered: () => true,
+  };
+  const tasks = [];
+  const submit = api.core.TaskManager.submit;
+  api.core.TaskManager.submit = (task) => { tasks.push(task); };
+  const rise = () => changed({ player, varpId: 168, previous: 0, value: settings[168] });
+  try {
+    rise();
+    current = 999; // region change before the next tick; the session sent 999 itself
+    tasks.shift().execute();
+    assert.deepEqual(songs, [147], 'the old track is not replayed over the new one');
+
+    songs.length = 0; current = 454;
+    rise();
+    settings = { 18: 0, 168: 0 };
+    tasks.shift().execute();
+    assert.deepEqual(songs, [147], 'volume back at 0: nothing more');
+
+    songs.length = 0; settings = { 18: 0, 168: 5 };
+    rise();
+    settings = { 18: 1, 168: 5 };
+    tasks.shift().execute();
+    assert.deepEqual(songs, [147], 'manual music mode: nothing more');
+
+    songs.length = 0; settings = { 18: 0, 168: 5 };
+    rise();
+    rise();
+    tasks.shift().execute();
+    tasks.shift().execute();
+    assert.deepEqual(songs, [147, 147, 454], 'two rises in one tick restart the track once');
+  } finally {
+    api.core.TaskManager.submit = submit;
+  }
+});
