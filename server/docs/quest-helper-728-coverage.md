@@ -28,13 +28,13 @@ owner-authorized reviewed batches. Unverified cases stay explicit.
 
 ### Community-tested quests: skip full manual replay
 
-The user accepted the21 completion reports in [issue1257](https://github.com/RSPSApp/tsps/issues/1257)
+The user accepted the 21 completion reports in [issue #1257](https://github.com/RSPSApp/tsps/issues/1257)
 for queue decisions. Read the [community completion exclusions](quest-helper-728-community-completions.md) before selecting any new full
 playthrough. Preserve the report’s caveats and use targeted checks for known bugs;
 these passes do not certify complete Quest Helper or recovery/cutscene parity.
-None of the21 names belongs to the original106 active job roster, so that scope
+None of the 21 names belongs to the original 106 active job roster, so that scope
 and its independently audited count are unchanged by this exemption. Unlisted quests
-remain eligible; Scorpion Catcher/Velrak issue1204 is still being fixed.
+remain eligible; Scorpion Catcher/Velrak issue #1204 is still being fixed.
 
 
 The owner authorized the 108-PR split merge batch. The [independent PR index](quest-helper-728-prs.md)

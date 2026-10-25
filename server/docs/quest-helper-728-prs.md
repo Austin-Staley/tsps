@@ -184,4 +184,4 @@ percentages from PR counts or source-only tests.
 
 ## Community-tested replay exclusions
 
-Follow the user-approved [community completion exclusions](quest-helper-728-community-completions.md) from issue1257 before starting any new manual actor. The21 listed completions skip full replay; caveats and targeted bug checks remain. None overlaps the original106 active jobs.
+Follow the user-approved [community completion exclusions](quest-helper-728-community-completions.md) from issue #1257 before starting any new manual actor. The 21 listed completions skip full replay; caveats and targeted bug checks remain. None overlaps the original 106 active jobs.

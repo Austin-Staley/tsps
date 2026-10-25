@@ -14,7 +14,7 @@ alternate/recovery branches and visual Quest Helper overlay parity remain unveri
 
 ## Active 106: accepted natural main-route proofs
 
-**Community reports accepted for scheduling:** the user-directed [community completion exclusions](quest-helper-728-community-completions.md) lists21 community-completed quests whose full manual playthroughs must not be repeated. Preserve their caveats; keep that evidence separate from the independently audited routes below. No active106 job overlaps this F2P/supplemental list.
+**Community reports accepted for scheduling:** the user-directed [community completion exclusions](quest-helper-728-community-completions.md) lists 21 community-completed quests whose full manual playthroughs must not be repeated. Preserve their caveats; keep that evidence separate from the independently audited routes below. No active 106 job overlaps this F2P/supplemental list.
 
 Twenty-six quests have accepted scoped main-route completion evidence: **26 / 106 active quests (24.53%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q099, q105, q117, q118). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084, q099 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
 
