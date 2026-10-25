@@ -2,7 +2,7 @@
 
 The five-floor Agility minigame under Darkmeyer. Behaviour comes from two live rsprox runs in the osrs-captures index: 1862 (Leagues V, rev 227, floors 1-4, five runs) and 3299 (Grid Master, rev 234, floors 1-5). Both worlds multiply XP (1862 x16, 3299 x15), so the plugin divides it back out. The OSRS Wiki fills in what the recordings don't show: the coffin loot, the level requirements, the token and the skill obstacles' items.
 
-This is part 1. It covers the lobby, the entry, the five floors and their obstacles, the timer, the coffins and leaving. **The traps are part 2:** crossbow, sword, fire and lightning statues, the teleport tiles, and the hit-and-respawn. Without them a floor is a timed course with no penalty.
+It covers the lobby, the entry, the five floors with their obstacles and traps, the timer, the coffins and leaving.
 
 ## Layout
 
@@ -15,6 +15,7 @@ This is part 1. It covers the lobby, the entry, the five floors and their obstac
 | `hallowedsepulchre/Obstacles.HallowedSepulchre.js` | Drops, middle stairs, platforms, the F4 gate, the F5 stepping stones, the F2 stones and the floor stairs. Also the route hook that walks to each obstacle's start tile. |
 | `hallowedsepulchre/Skills.HallowedSepulchre.js` | The grapple pillars, the bridge, the portal and the brazier. |
 | `hallowedsepulchre/Coffins.HallowedSepulchre.js` | The coffins and the Grand Hallowed Coffin, with the Wiki loot. |
+| `hallowedsepulchre/Traps.HallowedSepulchre.js` | The traps: fire, crossbow, sword and lightning statues, the strange tiles, hits and respawns. |
 | `data/hallowed-sepulchre.json` | Floors and layouts, tiles, varbits, messages, XP and loot. Each value is noted as recorded, derived or Wiki. |
 
 The shop ("Mysterious Hallowed Goods", 1455) is generated data, and `Shopkeepers.plugin.js` already opens it from the Stranger's Trade.
@@ -58,9 +59,31 @@ The shop ("Mysterious Hallowed Goods", 1455) is generated data, and `Shopkeepers
   - The Grand Hallowed Coffin needs 84 Thieving. Its loot is 8-10 marks, the high table, and Ring of endurance at 1/200.
 - **The floor 5 barriers.** `hallowed_final_chest_barrier` (39540) is a multiloc on the timer varbit. Both its variants are solid in the cache, so the floor lifts their collision until the timer runs out.
 
+## Traps (recorded)
+
+Each floor finds its traps among the cache map's locs in its own instance. Every cycle counts from the floor's start, so a floor plays the same on every run.
+
+- **Fire (Wizard statues).**
+  - Floors 1-2: 38409-38412 fire every 8 ticks; 38413-38415 never fire.
+  - Floors 3-5: each statue tile is in group A, B or both (a table from the recordings).
+  - Each statue burns the blast tile in front of it (38427), two ticks after its ready.
+  - Standing on the blast as it starts is a hit; stepping onto it while it burns is a hit the tick after.
+- **Crossbows.**
+  - Three lanes per statue: floors 1-2 shoot one random lane, floors 3-5 two.
+  - The bolt starts 4 tiles out (5 for tier 3) and sweeps 3 or 4 tiles a tick to its lane's recorded end, then goes.
+- **Swords.** The 3x3 sword goes out at the tier's step to the far point, holds, comes back, and is caught 2 ticks later. Meanwhile the statue shows its `_thrown` loc. Each statue has its own row in the data.
+- **Lightning (floors 4-5).** A checkerboard in front of the statue: a 3x3 X, or 5x3 on floor 5. It stuns ("You are stunned!") for 2 ticks and never damages.
+- **Strange tiles.** A forward tile pushes the player on along their corridor, a backward one back, 3-7 tiles as far as walkable. A tile fires the tick after the player arrives, unless it is resting; then it waits for its next telegraph.
+- **Hits.**
+  - Damage is 1-3, 2-4 or 3-5 by the trap's tier.
+  - +2: the death animation and the fade. +4: the player is at the checkpoint of the corridor they were hit in. +7: back in control.
+  - The timer doesn't stop.
+  - The checkpoints are the recordings' 23 corridor zones; elsewhere the floor's last landing is used.
+  - On floor 3's layout B, the level-1 corridor uses the west drop's landing, as live (varbit 10395).
+
 ## Not yet
 
-- Part 2: the traps.
+- The Hallowed ring.
 - The tool storage interface (666).
 - Death handling beyond the run ending (no recording has a death inside).
 - The ambient NPCs.
@@ -76,4 +99,5 @@ The shop ("Mysterious Hallowed Goods", 1455) is generated data, and `Shopkeepers
 - the coffins and loot tables;
 - the obelisk, the shard, the token and logout;
 - double clicks; leaving mid-fade; teleporting away during the entry;
-- the floor 5 barriers.
+- the floor 5 barriers;
+- the traps: the recorded fire pair, bolt lane (2260 → 2246) and owl sword, a lightning patch, pads, checkpoints, stepping in a tick late, and holds not carrying over.
