@@ -707,7 +707,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (!icon) return undefined;
             return { canvas: icon, width: icon.width, height: icon.height };
         };
-        UI_drawWrappedTextGL(
+        return UI_drawWrappedTextGL(
             glr,
             opts.fontLoader,
             text,
@@ -3591,6 +3591,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 effectiveText = "Please wait...";
             }
 
+            // Where the text landed, so wheel input can tell text from the empty box around it.
+            w._textBounds = undefined;
             if (effectiveText.length) {
                 const normalized = effectiveText.replace(/<br\s*\/?\s*>/gi, "\n");
                 // OSRS type-4 widgets use drawLines(), but short widgets disable automatic
@@ -3602,7 +3604,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     ((resolvedFont as any)?.lineHeight as number) ||
                     ((resolvedFont as any)?.ascent as number) ||
                     12;
-                drawWrappedTextGL(
+                w._textBounds = drawWrappedTextGL(
                     normalized,
                     x,
                     y,

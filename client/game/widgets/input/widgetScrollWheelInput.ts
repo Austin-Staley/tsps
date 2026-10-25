@@ -1,5 +1,5 @@
 import type { ScriptEvent } from "../../../rs/cs2/Cs2Vm";
-import { getVisibleWidgetSurfaceReason } from "../../../widgets/menu/utils";
+import { isVisibleWidgetSurfaceAt } from "../../../widgets/menu/utils";
 import type { WidgetInputControllerDeps, WidgetInputFrame } from "./widgetInputTypes";
 import type { WidgetInteractionController } from "../WidgetInteractionController";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
@@ -12,7 +12,7 @@ export function processWidgetScrollWheelInput(
     widgetManager: WidgetManager,
     widgetInteraction: WidgetInteractionController,
 ): void {
-    const { input, mx, hits } = frame;
+    const { input, mx, my, hits } = frame;
     const wheelDelta = input.wheelDeltaY;
     const pinchDelta = input.pinchZoomDelta ?? 0;
     if ((wheelDelta !== 0 || pinchDelta !== 0) && hits.length > 0 && !widgetInteraction.isDraggingWidget) {
@@ -28,7 +28,7 @@ export function processWidgetScrollWheelInput(
 
             // Camera zoom blocking is based on actual visible widget surfaces.
             // Listener-only widgets (for example buff_bar transmit children) must not block.
-            if (!blockedByVisibleWidget && getVisibleWidgetSurfaceReason(w)) {
+            if (!blockedByVisibleWidget && isVisibleWidgetSurfaceAt(w, mx, my)) {
                 blockedByVisibleWidget = true;
             }
 
