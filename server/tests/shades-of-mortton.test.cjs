@@ -53,6 +53,14 @@ function container(capacity = 28) {
     getAmount: (id) => slots.filter((s) => s.id === id).reduce((sum, s) => sum + s.amount, 0),
     getFreeSlots: () => capacity - slots.filter((s) => s.amount > 0).length,
     getValidItems: () => slots.filter((s) => s.amount > 0).map((s) => ({ getId: () => s.id, getAmount: () => s.amount })),
+    // ItemContainer.getAddableAmount: a held stack takes up to its cap, a new one needs a slot.
+    getAddableAmount(item) {
+      const held = this.getAmount(item.getId());
+      const stacks = core.ItemDefinition.forId(item.getId())?.isStackable?.() === true;
+      if (!stacks) return Math.min(item.getAmount(), this.getFreeSlots());
+      if (held > 0) return Math.min(item.getAmount(), 0x7fffffff - held);
+      return this.getFreeSlots() > 0 ? item.getAmount() : 0;
+    },
     refreshItems() {},
   };
 }
@@ -182,6 +190,43 @@ test('a chest without room for all its treasure (3 mithril bars, coins, paste) k
     Math.random = random;
   }
   assert.equal(p.inventory.getAmount(key('bronze', 'bloodred')), 0, 'with room, the key dissolves');
+  assert.equal(p.inventory.getAmount(2359), 3);
+  assert.ok(p.inventory.getAmount(Common.objId('swamppaste')) > 0);
+});
+
+test('a coin stack at its cap keeps the key: the chest would award coins the stack cannot take', () => {
+  const p = fakePlayer(new Location(3510, 9723, 0));
+  p.inventory.add(new core.Item(995, 0x7fffffff));
+  p.inventory.add(new core.Item(key('bronze', 'bloodred'), 1));
+  const random = Math.random;
+  Math.random = () => 0.99; // coins and paste
+  try {
+    hooks.objects.get('Bronze Chest:Open')({ player: p, object: loc('shadechest_bronze_bloodred', 3511, 9724) });
+  } finally {
+    Math.random = random;
+  }
+  assert.equal(p.messages.at(-1), Common.message('noRoom'));
+  assert.equal(p.inventory.getAmount(key('bronze', 'bloodred')), 1, 'the key is kept');
+  assert.equal(p.inventory.getAmount(995), 0x7fffffff);
+  assert.equal(p.inventory.getAmount(Common.objId('swamppaste')), 0);
+  assert.equal(p.pages.length, 0);
+});
+
+test('a spare key does not cost the room: the dissolving key always frees its own slot', () => {
+  const p = fakePlayer(new Location(3510, 9723, 0));
+  for (let i = 0; i < 23; i++) p.inventory.add(new core.Item(1511, 1));
+  p.inventory.add(new core.Item(key('bronze', 'bloodred'), 1));
+  p.inventory.add(new core.Item(key('bronze', 'bloodred'), 1));
+  assert.equal(p.inventory.getFreeSlots(), 3);
+  const random = Math.random;
+  Math.random = () => 0.43; // 3 mithril bars and paste: 4 slots, 3 free plus the key's
+  try {
+    hooks.objects.get('Bronze Chest:Open')({ player: p, object: loc('shadechest_bronze_bloodred', 3511, 9724) });
+  } finally {
+    Math.random = random;
+  }
+  assert.notEqual(p.messages.at(-1), Common.message('noRoom'));
+  assert.equal(p.inventory.getAmount(key('bronze', 'bloodred')), 1, 'one key dissolves, the spare stays');
   assert.equal(p.inventory.getAmount(2359), 3);
   assert.ok(p.inventory.getAmount(Common.objId('swamppaste')) > 0);
 });
