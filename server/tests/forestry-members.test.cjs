@@ -291,8 +291,12 @@ test('off the odd circle, a step is missed', () => {
 
 test("switching traps mid-disarm frees the first to spring", () => {
   const p = fakePlayer();
+  // Pinned rolls: a trap every 12 ticks, each living 13, so two stand at tick 24.
+  Math.random = () => 0;
   const event = startEvent('poachers', [p]);
-  for (let i = 0; i < 60 && event.traps.size < 2; i++) ticks(1);
+  ticks(24);
+  Math.random = random;
+  assert.equal(event.traps.size, 2);
   const [a, b] = event.traps;
   disarm(p, a);
   disarm(p, b);
