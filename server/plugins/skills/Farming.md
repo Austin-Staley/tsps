@@ -69,6 +69,16 @@ This is **not a verified 1:1 implementation**. In particular:
 
 ## Verification
 
+Geomancy refuses casting while attacking or being attacked, before rune
+consumption, Magic XP, animation or patch updates. It retains the existing
+shared combat definition and ordinary casting checks once combat ends.
+RSProx recording 1221 (revision 238, click `magic_spellbook:geomancy` at
+tick 5769) supplies the exact refusal text. That recording is a Leagues world;
+no League rune-restoration, timing or reward rules are imported. The
+[Geomancy article](https://oldschool.runescape.wiki/w/Geomancy) documents
+the ordinary 65 Magic, 60 XP and 3 astral/3 nature/8 earth rune cost.
+The dedicated native interface remains a separate fidelity limit above.
+
 Coral yields use the post-19-August-2026 six harvest lives and the published
 low/high calculator endpoints: Elkhorn 85/182, Pillar 25/180 and Umbral -50/178.
 Sources: [Elkhorn frag](https://oldschool.runescape.wiki/w/Elkhorn_frag),
