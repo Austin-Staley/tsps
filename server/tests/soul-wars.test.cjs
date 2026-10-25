@@ -16,22 +16,32 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 
-let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, Rewards, hooks, core;
+let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, Rewards, Tutorial, hooks, core;
 const online = [];
 const walks = [];
 let config = {};
+
+/** Name hooks run in turn until one takes the click, as the plugin manager does. */
+function chain(map, key, fn) {
+  const prior = map.get(key);
+  map.set(key, prior ? (event) => prior(event) || fn(event) : fn);
+}
 
 before(() => {
   CachePipeline.initialize();
   RegionManager.init();
   new NpcDefinitionLoader().load();
   core = PluginManager.getCoreApi();
-  hooks = { objects: new Map(), items: new Map(), prompts: [], death: [], drops: [] };
+  hooks = { objects: new Map(), npcs: new Map(), items: new Map(), prompts: [], death: [], drops: [] };
   const api = {
     core,
     persistAttribute() {},
     getPluginConfig: (key, fallback) => config[key] ?? fallback,
-    onObjectInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) hooks.objects.set(`${name}:${op}`, fn); },
+    onObjectInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) chain(hooks.objects, `${name}:${op}`, fn); },
+    onNpcInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) chain(hooks.npcs, `${name}:${op}`, fn); },
+    onGroundItemPickup: (fn) => { hooks.pickup = fn; },
+    onNpcDialogueVariant: (fn) => { hooks.variant = fn; },
+    onNpcDialogueCondition: (fn) => { hooks.condition = fn; },
     onItemAction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) hooks.items.set(`${name}:${op}`, fn); },
     onNpcHitModify: (fn) => { hooks.hit = fn; },
     onNpcDeath: (fn) => { (hooks.npcDeath ??= []).push(fn); },
@@ -41,7 +51,7 @@ before(() => {
     onShouldDropItemsOnDeath: (fn) => hooks.drops.push(fn),
     onPlayerLogin() {},
     onPlayerLogout() {},
-    onCustomEvent: (name, fn) => { (hooks.events ??= {})[name] = fn; },
+    onCustomEvent: (name, fn) => { const events = (hooks.events ??= {}); const prior = events[name]; events[name] = prior ? (e) => { prior(e); fn(e); } : fn; },
     onCanShop: (fn) => { hooks.canShop = fn; },
     onInterfaceActionButton: (ids, fn) => { for (const id of [].concat(ids)) (hooks.buttons ??= new Map()).set(id, fn); },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
@@ -59,6 +69,10 @@ before(() => {
   Supplies = require('../plugins/minigames/soulwars/Supplies.SoulWars');
   Bots = require('../plugins/minigames/soulwars/Bots.SoulWars');
   Rewards = require('../plugins/minigames/soulwars/Rewards.SoulWars');
+  Tutorial = require('../plugins/minigames/soulwars/Tutorial.SoulWars');
+  Tutorial.engine.walk = (player, to) => { player.walkedTo = to; };
+  Tutorial.engine.projectile = (from, to, target, id) => { target.blasted = id; };
+  Tutorial.engine.drop = (player, id, tile) => { (player.dropped ??= []).push([id, tile]); };
   // Fake players don't walk: the bots' routes are recorded instead.
   Bots.engine.walk = (player, to) => walks.push({ player, to });
   Lobby.source.players = () => online;
@@ -89,9 +103,10 @@ function container(capacity = 28) {
 }
 
 let index = 0;
-function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 0) } = {}) {
+function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 0), demonstrated = true } = {}) {
   const id = ++index;
-  const attributes = new Map();
+  // Players have seen the Nomad's demonstration unless a test says otherwise.
+  const attributes = new Map(demonstrated ? [['soul-wars:finished-tutorial', 1]] : []);
   const levels = {};
   const p = {
     location: at, messages: [], varbits: new Map(), varps: new Map(), texts: new Map(), subs: [], scripts: [], anims: [], graphics: [], hp: 99,
@@ -110,6 +125,10 @@ function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 
     getRunEnergy: () => p.run ?? 100, setRunEnergy(v) { p.run = v; },
     getPoisonDamage: () => p.poison ?? 0, setPoisonDamage(v) { p.poison = v; },
     setEnteredAmountAction(action) { p.amountAction = action; },
+    pages: [], said: [],
+    forceChat: (text) => p.said.push(text), setRunning() {}, getMovementQueue: () => ({ setBlockMovement() {} }),
+    setNpcTransformationId(npcId) { p.transform = npcId; },
+    getDialogueManager: () => (p.dialogue ??= dialogueManager(p)),
     getSkillManager: () => ({
       getCombatLevel: () => combat, getTotalLevel: () => total,
       getCurrentLevel: (skill) => levels[skill.getName?.() ?? skill] ?? 99, getMaxLevel: () => 99,
@@ -127,12 +146,40 @@ function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 
         sendSong: () => sender, sendEnterAmountPrompt: (title) => { p.prompts = [...(p.prompts ?? []), title]; return sender; },
         sendInterfaceFlagsRange: (uid, from, to, flags) => { (p.flags ??= []).push([uid, from, to, flags]); return sender; },
         sendSound: (id) => { (p.sounds ??= []).push(id); return sender; },
+        sendCameraMoveTo: () => sender, sendCameraLookAt: () => sender, sendCameraReset: () => sender,
+        clearHintArrow: () => { p.hint = null; return sender; },
+        sendPositionalHint: (tile) => { p.hint = { tile }; return sender; },
+        sendEntityHint: (npc) => { p.hint = { npc }; return sender; },
+        sendMultiIcon: () => sender, sendInterfaceRemoval: () => sender,
       };
       return sender;
     },
   };
   return p;
 }
+
+/** Records the pages shown; action pages run as the real manager runs them. */
+function dialogueManager(p) {
+  return {
+    entries: null, index: -1,
+    startDialogues(builder) { this.entries = builder.getDialogues(); this.startDialogue(0); },
+    startDialogue(i) {
+      this.index = i;
+      const page = this.entries?.get(i);
+      if (!page) { this.entries = null; return; }
+      if (page.constructor.name === 'ActionDialogue') page.send(p);
+      else if (page.constructor.name !== 'OptionDialogue') p.pages.push(page);
+    },
+    reset() { this.entries = null; this.index = -1; },
+    current() { return this.entries?.get(this.index); },
+    /** Clicks through to the end (or to a menu, which `choose` answers). */
+    continueAll() { for (let n = 0; n < 200 && this.entries && this.current()?.constructor.name !== 'OptionDialogue'; n++) this.startDialogue(this.index + 1); },
+    choose(option) { const menu = this.current(); this.reset(); menu.execute(option); },
+  };
+}
+
+const pageText = (page) => page.text ?? page.getText?.();
+const saidPages = (p) => p.pages.map(pageText);
 
 function ticks(count) {
   for (let i = 0; i < count; i++) TaskManager.process();
@@ -342,11 +389,13 @@ test("a death: no items lost, bones dropped, back in the team's graveyard as a g
   const [x, y] = game.area.templateOf(a.location);
   assert.deepEqual([x, y], Common.data.bases[team].slice(0, 2), 'no graveyard held: the base');
   assert.equal(varbit(a, 'soul_wars_recent_death'), 1);
+  assert.equal(a.transform, core.CacheDefinitions.getNpcId('soul_wars_player_ghost'), 'a ghost looks like one');
   assert.equal(game.statsOf(b).kills, 1);
   assert.equal(game.isGhost(a), true);
   ticks(17);
   assert.equal(game.isGhost(a), false);
   assert.equal(varbit(a, 'soul_wars_recent_death'), 0);
+  assert.equal(a.transform, -1);
 
   game.control.east.holder = team;
   for (const fn of hooks.death) fn({ player: a, killer: null, handled: false });
@@ -798,6 +847,170 @@ test('other rewards: Buy 1 of a blighted sack gives its batch; the Soul cape wan
   assert.equal(p.inventory.getAmount(25346), 0);
 });
 
+// ------------------------------------------------------------------ tutorial
+
+const T = () => Common.data.tutorial;
+const step = (p) => varbit(p, 'soul_wars_tutorial');
+const LOBBY_NOMAD_TILE = new Location(2213, 2857, 0);
+const lobbyNomad = () => ({ getId: () => 10528, getLocation: () => LOBBY_NOMAD_TILE });
+
+/** The tutorial's Nomad the player sees at their step. */
+function tutorialNomad(p) {
+  const area = Tutorial.states.get(p).area;
+  return [...area.npcs].find((npc) => npc.getId() >= 10548 && npc.getId() <= 10553
+    && (core.CacheDefinitions.getNpc(npc.getId()).transforms[step(p)] ?? -1) === 10516);
+}
+
+function talkTo(p, npc) {
+  p.pages.length = 0;
+  assert.ok(hooks.npcs.get('Nomad:Talk-to')({ player: p, npc }), 'the Nomad takes the talk');
+}
+
+/** A player taken into the demonstration and through its 22-tick opening. */
+function newRecruit() {
+  const p = fakePlayer({ demonstrated: false });
+  talkTo(p, lobbyNomad());
+  p.getDialogueManager().continueAll();
+  p.getDialogueManager().choose(1);
+  p.getDialogueManager().continueAll();
+  ticks(6 + 23);
+  return p;
+}
+
+function talkThrough(p) {
+  talkTo(p, tutorialNomad(p));
+  p.getDialogueManager().continueAll();
+}
+
+test("tutorial: the Nomad's introduction offers the demonstration (met on the offer); restricted items are refused", () => {
+  const p = fakePlayer({ demonstrated: false });
+  p.inventory.add(new core.Item(379, 1)); // a lobster
+  talkTo(p, lobbyNomad());
+  p.getDialogueManager().continueAll();
+  assert.equal(saidPages(p)[0], 'Excuse me, what is this place?');
+  assert.equal(saidPages(p).at(-1), "I can give you a demonstration if you're interested?");
+  assert.equal(varbit(p, 'soul_wars_met_nomad'), 1);
+  assert.deepEqual(p.getDialogueManager().current().getOptions(), ["Let's do it.", "Actually, I'm good."]);
+  p.getDialogueManager().choose(1);
+  p.getDialogueManager().continueAll();
+  assert.match(saidPages(p).at(-1), /^Hmm, it looks like you have some restricted items with you/);
+  assert.equal(Tutorial.inTutorial(p), false);
+  // Met already: the shorter greeting, and "I'll pass." turns it down.
+  talkTo(p, lobbyNomad());
+  p.getDialogueManager().continueAll();
+  assert.equal(saidPages(p)[0], 'Ah, you again. Are you ready for that demonstration?');
+  assert.deepEqual(p.getDialogueManager().current().getOptions(), ["Let's do it.", "I'll pass."]);
+});
+
+test("tutorial: \"Let's do it.\" teleports the player in (started), blue cape on, and the arrow points at the first Nomad", () => {
+  const p = newRecruit();
+  assert.equal(varbit(p, 'soul_wars_started_tutorial'), 1);
+  assert.ok(Tutorial.inTutorial(p));
+  const area = Tutorial.states.get(p).area;
+  assert.deepEqual(area.templateOf(p.getLocation()), T().land);
+  assert.equal(p.worn[1].getId(), T().items.cape);
+  assert.equal(step(p), 0);
+  assert.deepEqual(p.said, ['Huh?', 'Yikes!', 'Oh boy.']);
+  assert.equal(p.hint.npc, tutorialNomad(p));
+  assert.equal(text(p, 'soul_wars_tutorial_instructions:title'), 'Soul Wars demonstration');
+  assert.deepEqual(area.templateOf(p.walkedTo), T().walkTo);
+});
+
+test('tutorial: Zimberfizz appears on "Zimberfizz! Heel!" (step 3), is yours alone, and leaves his fragment (step 5)', () => {
+  const p = newRecruit();
+  const other = newRecruit();
+  talkThrough(p);
+  ticks(5);
+  assert.equal(step(p), 1);
+  talkThrough(p);
+  ticks(5);
+  assert.equal(step(p), 2);
+  assert.equal(text(p, 'soul_wars_tutorial_instructions:title'), 'Souls');
+  talkTo(p, tutorialNomad(p));
+  const dm = p.getDialogueManager();
+  while (pageText(dm.current()) !== 'Zimberfizz! Heel!') dm.startDialogue(dm.index + 1);
+  assert.equal(step(p), 3, 'step 3 as the line shows');
+  const imp = Tutorial.states.get(p).imp;
+  assert.equal(imp.getId(), 10517);
+  dm.continueAll();
+  assert.equal(step(p), 4);
+  assert.equal(p.hint.npc, imp);
+  assert.equal(Tutorial.attackRule(other, imp), false);
+  assert.ok(other.messages.includes("You've got no reason to bother that poor imp."));
+  assert.equal(Tutorial.attackRule(p, imp), true);
+  Tutorial.impDied({ npc: imp });
+  ticks(2);
+  assert.equal(step(p), 5);
+  assert.equal(p.dropped[0][0], T().items.fragment);
+});
+
+test('tutorial: the whole demonstration, to finished_tutorial, the portal home and the guide', () => {
+  const p = newRecruit();
+  talkThrough(p); ticks(5);
+  talkThrough(p); ticks(5);
+  talkThrough(p);
+  Tutorial.impDied({ npc: Tutorial.states.get(p).imp }); ticks(2);
+  p.inventory.add(new core.Item(T().items.fragment, 1));
+  talkThrough(p); ticks(5);
+  assert.equal(step(p), 6);
+  talkThrough(p);
+  assert.equal(step(p), 7);
+  assert.equal(Tutorial.states.get(p).imp.getId(), 10518);
+  Tutorial.impDied({ npc: Tutorial.states.get(p).imp }); ticks(2);
+  talkThrough(p);
+  assert.equal(step(p), 11);
+  assert.equal(varbit(p, 'soul_wars_obelisk_holder'), 1);
+  assert.equal(varbit(p, 'soul_wars_obelisk_alignment'), 0);
+  assert.ok(Tutorial.charge({ player: p, object: { getId: () => 40765 } }));
+  assert.equal(step(p), 12);
+  assert.equal(p.inventory.getAmount(T().items.fragment), 0);
+  assert.equal(text(p, 'soul_wars_game:red_strength'), '98%');
+  p.getDialogueManager().continueAll();
+  talkThrough(p); ticks(30);
+  assert.equal(step(p), 13);
+  talkThrough(p);
+  assert.equal(p.blasted, T().projectile);
+  ticks(15);
+  assert.equal(step(p), 14);
+  assert.equal(p.transform, T().ghost);
+  assert.deepEqual(Tutorial.states.get(p).area.templateOf(p.getLocation()), T().graveyard);
+  talkThrough(p);
+  assert.equal(p.transform, -1);
+  assert.equal(step(p), 16);
+  assert.equal(varbit(p, 'soul_wars_finished_tutorial'), 1);
+  assert.equal(Tutorial.finished(p), true);
+  p.pages.length = 0;
+  assert.ok(hooks.objects.get('Portal:Leave')({ player: p, object: { getId: () => 40440 } }));
+  ticks(8);
+  assert.equal(Tutorial.inTutorial(p), false);
+  assert.equal(p.worn[1], null);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], T().lobbyExit.slice(0, 2));
+  assert.equal(saidPages(p)[0], 'Here we are. Just head into the western waiting area if you want to join a battle.');
+  p.getDialogueManager().continueAll();
+  p.getDialogueManager().choose(1);
+  p.getDialogueManager().continueAll();
+  assert.equal(p.inventory.getAmount(T().items.guide), 1);
+  // Done: the Nomad's usual talk (and his Trade) from now on.
+  assert.equal(hooks.npcs.get('Nomad:Talk-to')({ player: p, npc: lobbyNomad() }), false);
+  assert.equal(hooks.variant({ player: p, npc: lobbyNomad() }), 'standard-dialogue-post-demonstration-dialogue');
+  assert.equal(hooks.condition({ player: p, npc: lobbyNomad(), text: 'If the player is on a Soul Wars world:' }), true);
+  assert.equal(hooks.condition({ player: p, npc: lobbyNomad(), text: 'If the player is not on a Soul Wars world:' }), false);
+});
+
+test('tutorial: leaving early starts it over; only a player who saw it may wait for a game', () => {
+  const p = newRecruit();
+  talkThrough(p); ticks(5);
+  assert.equal(step(p), 1);
+  assert.ok(hooks.npcs.get('Nomad:Leave-tutorial')({ player: p, npc: tutorialNomad(p) }));
+  ticks(4);
+  assert.equal(Tutorial.inTutorial(p), false);
+  assert.equal(step(p), 0);
+  assert.equal(Tutorial.finished(p), false);
+  p.location = new Location(2200, 2842, 0);
+  hooks.objects.get('Barrier:Pass')({ player: p, object: { getId: () => core.CacheDefinitions.getLocId('soul_wars_main_waiting_area_barrier') } });
+  assert.ok(p.messages.includes(Common.message('needTutorial')));
+});
+
 test('an imbue keeps what the item carries: a charged ring of suffering keeps its charges', () => {
   const p = fakePlayer();
   const imbued = core.CacheDefinitions.getEnumValues(Common.data.rewards.enums.imbueItem);
@@ -808,4 +1021,18 @@ test('an imbue keeps what the item carries: a charged ring of suffering keeps it
   Rewards.imbue({ player: p, slot });
   assert.equal(p.inventory.slots[0].id, imbued.get(slot));
   assert.deepEqual(p.inventory.slots[0].meta, { 'ring-of-suffering': 100000, preset: true });
+});
+
+test('tutorial: a cape put on during the entry fade stops the entry, and the cape stays', () => {
+  const p = fakePlayer({ demonstrated: false });
+  talkTo(p, lobbyNomad());
+  p.getDialogueManager().continueAll();
+  p.getDialogueManager().choose(1);
+  p.getDialogueManager().continueAll();
+  ticks(1);
+  p.worn[1] = new core.Item(6570, 1); // a fire cape, equipped mid-fade
+  ticks(6);
+  assert.equal(Tutorial.inTutorial(p), false);
+  assert.equal(p.worn[1]?.getId(), 6570, 'the cape is still worn');
+  assert.ok(p.messages.includes(Common.message('restricted')));
 });

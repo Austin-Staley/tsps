@@ -8,7 +8,7 @@
  * - the lobby HUD (434) shows "N/20" below the minimum and the count above it, with the
  *   countdown; it runs 290 ticks once 20 wait, with "The next Soul Wars game will start shortly."
  *   20 ticks before the start.
- * Wiki: total level 500 and combat 40 to play; food, potions and followers aren't allowed in
+ * Wiki: total level 500 and combat 40 to play, after the Nomad's demonstration; food, potions and followers aren't allowed in
  * the waiting area, nor are the poisoned. World config `SoulWars:minPlayers` lowers the minimum
  * for small worlds.
  */
@@ -83,8 +83,14 @@ function refusal(player) {
   const totalLevel = player.getSkillManager().getTotalLevel?.() ?? Infinity;
   const combat = player.getSkillManager().getCombatLevel?.() ?? 126;
   if (totalLevel < entry.totalLevel || combat < entry.combat) return Common.message("requirements");
+  if (!require("./Tutorial.SoulWars").finished(player)) return Common.message("needTutorial");
   if (require("./Supplies.SoulWars").banned(player)) return Common.message("banned");
   if ((player.getPoisonDamage?.() ?? 0) > 0) return Common.message("poisoned");
+  return restrictedItems(player);
+}
+
+/** A cape, food, potions or a follower: kept out of the waiting area and the demonstration. */
+function restrictedItems(player) {
   const cape = player.getEquipment().getItems?.()[1];
   if (cape && cape.getId() > 0) return Common.message("backSlot");
   const restricted = player.getInventory().getValidItems?.().some((item) => {
@@ -200,4 +206,4 @@ function attachLobby(api) {
   Common.every(tick);
 }
 
-module.exports = { attachLobby, tick, refusal, barrier, countdownText, waitingPlayers, minPlayers, source, bots };
+module.exports = { attachLobby, tick, refusal, restrictedItems, barrier, countdownText, waitingPlayers, minPlayers, source, bots };

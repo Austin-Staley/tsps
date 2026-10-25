@@ -10,8 +10,8 @@
  * - imbues: the item is swapped in place for its imbued form (enums 3541-3545);
  * - other: the Soul cape (Prayer 70), the Ectoplasmator (Prayer 40), Spoils of War and the blighted
  *   supplies, one at a time or X ("How many would you like to buy? (1-N)").
- * Until the tutorial is in, everyone counts as having done it (varbit soul_wars_finished_tutorial),
- * which is what gives the Nomad his Trade option.
+ * His Trade option shows once the player has seen his demonstration (varbit
+ * soul_wars_finished_tutorial; Tutorial.SoulWars).
  */
 const Common = require("./Common.SoulWars");
 
@@ -230,13 +230,8 @@ function findNomad() {
   return true;
 }
 
-function loggedIn({ player }) {
-  Common.varbit(player, "soul_wars_finished_tutorial", 1);
-}
-
 function attachRewards(api) {
   api.onCanShop(canShop);
-  api.onPlayerLogin(loggedIn);
   api.onInterfaceActionButton(uid("xp_rewards"), xpList);
   api.onInterfaceActionButton(uid("confirm_xp"), buyXp);
   api.onInterfaceActionButton(uid("confirm_imbue"), imbue);
