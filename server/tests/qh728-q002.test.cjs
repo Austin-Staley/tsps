@@ -39,7 +39,7 @@ function setup(options = {}) {
   const N = core.NpcIdentifiers;
   const hooks = {
     custom: new Map(), conditions: [], npcNamed: new Map(), objects: [],
-    itemOnObject: [], itemOnNpc: [], itemDrop: [], login: [], zoneEnter: [],
+    itemOnObject: [], itemOnNpc: [], itemDrop: [], login: [], logout: [], zoneEnter: [],
     hitModify: [], npcDeath: [], interfaceButtons: [],
   };
   const spawned = [], removed = [], tasks = [], attacks = [];
@@ -154,10 +154,19 @@ function setup(options = {}) {
     onItemDropPolicy(fn) { hooks.itemDrop.push(fn); },
     onZoneEnter(zone, fn) { hooks.zoneEnter.push({ zone, fn }); },
     onPlayerLogin(fn) { hooks.login.push(fn); },
+    onPlayerLogout(fn) { hooks.logout.push(fn); },
     onNpcHitModify(fn) { hooks.hitModify.push(fn); },
     onNpcDeath(fn) { hooks.npcDeath.push(fn); },
     onInterfaceActionButton(ids, fn) { hooks.interfaceButtons.push({ ids, fn }); },
     spawnNpc(definition) {
+      if (options.realNpcs) {
+        const npc = new core.NPC(definition.id, new core.Location(definition.x, definition.y, definition.z));
+        npc.setOwner(definition.owner);
+        npc.setOwnerOnly(true);
+        npc.setRegistered(true);
+        spawned.push(npc);
+        return npc;
+      }
       const npc = {
         definition,
         getId: () => definition.id,
@@ -172,7 +181,13 @@ function setup(options = {}) {
       spawned.push(npc);
       return npc;
     },
-    removeNpc(npc) { removed.push(npc); },
+    removeNpc(npc) {
+      removed.push(npc);
+      if (options.realNpcs) {
+        npc.getCombat().reset();
+        npc.setRegistered(false);
+      }
+    },
   }, { get(target, key) { return target[key] ?? (() => {}); } });
 
   require('../plugins/quests/quests/AnotherSliceOfHAM.Quest')(api);
@@ -544,4 +559,118 @@ test('Another Slice of H.A.M.: stage 9 login/re-entry restores crate, lure and t
   assert.equal(h.lastVariant(), 'the-under-underground');
   h.emit('ladders:climb', { objectId: 23376, handled: false });
   assert.equal(h.quest.getStage(h.player), 10, 'engaged distraction opens the final ladder');
+});
+
+test('Another Slice of H.A.M.: real inventory reclaims atomically with the last coin slot, without free replays', () => {
+  const h = setup();
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const inventory = new Inventory(h.player);
+  h.player.getInventory = () => inventory;
+  h.quest.setStage(h.player, 8);
+  for (let slot = 0; slot < 27; slot++) inventory.setItem(slot, new h.core.Item(h.I.SHARK, 1));
+  inventory.setItem(27, new h.core.Item(h.I.COINS, 1000));
+  assert.equal(inventory.isFull(), true);
+  h.emit('npc-dialogue:action', { npcId: h.N.GENERAL_WARTFACE, stepId: 'DXR-dR' });
+  assert.equal(inventory.getAmount(h.I.ANCIENT_MACE), 0, 'a receive action alone is not payment');
+  h.emit('npc-dialogue:action', { npcId: h.N.GENERAL_WARTFACE, stepId: 'iF8XSH' });
+  assert.equal(inventory.getAmount(h.I.COINS), 0);
+  assert.equal(inventory.getAmount(h.I.ANCIENT_MACE), 1, 'spending the exact price frees its slot');
+  for (const stepId of ['iF8XSH', 'DXR-dR', 'DXR-dR']) h.emit('npc-dialogue:action', { npcId: h.N.GENERAL_WARTFACE, stepId });
+  assert.equal(inventory.getAmount(h.I.ANCIENT_MACE), 1, 'repeating dialogue cannot duplicate the mace');
+  inventory.deleteNumber(h.I.ANCIENT_MACE, 1);
+  h.emit('npc-dialogue:action', { npcId: h.N.GENERAL_WARTFACE, stepId: 'DXR-dR' });
+  assert.equal(inventory.getAmount(h.I.ANCIENT_MACE), 0, 'a past payment is not reusable after losing its mace');
+});
+
+test('Another Slice of H.A.M.: following sergeants cannot bypass the crate or an unfinished patrol', () => {
+  for (const hide of [false, true]) {
+    const h = setup();
+    h.quest.setStage(h.player, 9);
+    h.setLocation(3172, 9569, 0);
+    h.enterZone(0);
+    h.emit('npc-dialogue:choice', { npcId: h.N.SERGEANT_MOSSFISTS, option: 'Both of you follow me' });
+    if (hide) {
+      h.dispatchObject({ objectId: 23283, x: 2408, y: 5538 });
+      h.advance();
+    }
+    h.setLocation(2412, 5537, 0);
+    h.enterZone(1);
+    assert.equal(h.quest.getStage(h.player), 9);
+    assert.deepEqual([h.getLocation().getX(), h.getLocation().getY()], [3172, 9569]);
+    assert.equal(h.attacks.length, 0);
+    h.advance();
+    h.advance();
+    assert.notEqual(h.attrs.get('another-slice-of-ham:patrol-passed'), true, 'a cancelled patrol cannot finish after ejection');
+  }
+});
+
+test('Another Slice of H.A.M.: walking from the entry to the marked crate does not cross guard detection', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 9);
+  h.setLocation(3172, 9569, 0);
+  h.enterZone(0);
+  // The real native object route follows the west corridor before approaching the crate.
+  for (const [x, y] of [[2396, 5543], [2396, 5538], [2407, 5538]]) {
+    h.setLocation(x, y);
+    for (const { zone, fn } of h.hooks.zoneEnter) {
+      if (x >= zone.minX && x <= zone.maxX && y >= zone.minY && y <= zone.maxY) fn({ player: h.player });
+    }
+    assert.deepEqual([h.getLocation().getX(), h.getLocation().getY()], [x, y], 'the approach must not eject the player before Hide-behind resolves');
+  }
+  h.dispatchObject({ objectId: 23283, x: 2408, y: 5538 });
+  assert.equal(h.varbits.get(3558), 1);
+});
+
+test('Another Slice of H.A.M.: logout cancels the patrol and restores only fresh owned tunnel actors', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 9);
+  h.setLocation(3172, 9569, 0);
+  h.enterZone(0);
+  const oldActors = [...h.spawned];
+  h.dispatchObject({ objectId: 23283, x: 2408, y: 5538 });
+  h.advance();
+  for (const logout of h.hooks.logout) logout({ player: h.player });
+  assert.ok(oldActors.every((npc) => h.removed.includes(npc)));
+  h.advance();
+  assert.notEqual(h.attrs.get('another-slice-of-ham:patrol-passed'), true);
+  const start = h.spawned.length;
+  for (const login of h.hooks.login) login({ player: h.player });
+  const restored = h.spawned.slice(start);
+  assert.equal(restored.filter((npc) => npc.getId() === h.N.GUARD_86).length, 3);
+  assert.ok(restored.every((npc) => npc.getOwner() === h.player && !oldActors.includes(npc)));
+  h.advance();
+  h.advance();
+  assert.equal(h.attrs.get('another-slice-of-ham:patrol-passed'), true, 'the restored hiding checkpoint can complete');
+});
+
+test('Another Slice of H.A.M.: real NPC combat targets and permission survive distraction recovery', () => {
+  const h = setup({ realNpcs: true });
+  try {
+    h.quest.setStage(h.player, 9);
+    h.setLocation(2396, 5553, 0);
+    for (const login of h.hooks.login) login({ player: h.player });
+    h.dispatchObject({ objectId: 23283, x: 2408, y: 5538 });
+    h.advance(); h.advance();
+    h.setLocation(2412, 5537, 0);
+    h.enterZone(1);
+    const guard = h.spawned.find((npc) => npc.getId() === h.N.GUARD_86 && npc.getLocation().getX() === 2412);
+    const sergeant = h.spawned.find((npc) => npc.getCombat().getTarget() === guard);
+    assert.ok(sergeant, 'the real sergeant Combat accepted its guard target');
+    assert.equal(guard.getCombat().getTarget(), sergeant);
+    guard.setNeedsPlacement(false); sergeant.setNeedsPlacement(false);
+    for (const [attacker, target] of [[guard, sergeant], [sergeant, guard]]) {
+      assert.equal(h.core.CombatFactory.canAttackPermission(attacker, target), h.core.CanAttackResponse.CAN_ATTACK);
+    }
+    for (const login of h.hooks.login) login({ player: h.player });
+    assert.equal(guard.getCombat().getTarget(), sergeant, 'login restores the same owned combat pair');
+    for (const death of h.hooks.npcDeath) death({ npcId: h.N.GUARD_86, npc: guard, killer: h.player });
+    assert.notEqual(h.attrs.get('another-slice-of-ham:guard-defeated'), true, 'a player kill is not the sergeant distraction');
+    for (const death of h.hooks.npcDeath) death({ npcId: h.N.GUARD_86, npc: guard, killer: sergeant });
+    assert.equal(h.attrs.get('another-slice-of-ham:guard-defeated'), true);
+    h.emit('ladders:climb', { objectId: 23376, handled: false });
+    assert.equal(h.quest.getStage(h.player), 10);
+  } finally {
+    for (const logout of h.hooks.logout) logout({ player: h.player });
+    for (const npc of h.spawned) h.core.World.markNpcCombatActive(npc, false);
+  }
 });
