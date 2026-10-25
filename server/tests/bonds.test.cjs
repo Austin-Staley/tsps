@@ -457,7 +457,41 @@ test("Deposit puts a bond in the pouch and Convert pays from the pouch dialog's 
   player.getInventory().adds(COINS, CONVERT_FEE);
   handlers.buttons.get(uid(863, 23))({ player });
   assert.ok(player.sent.some(([kind, , group]) => kind === "sub" && group === 862));
+  player.getInterfaceId = () => 863;
   player.amountAction.execute(3);
   assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 1, "only the one affordable inventory bond converts");
   assert.equal(player.getInventory().getAmount(COINS), 0);
+});
+
+test("a stale convert dialog action does nothing once the pouch is closed", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  player.getInventory().add(UNTRADEABLE_BOND, 1);
+  player.getInventory().adds(COINS, CONVERT_FEE);
+  handlers.buttons.get(uid(863, 23))({ player });
+  player.getInterfaceId = () => -1;
+  player.amountAction.execute(1);
+  assert.equal(player.getInventory().getAmount(UNTRADEABLE_BOND), 1);
+  assert.equal(player.getInventory().getAmount(COINS), CONVERT_FEE);
+});
+
+test("withdrawing into a full inventory keeps the bonds in the pouch; a full pouch refuses deposits", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  const press = (button) => handlers.buttons.get(uid(863, button))({ player, buttonId: uid(863, button) });
+  player.setAttribute("bonds:pouch-tradeable", 5);
+  for (let i = 0; i < 28; i++) player.getInventory().add(LOBSTER, 1);
+  press(20); // All
+  press(11); // Move to Inventory
+  assert.equal(player.getAttribute("bonds:pouch-tradeable"), 5);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 0);
+  assert.ok(player.messages.some((m) => m.includes("enough inventory space")));
+
+  player.setAttribute("bonds:pouch-tradeable", 100);
+  player.getInventory().deleteNumber(LOBSTER, 1);
+  player.getInventory().add(TRADEABLE_BOND, 1);
+  press(12);
+  assert.equal(player.getAttribute("bonds:pouch-tradeable"), 100);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 1);
+  assert.ok(player.messages.includes(POUCH_FULL));
 });
