@@ -1,0 +1,1445 @@
+{
+  "_about": "Soul Wars (https://oldschool.runescape.wiki/w/Soul_Wars). Recorded: rsprox 227/00079 (two games), 234/03277 (the tutorial and five games), 229/00668 (the main-game lobby); seasonal worlds, so their Zeal is boosted and not used. Arena coords are the template's (the match copies it into an instance). Wiki values are marked; calibrated ones are guesses.",
+  "_entry": "Wiki: total level 500 and combat 40; no food, potions, capes, followers or non-combat items in the waiting area; not poisoned, envenomed or diseased. Recorded: the back-slot refusal.",
+  "entry": {
+    "totalLevel": 500,
+    "combat": 40
+  },
+  "_lobby": "Recorded: the Edgeville portal (3082,3473) and Ferox's (3156,10025) to (2206,2858); the leave portal's menu; the waiting-area barrier at (2199,2842) (west of it is the waiting area); HUD 434 shows 'N/20' below 20 and the count above it; the countdown runs 290 ticks once 20 wait, 'The next Soul Wars game will start shortly.' 20 ticks before. Calibrated: the lobby and waiting-area bounds.",
+  "lobby": {
+    "arrive": [
+      2206,
+      2858,
+      0
+    ],
+    "afterGame": [
+      2210,
+      2851,
+      0
+    ],
+    "bounds": [
+      2180,
+      2828,
+      2230,
+      2870
+    ],
+    "waiting": [
+      2180,
+      2830,
+      2198,
+      2856
+    ],
+    "barrier": [
+      2199,
+      2842
+    ],
+    "edgeville": [
+      3082,
+      3476,
+      0
+    ],
+    "ferox": [
+      3158,
+      10027,
+      0
+    ]
+  },
+  "minPlayers": 20,
+  "countdownTicks": 290,
+  "shortlyAt": 20,
+  "countdown": [
+    [
+      230,
+      "4 minutes"
+    ],
+    [
+      200,
+      "3 minutes"
+    ],
+    [
+      150,
+      "2 minutes"
+    ],
+    [
+      100,
+      "1 minute"
+    ],
+    [
+      50,
+      "30 seconds"
+    ],
+    [
+      20,
+      "10 seconds"
+    ]
+  ],
+  "_match": "Recorded: 1500 ticks, 'Time remaining' every 250, five avatar kills ends it two ticks on; the teams' bases. Wiki: more kills wins, equal is a draw. Calibrated: the arena's chunk rectangle (all the template tiles the recordings saw).",
+  "arena": {
+    "chunk": [
+      264,
+      359
+    ],
+    "size": [
+      24,
+      13
+    ]
+  },
+  "gameTicks": 1500,
+  "timeEvery": 250,
+  "killsToWin": 5,
+  "endDelay": 2,
+  "bases": {
+    "blue": [
+      2141,
+      2908,
+      0
+    ],
+    "red": [
+      2275,
+      2919,
+      0
+    ]
+  },
+  "_avatars": "Recorded: their tiles, strength as the share of damage they block (100% blocks everything: 'Your attacks seem to have no effect on the avatar.' about every 18 ticks), the defeat and the 35-tick return. Wiki: 1,500 HP, combat 525.",
+  "avatars": {
+    "blue": {
+      "npc": 10531,
+      "name": "Avatar of Creation",
+      "tile": [
+        2125,
+        2889,
+        0
+      ]
+    },
+    "red": {
+      "npc": 10532,
+      "name": "Avatar of Destruction",
+      "tile": [
+        2285,
+        2929,
+        0
+      ]
+    }
+  },
+  "avatarHp": 1500,
+  "returnTicks": 35,
+  "noEffectEvery": 18,
+  "_souls": "Recorded: Forgotten Souls (46: 10534/10535; 76: 10536/10537) and wolves (10533) where the recordings saw them; a soul drops 2 fragments, kept for its killer 100 ticks and gone at 200. Wiki: souls are the only fragment source; wolves drop bones. Calibrated: how many roam at once, and their respawn.",
+  "creatures": {
+    "weak": {
+      "npcs": [
+        10534,
+        10535
+      ],
+      "count": 8,
+      "drop": [
+        25201,
+        2
+      ]
+    },
+    "strong": {
+      "npcs": [
+        10536,
+        10537
+      ],
+      "count": 4,
+      "drop": [
+        25201,
+        2
+      ]
+    },
+    "wolf": {
+      "npcs": [
+        10533
+      ],
+      "count": 4,
+      "drop": [
+        25199,
+        1
+      ]
+    }
+  },
+  "creatureRespawn": [
+    20,
+    40
+  ],
+  "spawnTiles": {
+    "weak": [
+      [
+        2152,
+        2928
+      ],
+      [
+        2155,
+        2925
+      ],
+      [
+        2156,
+        2923
+      ],
+      [
+        2156,
+        2925
+      ],
+      [
+        2156,
+        2927
+      ],
+      [
+        2156,
+        2928
+      ],
+      [
+        2157,
+        2918
+      ],
+      [
+        2157,
+        2926
+      ],
+      [
+        2157,
+        2928
+      ],
+      [
+        2157,
+        2933
+      ],
+      [
+        2158,
+        2926
+      ],
+      [
+        2158,
+        2930
+      ],
+      [
+        2159,
+        2922
+      ],
+      [
+        2159,
+        2924
+      ],
+      [
+        2159,
+        2925
+      ],
+      [
+        2159,
+        2926
+      ],
+      [
+        2159,
+        2927
+      ],
+      [
+        2159,
+        2930
+      ],
+      [
+        2159,
+        2935
+      ],
+      [
+        2160,
+        2921
+      ],
+      [
+        2160,
+        2922
+      ],
+      [
+        2160,
+        2923
+      ],
+      [
+        2160,
+        2926
+      ],
+      [
+        2160,
+        2931
+      ],
+      [
+        2160,
+        2934
+      ],
+      [
+        2160,
+        2935
+      ],
+      [
+        2161,
+        2916
+      ],
+      [
+        2161,
+        2922
+      ],
+      [
+        2161,
+        2923
+      ],
+      [
+        2161,
+        2930
+      ],
+      [
+        2161,
+        2933
+      ],
+      [
+        2161,
+        2934
+      ],
+      [
+        2161,
+        2936
+      ],
+      [
+        2161,
+        2937
+      ],
+      [
+        2162,
+        2921
+      ],
+      [
+        2162,
+        2922
+      ],
+      [
+        2162,
+        2930
+      ],
+      [
+        2162,
+        2934
+      ],
+      [
+        2163,
+        2921
+      ],
+      [
+        2163,
+        2924
+      ],
+      [
+        2163,
+        2925
+      ],
+      [
+        2163,
+        2930
+      ],
+      [
+        2163,
+        2931
+      ],
+      [
+        2163,
+        2933
+      ],
+      [
+        2164,
+        2923
+      ],
+      [
+        2164,
+        2925
+      ],
+      [
+        2164,
+        2928
+      ],
+      [
+        2164,
+        2930
+      ],
+      [
+        2164,
+        2931
+      ],
+      [
+        2164,
+        2934
+      ],
+      [
+        2165,
+        2922
+      ],
+      [
+        2165,
+        2923
+      ],
+      [
+        2165,
+        2930
+      ],
+      [
+        2165,
+        2931
+      ],
+      [
+        2166,
+        2923
+      ],
+      [
+        2166,
+        2924
+      ],
+      [
+        2166,
+        2926
+      ],
+      [
+        2166,
+        2928
+      ],
+      [
+        2166,
+        2929
+      ],
+      [
+        2166,
+        2930
+      ],
+      [
+        2166,
+        2931
+      ],
+      [
+        2166,
+        2935
+      ],
+      [
+        2167,
+        2920
+      ],
+      [
+        2167,
+        2923
+      ],
+      [
+        2167,
+        2924
+      ],
+      [
+        2167,
+        2925
+      ],
+      [
+        2167,
+        2927
+      ],
+      [
+        2167,
+        2928
+      ],
+      [
+        2167,
+        2929
+      ],
+      [
+        2167,
+        2932
+      ],
+      [
+        2167,
+        2936
+      ],
+      [
+        2168,
+        2921
+      ],
+      [
+        2168,
+        2922
+      ],
+      [
+        2168,
+        2923
+      ],
+      [
+        2168,
+        2924
+      ],
+      [
+        2168,
+        2927
+      ],
+      [
+        2168,
+        2930
+      ],
+      [
+        2168,
+        2936
+      ],
+      [
+        2169,
+        2921
+      ],
+      [
+        2169,
+        2922
+      ],
+      [
+        2169,
+        2926
+      ],
+      [
+        2169,
+        2927
+      ],
+      [
+        2169,
+        2928
+      ],
+      [
+        2169,
+        2935
+      ],
+      [
+        2169,
+        2936
+      ],
+      [
+        2170,
+        2917
+      ],
+      [
+        2170,
+        2922
+      ],
+      [
+        2170,
+        2926
+      ],
+      [
+        2170,
+        2928
+      ],
+      [
+        2170,
+        2931
+      ],
+      [
+        2171,
+        2924
+      ],
+      [
+        2171,
+        2925
+      ],
+      [
+        2171,
+        2926
+      ],
+      [
+        2171,
+        2931
+      ],
+      [
+        2171,
+        2933
+      ],
+      [
+        2172,
+        2925
+      ],
+      [
+        2172,
+        2928
+      ],
+      [
+        2172,
+        2929
+      ],
+      [
+        2172,
+        2931
+      ],
+      [
+        2172,
+        2934
+      ],
+      [
+        2173,
+        2930
+      ],
+      [
+        2173,
+        2936
+      ],
+      [
+        2174,
+        2919
+      ],
+      [
+        2174,
+        2920
+      ],
+      [
+        2174,
+        2926
+      ],
+      [
+        2174,
+        2927
+      ],
+      [
+        2176,
+        2925
+      ],
+      [
+        2238,
+        2892
+      ],
+      [
+        2239,
+        2900
+      ],
+      [
+        2240,
+        2886
+      ],
+      [
+        2240,
+        2893
+      ],
+      [
+        2241,
+        2894
+      ],
+      [
+        2241,
+        2895
+      ],
+      [
+        2242,
+        2888
+      ],
+      [
+        2242,
+        2892
+      ],
+      [
+        2242,
+        2895
+      ],
+      [
+        2243,
+        2886
+      ],
+      [
+        2243,
+        2894
+      ],
+      [
+        2243,
+        2896
+      ],
+      [
+        2244,
+        2889
+      ],
+      [
+        2244,
+        2893
+      ],
+      [
+        2244,
+        2894
+      ],
+      [
+        2244,
+        2897
+      ],
+      [
+        2244,
+        2899
+      ],
+      [
+        2245,
+        2887
+      ],
+      [
+        2245,
+        2889
+      ],
+      [
+        2245,
+        2890
+      ],
+      [
+        2245,
+        2902
+      ],
+      [
+        2246,
+        2887
+      ],
+      [
+        2246,
+        2890
+      ],
+      [
+        2246,
+        2894
+      ],
+      [
+        2246,
+        2895
+      ],
+      [
+        2246,
+        2896
+      ],
+      [
+        2247,
+        2887
+      ],
+      [
+        2248,
+        2893
+      ],
+      [
+        2248,
+        2895
+      ],
+      [
+        2248,
+        2898
+      ],
+      [
+        2248,
+        2899
+      ],
+      [
+        2248,
+        2902
+      ],
+      [
+        2249,
+        2886
+      ],
+      [
+        2249,
+        2887
+      ],
+      [
+        2249,
+        2889
+      ],
+      [
+        2249,
+        2891
+      ],
+      [
+        2249,
+        2892
+      ],
+      [
+        2249,
+        2895
+      ],
+      [
+        2249,
+        2897
+      ],
+      [
+        2249,
+        2898
+      ],
+      [
+        2249,
+        2900
+      ],
+      [
+        2250,
+        2888
+      ],
+      [
+        2250,
+        2892
+      ],
+      [
+        2250,
+        2896
+      ],
+      [
+        2250,
+        2898
+      ],
+      [
+        2251,
+        2886
+      ],
+      [
+        2251,
+        2891
+      ],
+      [
+        2251,
+        2893
+      ],
+      [
+        2251,
+        2896
+      ],
+      [
+        2251,
+        2897
+      ],
+      [
+        2251,
+        2898
+      ],
+      [
+        2251,
+        2902
+      ],
+      [
+        2252,
+        2897
+      ],
+      [
+        2253,
+        2891
+      ],
+      [
+        2253,
+        2896
+      ],
+      [
+        2253,
+        2901
+      ],
+      [
+        2254,
+        2886
+      ],
+      [
+        2254,
+        2889
+      ],
+      [
+        2254,
+        2890
+      ],
+      [
+        2254,
+        2899
+      ],
+      [
+        2255,
+        2887
+      ],
+      [
+        2255,
+        2888
+      ],
+      [
+        2255,
+        2889
+      ],
+      [
+        2256,
+        2891
+      ]
+    ],
+    "strong": [
+      [
+        2188,
+        2930
+      ],
+      [
+        2189,
+        2931
+      ],
+      [
+        2190,
+        2935
+      ],
+      [
+        2191,
+        2891
+      ],
+      [
+        2192,
+        2889
+      ],
+      [
+        2192,
+        2893
+      ],
+      [
+        2194,
+        2926
+      ],
+      [
+        2194,
+        2938
+      ],
+      [
+        2195,
+        2928
+      ],
+      [
+        2195,
+        2931
+      ],
+      [
+        2196,
+        2929
+      ],
+      [
+        2197,
+        2889
+      ],
+      [
+        2197,
+        2928
+      ],
+      [
+        2199,
+        2928
+      ],
+      [
+        2200,
+        2893
+      ],
+      [
+        2201,
+        2889
+      ],
+      [
+        2202,
+        2895
+      ],
+      [
+        2202,
+        2928
+      ],
+      [
+        2202,
+        2935
+      ],
+      [
+        2203,
+        2936
+      ],
+      [
+        2203,
+        2942
+      ],
+      [
+        2205,
+        2892
+      ],
+      [
+        2205,
+        2929
+      ],
+      [
+        2206,
+        2882
+      ],
+      [
+        2206,
+        2928
+      ],
+      [
+        2206,
+        2929
+      ],
+      [
+        2208,
+        2932
+      ],
+      [
+        2209,
+        2885
+      ],
+      [
+        2209,
+        2926
+      ],
+      [
+        2209,
+        2927
+      ],
+      [
+        2210,
+        2891
+      ],
+      [
+        2210,
+        2894
+      ],
+      [
+        2211,
+        2928
+      ],
+      [
+        2212,
+        2927
+      ],
+      [
+        2213,
+        2927
+      ],
+      [
+        2213,
+        2932
+      ],
+      [
+        2214,
+        2895
+      ],
+      [
+        2214,
+        2928
+      ],
+      [
+        2215,
+        2892
+      ],
+      [
+        2215,
+        2931
+      ],
+      [
+        2216,
+        2886
+      ],
+      [
+        2217,
+        2928
+      ],
+      [
+        2217,
+        2929
+      ],
+      [
+        2218,
+        2927
+      ],
+      [
+        2219,
+        2889
+      ],
+      [
+        2219,
+        2896
+      ],
+      [
+        2221,
+        2894
+      ],
+      [
+        2221,
+        2925
+      ],
+      [
+        2222,
+        2929
+      ],
+      [
+        2223,
+        2895
+      ],
+      [
+        2223,
+        2896
+      ],
+      [
+        2224,
+        2929
+      ],
+      [
+        2225,
+        2935
+      ],
+      [
+        2226,
+        2928
+      ],
+      [
+        2226,
+        2932
+      ],
+      [
+        2228,
+        2929
+      ]
+    ],
+    "wolf": [
+      [
+        2190,
+        2897
+      ],
+      [
+        2191,
+        2896
+      ],
+      [
+        2192,
+        2896
+      ],
+      [
+        2194,
+        2888
+      ],
+      [
+        2194,
+        2933
+      ],
+      [
+        2195,
+        2893
+      ],
+      [
+        2195,
+        2939
+      ],
+      [
+        2196,
+        2888
+      ],
+      [
+        2196,
+        2895
+      ],
+      [
+        2196,
+        2927
+      ],
+      [
+        2197,
+        2895
+      ],
+      [
+        2198,
+        2927
+      ],
+      [
+        2199,
+        2889
+      ],
+      [
+        2199,
+        2928
+      ],
+      [
+        2200,
+        2927
+      ],
+      [
+        2200,
+        2934
+      ],
+      [
+        2201,
+        2932
+      ],
+      [
+        2202,
+        2928
+      ],
+      [
+        2204,
+        2928
+      ],
+      [
+        2205,
+        2928
+      ],
+      [
+        2206,
+        2936
+      ],
+      [
+        2209,
+        2886
+      ],
+      [
+        2209,
+        2892
+      ],
+      [
+        2209,
+        2928
+      ],
+      [
+        2211,
+        2932
+      ],
+      [
+        2212,
+        2928
+      ],
+      [
+        2213,
+        2928
+      ],
+      [
+        2213,
+        2934
+      ],
+      [
+        2215,
+        2927
+      ],
+      [
+        2215,
+        2928
+      ],
+      [
+        2217,
+        2886
+      ],
+      [
+        2218,
+        2930
+      ],
+      [
+        2220,
+        2887
+      ],
+      [
+        2220,
+        2927
+      ],
+      [
+        2220,
+        2928
+      ],
+      [
+        2222,
+        2926
+      ],
+      [
+        2222,
+        2934
+      ]
+    ]
+  },
+  "dropPrivateTicks": 100,
+  "dropLifeTicks": 200,
+  "_obelisk": "Recorded: the obelisk at (2206,2911) takes every fragment: -2% enemy strength each when the team holds it, -0.5% otherwise (with the hint), and the refusals.",
+  "obelisk": {
+    "tile": [
+      2206,
+      2911
+    ],
+    "locs": {
+      "neutral": 40449,
+      "blue": 40450,
+      "red": 40451
+    },
+    "held": 2,
+    "unheld": 0.5
+  },
+  "_control": "Recorded: alignment 0 (blue) - 60 (neutral) - 120 (red), contested and holder varbits; 2 a tick with a small majority, up to 8 with a big one; the holder changes at the ends with the capture line and the loc swaps; uncontested it drifts back to the holder at 2 a tick. Calibrated: the capture zones' bounds.",
+  "control": {
+    "obelisk": {
+      "name": "Soul Obelisk",
+      "zone": [
+        2198,
+        2903,
+        2215,
+        2920
+      ],
+      "alignment": "soul_wars_obelisk_alignment",
+      "contested": "soul_wars_obelisk_contested",
+      "holder": "soul_wars_obelisk_holder"
+    },
+    "east": {
+      "name": "eastern graveyard",
+      "zone": [
+        2246,
+        2916,
+        2262,
+        2934
+      ],
+      "alignment": "soul_wars_east_gy_alignment",
+      "contested": "soul_wars_east_gy_contested",
+      "holder": "soul_wars_east_gy_holder"
+    },
+    "west": {
+      "name": "western graveyard",
+      "zone": [
+        2153,
+        2889,
+        2170,
+        2907
+      ],
+      "alignment": "soul_wars_west_gy_alignment",
+      "contested": "soul_wars_west_gy_contested",
+      "holder": "soul_wars_west_gy_holder"
+    }
+  },
+  "captureRate": {
+    "min": 2,
+    "max": 8,
+    "perPlayer": 2,
+    "drift": 2
+  },
+  "_graveyards": "Recorded: a death on the same tick as 'Oh dear, you are dead!' goes to the team's held graveyard (red east, blue west, as held); 17 ticks a ghost; the sanctuary's barriers let the living out only; the immunity graphic as they leave. Inferred: no graveyard held sends them to their base.",
+  "graveyards": {
+    "east": {
+      "respawn": [
+        [
+          2253,
+          2924
+        ],
+        [
+          2253,
+          2925
+        ],
+        [
+          2253,
+          2926
+        ]
+      ],
+      "barriers": {
+        "neutral": 40458,
+        "blue": 40452,
+        "red": 40455
+      },
+      "barrierTiles": [
+        [
+          2253,
+          2923,
+          1
+        ],
+        [
+          2253,
+          2927,
+          3
+        ]
+      ]
+    },
+    "west": {
+      "respawn": [
+        [
+          2162,
+          2897
+        ],
+        [
+          2162,
+          2898
+        ],
+        [
+          2162,
+          2899
+        ]
+      ],
+      "barriers": {
+        "neutral": 40459,
+        "blue": 40453,
+        "red": 40456
+      },
+      "barrierTiles": [
+        [
+          2162,
+          2896,
+          1
+        ],
+        [
+          2162,
+          2900,
+          3
+        ]
+      ]
+    }
+  },
+  "ghostTicks": 17,
+  "immuneTicks": 6,
+  "_supplies": "Recorded: the tables' Take-1/5/10 and Take-from (X); a potion boosts Attack, Strength, Defence, Ranged and Magic by 5 + 15%; a bandage heals about 15% (Wiki: 1 + 15% of max HP, and all run energy, curing poison).",
+  "items": {
+    "fragment": 25201,
+    "bones": 25199,
+    "bandages": 25202,
+    "potions": [
+      25203,
+      25204,
+      25205,
+      25206
+    ],
+    "capes": {
+      "blue": 25208,
+      "red": 25207
+    }
+  },
+  "_bones": "Wiki: buried in a graveyard (or the base) they give the team's avatar 1% strength back, a third of that in a graveyard the team doesn't hold; a death drops one set plus every bone and fragment carried. Unrecorded: the burial line.",
+  "boneStrength": 1,
+  "_activity": "Recorded: the bar (varbit soul_wars_activity_value) is 800, falling 3 a tick from 18 ticks in, reset by actions. Wiki: an empty bar removes the player, and they wait 10 minutes to rejoin. Unrecorded: the removal's line.",
+  "activity": {
+    "max": 800,
+    "drain": 3,
+    "from": 18,
+    "banTicks": 1000
+  },
+  "_zeal": "Wiki: at most 40 for a loss, 50 a draw, 60 a win; full only with 10:15 played; contributions capped at fragments 30, areas 6, avatar damage 260, bones 15. Calibrated: each contribution counts as a share of its cap, and the shares add up to the whole.",
+  "zeal": {
+    "loss": 40,
+    "draw": 50,
+    "win": 60,
+    "fullTicks": 1025,
+    "caps": {
+      "fragments": 30,
+      "areas": 6,
+      "damage": 260,
+      "bones": 15,
+      "kills": 10
+    }
+  },
+  "music": {
+    "lobby": 686,
+    "game": 685,
+    "end": 285
+  },
+  "messages": {
+    "backSlot": "You can't enter a waiting area while wearing something on your back.",
+    "restricted": "Food, potions, capes, followers and non-combat items are all restricted.",
+    "requirements": "You need a total level of 500 and a combat level of 40 to play Soul Wars.",
+    "poisoned": "You can't enter a waiting area while poisoned, envenomed or diseased.",
+    "banned": "You were removed from your last game for inactivity, so you must wait before joining another.",
+    "leaveWaiting": "Are you sure you want to leave?",
+    "leavePortal": "Where would you like to go?",
+    "shortly": "The next Soul Wars game will start shortly.",
+    "begun": "The game of Soul Wars has begun!",
+    "nomadStart": "The time is now! Crush their souls!",
+    "time": "Time remaining: {time}",
+    "noEffect": "Your attacks seem to have no effect on the avatar.",
+    "teammates": "You can't attack your teammates!",
+    "defeated": "<col={colour}>The {team} team has defeated the {avatar}!</col>",
+    "returned": "<col={colour}>The {avatar} has returned!</col>",
+    "captured": "<col={colour}>The {team} team has taken control of the {place}!</col>",
+    "charged": "You charge the Soul Obelisk with soul fragments and weaken the enemy avatar.",
+    "notHeld": "Your soul fragments will have a greater effect if your team controls the Soul Obelisk.",
+    "avatarDown": "You don't need to do that as the enemy avatar has been defeated.",
+    "avatarWeak": "You don't need to do that as the enemy avatar has already been fully weakened.",
+    "gameEnded": "You can't do that as the game has ended.",
+    "noFragments": "You don't have any soul fragments to sacrifice.",
+    "exitOnly": "You can only exit this sanctuary, not enter it.",
+    "ghostWait": "You must wait for another {seconds} second{s} before you rejoin the battle.",
+    "enemyBarrier": "You can't pass through the enemy team's barrier.",
+    "potion": "You use a potion to boost yourself.",
+    "bandage": "You use a bandage to heal yourself.",
+    "noBandage": "You do not currently need bandaging.",
+    "bury": "You bury the bones.",
+    "buryWhere": "You need to bury these bones in your base or a graveyard.",
+    "avatarFull": "Your avatar is already at full strength.",
+    "takeX": "How many would you like to take?",
+    "won": "<col={colour}>The {team} team was victorious!</col>",
+    "draw": "The game has ended in a draw!",
+    "zealFirst": "You earned {zeal} Zeal.",
+    "zeal": "You earned {zeal} Zeal. You now have {tokens} Zeal Tokens to spend.",
+    "inactive": "You have been removed from the game for inactivity."
+  }
+}
