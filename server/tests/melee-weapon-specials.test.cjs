@@ -15,10 +15,17 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const core = PluginManager.getCoreApi();
 
+/** Custom events the specials emit, answered by the test's listeners. */
+const listeners = new Map();
+function emitCustomEvent(name, payload) {
+  for (const listener of listeners.get(name) ?? []) listener(payload);
+}
+
 function load(file, overrides) {
   require(`../plugins/combat/specials/${file}.SpecialAttack`)({
     core: overrides ? { ...core, ...overrides } : core,
     registerCombatSpecial: CombatSpecial.register,
+    emitCustomEvent,
   });
 }
 
@@ -287,7 +294,7 @@ test("the infernal axe burns a third of its logs for half Firemaking XP and spen
   assert.equal(axe.meta["infernal-axe"].charges, 4999);
 });
 
-test("Smash lowers Defence by 30% (Statius 75%), on a successful accuracy roll, for players and NPCs", () => {
+test("Smash lowers Defence by 30% (Statius 75%) on a successful hit, for players and NPCs", () => {
   const dwh = special("dragon_warhammer").getCombatMethod();
   const statius = special("statius_warhammer").getCombatMethod();
 
@@ -298,7 +305,9 @@ test("Smash lowers Defence by 30% (Statius 75%), on a successful accuracy roll, 
   assert.equal(goblin.defence, 38, "wiki: then loses 15");
   dwh.handleAfterHitEffects(hit(goblin, 0));
   dwh.handleAfterHitEffects(hit(goblin, 20, false));
-  assert.equal(goblin.defence, 27, "a successful zero still drains; a miss does not");
+  assert.equal(goblin.defence, 38, "wiki: the DWH's hit has to deal damage; an accurate 0 and a miss drain nothing");
+  dwh.handleAfterHitEffects(hit(goblin, 1));
+  assert.equal(goblin.defence, 27, "a 1 is a successful hit");
 
   const boss = npcTarget(100);
   statius.handleAfterHitEffects(hit(boss, 30));
@@ -310,6 +319,38 @@ test("Smash lowers Defence by 30% (Statius 75%), on a successful accuracy roll, 
   const pker = playerTarget({ DEFENCE: 99 });
   statius.handleAfterHitEffects(hit(pker, 30));
   assert.equal(pker.skillManager.level("DEFENCE"), 25, "99 - floor(74.25)");
+});
+
+test("a special that drains nothing asks combat-special:missed-drain, and applies the answer", () => {
+  const asked = [];
+  listeners.set("combat-special:missed-drain", [(event) => {
+    asked.push([event.specialId, event.hit.getTotalDamage()]);
+    if (event.specialId === "dragon_warhammer") event.fraction = 0.05;
+    if (event.specialId === "bandos_godsword") event.levels = 10;
+  }]);
+  try {
+    const dwh = special("dragon_warhammer").getCombatMethod();
+    const bandos = special("bandos_godsword").getCombatMethod();
+    const npc = npcTarget(200);
+    dwh.handleAfterHitEffects(hit(npc, 0));
+    assert.equal(npc.defence, 190, "5% of 200");
+    dwh.handleAfterHitEffects(hit(npc, 30, false));
+    assert.equal(npc.defence, 181, "5% of 190, rounded down");
+    dwh.handleAfterHitEffects(hit(npc, 30));
+    assert.equal(npc.defence, 127, "a damaging Smash drains its 30% and asks nothing");
+    bandos.handleAfterHitEffects(hit(npc, 40, false));
+    assert.equal(npc.defence, 117, "Warstrike's answer drains 10 levels in its order");
+    bandos.handleAfterHitEffects(hit(npc, 25));
+    assert.equal(npc.defence, 92);
+    assert.deepEqual(asked, [["dragon_warhammer", 0], ["dragon_warhammer", 30], ["bandos_godsword", 40]]);
+
+    listeners.set("combat-special:missed-drain", []);
+    dwh.handleAfterHitEffects(hit(npc, 0));
+    bandos.handleAfterHitEffects(hit(npc, 0));
+    assert.equal(npc.defence, 92, "without an answer a failed special drains nothing");
+  } finally {
+    listeners.delete("combat-special:missed-drain");
+  }
 });
 
 test("Warstrike drains Defence, Strength, Prayer, Attack, Magic then Ranged by the damage dealt", () => {
