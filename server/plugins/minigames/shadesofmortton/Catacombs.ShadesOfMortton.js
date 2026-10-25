@@ -118,13 +118,24 @@ function give(player, id, amount) {
   else for (let i = 0; i < amount; i++) inventory.add(new Common.core.Item(id, 1));
 }
 
-/** The slots these rewards take: a stack the inventory already holds takes none. */
-function slotsFor(inventory, rewards) {
-  return rewards.reduce((total, [id, amount]) => {
+/**
+ * Whether every reward fits: the new slots against the free ones, and a stack the inventory
+ * already holds against its cap (add() would clamp the surplus away, after the key is gone).
+ */
+function fits(inventory, rewards) {
+  // Keys don't stack, so the one that dissolves always frees exactly one slot, spares or not.
+  let room = inventory.getFreeSlots() + 1;
+  for (const [id, amount] of rewards) {
     const stacks = Common.core.ItemDefinition.forId(id)?.isStackable?.() === true;
-    if (!stacks) return total + amount;
-    return total + (inventory.getAmount(id) > 0 ? 0 : 1);
-  }, 0);
+    if (!stacks) {
+      room -= amount;
+    } else if (inventory.getAmount(id) > 0) {
+      if (inventory.getAddableAmount(new Common.core.Item(id, amount)) < amount) return false;
+    } else {
+      room -= 1;
+    }
+  }
+  return room >= 0;
 }
 
 function talk(player, pages) {
@@ -152,9 +163,7 @@ function chest({ player, object }) {
   const [pasteLow, pasteHigh] = Common.data.chests.swampPaste[found.metal];
   const paste = Common.randomInt(pasteLow, pasteHigh);
   const rewards = [loot && [loot.id, loot.amount], coins > 0 && [COINS, coins], [Common.objId(SWAMP_PASTE), paste]].filter(Boolean);
-  // The key's own slot is free once it dissolves, so it counts towards the room.
-  const room = inventory.getFreeSlots() + (inventory.getAmount(keyId) === 1 ? 1 : 0);
-  if (slotsFor(inventory, rewards) > room) {
+  if (!fits(inventory, rewards)) {
     player.sendMessage(Common.message("noRoom"));
     return true;
   }
