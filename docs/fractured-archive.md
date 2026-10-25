@@ -477,6 +477,11 @@ From the captures of three kills, the Wiki's Ocellus and strategy pages, and the
 - **The reward chest:** Search opens `tfa_chests` (973), the Archive's copy of the Tombs of Amascut's chest. Its items sit on inventory 1029 (six slots, `tfa_chests`), with Take / Take-5 / Take-10 / Take-All on an item (`interface_inv_init`, 149) and Bank-all (973:5), Take-all (973:7) and Discard-all (973:9, after "Are you sure you want to discard everything?"). Taken to the inventory, bulky drops come noted; banked, they're unnoted. The loot counts for the collection log when the chest is first opened.
 - *Estimates:* the unique chance (4%) and weights, the pet's rate (1/400), the unique chest's tile, opening only your own chest, the chest's item options (as the Tombs of Amascut's), unclaimed loot going to the bank on leaving or logging out (the Wiki says the lobby's Loot Wheelbarrow keeps it), and the cabbage for a poor run (not done). Aether catalyst (3/148) is left out: the cache has no item by that name.
 
+## The rewards
+
+- **Zorya's tome** (`plugins/items/ZoryasTome.plugin.js`): a powered tome (built-in spell, base max hit 18, 3 ticks, 7 tiles / 9 on Longrange), charged by using astral and nature runes on it (3 + 2 a charge, 20,000 max), with Check / Uncharge, one charge a cast and the uncharged id when empty. Its special, Zorya's flow (50%), is x2.5 accuracy and x1.6 damage, and a landed hit buffs the next 3 attacks (5 if used again during the buff) for 30 seconds at 2 ticks each. *Estimates:* that reading of "150% / 60% increased", the five-attack rule, the male-only caster graphics and Sanguinesti's projectile timing. Not done: Configure-Charges in the bank.
+- **Elemental fragments** (`plugins/combat/elementalspells/Fragments.ElementalSpells.js`): "Break" one to add 2 to that element's spells' base max hit for good (`elemental-spells:fragments`, one bit an element). The Wiki doesn't say whether more stack; each element counts once (*estimate*).
+
 ## Spectating from outside
 
 - The lobby's Strategy board (63083, "Spectate") asks "Spectate a specific party." / "Spectate a recent party." / "Cancel.".
