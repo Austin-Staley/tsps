@@ -33,6 +33,7 @@ module.exports = {
     Common.init(api);
     api.persistAttribute(Common.VARPS_ATTRIBUTE, null);
     api.onPlayerLogin(Common.restore);
+    api.onPlayerDeath(Common.endTimeline);
     Renu.attach(api);
     Sites.attach(api);
     Whistle.attach(api);

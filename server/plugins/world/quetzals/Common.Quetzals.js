@@ -186,37 +186,77 @@ function later(player, ticks, action) {
   })());
 }
 
+/** Each player's running timeline. Only it may hold or release the player's movement. */
+const timelines = new WeakMap();
+
+function tileOf(player) {
+  const location = player.getLocation();
+  return [location.getX(), location.getY(), location.getZ()];
+}
+
 /**
  * Runs `steps` ({ tick: action }) from the next tick on, holding the player still until the
- * last one. A logout ends it where the player stands; `onEnd` runs either way.
+ * last one. A logout ends it where the player stands. A death, a move its own steps didn't make
+ * (a respawn, another teleport) or a newer timeline ends it before its next step; `onCancel`
+ * then undoes what it holds, but only while it is still the player's timeline. `onEnd` runs
+ * however it ends.
  */
-function timeline(player, steps, onEnd) {
+function timeline(player, steps, { onEnd, onCancel } = {}) {
   const { Task, TaskManager } = core;
   const last = Math.max(...Object.keys(steps).map(Number));
   const movement = player.getMovementQueue();
-  movement.setBlockMovement(true).reset();
+  let anchor = tileOf(player);
   let tick = 0;
-  TaskManager.submit(new (class extends Task {
+  const task = new (class extends Task {
     constructor() {
       super(1, player, false);
+      this.ended = false;
+      this.cancelled = false;
     }
 
     execute() {
-      tick++;
-      if (!player.isRegistered()) {
+      if (timelines.get(player) !== this || !player.isRegistered()) {
         this.stop();
         return;
       }
+      if (player.isDyingReturn?.() === true || tileOf(player).some((value, index) => value !== anchor[index])) {
+        this.cancel();
+        return;
+      }
+      tick++;
       steps[tick]?.();
+      anchor = tileOf(player);
       if (tick >= last) this.stop();
     }
 
+    cancel() {
+      this.cancelled = true;
+      this.stop();
+    }
+
     stop() {
-      movement.setBlockMovement(false);
-      onEnd?.();
+      if (!this.ended) {
+        this.ended = true;
+        if (timelines.get(player) === this) {
+          timelines.delete(player);
+          movement.setBlockMovement(false);
+          if (this.cancelled) onCancel?.();
+        }
+        onEnd?.();
+      }
       super.stop();
     }
-  })());
+  })();
+  const previous = timelines.get(player);
+  timelines.set(player, task);
+  previous?.stop();
+  movement.setBlockMovement(true).reset();
+  TaskManager.submit(task);
+}
+
+/** Ends the player's running timeline, as a death does (onPlayerDeath, before the respawn). */
+function endTimeline({ player }) {
+  timelines.get(player)?.cancel();
 }
 
 /** An interface's group id and its site icons component (`<name>:icons`, slot = table row). */
@@ -276,7 +316,7 @@ function questComplete(player, key) {
 
 module.exports = {
   init, varbitId, varbit, varp, obj, landingSites, siteById, save, setVarbits, setVarbit, restore,
-  siteBuilt, markBuilt, siteUsable, renuUnlocked, fade, minimap, busy, later, timeline, box, message,
+  siteBuilt, markBuilt, siteUsable, renuUnlocked, fade, minimap, busy, later, timeline, endTimeline, box, message,
   questComplete, menu, openMenu, clickedSite, closeMenu,
   VARPS_ATTRIBUTE, SITE_VARBITS, BASE_APPEARANCE, LAST_DESTINATION, MAIN_MODAL, OVERLAY_ATMOSPHERE_UID,
   get api() { return api; },

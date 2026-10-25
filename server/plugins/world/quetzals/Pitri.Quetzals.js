@@ -107,7 +107,16 @@ function answer({ player, definition, text }) {
   return null;
 }
 
-/** The transcript's "receive a Basic quetzal whistle blueprint": free once, then 500 coins. */
+/** Room for the blueprint, counting the slot a payment of the whole coin stack empties. */
+function roomFor(inventory, blueprint, free) {
+  if (inventory.getAddableAmount(blueprint) >= 1) return true;
+  return !free && inventory.getAmount(Common.core.ItemIdentifiers.COINS) === Common.data.blueprintCost;
+}
+
+/**
+ * The transcript's "receive a Basic quetzal whistle blueprint": free once, then 500 coins. The
+ * free claim and the payment only stand once the blueprint is in the inventory.
+ */
 function giveBlueprint(event) {
   if (event.action !== "receive" || event.target !== BLUEPRINT_TARGET) return;
   if (event.definition?.getName?.() !== PITRI) return;
@@ -115,15 +124,28 @@ function giveBlueprint(event) {
   const { player } = event;
   const inventory = player.getInventory();
   const free = freeBlueprintDue(player);
-  const coins = Common.core.ItemIdentifiers.COINS;
-  if (!free && inventory.getAmount(coins) < Common.data.blueprintCost) {
+  const { COINS } = Common.core.ItemIdentifiers;
+  const cost = Common.data.blueprintCost;
+  const blueprint = new Common.core.Item(Common.obj(BASIC_BLUEPRINT), 1);
+  if (!free && inventory.getAmount(COINS) < cost) {
     player.sendMessage(Common.message("blueprintCoins"));
     event.end = true;
     return;
   }
+  if (!roomFor(inventory, blueprint, free)) {
+    inventory.full();
+    event.end = true;
+    return;
+  }
+  const held = inventory.getAmount(blueprint.getId());
+  if (!free) inventory.delete(COINS, cost);
+  inventory.add(blueprint, true);
+  if (inventory.getAmount(blueprint.getId()) <= held) {
+    if (!free) inventory.add(new Common.core.Item(COINS, cost), true);
+    event.end = true;
+    return;
+  }
   if (free) player.setAttribute(BLUEPRINT_CLAIMED_ATTRIBUTE, true);
-  else inventory.delete(coins, Common.data.blueprintCost);
-  inventory.add(new Common.core.Item(Common.obj(BASIC_BLUEPRINT), 1), true);
 }
 
 function rechargeWhistle({ player, npc, definition }) {

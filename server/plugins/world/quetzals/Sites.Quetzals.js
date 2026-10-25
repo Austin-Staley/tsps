@@ -71,7 +71,7 @@ function build(event) {
   building.add(player);
   Common.timeline(player, {
     [Common.data.landingSite.ticks]: () => finish(player, site),
-  }, () => building.delete(player));
+  }, { onEnd: () => building.delete(player) });
   return true;
 }
 

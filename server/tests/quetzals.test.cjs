@@ -11,6 +11,7 @@ const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { Location } = require("../dist/game/model/Location");
 const { Item } = require("../dist/game/model/Item");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const Quetzals = require("../plugins/world/Quetzals.plugin");
 
 const { Common, Renu, Sites, Whistle, Pitri } = Quetzals._test;
@@ -19,7 +20,7 @@ const varbitId = (name) => CacheDefinitions.getVarbitId(name);
 const varpId = (name) => CacheDefinitions.getVarpId(name);
 
 const tasks = [];
-const hooks = { items: [], npcs: [], objects: [], clicks: [], events: new Map(), conditions: [], persisted: new Map() };
+const hooks = { items: [], npcs: [], objects: [], clicks: [], events: new Map(), conditions: [], deaths: [], persisted: new Map() };
 const dialogueStarts = [];
 let completeQuests = new Set();
 let rumours = 0;
@@ -64,6 +65,7 @@ const api = {
   },
   persistAttribute: (key, value) => hooks.persisted.set(key, value),
   onPlayerLogin: () => {},
+  onPlayerDeath: (handler) => hooks.deaths.push(handler),
   onNpcInteraction: (name, actions) => hooks.npcs.push({ name, actions }),
   onObjectInteraction: (name, actions) => hooks.objects.push({ name, actions }),
   onItemAction: (name, actions) => hooks.items.push({ name, actions }),
@@ -94,7 +96,7 @@ function tick(count = 1) {
   for (let i = tasks.length - 1; i >= 0; i--) if (!tasks[i].running) tasks.splice(i, 1);
 }
 
-function createPlayer({ at = new Location(1584, 3053, 0), items = [], varbits = {}, varps = {}, wilderness = 0 } = {}) {
+function createPlayer({ at = new Location(1584, 3053, 0), items = [], varbits = {}, varps = {}, wilderness = 0, realInventory = false } = {}) {
   const varbitValues = new Map(Object.entries(varbits).map(([name, value]) => [varbitId(name), value]));
   const varpValues = new Map(Object.entries(varps).map(([name, value]) => [varpId(name), value]));
   const attributes = new Map();
@@ -106,6 +108,7 @@ function createPlayer({ at = new Location(1584, 3053, 0), items = [], varbits = 
   let interfaceId = -1;
   let blocked = false;
   let registered = true;
+  let dying = false;
   const amountOf = (id) => (id < 0 ? 0 : slots.reduce((sum, item) => sum + (item.getId() === id ? item.getAmount() : 0), 0));
   const inventory = {
     getItems: () => slots,
@@ -140,9 +143,10 @@ function createPlayer({ at = new Location(1584, 3053, 0), items = [], varbits = 
     sendInterfaceFlagsRange: (uid, from, to, flags) => { sent.flags.push([uid, from, to, flags]); return sender; },
     sendSound: (id) => { sent.sounds.push(id); return sender; },
     sendSoundEffect: (id) => { sent.sounds.push(id); return sender; },
+    sendItemContainer: () => sender,
   };
   const movement = { setBlockMovement: (value) => { blocked = value; return movement; }, reset: () => movement };
-  return {
+  const player = {
     sent,
     slots,
     get blocked() { return blocked; },
@@ -165,7 +169,22 @@ function createPlayer({ at = new Location(1584, 3053, 0), items = [], varbits = 
     setAttribute: (key, value) => attributes.set(key, value),
     sendMessage: (text) => sent.messages.push(text),
     getDialogueManager: () => ({ startDialogues: (chain) => sent.boxes.push(chain.entries[0].text) }),
+    isDyingReturn: () => dying,
+    die() { dying = true; },
+    // As PlayerDeathTask does: reset (dying off, movement unheld), the death hooks, then the respawn tile.
+    respawn(target) {
+      dying = false;
+      blocked = false;
+      for (const handler of hooks.deaths) handler({ player, killer: null, handled: false });
+      location = target;
+    },
   };
+  if (realInventory) {
+    const real = new Inventory(player);
+    items.forEach(([id, amount = 1]) => real.add(new Item(id, amount), false));
+    player.getInventory = () => real;
+  }
+  return player;
 }
 
 const site = (name) => Common.landingSites().find((entry) => entry.name === name);
@@ -427,7 +446,7 @@ test("Pitri gives the basic blueprint free after ten rumours, then for 500 coins
     return event;
   };
   const condition = "If the player has completed 10 rumours and has not claimed the free whistle blueprint:";
-  const player = createPlayer({ items: [[ItemIdentifiers.COINS, 600]] });
+  const player = createPlayer({ items: [[ItemIdentifiers.COINS, 600]], realInventory: true });
   rumours = 9;
   assert.equal(answer(player, condition), false);
   rumours = 10;
@@ -443,6 +462,79 @@ test("Pitri gives the basic blueprint free after ten rumours, then for 500 coins
   assert.equal(player.sent.messages.at(-1), "You need 500 coins to buy a blueprint.");
   assert.equal(player.getInventory().getAmount(obj("hg_whistle_blueprint_1")), 2);
   rumours = 0;
+});
+
+const pitri = { getName: () => "Soar Leader Pitri" };
+const freeBlueprintCondition = "If the player has completed 10 rumours and has not claimed the free whistle blueprint:";
+const answerPitri = (player, text) => hooks.conditions.map((handler) => handler({ player, definition: pitri, text })).find((value) => value != null);
+const receiveBlueprint = (player) => {
+  const event = { player, definition: pitri, action: "receive", target: "a Basic quetzal whistle blueprint", handled: false };
+  for (const handler of hooks.events.get("npc-dialogue:action")) handler(event);
+  return event;
+};
+const filler = (count) => Array.from({ length: count }, () => [obj("logs")]);
+
+test("a full inventory keeps the free blueprint unclaimed until it can be given", () => {
+  const player = createPlayer({ items: filler(28), realInventory: true });
+  rumours = 10;
+  assert.equal(answerPitri(player, freeBlueprintCondition), true);
+  const event = receiveBlueprint(player);
+  assert.equal(event.handled, true);
+  assert.equal(event.end, true);
+  assert.equal(player.getInventory().getAmount(obj("hg_whistle_blueprint_1")), 0);
+  assert.notEqual(player.getAttribute(Pitri.BLUEPRINT_CLAIMED_ATTRIBUTE), true, "the free blueprint is still owed");
+  assert.equal(player.sent.messages.at(-1), "Not enough space in your inventory.");
+  assert.equal(answerPitri(player, freeBlueprintCondition), true);
+
+  player.getInventory().delete(obj("logs"), 1);
+  receiveBlueprint(player);
+  assert.equal(player.getInventory().getAmount(obj("hg_whistle_blueprint_1")), 1);
+  assert.equal(player.getAttribute(Pitri.BLUEPRINT_CLAIMED_ATTRIBUTE), true);
+  rumours = 0;
+});
+
+test("a full inventory keeps the 500 coins, unless paying them frees the coins' slot", () => {
+  const player = createPlayer({ items: [[ItemIdentifiers.COINS, 600], ...filler(27)], realInventory: true });
+  player.setAttribute(Pitri.BLUEPRINT_CLAIMED_ATTRIBUTE, true);
+  const event = receiveBlueprint(player);
+  assert.equal(event.end, true);
+  assert.equal(player.getInventory().getAmount(ItemIdentifiers.COINS), 600, "no payment without the blueprint");
+  assert.equal(player.getInventory().getAmount(obj("hg_whistle_blueprint_1")), 0);
+  assert.equal(player.sent.messages.at(-1), "Not enough space in your inventory.");
+
+  const exact = createPlayer({ items: [[ItemIdentifiers.COINS, 500], ...filler(27)], realInventory: true });
+  exact.setAttribute(Pitri.BLUEPRINT_CLAIMED_ATTRIBUTE, true);
+  assert.notEqual(receiveBlueprint(exact).end, true);
+  assert.equal(exact.getInventory().getAmount(ItemIdentifiers.COINS), 0);
+  assert.equal(exact.getInventory().getAmount(obj("hg_whistle_blueprint_1")), 1, "the emptied coin slot holds it");
+});
+
+test("a death mid-flight ends the whistle journey: the respawn stands and the charge is kept", () => {
+  const whistle = obj("hg_quetzalwhistle_basic");
+  const basic = Whistle.whistleOf(whistle);
+  const respawnTile = new Location(3222, 3218, 0);
+  const player = createPlayer({ items: [[whistle]], at: new Location(1445, 3104, 0) });
+  Whistle.setCharges(player, basic, 5);
+  itemHook("Basic quetzal whistle", "Signal")({ player, itemId: whistle });
+  click(player, "quetzalwhistle_menu", Common.landingSites().indexOf(site("The Teomat")));
+  tick(3);
+  player.die();
+  tick(3);
+  player.respawn(respawnTile);
+  tick(10);
+  assert.deepEqual(at(player.getLocation()), at(respawnTile));
+  assert.equal(Whistle.chargesOf(player, basic), 5);
+  assert.equal(player.varbit("busy"), 0);
+  assert.equal(player.varbit("minimap_state"), 0);
+  assert.equal(player.blocked, false);
+  assert.equal(tasks.length, 0);
+
+  // A new flight after the respawn is not held up by the ended one.
+  itemHook("Basic quetzal whistle", "Signal")({ player, itemId: whistle });
+  click(player, "quetzalwhistle_menu", Common.landingSites().indexOf(site("The Teomat")));
+  tick(11);
+  assert.deepEqual(at(player.getLocation()), [site("The Teomat").x, site("The Teomat").y, site("The Teomat").z]);
+  assert.equal(Whistle.chargesOf(player, basic), 4);
 });
 
 test("the plugin saves the quetzal varps, charges and the free blueprint", () => {

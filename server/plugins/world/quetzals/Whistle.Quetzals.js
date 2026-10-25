@@ -140,8 +140,10 @@ function fly(player, whistle, site) {
   const spotanim = core.CacheDefinitions.getSpotanimId(WHISTLE_SPOTANIM);
   if (seq != null) player.performAnimation(new core.Animation(seq));
   if (spotanim != null) player.performGraphic(new core.Graphic(spotanim));
+  let faded = false;
   Common.timeline(player, {
     [FADE_OUT_TICKS]: () => {
+      faded = true;
       Common.minimap(player, true);
       Common.fade(player, true, FADE_OUT_CYCLES);
     },
@@ -158,7 +160,16 @@ function fly(player, whistle, site) {
       Common.fade(player, false, FADE_IN_CYCLES);
     },
     [CLOSE_OVERLAY_TICKS]: () => sender.closeSubInterface(Common.OVERLAY_ATMOSPHERE_UID),
-  }, () => flights.delete(player));
+  }, {
+    // Ended before landing (a death, another move): no charge goes, and the flight lets go.
+    onCancel: () => {
+      Common.busy(player, false);
+      if (!faded) return;
+      Common.minimap(player, false);
+      sender.closeSubInterface(Common.OVERLAY_ATMOSPHERE_UID);
+    },
+    onEnd: () => flights.delete(player),
+  });
 }
 
 function menuClosed({ player, interfaceId }) {

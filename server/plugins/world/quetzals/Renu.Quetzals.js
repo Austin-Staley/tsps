@@ -93,7 +93,14 @@ function fly(player, site, { recordDestination = true, onLand } = {}) {
       Common.fade(player, false, FADE_CYCLES);
     },
     [CLOSE_OVERLAY_TICKS]: () => sender.closeSubInterface(Common.OVERLAY_ATMOSPHERE_UID),
-  }, () => flights.delete(player));
+  }, {
+    onCancel: () => {
+      Common.minimap(player, false);
+      Common.busy(player, false);
+      sender.closeSubInterface(Common.OVERLAY_ATMOSPHERE_UID);
+    },
+    onEnd: () => flights.delete(player),
+  });
 }
 
 function chooseSite(event) {
