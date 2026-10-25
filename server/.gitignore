@@ -19,3 +19,5 @@ Server
 
 # AI bots roster (plugins/bots/ai/AiBotRoster.js)
 data/saves/ai-bots.json
+data/saves/colosseum-scoreboard.json
+data/saves/araxxor-scoreboard.json
