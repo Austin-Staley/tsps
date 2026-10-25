@@ -9,6 +9,7 @@ import { DefinitionLoader } from "../DefinitionLoader";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { NpcIdentifiers } from "../../../../util/NpcIdentifiers";
 import { PluginManager } from "../../../../plugins/PluginManager";
+import { ServerPerf } from "../../../../util/ServerPerf";
 
 interface RawNpcSpawnDefinition {
     /** Numeric cache id. Use `key` instead to name a constant in NpcIdentifiers. */
@@ -173,26 +174,28 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
     /** Called for humans and bots, before login/map-square hooks and visibility updates. */
     public static activateNear(location: Location, viewDistance = 15): number {
         if (!NpcSpawnDefinitionLoader.lineage || NpcSpawnDefinitionLoader.pendingByRegion.size === 0) return 0;
-        let applied = 0;
-        const regionX = location.getX() >> 6;
-        const regionY = location.getY() >> 6;
-        const radius = Math.max(1, Math.ceil((viewDistance + NpcSpawnDefinitionLoader.MAX_DEFERRED_WANDER_RADIUS) / 64));
-        for (let dx = -radius; dx <= radius; dx++) {
-            for (let dy = -radius; dy <= radius; dy++) {
-                const key = `${location.getZ()}:${regionX + dx}:${regionY + dy}`;
-                const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
-                if (!pending) continue;
-                const remaining: NpcSpawnDefinition[] = [];
-                for (const definition of pending) {
-                    if (NpcSpawnDefinitionLoader.spawn(definition)) applied++;
-                    else remaining.push(definition);
+        return ServerPerf.measurePhase("world.activate_npc_spawns", () => {
+            let applied = 0;
+            const regionX = location.getX() >> 6;
+            const regionY = location.getY() >> 6;
+            const radius = Math.max(1, Math.ceil((viewDistance + NpcSpawnDefinitionLoader.MAX_DEFERRED_WANDER_RADIUS) / 64));
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
+                    const key = `${location.getZ()}:${regionX + dx}:${regionY + dy}`;
+                    const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
+                    if (!pending) continue;
+                    const remaining: NpcSpawnDefinition[] = [];
+                    for (const definition of pending) {
+                        if (NpcSpawnDefinitionLoader.spawn(definition)) applied++;
+                        else remaining.push(definition);
+                    }
+                    if (remaining.length) NpcSpawnDefinitionLoader.pendingByRegion.set(key, remaining);
+                    else NpcSpawnDefinitionLoader.pendingByRegion.delete(key);
                 }
-                if (remaining.length) NpcSpawnDefinitionLoader.pendingByRegion.set(key, remaining);
-                else NpcSpawnDefinitionLoader.pendingByRegion.delete(key);
             }
-        }
-        // shortcut: activated NPCs stay alive to preserve scripts and respawn timers; add sleeping only with state-safe lifecycle support.
-        return applied;
+            // shortcut: activated NPCs stay alive to preserve scripts and respawn timers; add sleeping only with state-safe lifecycle support.
+            return applied;
+        });
     }
 
     private static spawn(definition: NpcSpawnDefinition): boolean {

@@ -24,6 +24,7 @@ const { TaskManager } = require("../dist/game/task/TaskManager");
 const { NPCDeathTask } = require("../dist/game/task/impl/NPCDeathTask");
 const { NPCRespawnTask } = require("../dist/game/task/impl/NPCRespawnTask");
 const { PluginManager } = require("../dist/plugins/PluginManager");
+const { ServerPerf } = require("../dist/util/ServerPerf");
 
 const MAN = 3106;
 const SMOKE_DEVIL = 498;
@@ -122,6 +123,30 @@ test("crossing a square or teleporting activates the destination before map-squa
   const player = {};
   World.onPlayerMoved(player, new Location(3222, 3218, 0), new Location(2400, 9440, 0));
   assert.equal(countAtHook, 1);
+});
+
+test("server perf includes login and teleport activation work without a periodic sweep", (t) => {
+  spawnFile([{ id: MAN, x: 3222, y: 3218 }, { id: SMOKE_DEVIL, x: 2400, y: 9440 }], false);
+  let now = 0n;
+  t.mock.method(process.hrtime, "bigint", () => now);
+  const create = NPC.create;
+  t.mock.method(NPC, "create", function (...args) {
+    now += 7_000_000n;
+    return create.apply(this, args);
+  });
+  const origin = new Location(3222, 3218, 0);
+  const player = { getLocation: () => origin };
+  ServerPerf.beginTick(1, 0, 0, 0, 0);
+  try {
+    World.registerPlayerPosition(player);
+    World.onPlayerMoved(player, origin, new Location(2400, 9440, 0));
+    ServerPerf.endTick(14, 0, World.getNpcs().sizeReturn(), 0);
+    const phase = ServerPerf.getSummary(1).topPhases.find(row => row.name === "world.activate_npc_spawns");
+    assert.equal(phase?.totalMs, 14, "both 7 ms creation bursts must be counted");
+  } finally {
+    ServerPerf.endTick(0, 0, 0, 0);
+    World.unregisterPlayerPosition(player);
+  }
 });
 
 test("a teleport during player processing includes new NPCs in that tick's visibility candidates", () => {

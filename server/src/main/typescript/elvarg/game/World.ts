@@ -1247,9 +1247,7 @@ export class World {
             }
         });
 
-        timed("activate_npc_spawns", () => {
-            for (const player of World.players) NpcSpawnDefinitionLoader.activateNear(BoatManager.rootLocation(player), player.getNpcViewDistance());
-        });
+        for (const player of World.players) NpcSpawnDefinitionLoader.activateNear(BoatManager.rootLocation(player), player.getNpcViewDistance());
         World.rebuildRealPlayerObserverBuckets();
         timed("process_npcs", () => {
             // One pass per cycle: the collection scans every occupied bucket,
