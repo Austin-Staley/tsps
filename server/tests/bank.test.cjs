@@ -23,7 +23,7 @@ const LAVA_BATTLESTAFF_PLACEHOLDER = 90053;
 const DEFINITIONS = {
   995: { name: "Coins", stackable: true },
   13204: { name: "Platinum token", stackable: true },
-  [TRIDENT]: { name: "Trident of the seas" },
+  [TRIDENT]: { name: "Trident of the seas", examine: "This trident has a charge." },
   [LAVA_BATTLESTAFF]: { name: "Lava battlestaff", placeholder: LAVA_BATTLESTAFF_PLACEHOLDER },
   [MYSTIC_LAVA_STAFF]: { name: "Mystic lava staff" },
   [LAVA_BATTLESTAFF_NOTE]: { name: "Lava battlestaff", stackable: true, noteOf: LAVA_BATTLESTAFF },
@@ -33,6 +33,7 @@ ItemDefinition.forId = (id) => {
   return {
     getId: () => id,
     getName: () => def.name,
+    getExamine: () => def.examine ?? "",
     isStackable: () => def.stackable === true,
     isNoted: () => def.noteOf != null,
     unNote: () => def.noteOf ?? id,
@@ -274,6 +275,19 @@ test("clicking Release on a placeholder removes it; other options leave it", () 
 
   click("Release", 8);
   assert.deepEqual(Bank.layout(player), []);
+});
+
+test("a bank item's op 11 examines it without withdrawing", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 1), false);
+
+  Bank.handleWidgetAction(player, {
+    groupId: Bank.MAIN_INTERFACE_ID, childId: 12, buttonNum: Bank.EXAMINE_OP, slot: 0, itemId: TRIDENT,
+  });
+
+  assert.deepEqual(player.messages, ["This trident has a charge."]);
+  assert.equal(player.getBank(0).getAmount(TRIDENT), 1);
+  assert.equal(player.getInventory().getAmount(TRIDENT), 0);
 });
 
 function clickTab(player, tab, buttonNum, option) {

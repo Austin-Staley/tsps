@@ -624,6 +624,15 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         y: reader.short(),
         spellItemId: (reader.byte(), reader.shortAddLE()),
       };
+    case NativeClientPacket.IF_BUTTONX: {
+      // Ops 11-32 carry their op index (live OSRS: a bank item's Examine is IF_BUTTONX op=11).
+      const widgetId = reader.int(), slot = reader.short(), itemId = reader.signedShort();
+      return {
+        type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff,
+        buttonNum: reader.byte(), slot: slot === 0xffff ? undefined : slot,
+        itemId: itemId >= 0 ? itemId : undefined,
+      };
+    }
     case NativeClientPacket.IF_BUTTON1:
     case NativeClientPacket.IF_BUTTON2:
     case NativeClientPacket.IF_BUTTON3:
@@ -1917,6 +1926,17 @@ export function encodeWidgetSetFlagsRange(uid: number, fromSlot: number, toSlot:
   payload.writeUInt16BE(toSlot & 0xffff, 6);
   payload.writeInt32BE(flags | 0, 8);
   return encodeServerPacket(ServerPacketId.WIDGET_SET_FLAGS_RANGE, payload);
+}
+
+/** IF_SETEVENTS_V2: the flags plus a transmit mask for ops 1-32 (bit N for op N+1). */
+export function encodeWidgetSetFlagsRangeV2(uid: number, fromSlot: number, toSlot: number, flags: number, ops: number): Buffer {
+  const payload = Buffer.alloc(16);
+  payload.writeInt32BE(uid | 0);
+  payload.writeUInt16BE(fromSlot & 0xffff, 4);
+  payload.writeUInt16BE(toSlot & 0xffff, 6);
+  payload.writeInt32BE(flags | 0, 8);
+  payload.writeInt32BE(ops | 0, 12);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_FLAGS_RANGE_V2, payload);
 }
 
 export function encodeWidgetSetAnimation(uid: number, animationId: number): Buffer {

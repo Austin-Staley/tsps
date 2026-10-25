@@ -64,6 +64,7 @@ import {
   encodeWidgetSetAnimation,
   encodeWidgetSetFlags,
   encodeWidgetSetFlagsRange,
+  encodeWidgetSetFlagsRangeV2,
   encodeWidgetSetHidden,
   encodeWidgetSetItem,
   encodeWidgetSetModel,
@@ -1338,8 +1339,14 @@ export class PacketSender {
     return this;
   }
 
-  sendInterfaceFlagsRange(uid: number, fromSlot: number, toSlot: number, flags: number): this {
-    this.player.getSession().sendClientPacket(encodeWidgetSetFlagsRange(uid, fromSlot, toSlot, flags));
+  /**
+   * IF_SETEVENTS. With `ops` (bit N for op N+1) it is IF_SETEVENTS_V2, the only way to enable
+   * ops 11-32 - the bank's op 11 Examine.
+   */
+  sendInterfaceFlagsRange(uid: number, fromSlot: number, toSlot: number, flags: number, ops?: number): this {
+    this.player.getSession().sendClientPacket(ops === undefined
+      ? encodeWidgetSetFlagsRange(uid, fromSlot, toSlot, flags)
+      : encodeWidgetSetFlagsRangeV2(uid, fromSlot, toSlot, flags, ops));
     return this;
   }
 

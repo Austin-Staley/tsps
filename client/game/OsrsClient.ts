@@ -2893,6 +2893,8 @@ export class OsrsClient {
                 if (fromSlot === 65535) fromSlot = -1;
                 if (toSlot === 65535) toSlot = -1;
                 const flags = Number(payload.flags) | 0;
+                // IF_SETEVENTS_V2 adds a transmit mask for ops 1-32.
+                const opMask = payload.opMask === undefined ? undefined : Number(payload.opMask) | 0;
                 if (this.widgetManager) {
                     const parent = this.widgetManager.getWidgetByUid(uid);
                     const children = Array.isArray((parent as any)?.children)
@@ -2901,7 +2903,7 @@ export class OsrsClient {
                     // Set flags for each childIndex in the range [fromSlot, toSlot]
                     // The uid becomes the 'id' component of the key (matches dynamic child's id field)
                     for (let childIndex = fromSlot; childIndex <= toSlot; childIndex++) {
-                        this.widgetManager.setWidgetFlagsByKey(uid, childIndex, flags);
+                        this.widgetManager.setWidgetFlagsByKey(uid, childIndex, flags, opMask);
                         const child = childIndex >= 0 ? children[childIndex] : parent;
                         if (child) {
                             markWidgetInteractionDirty(child);
