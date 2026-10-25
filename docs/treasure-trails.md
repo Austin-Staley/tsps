@@ -2,8 +2,8 @@
 
 Beginner clues are in [beginner-treasure-trails.md](beginner-treasure-trails.md). This page covers
 the members tiers, built in `server/plugins/treasuretrails/TreasureTrails.plugin.js`
-(`members: true`) and its `trails/` units. Easy, medium and hard are implemented. Elite and master
-add their step families to the same engine.
+(`members: true`) and its `trails/` units. Easy, medium, hard and elite are implemented. Master
+adds its step families to the same engine.
 
 ## Where the content comes from
 
@@ -63,6 +63,21 @@ Hard has 186 steps:
 | Map | Dig / crate | 4 / 3 | |
 | Music (Cecilia) | NPC | 10 | |
 
+Elite has 124 steps:
+
+| Family | Target | Steps | Extra |
+| --- | --- | --- | --- |
+| Anagram | NPC | 12 | all question challenges, on one shared scroll |
+| Coordinate | Dig | 41 | every one summons a guard: Armadylean 6587 (40), Bandosian 6588 (1) |
+| Cryptic | NPC / loc / dig / kill / key | 15 / 2 / 12 / 14 / 1 | NPC includes Sherlock's skill challenge; the key is the King Black Dragon's chest |
+| Emote | Tile, outfit, Uri | 19 | one emote each, every one with a STASH unit, no double agents |
+| Map | Dig / crate | 5 / 1 | |
+| Music (Cecilia) | NPC | 2 | |
+
+The cache gives elite no puzzle-box or light-box rows. Only master rows use the challenge-box rows,
+and the Wiki also lists light boxes as master-only. The legacy `Puzzle box (elite)` (12161) has no
+row and is not used.
+
 The challenge answers are read from the cache. They agree with the Wiki's challenge-scroll guide
 (the osrsreboxed-db `clue-challenges.json` export) on 89 of 90 questions. The exception is the Old
 Crone's Slayer Tower question: the cache says 623, the Wiki 619. The game uses the cache.
@@ -84,7 +99,7 @@ A trail's state lives in the scroll's item metadata, under `treasure-trails:<tie
 - Banking, dropping, death and saves keep the trail, because they keep item metadata. A scroll
   read before a logout resumed at the same step after logging in again.
 
-**Trail length:** easy trails are 2–4 steps, medium 3–5 and hard 4–6 (Wiki, "Clue scroll (<tier>)"). The
+**Trail length:** easy trails are 2–4 steps, medium 3–5, hard 4–6 and elite 5–7 (Wiki, "Clue scroll (<tier>)"). The
 Wiki publishes no per-length weights, so the length is chosen uniformly; this is an implementation
 assumption.
 
@@ -168,6 +183,46 @@ assumption.
     - The Saradomin wizard only melees, because the NPC loader picks one combat style.
     - The Zamorak wizard lacks the Flames of Zamorak graphic.
     - Their shouts are missing.
+- **Shared challenge scrolls** (elite): elite rows have no challenge scroll of their own. Every
+  elite anagram hands over `trail_elite_anagram_challenge`, and Sherlock hands over
+  `trail_elite_skill_challenge`. Like every challenge, the scroll is carried beside its clue and
+  linked to it by the trail's token, so Read finds that trail's own question or task, and one item
+  stands for many rows.
+- **Sherlock's skill challenges** (elite; `Skills.TreasureTrails.js`, Wiki "Sherlock",
+  Transcript:Sherlock):
+  - **Hand-over:** showing him the clue ("Show this to Sherlock.") adds the challenge scroll beside
+    it (a free slot is needed), with a task from `cluehelper_clue_skillchallenge` stored on the
+    scroll. Read shows the task.
+  - **Choice:** the task is picked from those whose stat requirements the player meets at their
+    current level (the Wiki allows boosts). It falls back to any supported task.
+  - **Counting:** the task counts only when it is done with the scroll in the inventory (Wiki). That
+    marks the scroll and sends "You have completed your elite/master level challenge!"; talking to
+    him then gives the next clue. Before that, he gives his everyday "bring it to me" line.
+  - **Detection:** `trails/data/skill-challenges.json` maps each task to the event its action
+    already emits, matched by item, NPC or prayer:
+    - existing events: `equipment:changed`, `runecrafting:success`, `agility:lap`,
+      `fletching:made`, `hunter:success`, `smithing:success`, `fishing:success`,
+      `woodcutting:success`, `cooking:success`, and NPC deaths;
+    - existing events that now carry the item: `mining:success` and `firemaking:success` gained
+      `itemId`, aerial fishing's `fishing:success` its fish, and `runecrafting:success`
+      `amountPerEssence`;
+    - new generic emits at the action: `magic:enchanted`, `herblore:made`, `crafting:made`,
+      `farming:planted`, and core `prayer:activated`.
+  - **Not assigned:** a task without an entry is content this server lacks: skullball, the
+    Ardougne Castle chest, Dorgesh-Kaan lamps and nickel. Sherlock never sets them.
+- **Kill steps** (elite cryptic, Wiki cryptic clues: "pick up the clue or casket that it drops"):
+  killing one of the step's NPCs while holding the clue takes the clue and drops the next one, or
+  the casket, on the NPC's tile. The drop is the killer's alone and keeps the trail's meta.
+  - A kill step is only rolled if one of its NPCs has a world spawn (`npc-spawns.json`).
+  - That leaves out the pyre-ship barbarian spirit (Barbarian Firemaking isn't implemented), the
+    shellbane gryphon (spawned only inside Troubled Tortugans), and the clue's Frost Nagua. The clue
+    names 13788, but the world's Frost Nagua are 13787.
+  - These steps return once the content does.
+- **Guards** (elite coordinates, Wiki "Armadylean guard", "Bandosian guard"): the hard fight code
+  as it is. The dig summons the step's guard, who must die before the dig gives the clue.
+  - Data gap, outside clue code: melee hits flying monsters here. That includes the Armadylean
+    guard (the Wiki allows only ranged, magic or a halberd) and the aviansies of a kill step ("fly
+    high where a sword cannot help you"). This belongs to NPC combat definitions.
 - **Music:** from Cecilia's Wiki transcript, the player selects the requested track, then speaks to
   her.
   - "Select the song I asked you to play, and speak to me again."
@@ -208,9 +263,16 @@ it with the agent MCP's vision clip, and comparing it with the Wiki's map images
 | `cluehelper_map_hard_4` | Dark Warriors' Fortress crate | `trail_map14` |
 | `cluehelper_map_hard_5` | South-east of the Wilderness Agility Course (volcanoes) | `trail_clue_hard_map006` |
 | `cluehelper_map_hard_6` | South of the Legends' Guild (picnic tables) | `trail_clue_hard_map007` |
+| `cluehelper_map_elite_0` | North-east of Castle Wars | `trail_map19` |
+| `cluehelper_map_elite_1` | Mogre Camp mudskipper cave | `trail_map20` |
+| `cluehelper_map_elite_2` | Zul-Andra | `trail_map21` |
+| `cluehelper_map_elite_3` | South of the Soul Altar | `trail_map22` |
+| `cluehelper_map_elite_4` | East of the Burgh de Rott furnace | `trail_map23` |
+| `cluehelper_map_elite_5` | South-western Ape Atoll shack (crate) | `trail_map24` |
 
 The named `trail_clue_medium_map008`–`012` interfaces were rendered too, not assumed from their
-names. `trail_map19` looks like the Lighthouse map but belongs to another tier.
+names. The six elite maps are the six `trail_map19`–`24` interfaces no other tier uses, each matched
+to the Wiki's elite map image in a slot-14 capture.
 
 The same captures show that the beginner runtime's `MAP_INTERFACES` gets four of its five maps
 wrong:
@@ -233,7 +295,8 @@ rules:
 - **Build:** a hammer, any saw and 10 nails of one metal (not dragon), plus:
   - easy: Construction 27 (boostable) and 2 planks, for 150 Construction XP;
   - medium: Construction 42 and 2 oak planks, for 250 XP;
-  - hard: Construction 55 and 2 teak planks, for 400 XP.
+  - hard: Construction 55 and 2 teak planks, for 400 XP;
+  - elite: Construction 77 and 2 mahogany planks, for 600 XP.
 
   Building sets the unit's varbit.
 - **Search a built unit:** it stores the step's complete outfit, or returns it if the inventory has
@@ -274,6 +337,17 @@ items.
 - ClueCapacity owns the scroll cases (minor at 100, major at 200), including their recovery.
 - Any other milestone item, the easy Large spade at 500, comes with the casket whose completion
   reaches it.
+
+**The Mimic** (Wiki "Mimic"): elite and master tables carry a `mimic_chance` (1/35, 1/15).
+- **The roll:** opening such a casket rolls its roll count and the chance, then asks the Mimic
+  plugin (`treasure-trails:mimic-casket`).
+- **The answer:** the Mimic plugin owns the rest and answers with the Mimic item, keeping the
+  casket's clue rolls (`Shared.initializeCasket`). It answers only for a player who opted in at the
+  strange casket and holds no Mimic. It also answers for the dry protection: the first Mimic is
+  guaranteed on the 25th elite or 10th master casket (`mimic:encountered`).
+- **Then:** the item replaces the casket, the completion and its milestone rewards count, and the
+  message is "The chest turned out to be the Mimic!". The Mimic's own chest later asks for the
+  clue loot through `treasure-trails:roll-casket`, as before.
 
 **The rewarded 1/50 master clue** obeys clue capacity (`treasure-trails:can-receive`). After X Marks
 the Spot it becomes a scroll box (`treasure-trails:clue-item`).
@@ -402,6 +476,27 @@ PR #890 review verification independently decoded RSProx recordings
 - An unarmed walker was killed by a wizard once. The clue survived, and the next dig summoned a fresh
   wizard, as the Wiki describes.
 
+- `tests/treasure-trails-elite.test.cjs` covers all 124 elite steps. It checks:
+  - the skipped rows (three kill steps, four Sherlock tasks);
+  - all 12 anagram challenges on the shared scroll;
+  - every supported Sherlock task (hand-over, task text, refusal before done, the wrong action not
+    counting, the right one counting, then the next clue);
+  - task choice by level, and a task done without the scroll not counting;
+  - every rollable kill step's drop (and the casket on a last step);
+  - both guards, Uri on every emote, and the King Black Dragon key;
+  - the Mimic (opt-in, one at a time, the 25th casket guaranteed once);
+  - the elite casket and the elite STASH units.
+
+- **Elite natural route** on the isolated slot-14 world (game 43714, agent MCP 49814), through real
+  packets with best-in-slot switches:
+  - an Armadylean guard fought and the dig repeated;
+  - Jardric's question answered on the shared elite challenge scroll;
+  - an aviansie killed for a kill step, and its dropped clue picked up;
+  - a Fountain of Heroes emote with Uri's phrase and the next clue;
+  - the Mogre Camp map dug;
+  - Sherlock's hand-over and his "bring it to me" line before the task, on several Sherlock steps.
+- The six elite maps were matched in captures against the Wiki's images.
+
 Sources:
 - [Clue scroll (easy)](https://oldschool.runescape.wiki/w/Clue_scroll_(easy))
 - [STASH](https://oldschool.runescape.wiki/w/STASH)
@@ -419,6 +514,12 @@ Sources:
 - [Double agent](https://oldschool.runescape.wiki/w/Double_agent)
 - [Saradomin wizard](https://oldschool.runescape.wiki/w/Saradomin_wizard)
 - [Hard maps](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Maps/Hard)
+- [Clue scroll (elite)](https://oldschool.runescape.wiki/w/Clue_scroll_(elite))
+- [Sherlock](https://oldschool.runescape.wiki/w/Sherlock) and [his transcript](https://oldschool.runescape.wiki/w/Transcript:Sherlock)
+- [Cryptic clues](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Cryptic_clues)
+- [Armadylean guard](https://oldschool.runescape.wiki/w/Armadylean_guard) and [Bandosian guard](https://oldschool.runescape.wiki/w/Bandosian_guard)
+- [Mimic](https://oldschool.runescape.wiki/w/Mimic)
+- [Elite maps](https://oldschool.runescape.wiki/w/Treasure_Trails/Guide/Maps/Elite)
 - installed cache revision 241
 
 ## Inventory and repeat-step regressions

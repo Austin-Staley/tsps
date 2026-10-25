@@ -9,6 +9,7 @@ const TIERS = [
     uriClueDisplay: "trail_medium_emote_exp9", uriClueMessage: "You've been given a clue!" },
   // Puzzle images are interface 306's varp 261 values: hard's castle, tree and troll (Wiki "Puzzle box").
   { name: "hard", label: "Hard", difficulty: 3, length: [4, 6], stash: { level: 55, xp: 400, plank: "TEAK_PLANK" }, puzzleImages: [1, 2, 3] },
+  { name: "elite", label: "Elite", difficulty: 4, length: [5, 7], stash: { level: 77, xp: 600, plank: "MAHOGANY_PLANK" } },
 ];
 
 const byName = new Map(TIERS.map(tier => [tier.name, tier]));

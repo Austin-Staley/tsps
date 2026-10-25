@@ -31,10 +31,10 @@ function probability(text) {
 }
 
 /** Base rolls plus the table's chance-based tertiaries (milestone tertiaries belong to ClueCapacity). */
-function roll(tier, { entrana = false, random = Math.random } = {}) {
+function roll(tier, { entrana = false, random = Math.random, rolls = null } = {}) {
   const table = TABLES[tier.name];
   if (!table) throw new Error(`No ${tier.name} reward table`);
-  const drops = Rolls.rollTable(entrana ? entranaTable(table) : table, between(table.rolls, random), random);
+  const drops = Rolls.rollTable(entrana ? entranaTable(table) : table, rolls ?? between(table.rolls, random), random);
   for (const tertiary of table.tertiary ?? []) {
     const chance = probability(tertiary.probability);
     if (chance != null && random() < chance) drops.push({ itemId: tertiary.item_id, amount: between(tertiary.quantity, random), noted: tertiary.noted });
@@ -94,6 +94,28 @@ function give(player, drops) {
   return [...credited].map(([itemId, quantity], slot) => ({ itemId, quantity, slot }));
 }
 
+/**
+ * Wiki "Mimic": an elite or master casket may turn out to be the Mimic. The table's chance is
+ * rolled here; the Mimic plugin decides (its opt-in, one at a time, its dry protection) and
+ * answers with the Mimic item carrying this casket's rolls.
+ */
+function mimicCasket(player, tier, rolls, opened, random = Math.random) {
+  const chance = probability(TABLES[tier.name]?.mimic_chance);
+  if (chance == null) return null;
+  const request = { player, tier: tier.name, rolls, rolled: random() < chance, opened, item: null };
+  api.emitCustomEvent("treasure-trails:mimic-casket", request);
+  return request.item ?? null;
+}
+
+/** The completion's milestone rewards on their own, for a casket that became the Mimic. */
+function milestoneDrops(player, tier, count) {
+  const request = { player, completed: count, milestones: TABLES[tier.name]?.milestones ?? [], drops: [], handled: false, error: null };
+  api.emitCustomEvent("treasure-trails:milestone-rewards", request);
+  if (!request.handled || request.error) throw request.error ?? new Error("Treasure Trails milestone service unavailable");
+  const drops = [...request.drops, ...itemMilestones(player, tier, count)];
+  return drops.length ? prepareDrops(clueRewards(player, drops), tier) : [];
+}
+
 function tierOfCasket(id) {
   return TIERS.find(tier => Runtime.data(tier).casket === id) ?? null;
 }
@@ -107,15 +129,20 @@ function open(event) {
   if (player.getAttribute(OPENING_ATTRIBUTE)) return true;
   player.setAttribute(OPENING_ATTRIBUTE, true);
   try {
-    let drops, count;
+    let drops, count, mimic;
     try {
       const completed = Number(player.getAttribute(Runtime.completedAttribute(tier)) ?? 0);
       if (!Number.isSafeInteger(completed) || completed < 0 || completed >= Number.MAX_SAFE_INTEGER) throw new Error(`Invalid ${tier.name} completion count`);
       count = completed + 1;
-      const request = { player, completed: count, milestones: TABLES[tier.name]?.milestones ?? [], drops: roll(tier, { entrana: onEntrana(player) }), handled: false, error: null };
-      api.emitCustomEvent("treasure-trails:milestone-rewards", request);
-      if (!request.handled || request.error) throw request.error ?? new Error("Treasure Trails milestone service unavailable");
-      drops = prepareDrops(clueRewards(player, [...request.drops, ...itemMilestones(player, tier, count)]), tier);
+      const rolls = TABLES[tier.name] ? between(TABLES[tier.name].rolls, Math.random) : null;
+      mimic = mimicCasket(player, tier, rolls, count);
+      if (mimic) drops = milestoneDrops(player, tier, count);
+      else {
+        const request = { player, completed: count, milestones: TABLES[tier.name]?.milestones ?? [], drops: roll(tier, { entrana: onEntrana(player), rolls }), handled: false, error: null };
+        api.emitCustomEvent("treasure-trails:milestone-rewards", request);
+        if (!request.handled || request.error) throw request.error ?? new Error("Treasure Trails milestone service unavailable");
+        drops = prepareDrops(clueRewards(player, [...request.drops, ...itemMilestones(player, tier, count)]), tier);
+      }
     } catch (error) {
       event.error = error;
       player.sendMessage("You can't open this casket right now.");
@@ -123,6 +150,16 @@ function open(event) {
     }
     // A preparation callback may have moved or replaced the clicked stack.
     if (inventory.getItems()[slot] !== item || item.getAmount() < 1) return true;
+    if (mimic) {
+      // The trail is complete; the Mimic's own chest holds its rewards.
+      inventory.setItem(slot, mimic);
+      player.setAttribute(Runtime.completedAttribute(tier), count);
+      give(player, drops);
+      Runtime.restore({ player });
+      player.sendMessage("The chest turned out to be the Mimic!");
+      player.sendMessage(`You have completed ${count} ${tier.name} Treasure Trail${count === 1 ? "" : "s"}.`);
+      return true;
+    }
     inventory.deleteAtSlot(slot, 1);
     player.setAttribute(Runtime.completedAttribute(tier), count);
     const slots = give(player, drops);
