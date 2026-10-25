@@ -263,6 +263,8 @@ async function main(): Promise<void> {
     assert.ok(placeholderMenu[0].deprioritized && placeholderMenu[0].onClick);
     assert.equal(plugin.handleWidgetAction({ widget: items.children![placeholderSlot], option: "Duplicate-item", source: "primary" } as any), true);
 
+    assert.ok((items.children![0] as any).jsListeners?.onDragComplete, "a laid-out item's drag rearranges the layout");
+
     // A withdraw from a laid-out slot goes to the item's real bank slot.
     const event: any = { widget: items.children![9], option: "Withdraw-1", slot: 9, itemId: WHIP, opIndex: 1 };
     plugin.handleWidgetAction(event);
@@ -289,6 +291,9 @@ async function main(): Promise<void> {
     plugin.closeBankTag();
     build();
     assert.equal(shown().length, 5);
+    // The bank's own drag-complete script is back: the layout's listener is gone.
+    assert.equal((items.children![0] as any).jsListeners?.onDragComplete, undefined);
+    assert.ok((items.children![0] as any).eventHandlers?.onDragComplete);
 
     await plugin.stop();
     assert.equal(container.children, null, "the tab layer is removed");

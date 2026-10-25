@@ -47,6 +47,15 @@ export const ScriptArgMagic = {
     OP_SUBINDEX: -2147483638, // Integer.MIN_VALUE + 10
 } as const;
 
+/** The plugin listener (widgets/custom/dynamicWidgets.ts) a script's listener of each type replaces. */
+const JS_LISTENER_FOR_EVENT: Partial<Record<WidgetEventType, string>> = {
+    onOp: "onOp",
+    onMouseOver: "onMouseOver",
+    onMouseLeave: "onMouseLeave",
+    onScroll: "onScrollWheel",
+    onDragComplete: "onDragComplete",
+};
+
 /** Magic string for target name substitution */
 export const EVENT_OPBASE = "event_opbase";
 
@@ -2011,6 +2020,10 @@ export class Cs2Vm {
 
         // setting/clearing any listener marks the widget as having listeners
         widget.hasListener = true;
+
+        // A plugin's JavaScriptCallback was the widget's listener of this type: a script's replaces it.
+        const jsListener = JS_LISTENER_FOR_EVENT[eventType];
+        if (jsListener) delete (widget as any).jsListeners?.[jsListener];
 
         if (isClear) {
             delete widget.eventHandlers[eventType];
