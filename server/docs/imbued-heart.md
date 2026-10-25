@@ -12,6 +12,12 @@ tick after the inventory click. League task notifications and nearby combat effe
 are excluded from this fix. This is the only indexed imbued-heart activation;
 normal-world activation feedback has not been independently captured here.
 
+The spotanim entry in recording 1763 omits height and delay. RSProx's
+[`appendSpotanimExtendedInfo`](https://github.com/blurite/rsprox/blob/d5493fb7714d057e7c97be4eda3d10b6078bb87c/transcriber/src/main/kotlin/net/rsprox/transcriber/text/TextPlayerInfoTranscriber.kt#L731)
+filters both fields against zero, confirming **height 0 and delay 0**. These match
+`Graphic`'s defaults and are asserted by the activation-feedback regression. The
+one-tick click-to-response interval is separate from the graphic's packet delay.
+
 The current revision 241 cache maps `imbued_heart` to item **20724** and
 `imbued_heart_impact` to spotanim **1316**. Sound archive **6847** exists in index 4.
 The existing cache-backed test confirms that the real item offers Invigorate and its

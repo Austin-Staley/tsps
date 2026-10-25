@@ -41,7 +41,7 @@ function createPlayer({ base = 99, current = base, hearts = 1 } = {}) {
   const inventory = { reads: 0, items: Array.from({ length: hearts }, () => Items.IMBUED_HEART) };
   const player = {
     attributes, messages, inventory, graphics, sounds,
-    performGraphic: (graphic) => graphics.push(graphic.getId()),
+    performGraphic: (graphic) => graphics.push({ id: graphic.getId(), height: graphic.getHeight(), delay: graphic.getDelay() }),
     getPacketSender: () => ({ sendSoundEffect: (...args) => sounds.push(args) }),
     getSkillManager: () => ({
       getMaxLevel: () => base,
@@ -133,10 +133,10 @@ test("Invigorate sends its activation feedback once, never on a drained click", 
   const { player, level } = createPlayer();
   use(player);
   assert.equal(level(), 109);
-  assert.deepEqual(player.graphics, [1316]);
+  assert.deepEqual(player.graphics, [{ id: 1316, height: 0, delay: 0 }]);
   assert.deepEqual(player.sounds, [[6847, 1, 0]]);
   use(player);
-  assert.deepEqual(player.graphics, [1316]);
+  assert.deepEqual(player.graphics, [{ id: 1316, height: 0, delay: 0 }]);
   assert.deepEqual(player.sounds, [[6847, 1, 0]]);
   assert.match(player.messages.at(-1), /heart is still drained/);
 });
