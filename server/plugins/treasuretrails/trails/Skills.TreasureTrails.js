@@ -57,7 +57,7 @@ function talk(event) {
   const definition = event.definition ?? npc.getCurrentDefinition?.(player);
   if (definition?.getActions?.()[event.clickType - 1] !== "Talk-to") return;
   const trail = Runtime.startedTrails(player).find(entry => (entry.step.skill?.itemId != null || entry.step.family === "skillchallenge") &&
-    entry.step.npcIds.includes(npcId));
+    entry.step.npcIds?.includes(npcId));
   if (!trail) return;
   event.handled = true;
   const steps = Dialogue.transcript(player, npc, npcId, VARIANT);
