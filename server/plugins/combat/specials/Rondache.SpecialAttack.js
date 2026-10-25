@@ -3,7 +3,7 @@
 // so it is toggled with the special bar button like a weapon's. Wiki: needs 10 or more charges,
 // uses all of them and no special attack energy; rolls against Crush defence with +6 Crush
 // accuracy per charge; deals x + x% damage for x charges (24 at 20).
-// Estimates: the hit is instant and unmodified by prayers or gear beyond the accuracy roll; the
+// Estimates: the hit lands after one tick; the
 // refusal message; the animation (tfa_human_rondache_special) and gfx (vfx_tfa_rondache_special)
 // are the cache's names for it.
 const Effects = require("../effects/Rondache.EquipmentEffects");
@@ -12,12 +12,12 @@ const MIN_CHARGES = 10;
 const ACCURACY_PER_CHARGE = 6;
 
 module.exports = function registerRondacheSpecialAttack(api) {
-  const { AccuracyFormulasDpsCalc, Animation, BonusManager, CacheDefinitions, CombatMethod, CombatSpecial, CombatType, Graphic, HitDamage, HitMask, ItemIdentifiers } = api.core;
+  const { AccuracyFormulasDpsCalc, Animation, BonusManager, CacheDefinitions, CombatMethod, CombatSpecial, CombatType, Graphic, CombatFactory, MeleeCombatMethod, PendingHit, ItemIdentifiers } = api.core;
 
   const roll = (max) => Math.floor(Math.random() * (max + 1));
 
   function slam(player, target) {
-    const used = Effects._test.charges(player);
+    const used = Effects.charges(player);
     const crushBonus = player.getBonusManager().getAttackBonus()[BonusManager.ATTACK_CRUSH] + ACCURACY_PER_CHARGE * used;
     const attack = Math.floor(AccuracyFormulasDpsCalc.effectiveAttackLevel(player) * (crushBonus + 64));
     const defence = AccuracyFormulasDpsCalc.defenseMeleeRoll(target, BonusManager.ATTACK_CRUSH);
@@ -37,7 +37,7 @@ module.exports = function registerRondacheSpecialAttack(api) {
     start(character) {
       const player = character.getAsPlayer();
       const target = player.getCombat().getTarget();
-      if (Effects._test.charges(player) < MIN_CHARGES) {
+      if (Effects.charges(player) < MIN_CHARGES) {
         player.sendMessage("Your rondache needs at least 10 charges to use Shield Slam.");
         return;
       }
@@ -46,10 +46,11 @@ module.exports = function registerRondacheSpecialAttack(api) {
         return;
       }
       const damage = slam(player, target);
-      Effects._test.setCharges(player, 0);
+      Effects.setCharges(player, 0);
       player.performAnimation(new Animation(CacheDefinitions.getSeqId("tfa_human_rondache_special")));
       player.performGraphic(new Graphic(CacheDefinitions.getSpotanimId("vfx_tfa_rondache_special")));
-      target.getCombat().getHitQueue().addPendingDamage([new HitDamage(damage, damage > 0 ? HitMask.RED : HitMask.BLUE).setSource(player)]);
+      // Accuracy is rolled above, so the hit skips its own roll but still meets protection prayers, hooks and XP.
+      CombatFactory.addPendingHit(new PendingHit(player, target, new MeleeCombatMethod(), { damage, rollAccuracy: false, delay: 1 }));
     }
   }
 

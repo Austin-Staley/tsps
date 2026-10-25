@@ -14,7 +14,8 @@
  */
 
 const ZEAL_UNLOCKED_ATTRIBUTE = "prayer:zeal-unlocked";
-const FOLIO_CHARGES_ATTRIBUTE = "fractured-archive:folio-charges";
+/** Item meta: the folio counts its own charges. */
+const FOLIO_CHARGES_META = "fractured-archive:folio-charges";
 const ZEAL_UNLOCKED_VARBIT = 16578;
 const ZEAL_ATTACK = 75;
 const ZEAL_STRENGTH = 75;
@@ -27,7 +28,6 @@ const LOBBY = { x: 4127, y: 5508, z: 0 };
 
 let core = null;
 
-const charges = (player) => Number(player.getAttribute(FOLIO_CHARGES_ATTRIBUTE)) || 0;
 const plural = (count) => `${count} charge${count === 1 ? "" : "s"}`;
 
 // ---------------------------------------------------------------- Zeal
@@ -79,57 +79,70 @@ function zealRequirements(event) {
 
 // ---------------------------------------------------------------- the folio
 
-/** Sets the charges, and swaps the folio between charged and inert when they start or run out. */
-function setCharges(player, count, slot) {
-  const before = charges(player);
-  player.setAttribute(FOLIO_CHARGES_ATTRIBUTE, count);
-  if ((before > 0) === (count > 0)) return;
+const itemCharges = (item) => Number(item?.getMetaValue?.(FOLIO_CHARGES_META)) || 0;
+const isFolio = (item) => item?.getId?.() === core.ItemIdentifiers.ARCHIVISTS_FOLIO || item?.getId?.() === core.ItemIdentifiers.ARCHIVISTS_FOLIO_INERT_;
+
+/** The slot now holding `item` (it may have moved), else any folio with charges. */
+function slotOf(player, item) {
+  const items = player.getInventory().getItems();
+  const found = items.indexOf(item);
+  return found >= 0 ? found : items.findIndex((other) => isFolio(other) && itemCharges(other) > 0);
+}
+
+/** Puts `count` charges on the folio in `slot`: the charged folio carries them, none is the inert one. */
+function setCharges(player, slot, count) {
   const { Item, ItemIdentifiers } = core;
-  const id = count > 0 ? ItemIdentifiers.ARCHIVISTS_FOLIO : ItemIdentifiers.ARCHIVISTS_FOLIO_INERT_;
-  player.getInventory().setItem(slot, new Item(id, 1));
+  const folio = new Item(count > 0 ? ItemIdentifiers.ARCHIVISTS_FOLIO : ItemIdentifiers.ARCHIVISTS_FOLIO_INERT_, 1);
+  if (count > 0) folio.setMetaValue(FOLIO_CHARGES_META, count);
+  player.getInventory().setItem(slot, folio);
   player.getInventory().refreshItems();
 }
 
-function checkFolio({ player }) {
-  player.sendMessage(charges(player) > 0
-    ? `Your folio has ${plural(charges(player))} left.`
+function checkFolio({ player, item }) {
+  const count = itemCharges(item);
+  player.sendMessage(count > 0
+    ? `Your folio has ${plural(count)} left.`
     : "Your folio has no charges. It can be charged with ascension shards.");
 }
 
-function readFolio({ player, slot }) {
-  if (charges(player) <= 0) {
-    checkFolio({ player });
+function readFolio({ player, item }) {
+  if (itemCharges(item) <= 0) {
+    checkFolio({ player, item });
     return;
   }
   const target = new core.Location(LOBBY.x, LOBBY.y, LOBBY.z);
   if (!core.TeleportHandler.checkReqs(player, target, WILDERNESS_LIMIT)) return;
   core.TeleportHandler.teleport(player, target, core.TeleportType.NORMAL, false, () => {
-    setCharges(player, charges(player) - 1, slot);
-    player.sendMessage(`Your folio has ${plural(charges(player))} left.`);
+    const slot = slotOf(player, item);
+    if (slot < 0) return;
+    const left = itemCharges(player.getInventory().getItems()[slot]) - 1;
+    setCharges(player, slot, left);
+    player.sendMessage(`Your folio has ${plural(Math.max(0, left))} left.`);
   });
 }
 
-function chargeFolio({ player, slot }) {
+function chargeFolio({ player, item }) {
   const inventory = player.getInventory();
   const shards = inventory.getAmount(core.ItemIdentifiers.ASCENSION_SHARDS);
   if (shards <= 0) {
     player.sendMessage("You need ascension shards to charge the folio.");
     return;
   }
+  const slot = slotOf(player, item);
+  if (slot < 0) return;
   inventory.deleteNumber(core.ItemIdentifiers.ASCENSION_SHARDS, shards);
-  setCharges(player, charges(player) + shards * CHARGES_PER_SHARD, slot);
-  checkFolio({ player });
+  const count = itemCharges(item) + shards * CHARGES_PER_SHARD;
+  setCharges(player, slot, count);
+  player.sendMessage(`Your folio has ${plural(count)} left.`);
 }
 
-function chargeWithShards({ player, usedItemId, usedItemSlot, usedWithItemSlot }) {
-  const folioSlot = usedItemId === core.ItemIdentifiers.ASCENSION_SHARDS ? usedWithItemSlot : usedItemSlot;
-  chargeFolio({ player, slot: folioSlot });
+function chargeWithShards({ player, usedItemId, usedItem, usedWithItem }) {
+  chargeFolio({ player, item: usedItemId === core.ItemIdentifiers.ASCENSION_SHARDS ? usedWithItem : usedItem });
 }
 
 module.exports = function registerFracturedArchiveRewards(api) {
   core = api.core;
   api.persistAttribute(ZEAL_UNLOCKED_ATTRIBUTE, false);
-  api.persistAttribute(FOLIO_CHARGES_ATTRIBUTE, 0);
   api.onPlayerLogin(syncZeal);
   api.onPrayerDisabled(zealRequirements);
   api.registerArea(createCamelotArea(api));
