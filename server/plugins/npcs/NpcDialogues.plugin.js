@@ -37,6 +37,12 @@ const MAX_JUMPS = 100;
 // These NPCs have executable plugin conversations, not an imported prose transcript.
 const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
+/** Said by an NPC whose Talk-to found nothing to play. */
+const PLACEHOLDER_LINE = "Sorry, i've nothing interesting to talk about yet";
+
+/** NPC names whose missing conversation has been reported, so each is logged once, not per click. */
+const reportedDialogueGaps = new Set();
+
 /**
  * Wiki transcripts leave parts of a line to the reader's character: their name
  * ("[player name]", "<player name>") and gendered alternatives ("[sir/madam]",
@@ -102,6 +108,20 @@ function pickVariant(npc) {
     ?? keys.find((name) => name.startsWith("standard"))
     ?? keys.find((name) => !name.startsWith("overhead"));
   return Array.isArray(variants[key]) ? variants[key] : undefined;
+}
+
+/**
+ * Warn once per NPC name that Talk-to fell back to the placeholder line: either no transcript
+ * reaches the NPC, or its transcript has no variant pickVariant can play (only overhead shouts).
+ */
+function reportDialogueGap(event, resolved) {
+  const name = event.definition.getName();
+  if (reportedDialogueGaps.has(name)) return;
+  reportedDialogueGaps.add(name);
+  const reason = resolved?.steps ? "its transcript variant is empty"
+    : resolved?.page ? `transcript "${resolved.page}" has no playable variant`
+    : "no transcript reaches it";
+  console.warn(`[npc-dialogues] ${name} (npc ${event.npcId}) says the placeholder line: ${reason}`);
 }
 
 /** Transcript page name -> an NPC id that speaks it, so cutscene/paired speakers
@@ -931,7 +951,10 @@ module.exports = {
       if (!pickVariant(record) && aliases.has(name)) record = data[aliases.get(name)];
       const forced = event.variant ? record?.variants?.[event.variant] : undefined;
       const steps = Array.isArray(forced) ? forced : pickVariant(record);
-      return steps ? withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context }) : null;
+      if (steps) return withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context });
+      // A transcript reaches the NPC but pickVariant found nothing in it to play: name it for the warning.
+      const page = record ? (record === data[name] ? name : aliases.get(name)) : pages[0]?.page;
+      return page ? { page } : null;
     };
 
     /**
@@ -957,8 +980,9 @@ module.exports = {
         const name = event.definition.getName();
         if (SPECIAL_NPC_DIALOGUES.has(name)) return false;
         const resolved = resolveTranscript(event);
+        if (!resolved?.steps?.length) reportDialogueGap(event, resolved);
         startDialogue(api, event, resolved?.steps?.length ? resolved.steps : [
-          { npc: "Sorry, i've nothing interesting to talk about yet" },
+          { npc: PLACEHOLDER_LINE },
         ], resolved?.branches, resolved?.context);
         return true;
       },
