@@ -332,6 +332,21 @@ export class WeaponProfiles {
             fireSound: Sound.SHOOT_CROSSBOW,
             boltEffects: true,
         });
+        // Wiki (Ascension crossbows): 3 ticks (cache param 14), range 6, 8 on Longrange. The shot alternates
+        // tfa_human_ascension_crossbow_fire_left/right (15113/15115, _pvn 15114/15116); the plugin flips
+        // sides, this is the left one. Projectile heights are the standard crossbow's (an estimate).
+        this.register({
+            itemIds: [ItemIdentifiers.ASCENSION_CROSSBOWS],
+            attackAnimation: 15113,
+            npcAttackAnimation: 15114,
+            attackDistance: 6,
+            longRangeDistance: 8,
+            longRangeFightType: FightType.CROSSBOW_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_CROSSBOW,
+            boltEffects: true,
+        });
         // Machetes, sickles and canes share the slash-sword/mace interfaces but swing one tick slower.
         this.register({
             itemIds: [975, 6313, 6315, 6317, 2961, 2963, 3899, 22433, 22435, 24693, 24695],
