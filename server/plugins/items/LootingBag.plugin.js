@@ -213,6 +213,23 @@ function handleItemOnItem(event) {
   player.getPacketSender().sendEnterAmountPrompt("How many would you like to store?");
 }
 
+/**
+ * "looting-bag:store" `{ player, items: [{ id, amount }], check?, result }`: another plugin puts loot
+ * straight into the player's open bag (the Wilderness Agility dispenser). `result` is "no-bag" without
+ * an open bag in the inventory, "full" when not all of `items` fit, else "stored" (nothing is stored
+ * when `check` is set, or on "full").
+ */
+function storeLoot(event) {
+  const bag = bagFor(event.player);
+  if (!bag || bag.getId() !== OPEN_BAG_ID) return void (event.result = "no-bag");
+  const items = bagItems(bag);
+  const fresh = new Set(event.items.filter(({ id }) => !items.some((stored) => stored.id === id && stored.meta == null)).map(({ id }) => id));
+  if (items.length + fresh.size > BAG_SIZE) return void (event.result = "full");
+  event.result = "stored";
+  if (event.check) return;
+  for (const { id, amount } of event.items) store(bag, new Item(id, amount), amount);
+}
+
 /** Public read-only contents query; the bag owner keeps its metadata private. */
 function answerContents(event) {
   if (!isBag(event.item)) return;
@@ -226,6 +243,7 @@ module.exports = {
   dependsOn: ["Wilderness", "Food", "Potions", "LootKeys"],
   register(api) {
     api.onCustomEvent("storage:contents", answerContents);
+    api.onCustomEvent("looting-bag:store", storeLoot);
     api.onGroundItemPickup((event) => {
       const bag = bagFor(event.player);
       const item = event.groundItem.getItem();
@@ -260,5 +278,5 @@ module.exports = {
       }
     });
   },
-  _test: { bagItems, canStore, isBag, store },
+  _test: { bagItems, canStore, isBag, store, storeLoot },
 };
