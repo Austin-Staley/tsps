@@ -1696,7 +1696,7 @@ export class CombatSpells {
     public static ICE_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(8 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(8 * multiplier), null, cast, "ice"); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 360, 0, 20, 43, 31); },
         () => { return new Graphic(361); },
@@ -1776,7 +1776,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(16 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(16 * multiplier), null, cast, "ice"); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(363) },
@@ -1858,7 +1858,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return new Graphic(366, 6553600); },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(24 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(24 * multiplier), null, cast, "ice"); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(367) },
@@ -1936,7 +1936,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(32 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(32 * multiplier), null, cast, "ice"); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(369) },

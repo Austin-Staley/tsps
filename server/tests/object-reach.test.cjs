@@ -18,6 +18,7 @@ const { Item } = require('../dist/game/model/Item');
 const { UseItemPacketListener } = require('../dist/net/packet/impl/UseItemPacketListener');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Sounds } = require('../dist/game/Sounds');
+const { TimerKey } = require('../dist/util/timers/TimerKey');
 
 const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
@@ -592,6 +593,70 @@ test('ladder click waits for arrival before animating and changes plane one tick
   assert.equal(queue.hasPendingWork(), false);
   forceMovement = null;
   assert.equal(queue.getMobility().canMove(), true);
+});
+
+test('a frozen player climbs a ladder in reach, and gets "I can\'t reach that!" for one further away', (t) => {
+  // Wiki (Freeze): freezes do not stop interacting with adjacent ladders or cave entrances.
+  // rsprox 2238: a frozen player's clicks on an exit 14 tiles away answer "I can't reach that!".
+  const events = [], messages = [];
+  let location = new Location(100, 99, 0);
+  const noop = () => {};
+  const player = {
+    isPlayer: () => true, isNpc: () => false, isPlayerBot: () => true, getAsPlayer() { return this; },
+    getIndex: () => 1, getUsername: () => 'frozen', getSize: () => 1,
+    getLocation: () => location, setLocation: (value) => { location = value; },
+    getPrivateArea: () => null, getHitpoints: () => 10, isNeedsPlacement: () => false,
+    getForceMovement: () => null,
+    getTimers: () => ({ has: (key) => key === TimerKey.FREEZE }), getFollowing: () => null,
+    getCombat: () => ({ setCastSpell: noop, reset: noop }),
+    getSkillManager: () => ({ stopSkillable: noop }),
+    setFollowing: noop, setCombatFollowing: noop, setPositionToFace: noop,
+    setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
+    isRunningReturn: () => false, sendMessage: (message) => messages.push(message),
+    performAnimation: (animation) => events.push(['anim', animation.getId()]),
+    moveTo: (destination) => { queue.reset(); location = destination.clone(); events.push(['tele']); },
+  };
+  const queue = new MovementQueue(player);
+  player.getMovementQueue = () => queue;
+  queue.handleRegionChange = noop;
+  queue.syncWildernessStateForMovedPlayer = noop;
+  queue.drainRunEnergy = noop;
+  const oldRoute = PathFinder.rsmodRouteFinding;
+  const oldCycle = World.processCycle;
+  PathFinder.rsmodRouteFinding = new RsmodRouteFinding((x, y) => x === 100 && y === 100 ? 0x100 : 0);
+  t.after(() => { PathFinder.rsmodRouteFinding = oldRoute; World.processCycle = oldCycle; TaskManager.cancelTasks(player); TaskManager.cancelTasks(1); });
+  t.mock.method(ObjectDefinition, 'forId', () => ({ getSizeX: () => 1, getSizeY: () => 1, getBlockingMask: () => 27 }));
+  const handlers = new Map();
+  require('../plugins/objects/Ladders.plugin').register({
+    getTaskManager: () => TaskManager,
+    onCustomEvent: (name, handler) => handlers.set(name, handler),
+    onObjectInteraction: noop,
+  });
+  const climb = () => handlers.get('ladders:climbUp')({ player, destination: new Location(location.x, location.y, 1) });
+  const tick = () => {
+    World.processCycle++;
+    TaskManager.process();
+    queue.beginCycle();
+    if (queue.hasPendingWork()) queue.process();
+    TaskManager.processWalkTo(1);
+  };
+  World.processCycle = 200;
+  assert.equal(queue.getMobility().canMove(), false);
+  queue.walkToObject(new GameObject(132, new Location(100, 100, 0), 10, 0, null), { execute: climb });
+  tick();
+  assert.deepEqual(events, [['anim', 828]]);
+  tick();
+  assert.equal(location.z, 1, 'the frozen player still climbs');
+  assert.deepEqual(messages, []);
+
+  events.length = 0;
+  location = new Location(100, 96, 0);
+  queue.walkToObject(new GameObject(132, new Location(100, 100, 0), 10, 0, null), { execute: climb });
+  for (let n = 0; n < 4; n++) tick();
+  assert.deepEqual(messages, ["I can't reach that!"]);
+  assert.deepEqual(events, []);
+  assert.equal(location.y, 96);
+  assert.equal(queue.points.length, 0, 'nothing is queued to walk once the freeze ends');
 });
 
 test('an inventory item action cancels the queued object op but keeps the walk', (t) => {
