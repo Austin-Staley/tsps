@@ -266,6 +266,7 @@ test('q059 mandatory handler route: start gate, bridge, key, door, light, wall, 
   assert.equal(h.variant(N.GUNNJORN), 'getting-the-key');
   h.action(N.GUNNJORN, 'Wh6Z8x');
   assert.equal(h.inventory.get(I.LIGHTHOUSE_KEY), 1);
+  h.setLocation(2509, 3635);
   h.object(4577, 2509, 3636);
   assert.equal(h.inventory.get(I.LIGHTHOUSE_KEY), 0, 'the key unlocks the door');
   h.object(4577, 2509, 3636);
@@ -457,4 +458,98 @@ test('q059 auxiliary flags are earned individually and replay after bootstrap wi
   assert.equal(h.varps.get(parent)&~owned,siblings);
   assert.equal(h.quest.getStage(h.player),stage);
   assert.deepEqual([...h.inventory],beforeItems);
+});
+
+test('real Doors-first dispatch crosses the keyed lighthouse threshold without changing shared clipping', () => {
+  const core = PluginManager.getCoreApi();
+  core.RegionManager.init();
+  core.RegionManager.loadMapFiles(2509, 3636, false);
+  const anchor = new core.Location(2509, 3636, 0);
+  const door = core.MapObjects.get(4577, anchor, null);
+  assert.ok(door);
+  assert.deepEqual([door.getType(), door.getFace(), door.getDefinition().getInteractions()[0]], [0, 3, 'Walk-through']);
+  const crossing = () => core.RegionManager.canMove(2509, 3635, 2509, 3636, 0, 1, 1, null);
+  assert.equal(crossing(), false);
+  const h = setup();
+  const saved = {
+    objectInteractionHooks: PluginManager.objectInteractionHooks,
+    objectHooksByName: PluginManager.objectHooksByName,
+    nextObjectHookOrder: PluginManager.nextObjectHookOrder,
+    customEventHooks: PluginManager.customEventHooks,
+    objectRouteHooks: PluginManager.objectRouteHooks,
+  };
+  PluginManager.objectInteractionHooks = [];
+  PluginManager.objectHooksByName = new Map();
+  PluginManager.nextObjectHookOrder = 0;
+  PluginManager.customEventHooks = new Map();
+  PluginManager.objectRouteHooks = [];
+  try {
+    const api = PluginManager.createApi('q059-lighthouse-dispatch');
+    delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
+    require('../plugins/objects/Doors.plugin').register({ ...api, onRegionLoaded() {}, onServerStartup(handler) { handler(); } });
+    for (const [name, handlers] of h.hooks.custom) for (const handler of handlers) api.onCustomEvent(name, handler);
+    for (const handler of h.hooks.objects) api.onObjectInteraction(handler);
+    const click = (location = { x: 2509, y: 3636, z: 0 }) => {
+      const event = { player: h.player, object: door, objectId: 4577, definition: door.getDefinition(),
+        location, option: 'walk-through', clickType: 1, handled: false };
+      PluginManager.emitObjectInteraction(event);
+      return event;
+    };
+    const position = () => {
+      const l = h.player.getLocation(); return [l.getX(), l.getY(), l.getZ()];
+    };
+    h.setLocation(2509, 3635);
+    click();
+    assert.deepEqual(position(), [2509, 3635, 0], 'a locked doorway never crosses');
+    assert.ok(h.messages.includes('This door is locked securely shut.'));
+    h.quest.setStage(h.player, 1);
+    h.action(h.core.NpcIdentifiers.GUNNJORN, 'Wh6Z8x');
+    click();
+    assert.equal(h.inventory.get(h.core.ItemIdentifiers.LIGHTHOUSE_KEY), 0);
+    assert.deepEqual(position(), [2509, 3635, 0], 'unlocking alone does not skip the bridge gate');
+    click();
+    assert.equal(h.quest.getStage(h.player), 1);
+    assert.deepEqual(position(), [2509, 3635, 0]);
+    h.inventory.set(h.core.ItemIdentifiers.PLANK, 2);
+    h.inventory.set(h.core.ItemIdentifiers.STEEL_NAILS, 60);
+    h.inventory.set(h.core.ItemIdentifiers.HAMMER, 1);
+    h.itemOnObject(4615, h.core.ItemIdentifiers.PLANK);
+    h.itemOnObject(4616, h.core.ItemIdentifiers.PLANK);
+    click();
+    assert.equal(h.quest.getStage(h.player), 2);
+    assert.deepEqual(position(), [2509, 3636, 0], 'earned entry crosses to the actual inside tile');
+    // The actual wall route brings a naturally north-adjacent click to the
+    // inside threshold before the object callback executes.
+    h.setLocation(2509, 3637);
+    const routeEvent = { player: h.player, object: door, objectId: 4577,
+      definition: door.getDefinition(), clickType: 1,
+      sourceLocation: { x: 2509, y: 3637, z: 0 }, destination: null };
+    PluginManager.emitObjectRoute(routeEvent);
+    assert.equal(routeEvent.destination, null, 'normal collision routing needs no quest override');
+    const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+    const route = new RsmodRouteFinding().findRoute({
+      level: 0, srcX: 2509, srcY: 3637, srcSize: 1,
+      destX: 2509, destY: 3636, locAngle: door.getFace(), locShape: door.getType(),
+      blockAccessFlags: routeEvent.blockAccessFlags, privateArea: null, moveNear: false,
+    });
+    assert.equal(route.success, true);
+    assert.deepEqual([route.endX, route.endY], [2509, 3636], 'the production route selects the accepted inside approach');
+    assert.equal(core.RegionManager.canMove(2509, 3637, route.endX, route.endY, 0, 1, 1, null), true);
+    h.setLocation(route.endX, route.endY);
+    click();
+    assert.deepEqual(position(), [2509, 3635, 0], 'repeat exit crosses back outside after natural approach');
+    click();
+    assert.deepEqual(position(), [2509, 3636, 0], 'repeat entry stays available');
+    h.setLocation(2508, 3635);
+    click();
+    assert.deepEqual(position(), [2508, 3635, 0], 'the wall endpoint is not an approved doorway approach');
+    h.setLocation(2509, 3635, 1);
+    click();
+    assert.deepEqual(position(), [2509, 3635, 1], 'another floor cannot trigger the crossing');
+    h.setLocation(2509, 3635);
+    click({ x: 2509, y: 3637, z: 0 });
+    assert.deepEqual(position(), [2509, 3635, 0], 'another location cannot borrow this doorway');
+    assert.equal(crossing(), false, 'global collision remains intact for every other player');
+    assert.equal(core.MapObjects.get(4577, anchor, null), door, 'no shared object is replaced');
+  } finally { Object.assign(PluginManager, saved); }
 });
