@@ -6,7 +6,6 @@ import { Scene } from "../../../rs/scene/Scene";
 import type { HitsplatEventPayload } from "../../../game/GameRenderer";
 import { ClientState } from "../../../game/ClientState";
 import type { GroundItemOverlayEntry } from "../../../game/data/ground/GroundItemStore";
-import { appendAttackTimerOverhead } from "../../../game/plugins/attacktimer/AttackTimerOverhead";
 import type { TileMarkersPluginConfig } from "../../../game/plugins/tilemarkers/types";
 import type { Model } from "../../../rs/model/Model";
 import type { OsrsMenuEntry } from "../../../rs/MenuEntry";
@@ -106,6 +105,7 @@ import {
     getInteractNpcModelLoader,
     buildHighlightTrianglePoints as buildHighlightTrianglePointsViaHost,
     buildLocModelHighlightTriangles as buildLocModelHighlightTrianglesViaHost,
+    buildLocModelHighlightParts as buildLocModelHighlightPartsViaHost,
     buildNpcModelHighlightTriangles as buildNpcModelHighlightTrianglesViaHost,
     resolveNpcMovementSequenceIds,
     resolveNpcHighlightTargetFromServerId,
@@ -276,6 +276,35 @@ export class OverlayHost {
                 npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
+        this.osrsClient.sceneGeometry = {
+            tileHeight: (x, y, plane) => this.getTileHeightAtPlane(x, y, plane),
+            worldToScreen: (x, height, y) => {
+                const p = this.worldToScreen(x, height, y);
+                return p ? [p[0], p[1]] : undefined;
+            },
+            npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
+            npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+            locModelPoints: (loc) => buildLocModelHighlightPartsViaHost(this.typedHost, {
+                kind: "loc",
+                locId: loc.id,
+                tileX: loc.tileX,
+                tileY: loc.tileY,
+                plane: loc.plane,
+                locModelType: loc.shape,
+                locRotation: loc.rotation,
+            }),
+            locsAtTile: (worldX, worldY, plane) =>
+                (this.getLocIdsAtTileAllLevels(worldX, worldY) ?? [])
+                    .filter((l) => l.level === plane && typeof l.typeRot === "number")
+                    .map((l) => ({
+                        id: l.id,
+                        tileX: worldX,
+                        tileY: worldY,
+                        plane,
+                        shape: (l.typeRot ?? 0) & 0x3f,
+                        rotation: ((l.typeRot ?? 0) >> 6) & 3,
+                    })),
+        };
         this.boundToCssEvent = (gx?: number, gy?: number) =>
             this.toCssEvent(gx, gy, this.currentFrameCount);
     }
@@ -1309,9 +1338,9 @@ export class OverlayHost {
             }
         } catch {}
 
-        // The attack timer plugin's countdown, with the local player's text (render.ts 1043-1052).
+        // Plugin text with the local player's overhead chat (the attack timer) (render.ts 1043-1052).
         try {
-            appendAttackTimerOverhead(
+            this.typedHost.osrsClient.clientPlugins.appendLocalPlayerOverheads(
                 this.typedHost,
                 localPlayerTextIdx,
                 overheadTexts,
@@ -1552,7 +1581,7 @@ export class OverlayHost {
         // Ground item labels: player anchor first, camera fallback (render.ts 1341-1386).
         this.groundOverlayEntries = [];
         if (playerWorldX != null && playerWorldZ != null) {
-            const overlayEntries = osrsClient.getGroundItemOverlayEntries(
+            const overlayEntries = osrsClient.clientPlugins.groundItemOverlayEntries(
                 Math.floor(playerWorldX),
                 Math.floor(playerWorldZ),
                 playerLevel,
@@ -1565,7 +1594,7 @@ export class OverlayHost {
                     const camX = Math.floor(osrsClient.camera.getPosX());
                     const camY = Math.floor(osrsClient.camera.getPosZ());
                     const camLevel = resolveGroundItemStackPlane(this.getPlayerRawPlane() | 0);
-                    const camEntries = osrsClient.getGroundItemOverlayEntries(camX, camY, camLevel, {
+                    const camEntries = osrsClient.clientPlugins.groundItemOverlayEntries(camX, camY, camLevel, {
                         radius: groundOverlayRadius,
                         maxEntries: groundOverlayMaxEntries,
                     });
@@ -1580,7 +1609,7 @@ export class OverlayHost {
                     const fallbackX = (peHs.getX(idx) / 128.0) | 0;
                     const fallbackY = (peHs.getY(idx) / 128.0) | 0;
                     const fallbackLevel = peHs.getLevel(idx) | 0;
-                    const overlayEntries = osrsClient.getGroundItemOverlayEntries(
+                    const overlayEntries = osrsClient.clientPlugins.groundItemOverlayEntries(
                         fallbackX,
                         fallbackY,
                         fallbackLevel,
@@ -1637,7 +1666,7 @@ export class OverlayHost {
 
         let config: TileMarkersPluginConfig | undefined;
         try {
-            config = osrsClient.tileMarkersPlugin.getConfig();
+            config = osrsClient.clientPlugins.tileMarkersConfig();
         } catch {}
 
         const destWorldX = ClientState.destinationWorldX | 0;

@@ -11,7 +11,6 @@ const { CacheIndexDat2 } = require("../dist/game/cache/codec/rs/cache/CacheIndex
 const { ConfigType } = require("../dist/game/cache/codec/rs/cache/ConfigType");
 const { IndexType } = require("../dist/game/cache/codec/rs/cache/IndexType");
 const { Gamevals, GamevalKind } = require("../dist/game/cache/Gamevals");
-const { CombatSpell } = require("../dist/game/content/combat/magic/CombatSpell");
 const { CombatSpells } = require("../dist/game/content/combat/magic/CombatSpells");
 
 const BIND = 710; // human_castentangle
@@ -67,7 +66,10 @@ function caster({ player = true, staff = false } = {}) {
 }
 
 test("every twin is the cache's _staff copy of the cast: the same frames, with the staff kept in hand", () => {
-  for (const [plain, staff] of CombatSpell.STAFF_CAST_ANIMATIONS) {
+  for (const name of ["BIND", "WIND_STRIKE", "CONFUSE", "WEAKEN", "CURSE", "CRUMBLE_UNDEAD", "WIND_WAVE", "ENFEEBLE", "STUN", "TELEBLOCK"]) {
+    const spell = CombatSpells[name];
+    const plain = spell.castAnimation().getId();
+    const staff = spell.castAnimationFor(caster({ staff: true }).mobile).getId();
     assert.equal(seqNames.get(staff), `${seqNames.get(plain)}_staff`, `seq ${staff}`);
     const [cast, staffCast] = [decodeSeq(plain), decodeSeq(staff)];
     assert.deepEqual(staffCast.frames, cast.frames, `${plain} and ${staff} frames`);
@@ -94,6 +96,42 @@ test("the cast plays the twin, and a spell with no twin keeps its own animation"
   assert.deepEqual(withStaff.played, [BIND_STAFF]);
 
   const surge = CombatSpells.FIRE_SURGE.castAnimation().getId();
-  assert.equal(CombatSpell.STAFF_CAST_ANIMATIONS.has(surge), false);
   assert.equal(CombatSpells.FIRE_SURGE.castAnimationFor(caster({ staff: true }).mobile).getId(), surge);
+});
+
+test("the POH elemental balance casts through the house handler with the staff twin", (t) => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const { Location } = require("../dist/game/model/Location");
+  const { TaskManager } = require("../dist/game/task/TaskManager");
+  require("../plugins/skills/construction/Core.Construction").init({ core: PluginManager.getCoreApi() });
+  const { PlayerHouseInstance } = require("../plugins/skills/construction/Instance.Construction");
+  const balance = require("../plugins/skills/construction/ElementalBalance.Construction");
+  const location = new Location(6400, 6400, 0);
+  const house = Object.assign(Object.create(PlayerHouseInstance.prototype), {
+    buildingMode: false,
+    getFurnitureAt: () => ({ buildableKey: "LESSER_MAGICAL_BALANCE" }),
+    enter() {}, hideFurniture() {}, getPlayers: () => [],
+  });
+  const npc = { getLocation: () => location, isRegistered: () => true };
+  t.mock.method(PluginManager, "spawnNpc", () => npc);
+  let activate;
+  balance.attachElementalBalance({
+    onObjectInteraction: (_name, handlers) => { activate = handlers.Activate; },
+    onNpcInteraction() {},
+  });
+  const { mobile: player, played } = caster({ staff: true });
+  const deleted = [];
+  Object.assign(player, {
+    getPrivateArea: () => house, getLocation: () => location,
+    getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+    getInventory: () => ({ getAmount: () => 100, delete: (id, amount) => deleted.push([id, amount]) }),
+    getMovementQueue: () => ({ reset() {} }), setPositionToFace() {},
+  });
+  t.after(() => TaskManager.cancelTasks(player));
+  assert.equal(activate({ player, location }), true);
+  t.mock.method(CombatSpells.WIND_STRIKE, "castProjectile", () => null);
+  assert.equal(house.canCastOnNpc(player, npc, CombatSpells.WIND_STRIKE), false);
+  assert.deepEqual(played, [1162]);
+  assert.deepEqual(deleted, CombatSpells.WIND_STRIKE.itemsRequired(player).map(item => [item.getId(), item.getAmount()]));
+  assert.ok(deleted.length > 0, "the actual balance cast consumed its runes");
 });

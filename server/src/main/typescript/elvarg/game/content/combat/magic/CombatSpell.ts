@@ -1,6 +1,6 @@
 import { PluginManager } from "../../../../plugins/PluginManager";
 
-import { Spell } from "./Spell";
+import { Spell, SpellCastContext } from "./Spell";
 import { Mobile } from "../../../entity/impl/Mobile";
 import { NPC } from "../../../entity/impl/npc/NPC";
 import { Animation } from "../../../model/Animation";
@@ -10,40 +10,19 @@ import { Projectile } from "../../../model/Projectile";
 import { PendingHit } from "../hit/PendingHit";
 
 
-export abstract class CombatSpell extends Spell {
-  /**
-   * Standard spells' cast animations and their `_staff` twins (cache gamevals, e.g.
-   * human_castentangle 710 / human_castentangle_staff 1161). Each pair shares its frames, but
-   * the plain one empties both hands, so a player wielding a staff casts with the twin and keeps
-   * the staff drawn (LostCity's player_magic: the spell's staffanim when the weapon is a staff).
-   */
-  public static readonly STAFF_CAST_ANIMATIONS: ReadonlyMap<number, number> = new Map([
-    [710, 1161], // human_castentangle: Bind, Snare, Entangle
-    [711, 1162], // human_caststrike: strikes, bolts, blasts
-    [716, 1163], // human_castconfuse
-    [717, 1164], // human_castweaken
-    [718, 1165], // human_castcurse: Curse, Vulnerability
-    [724, 1166], // human_castcrumbleundead
-    [727, 1167], // human_castwave
-    [728, 1168], // human_castenfeeble
-    [729, 1169], // human_caststun
-    [1819, 1820], // human_casting_tele_block
-  ]);
+/**
+ * OSRS casts these with a staff variant while a staff is wielded (human_cast*_staff), which hides
+ * the staff instead of waving the unarmed animation around it: entangle, strike, confuse, weaken,
+ * curse, crumble undead, wave, enfeeble, stun and Tele Block.
+ */
+const STAFF_CAST_ANIMATIONS: Readonly<Record<number, number>> = {
+  710: 1161, 711: 1162, 716: 1163, 717: 1164, 718: 1165,
+  724: 1166, 727: 1167, 728: 1168, 729: 1169, 1819: 1820,
+};
 
+export abstract class CombatSpell extends Spell {
   protected usesSharedCastDelay(): boolean {
     return true;
-  }
-
-  /** The cast animation as `cast` plays it: its `_staff` twin when a player wields a staff. */
-  public castAnimationFor(cast: Mobile): Animation | undefined {
-    const animation = this.castAnimation();
-    const staffId = animation ? CombatSpell.STAFF_CAST_ANIMATIONS.get(animation.getId()) : undefined;
-    if (staffId === undefined || !cast.isPlayer() || !cast.getAsPlayer().getEquipment().hasStaffEquipped()) {
-      return animation;
-    }
-    const staff = new Animation(staffId, animation.getDelay());
-    staff.priority = animation.getPriority();
-    return staff;
   }
 
   /**
@@ -53,6 +32,16 @@ export abstract class CombatSpell extends Spell {
    */
   public canCastOnTarget(cast: Mobile, target: Mobile): boolean {
     return true;
+  }
+
+  /** The cast animation this caster plays: the staff variant while a player wields a staff. */
+  public castAnimationFor(cast: Mobile): Animation | undefined {
+    const castAnim = this.castAnimation();
+    const staffAnim = castAnim ? STAFF_CAST_ANIMATIONS[castAnim.getId()] : undefined;
+    if (staffAnim !== undefined && cast.isPlayer() && cast.getAsPlayer().getEquipment().hasStaffEquipped()) {
+      return new Animation(staffAnim);
+    }
+    return castAnim;
   }
 
   public startCast(cast: Mobile, castOn: Mobile): void {
@@ -93,6 +82,11 @@ export abstract class CombatSpell extends Spell {
   }
 
 
+  /** XP a splash pays instead of the base XP; most spells pay the same either way. */
+  public splashExperience(): number {
+    return this.baseExperience();
+  }
+
   public getAttackSpeed(): number {
     return 5;
   }
@@ -103,7 +97,7 @@ export abstract class CombatSpell extends Spell {
   abstract startGraphic(): Graphic | undefined;
   abstract castProjectile(cast: Mobile, castOn: Mobile): Projectile | undefined;
   abstract endGraphic(): Graphic | undefined;
-  abstract finishCast(cast: Mobile, castOn: Mobile, accurate: boolean, damage: number): void;
+  abstract finishCast(cast: Mobile, castOn: Mobile, accurate: boolean, damage: number, context?: SpellCastContext | null): void;
   abstract levelRequired(): number;
   abstract getSpell(): CombatSpell;
 
@@ -111,12 +105,14 @@ export abstract class CombatSpell extends Spell {
     if (!hit.isAccurate()) {
       return;
     }
-    const effect = { attacker: hit.getAttacker(), target: hit.getTarget(), spell: this, hit, allowed: true };
+    const effect = { attacker: hit.getAttacker(), target: hit.getTarget(), spell: this, hit, allowed: true, effectMultiplier: 1 };
     PluginManager.emitCustomEvent("magic:hit-effects", effect);
-    if (effect.allowed) this.spellEffectOnHitCalc(effect.attacker, effect.target, hit.getTotalDamage());
+    if (!effect.allowed) return;
+    this.spellEffectOnHitCalc(effect.attacker, effect.target, hit.getTotalDamage(), effect.effectMultiplier);
+    PluginManager.emitCustomEvent("magic:hit-effects-applied", effect);
   }
 
-  public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number): void { }
+  public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number, effectMultiplier = 1): void { }
 
   public impactSound(): Sound {
     return null;
