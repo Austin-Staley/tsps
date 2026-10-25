@@ -295,6 +295,7 @@ function handleCraftRunes(event) {
       petBase: runeData.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
       rolls: craftedEssence,
       runeId: runeData.runeId,
+      amountPerEssence,
     });
   }
 

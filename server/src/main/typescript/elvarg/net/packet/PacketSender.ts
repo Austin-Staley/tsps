@@ -1,4 +1,7 @@
-import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot } from "../protocol/ClientProtocol";
+import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot,
+  SONG_NO_FADES,
+  type SongFades,
+} from "../protocol/ClientProtocol";
 import { BIT_MASKS } from "../../game/cache/codec/rs/MathConstants";
 import { PacketBuilder } from "./PacketBuilder";
 import { ValueType } from "./ValueType";
@@ -64,6 +67,7 @@ import {
   encodeWidgetSetAnimation,
   encodeWidgetSetFlags,
   encodeWidgetSetFlagsRange,
+  encodeWidgetSetFlagsRangeV2,
   encodeWidgetSetHidden,
   encodeWidgetSetItem,
   encodeWidgetSetModel,
@@ -186,16 +190,25 @@ export class PacketSender {
     return this.sendSoundEffect(soundId, 1, delay, volume);
   }
 
-  sendSong(id: number): this {
-    if (this.player.getSession().sendClientPacket(encodePlaySong(id))) {
+  sendSong(id: number, fades?: SongFades): this {
+    if (this.player.getSession().sendClientPacket(encodePlaySong(id, fades))) {
       const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
       PluginManager.emitCustomEvent("audio:play-song", { player: this.player, trackId: id });
     }
     return this;
   }
 
-  sendJingle(id: number, delayTicks: number): this {
-    if (this.player.getSession().sendClientPacket(encodePlayJingle(id, delayTicks))) return this;
+  /**
+   * A jingle. Live sends the current track with zero fades on the same tick first (every one of the
+   * 1,584 jingles in rsprox revs 236-239), and the client resumes that track when the jingle ends.
+   * `delay` is the old 24-bit length field, which the client no longer reads.
+   */
+  sendJingle(id: number, delay = 0): this {
+    const session = this.player.getSession();
+    const track = session.getCurrentMusicTrack?.() ?? -1;
+    if (track >= 0) session.sendClientPacket(encodePlaySong(track, SONG_NO_FADES));
+    session.sendClientPacket(encodePlayJingle(id, delay));
+    return this;
   }
 
   sendAreaSound(
@@ -649,9 +662,10 @@ export class PacketSender {
     return this;
   }
 
-  sendPublicChat(message: string, from: string, playerId: number): this {
+  /** `chatType` overrides the public type 2: ChatType.AUTOTYPER / MODAUTOTYPER for autochat. */
+  sendPublicChat(message: string, from: string, playerId: number, chatType?: number): this {
     this.player.getSession().sendClientPacket(
-      encodeChatMessage("public", message, from, "", playerId)
+      encodeChatMessage("public", message, from, "", playerId, chatType)
     );
     return this;
   }
@@ -842,7 +856,7 @@ export class PacketSender {
     for (const item of resolvedItems) {
       const id = item?.getId?.() ?? item?.id ?? -1;
       const amount = item?.getAmount?.() ?? item?.amount ?? 0;
-      if (id <= 0 || amount <= 0) {
+      if (id < 0 || amount <= 0) {
         out.putInt(-1);
         continue;
       }
@@ -1176,6 +1190,7 @@ export class PacketSender {
       x: position.getX(),
       y: position.getY(),
       level: position.getZ(),
+      ...item.getTiming?.(),
       ownerId: mine ? this.player.getIndex() : -1,
       isPrivate: item.getState?.() === 0,
       ownership: owner == null ? 0 : mine ? 1 : 2,
@@ -1338,8 +1353,14 @@ export class PacketSender {
     return this;
   }
 
-  sendInterfaceFlagsRange(uid: number, fromSlot: number, toSlot: number, flags: number): this {
-    this.player.getSession().sendClientPacket(encodeWidgetSetFlagsRange(uid, fromSlot, toSlot, flags));
+  /**
+   * IF_SETEVENTS. With `ops` (bit N for op N+1) it is IF_SETEVENTS_V2, the only way to enable
+   * ops 11-32 - the bank's op 11 Examine.
+   */
+  sendInterfaceFlagsRange(uid: number, fromSlot: number, toSlot: number, flags: number, ops?: number): this {
+    this.player.getSession().sendClientPacket(ops === undefined
+      ? encodeWidgetSetFlagsRange(uid, fromSlot, toSlot, flags)
+      : encodeWidgetSetFlagsRangeV2(uid, fromSlot, toSlot, flags, ops));
     return this;
   }
 

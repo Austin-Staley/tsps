@@ -340,3 +340,84 @@ test("settings buttons act only with the screen open, from the layer shown, and 
   enter(player, "9999");
   assert.equal(Common.delayDays(player), 7, "wrong PIN: unchanged");
 });
+
+// The other locks (Wiki: "Situations requiring a PIN"): "bank-pin:guard" and the point shops.
+test('the guard: no PIN or an entered one passes; a locked PIN asks under the feature title, then resumes once', () => {
+  const Guard = require('../plugins/interface/bankpin/Guard.BankPin');
+  Guard.attach({ onCustomEvent() {}, onCanShop() {} }, { onForgotten: Settings.forgot });
+  const free = fakePlayer();
+  const open = { player: free, feature: 'grand-exchange', resume: () => assert.fail('no keypad, no resume') };
+  Guard.guard(open);
+  assert.equal(open.locked, undefined, 'no PIN: nothing asked');
+
+  const player = withPin('2468');
+  let resumed = 0;
+  let request = { player, feature: 'grand-exchange', resume: () => resumed++ };
+  Guard.guard(request);
+  assert.equal(request.locked, true);
+  assert.equal(player.interface, 213);
+  assert.equal(player.strings[u().keypad.title], 'Grand Exchange', 'recorded (rsprox 3250)');
+  assert.equal(shown(player, u().keypad.forgotten), true, '"I don\'t know it." is offered');
+  enter(player, '1357');
+  tick(2);
+  assert.equal(resumed, 0, 'a wrong PIN opens nothing');
+  Guard.guard(request = { player, feature: 'bond', resume: () => resumed++ });
+  assert.equal(player.strings[u().keypad.title], 'Old School Bonds', 'recorded (rsprox 1375)');
+  enter(player, '2468');
+  assert.equal(player.messages.at(-1), 'You have correctly entered your PIN.');
+  assert.equal(resumed, 0, 'a tick later');
+  tick();
+  assert.equal(resumed, 1);
+  const next = { player, feature: 'stash', resume: () => assert.fail('already entered') };
+  Guard.guard(next);
+  assert.equal(next.locked, undefined, 'entered once for the session');
+  const bank = { player, allow: null, source: 'open' };
+  Settings.canBank(bank);
+  assert.equal(bank.allow, null, 'the bank too');
+});
+
+test('an unlisted feature shows the bank title; a locked-out player gets no keypad', () => {
+  const Guard = require('../plugins/interface/bankpin/Guard.BankPin');
+  const player = withPin('1111');
+  Guard.guard({ player, feature: 'reward-cart' });
+  assert.equal(player.strings[u().keypad.title], 'Bank of Gielinor');
+  Common.set(player, 'lockedUntil', time + 10_000);
+  player.interface = -1;
+  const request = { player, feature: 'reward-cart' };
+  Guard.guard(request);
+  assert.equal(request.locked, true, 'still refused');
+  assert.equal(player.interface, -1, 'no keypad while locked out');
+});
+
+test('the point shops the Wiki lists ask for a locked PIN; other shops do not', () => {
+  const Guard = require('../plugins/interface/bankpin/Guard.BankPin');
+  const player = withPin('4321');
+  const general = { player, shopId: 1027, allow: null };
+  Guard.canShop(general);
+  assert.equal(general.allow, null);
+  const lms = { player, shopId: 1449, allow: null };
+  Guard.canShop(lms);
+  assert.equal(lms.allow, false);
+  assert.equal(player.interface, 213);
+});
+
+test('a bond asks for a locked PIN before its Redeem options', () => {
+  const Guard = require('../plugins/interface/bankpin/Guard.BankPin');
+  const Bonds = require('../plugins/items/Bonds.plugin');
+  const actions = {};
+  let prompts = 0;
+  Bonds.register(new Proxy({
+    core,
+    onItemAction: (name, handlers) => { actions[name] = handlers; },
+    emitCustomEvent: (name, request) => { if (name === 'bank-pin:guard') Guard.guard(request); },
+    sendMultiChatboxPrompt: () => { prompts++; },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const player = withPin('9999');
+  player.getInventory = () => ({ getAmount: () => 1, getItems: () => [] });
+  actions['Old school bond'].Redeem({ player });
+  assert.equal(prompts, 0);
+  assert.equal(player.strings[u().keypad.title], 'Old School Bonds');
+  enter(player, '9999');
+  tick();
+  assert.equal(prompts, 1, 'the options after the PIN');
+});

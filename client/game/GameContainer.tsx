@@ -14,6 +14,7 @@ import { GameRenderer } from "./GameRenderer";
 import { GameState } from "./login/GameState";
 import { OsrsClient } from "./OsrsClient";
 import { Sidebar } from "./sidebar/Sidebar";
+import { SidebarToggleArrow } from "./sidebar/SidebarToggleArrow";
 import { ControlsHelp } from "./controls/ControlsHelp";
 import "./controls/ControlsHelp.css";
 import { FirstPersonPlugin } from "./plugins/firstperson/FirstPersonPlugin";
@@ -430,6 +431,11 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         <Canvas renderer={renderer} />
                     </div>
                 </div>
+
+                {/* RuneLite's open/close arrow at the game's right edge (Ctrl+F11 does the same). */}
+                {!hideUi && osrsClient.gameState >= GameState.LOGIN_SCREEN && (
+                    <SidebarToggleArrow store={osrsClient.sidebar} />
+                )}
 
                 {!hideUi && (
                     <span>
