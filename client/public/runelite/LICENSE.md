@@ -1,13 +1,22 @@
-# Quest Helper images
+# Sidebar images
 
-Images used by the Quest Helper sidebar panel and overlays.
+These images are used by the RuneLite-style sidebar and the Quest Helper panel.
 
 From RuneLite (https://github.com/runelite/runelite, `runelite-client/src/main/resources/`):
 
 | File | Source path |
 |---|---|
+| `config_icon.png` | `net/runelite/client/plugins/config/config_icon.png` |
+| `config_edit_icon.png` | `net/runelite/client/plugins/config/config_edit_icon.png` |
+| `star_on.png` | `net/runelite/client/plugins/config/star_on.png` |
+| `switcher_on.png` | `net/runelite/client/plugins/config/switcher_on.png` |
+| `notes_icon.png` | `net/runelite/client/plugins/notes/notes_icon.png` |
 | `search.png` | `net/runelite/client/ui/components/search.png` |
+| `open_rs.png` | `net/runelite/client/ui/open_rs.png` |
+| `xp_overall.png` | `skill_icons/overall.png` |
 | `skill_icons_small/*.png` (the 24 skills) | `skill_icons_small/*.png` |
+
+Drawn for this client: `menu_swapper_icon.png`, `tile_packs_icon.png`.
 
 From Quest Helper (https://github.com/Zoinkwiz/quest-helper, commit `06da90f`, `src/main/resources/`):
 

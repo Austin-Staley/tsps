@@ -734,6 +734,21 @@ export class Player extends Mobile {
         return true;
     }
 
+    /**
+     * An audio varp the client transmitted. A change is announced as the "audio:setting-changed"
+     * custom event ({ player, varpId, previous, value }) so plugins can answer it, as the Music
+     * plugin does when the music volume rises from 0.
+     */
+    public applyAudioSettingFromClient(varpId: number, value: number): boolean {
+        const previous = this.audioSettings[varpId];
+        if (!this.setAudioSetting(varpId, value)) return false;
+        const next = this.audioSettings[varpId];
+        if (next !== previous) {
+            PluginManager.emitCustomEvent("audio:setting-changed", { player: this, varpId, previous, value: next });
+        }
+        return true;
+    }
+
     public getSession(): PlayerSession {
         return this.session;
     }

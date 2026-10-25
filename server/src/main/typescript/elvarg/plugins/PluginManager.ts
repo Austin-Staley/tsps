@@ -42,6 +42,7 @@ import {
   PluginItemOnPlayerEvent,
   PluginItemOnObjectEvent,
   PluginSpellOnObjectEvent,
+  PluginSpellOnNpcEvent,
   PluginSpellOnItemEvent,
   PluginSpellCastEvent,
   PluginNpcDeathEvent,
@@ -326,6 +327,7 @@ export class PluginManager {
   private static itemOnGroundItemHooks: PluginHook<PluginItemOnGroundItemEvent>[] =
     [];
   private static spellOnObjectHooks: PluginHook<PluginSpellOnObjectEvent>[] = [];
+  private static spellOnNpcHooks: PluginHook<PluginSpellOnNpcEvent>[] = [];
   private static spellOnItemHooks: PluginHook<PluginSpellOnItemEvent>[] = [];
   private static spellCastHooks: PluginHook<PluginSpellCastEvent>[] = [];
   private static groundItemInteractionHooks: PluginHook<PluginGroundItemInteractionEvent>[] =
@@ -855,14 +857,46 @@ export class PluginManager {
     return definition.inventoryActions?.[event.clickType - 1] ?? null;
   }
 
-  public static spawnNpc(definition: PluginNpcSpawnDefinition): any {
+  /** Plugin name -> the lineage its spawns (and their respawn clones) carry. */
+  private static readonly npcLineages = new Map<string, any>();
+
+  private static npcLineageFor(pluginName: string): any {
+    let lineage = PluginManager.npcLineages.get(pluginName);
+    if (!lineage) {
+      const { NpcSpawnLineage } = require("../game/entity/impl/npc/NpcSpawnLineage");
+      lineage = new NpcSpawnLineage(pluginName);
+      PluginManager.npcLineages.set(pluginName, lineage);
+    }
+    return lineage;
+  }
+
+  /**
+   * Takes out every plugin NPC without a player owner, and stops their respawns, when the
+   * server shuts down: plugins never reload, so nothing else would. Player-owned ones go
+   * with their owner's logout.
+   */
+  public static removeUnownedPluginNpcs(): number {
+    let removed = 0;
+    for (const lineage of PluginManager.npcLineages.values()) {
+      removed += lineage.retire({ keepPlayerOwned: true });
+    }
+    return removed;
+  }
+
+  public static spawnNpc(definition: PluginNpcSpawnDefinition, pluginName?: string): any {
     const id = Math.trunc(Number(definition?.id));
     if (!Number.isFinite(id) || id < 0) {
       return null;
     }
     const { NPC } = require("../game/entity/impl/npc/NPC");
+    const { NpcSpawnLineage } = require("../game/entity/impl/npc/NpcSpawnLineage");
     const { Location } = require("../game/model/Location");
     const { World } = require("../game/World");
+    const unique = typeof definition.unique === "string" && definition.unique.length > 0 ? definition.unique : null;
+    if (unique !== null && NpcSpawnLineage.uniqueHolder(unique)) {
+      console.warn(`[plugins] ${pluginName ?? "a plugin"} spawned unique NPC "${unique}" while it is live; refused`);
+      return null;
+    }
     const npc = NPC.create(
       id,
       new Location(Number(definition.x) | 0, Number(definition.y) | 0, Number(definition.z ?? 0) | 0)
@@ -886,6 +920,12 @@ export class PluginManager {
       // Owner-scoped spawns are quest/instance NPCs: when they die, the owning
       // plugin resyncs them, so never fall back to a global unowned respawn clone.
       (npc as any).__skipDefaultRespawn = true;
+    }
+    if (pluginName) {
+      npc.setSpawnLineage(PluginManager.npcLineageFor(pluginName));
+    }
+    if (unique !== null) {
+      NpcSpawnLineage.claimUnique(unique, npc);
     }
     if (!World.getNpcs().add(npc)) {
       World.getAddNPCQueue().push(npc);
@@ -1704,6 +1744,14 @@ export class PluginManager {
   public static emitSpellOnObject(event: PluginSpellOnObjectEvent): boolean {
     for (const hook of PluginManager.spellOnObjectHooks) {
       PluginManager.executeHook(hook, event, "spell_on_object", "spell_on_object");
+    }
+    return event.handled === true;
+  }
+
+  public static emitSpellOnNpc(event: PluginSpellOnNpcEvent): boolean {
+    for (const hook of PluginManager.spellOnNpcHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "spell_on_npc", "spell_on_npc");
     }
     return event.handled === true;
   }
@@ -2809,7 +2857,7 @@ export class PluginManager {
         }
         PluginManager.zoneHooks.push({ pluginName, zone, onExit: handler });
       },
-      spawnNpc: (definition) => PluginManager.spawnNpc(definition),
+      spawnNpc: (definition) => PluginManager.spawnNpc(definition, pluginName),
       removeNpc: (npc) => PluginManager.removeNpc(npc),
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
@@ -3653,6 +3701,16 @@ export class PluginManager {
             if (!event || event.handled || !event.player || !event.object) {
               return;
             }
+            handler(event);
+          },
+        });
+      },
+      onSpellOnNpc: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.spellOnNpcHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || event.handled || !event.player || !event.npc || !event.spell) return;
             handler(event);
           },
         });

@@ -275,31 +275,18 @@ export class LunarSpells {
     }
 
     public static handleItemTarget(player: Player, itemId: number, slot: number, name: string | undefined): boolean {
+        // Recharge Dragonstone has no target; the Jewellery plugin casts it.
         const key = name?.trim().toLowerCase() ?? "";
         const definitions: Record<string, SpellData> = {
             "string jewellery": { level: 80, experience: 83, runes: [rune(9075, 2), rune(556, 5), rune(563)] },
-            "recharge dragonstone": { level: 89, experience: 97.5, runes: [rune(9075, 4), rune(557, 10), rune(563, 4)] },
         };
         const data = definitions[key];
         const item = player.getInventory().getItems()[slot];
         if (!data || !item || item.getId() !== itemId) return false;
-        if (key === "string jewellery") {
-            const unstrung = new Map<number, number>([[1635, 1656], [1637, 1658], [1639, 1660], [1641, 1662], [6571, 6573]]);
-            const result = unstrung.get(itemId);
-            if (!result) {
-                player.sendMessage("This spell can only be cast on an unstrung amulet.");
-                return true;
-            }
-            return new LunarSpell(data).cast(player, () => { item.setId(result); player.getInventory().refreshItems(); });
-        }
-        const charged = new Map<number, number>([
-            [1712, 1710], [1710, 1708], [1708, 1706], [1706, 1704],
-            [2552, 2554], [2554, 2556], [2556, 2558], [2558, 2560],
-            [11118, 11120], [11120, 11122], [11122, 11124], [11124, 11126],
-        ]);
-        const result = charged.get(itemId);
+        const unstrung = new Map<number, number>([[1635, 1656], [1637, 1658], [1639, 1660], [1641, 1662], [6571, 6573]]);
+        const result = unstrung.get(itemId);
         if (!result) {
-            player.sendMessage("This spell can only recharge dragonstone jewellery.");
+            player.sendMessage("This spell can only be cast on an unstrung amulet.");
             return true;
         }
         return new LunarSpell(data).cast(player, () => { item.setId(result); player.getInventory().refreshItems(); });
