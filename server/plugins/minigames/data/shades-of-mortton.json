@@ -139,7 +139,7 @@
       }
     }
   },
-  "_messages": "Recorded: keyUnlock, needKey, tombDoor, tombDoorBack, wrongKey, treasure, swampPaste. Mine: noTreasureCoins (the recording always had coins), noRoom.",
+  "_messages": "Recorded: logsOn, remainsOn, lighting, keyUnlock, needKey, tombDoor, tombDoorBack, wrongKey, treasure, swampPaste. Mine: noTreasureCoins (the recording always had coins), noRoom, noTinderbox, firemaking, weakLogs, pyreBusy. The quest's: needQuest.",
   "messages": {
     "keyUnlock": "You use your Shade key to unlock the door.",
     "needKey": "You need a key to open this door.",
@@ -149,6 +149,90 @@
     "treasure": "You find some treasure and {coins} gold coins. The key strangely dissolves into the chest lock.",
     "noTreasureCoins": "You find some treasure. The key strangely dissolves into the chest lock.",
     "swampPaste": "You find {paste} doses of swamp paste at the bottom of the chest.",
-    "noRoom": "You don't have enough inventory space to take the treasure."
+    "noRoom": "You don't have enough inventory space to take the treasure.",
+    "logsOn": "You put some logs on the pyre.",
+    "remainsOn": "You place the shade's remains on the logs.",
+    "lighting": "You attempt to light the funeral pyre.",
+    "noTinderbox": "You need a tinderbox to light the pyre.",
+    "firemaking": "You need a Firemaking level of {level} to light these logs.",
+    "weakLogs": "These logs won't burn hot enough to cremate those remains.",
+    "pyreBusy": "Someone else is using that pyre.",
+    "needQuest": "You can't do that until you have made your own funeral pyre logs."
+  },
+  "_pyres": "Recorded (227/01846 [10247]-[10272], 232/03118): pyre logs on the funeral pyre ('You put some logs on the pyre.', the pyre shows its wood), remains on the logs ('You place the shade's remains on the logs.'), Light ('You attempt to light the funeral pyre.'), the fire 3 ticks on with the experience, the Shade Spirit 2 ticks later, and 4 ticks after that the reward on the stone stand (private, gone after 500 ticks) with a puff of smoke as the pyre empties. Wiki: the woods (Firemaking level and experience), the remains' Prayer experience and the wood each needs, 21% coins or else a key.",
+  "pyres": {
+    "woods": [
+      ["logs", 5, 50],
+      ["oak", 20, 70],
+      ["willow", 35, 100],
+      ["teak", 40, 120],
+      ["arctic_pine", 47, 158.5],
+      ["maple", 50, 175],
+      ["mahogany", 55, 210],
+      ["yew", 65, 255],
+      ["camphor", 71, 320],
+      ["magic", 80, 404.5],
+      ["ironwood", 85, 435],
+      ["redwood", 95, 500],
+      ["rosewood", 97, 590]
+    ],
+    "remains": {
+      "shade_bones1": {
+        "prayer": 25,
+        "minWood": 5,
+        "coins": [200, 300],
+        "keys": [[79, ["bronze_bloodred", "bronze_brown", "bronze_crimson"]]]
+      },
+      "shade_bones2": {
+        "prayer": 37.5,
+        "minWood": 5,
+        "coins": [400, 500],
+        "keys": [
+          [12.5, ["bronze_black", "bronze_purple"]],
+          [66.5, ["steel_bloodred", "steel_brown", "steel_crimson"]]
+        ]
+      },
+      "shade_bones3": {
+        "prayer": 61,
+        "minWood": 35,
+        "coins": [600, 700],
+        "keys": [[12.5, ["steel_black", "steel_purple"]], [66.5, ["black_bloodred", "black_brown", "black_crimson"]]]
+      },
+      "shade_bones4": {
+        "prayer": 79.5,
+        "minWood": 65,
+        "coins": [800, 900],
+        "keys": [
+          [28.2, ["black_crimson", "black_black", "black_purple"]],
+          [50.8, ["silver_bloodred", "silver_brown"]]
+        ]
+      },
+      "shade_bones5": {
+        "prayer": 100,
+        "minWood": 80,
+        "coins": [2000, 4000],
+        "keys": [
+          [63.4, ["silver_brown", "silver_crimson", "silver_black", "silver_purple"]],
+          [15.6, ["gold_bloodred"]]
+        ]
+      },
+      "shade_bones6": {
+        "prayer": 120.5,
+        "minWood": 95,
+        "coins": [2000, 7000],
+        "keys": [[79, ["gold_bloodred", "gold_brown", "gold_crimson", "gold_black", "gold_purple"]]]
+      }
+    },
+    "stand": "pyre_stand",
+    "standReach": 4,
+    "spirit": "shade_heaven",
+    "anims": {"place": 832, "light": 733},
+    "graphics": {"fire": 292, "smoke": 188},
+    "sounds": {"spirit": 748},
+    "fireTicks": 3,
+    "spiritTicks": 2,
+    "rewardTicks": 4,
+    "spiritLeavesTicks": 7,
+    "rewardDespawnTicks": 500
   }
 }

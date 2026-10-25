@@ -15,7 +15,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 
-let Common, Shades, Catacombs, hooks, core;
+let Common, Shades, Catacombs, Pyres, hooks, core;
 
 function chain(map, key, fn) {
   const prior = map.get(key);
@@ -26,18 +26,25 @@ before(() => {
   CachePipeline.initialize();
   RegionManager.init();
   core = PluginManager.getCoreApi();
-  hooks = { objects: new Map(), events: {}, npcHit: [], npcDeath: [] };
+  hooks = { objects: new Map(), events: { emitted: [] }, npcHit: [], npcDeath: [] };
   const api = {
     core,
     onObjectInteraction: (name, actions) => { for (const [op, fn] of Object.entries(actions)) chain(hooks.objects, `${name}:${op}`, fn); },
     onNpcHitModify: (fn) => hooks.npcHit.push(fn),
     onNpcDeath: (fn) => hooks.npcDeath.push(fn),
     onCustomEvent: (name, fn) => { hooks.events[name] = fn; },
+    onItemOnObject: (fn) => { hooks.itemOnObject = fn; },
+    onPlayerLogout() {},
+    emitCustomEvent: (name, payload) => {
+      if (name === 'quest:get-stage') payload.stage = payload.player.stage ?? 0;
+      else hooks.events.emitted.push([name, payload]);
+    },
   };
   require('../plugins/minigames/ShadesOfMortton.plugin').register(api);
   Common = require('../plugins/minigames/shadesofmortton/Common.ShadesOfMortton');
   Shades = require('../plugins/minigames/shadesofmortton/Shades.ShadesOfMortton');
   Catacombs = require('../plugins/minigames/shadesofmortton/Catacombs.ShadesOfMortton');
+  Pyres = require('../plugins/minigames/shadesofmortton/Pyres.ShadesOfMortton');
 });
 
 function ticks(count) {
@@ -159,6 +166,76 @@ test("coins are a third of what the roll leaves over the loot's value (Wiki)", (
     assert.equal(Catacombs.coinsFor('bronze', null), Math.floor(400 / 3));
     const gold = core.CacheDefinitions.getItem(2357).price;
     assert.equal(Catacombs.coinsFor('bronze', { id: 2357, amount: 1 }), Math.max(0, Math.floor((400 - gold) / 3)));
+  } finally {
+    Math.random = random;
+  }
+});
+
+// ------------------------------------------------------------------ pyres
+
+function burner({ stage = 85 } = {}) {
+  const p = fakePlayer(new Location(3507, 3278, 0));
+  Object.assign(p, {
+    stage, xp: [], anims: [],
+    getUsername: () => 'Burner', getPrivateArea: () => null, isRegistered: () => true,
+    performAnimation: (a) => p.anims.push(a.getId()),
+    getSkillManager: () => ({
+      getCurrentLevel: () => 99,
+      addExperience: (skill, amount) => { p.xp.push([skill.getName(), amount]); },
+    }),
+  });
+  return p;
+}
+
+const pyre = (name) => new core.GameObject(Common.locId(name), new Location(3507, 3276, 0), 10, 0, null);
+
+test('a funeral pyre: logs, then remains, then Light; the fire, the experience, the Shade Spirit and the reward', () => {
+  const p = burner();
+  p.inventory.add(new core.Item(Common.objId('magic_logs_pyre'), 1));
+  p.inventory.add(new core.Item(Common.objId('shade_bones1'), 1));
+  p.inventory.add(new core.Item(Common.objId('tinderbox'), 1));
+  hooks.events.emitted.length = 0;
+  hooks.itemOnObject({ player: p, object: pyre('temple_pyre'), itemId: Common.objId('magic_logs_pyre'), handled: false });
+  assert.ok(p.messages.includes('You put some logs on the pyre.'));
+  assert.equal(p.inventory.getAmount(Common.objId('magic_logs_pyre')), 0);
+  hooks.itemOnObject({ player: p, object: pyre('temple_pyre_magic'), itemId: Common.objId('shade_bones1'), handled: false });
+  assert.ok(p.messages.includes("You place the shade's remains on the logs."));
+  hooks.objects.get('Magic Pyre:Light')({ player: p, object: pyre('temple_pyre_bones_magic') });
+  assert.ok(p.messages.includes('You attempt to light the funeral pyre.'));
+  assert.equal(p.anims.at(-1), 733);
+  ticks(3);
+  assert.deepEqual(p.xp, [['Prayer', 25], ['Firemaking', 404.5]]);
+  ticks(2 + 4 + 1);
+  const names = hooks.events.emitted.map(([name]) => name);
+  assert.deepEqual(names, ['shades-of-mortton:pyre-logs', 'shades-of-mortton:cremated'], 'the quest hears of both');
+  const reward = hooks.events.emitted[1][1].reward;
+  assert.ok(reward.id === 995 || Common.keyOf(reward.id)?.metal === 'bronze', 'Loar remains give coins or a bronze key');
+});
+
+test('remains need wood good enough (Riyl: willow or better), and the quest step comes first', () => {
+  const p = burner();
+  p.inventory.add(new core.Item(Common.objId('logs_pyre'), 1));
+  p.inventory.add(new core.Item(Common.objId('shade_bones3'), 1));
+  hooks.itemOnObject({ player: p, object: pyre('temple_pyre'), itemId: Common.objId('logs_pyre'), handled: false });
+  hooks.itemOnObject({ player: p, object: pyre('temple_pyre_logs'), itemId: Common.objId('shade_bones3'), handled: false });
+  assert.equal(p.messages.at(-1), Common.message('weakLogs'));
+  assert.equal(p.inventory.getAmount(Common.objId('shade_bones3')), 1);
+  const early = burner({ stage: 60 });
+  early.inventory.add(new core.Item(Common.objId('logs_pyre'), 1));
+  hooks.itemOnObject({ player: early, object: new core.GameObject(Common.locId('temple_pyre'), new Location(3477, 3268, 0), 10, 0, null), itemId: Common.objId('logs_pyre'), handled: false });
+  assert.equal(early.messages.at(-1), Common.message('needQuest'));
+});
+
+test('the reward (Wiki): a key from the remains\' groups, else 21% coins', () => {
+  const remains = { keys: Common.data.pyres.remains.shade_bones2.keys, coins: [400, 500] };
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    assert.equal(Common.keyOf(Pyres.rewardFor(remains).id).metal, 'bronze', 'Phrin: the 12.5% bronze group first');
+    Math.random = () => 0.5;
+    assert.equal(Common.keyOf(Pyres.rewardFor(remains).id).metal, 'steel');
+    Math.random = () => 0.9;
+    assert.equal(Pyres.rewardFor(remains).id, 995);
   } finally {
     Math.random = random;
   }

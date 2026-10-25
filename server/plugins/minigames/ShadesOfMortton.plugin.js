@@ -4,11 +4,14 @@
  * (quests/quests/ShadesOfMortton.Quest.js) keeps its own steps: the temple, sacred oil, pyre logs.
  * The units are in ./shadesofmortton/:
  * - Shades: shadows rising into shades and sinking back, and their remains;
- * - Catacombs: the hillside entrance, the tomb doors and the chests.
+ * - Catacombs: the hillside entrance, the tomb doors and the chests;
+ * - Pyres: the funeral pyres, the Shade Spirit and the reward on the stand (the quest hears of
+ *   them for its stages).
  */
 const Common = require("./shadesofmortton/Common.ShadesOfMortton");
 const Shades = require("./shadesofmortton/Shades.ShadesOfMortton");
 const Catacombs = require("./shadesofmortton/Catacombs.ShadesOfMortton");
+const Pyres = require("./shadesofmortton/Pyres.ShadesOfMortton");
 
 module.exports = {
   name: "Shades of Mort'ton",
@@ -17,5 +20,6 @@ module.exports = {
     Common.init(api);
     Shades.attachShades(api);
     Catacombs.attachCatacombs(api);
+    Pyres.attachPyres(api);
   },
 };
