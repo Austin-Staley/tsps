@@ -407,3 +407,17 @@ test('buys use coins first, then platinum tokens with change in coins', t => {
   assert.equal(inventory.getAmount(995), 110);
   assert.equal(inventory.getAmount(13204), 2);
 });
+
+test('trades above the coin stack pay with tokens and collect as tokens plus coins', t => {
+  const { MAX_TRADE, payout } = plugin._test;
+  assert.equal(MAX_TRADE, 2_149_631_130_647);
+  assert.deepEqual(payout({ sell: true, total: 3_000_000_123 }), [{ itemId: 13204, amount: 3_000_000 }, { itemId: 995, amount: 123 }]);
+  assert.deepEqual(payout({ sell: true, total: MAX_TRADE }), [{ itemId: 13204, amount: 2_147_483_647 }, { itemId: 995, amount: 2_147_483_647 }]);
+  assert.deepEqual(payout({ sell: true, total: 500 }), [{ itemId: 995, amount: 500 }]);
+  const { inventory, place } = exchange(t);
+  inventory.add(new Item(995, 2_000_000_000), false);
+  inventory.add(new Item(13204, 1_500_000), false);
+  assert.equal(place(false, UNLIMITED, 1_000, 3_000_000).total, 3_000_000_000);
+  assert.equal(inventory.getAmount(995), 0);
+  assert.equal(inventory.getAmount(13204), 500_000);
+});

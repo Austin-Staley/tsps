@@ -51,9 +51,13 @@ const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
 const PLATINUM_TOKEN = ItemIdentifiers.PLATINUM_TOKEN;
 // OSRS Wiki Update:GE_Improvements:_Beyond_Max_Cash: payment mixes coins and platinum tokens,
-// coins first, with change in coins. Only the inventory is used; trades stay within MAX coins
-// (estimate: the client's quantity varbit and entry prompt are int-sized).
+// coins first, with change in coins. Only the inventory is used (the client reads it with
+// inv_total of 995/13204 in script 9915). Cache script 779 rejects a total (varbit 4396 quantity
+// x long varp 5753 price) above lconst 500:2147482647 = 2,149,631,130,647 ("Too much money!"),
+// i.e. a full stack of coins plus a full stack of tokens. The price entry (script 108) is still
+// an int prompt, so a unit price stays within MAX; only quantity x price can exceed it.
 const COINS_PER_TOKEN = 1000;
+const MAX_TRADE = MAX + MAX * COINS_PER_TOKEN;
 const MARKET_DATA_FILE = path.join(__dirname, "data", "grand-exchange.json");
 // OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
 const usableSlots = () => (pluginApi.core.WorldDefinition.isMembersWorld() ? 8 : 3);
@@ -244,7 +248,7 @@ function marketVarps(slot, offer) {
     [base + 1]: offer?.quantity ?? 0,
     // An aborted offer traded nothing (the client draws its bar red).
     [base + 2]: offer?.finished && !offer.aborted ? offer.quantity : 0,
-    [base + 3]: offer?.finished && !offer.aborted ? offer.total : 0,
+    [base + 3]: offer?.finished && !offer.aborted ? Math.min(MAX, offer.total) : 0,
     [base + 4]: offer?.sell ? 1 : 0,
     [base + 5]: offer ? (offer.finished ? FINISHED : 2) : 0,
     [OFFER_ITEMS[slot] + 1]: 0,
@@ -258,16 +262,22 @@ function allMarketVarps(player) {
   return varps;
 }
 
-/** What a finished offer hands over: the trade's result, or for an aborted offer what was put in. */
+/**
+ * What a finished offer hands over, as item stacks: the trade's result, or for an aborted offer
+ * what was put in. Coin totals over a full stack are paid as platinum tokens plus the remaining coins.
+ */
 function payout(offer) {
   const coins = offer.sell !== Boolean(offer.aborted);
-  return { coins, itemId: coins ? COINS : offer.itemId, amount: coins ? offer.total : offer.quantity };
+  if (!coins) return [{ itemId: offer.itemId, amount: offer.quantity }];
+  if (offer.total <= MAX) return [{ itemId: COINS, amount: offer.total }];
+  const tokens = Math.min(MAX, Math.floor(offer.total / COINS_PER_TOKEN));
+  return [{ itemId: PLATINUM_TOKEN, amount: tokens }, { itemId: COINS, amount: offer.total - tokens * COINS_PER_TOKEN }];
 }
 
 function collection(offer) {
   return {
     capacity: 2,
-    slots: offer?.finished ? [{ slot: 0, itemId: payout(offer).itemId, quantity: payout(offer).amount }] : [],
+    slots: offer?.finished ? payout(offer).map(({ itemId, amount }, slot) => ({ slot, itemId, quantity: amount })) : [],
   };
 }
 
@@ -397,8 +407,8 @@ function confirm(player, offer) {
   const sender = player.getPacketSender();
   if (!Number.isInteger(unitPrice) || unitPrice < 1 || unitPrice > MAX ||
       !Number.isInteger(amount) || amount < 1 || amount > MAX ||
-      !Number.isSafeInteger(total) || total > MAX) {
-    sender.sendMessage("Choose a smaller quantity (maximum trade value is 2,147,483,647 coins).");
+      !Number.isSafeInteger(total) || total > MAX_TRADE) {
+    sender.sendMessage("Choose a smaller quantity (maximum trade value is 2,149,631,130,647 coins).");
     return;
   }
   const remaining = offer.sell ? Infinity : remainingLimit(player, offer.itemId);
@@ -428,6 +438,7 @@ function confirm(player, offer) {
     const shortfall = total - inventory.getAmount(COINS);
     result.deleted(COINS, inventory.getAmount(COINS), false);
     result.deleted(PLATINUM_TOKEN, tokens, false);
+    // The coin stack was emptied and the change is under 1,000, so it cannot overflow.
     result.add(new Item(COINS, tokens * COINS_PER_TOKEN - shortfall), false);
   } else {
     result.deleted(inputId, inputAmount, false);
@@ -473,35 +484,41 @@ function collectionOutputId(baseId, amount, action, forceNotes = false) {
 function collect(player, action, slot = viewing.get(player), forceNotes = false) {
   const offer = completedOffers(player)[slot];
   if (!offer?.finished) return;
-  const paid = payout(offer);
-  const baseId = paid.coins ? COINS : ItemDefinition.forId(paid.itemId).unNote();
-  const outputAmount = paid.amount;
-  const outputId = collectionOutputId(baseId, outputAmount, action, forceNotes);
   const inventory = player.getInventory();
-  const destination = action === 3 ? player.getBank(Bank.getTabForItem(player, baseId)) : inventory;
-  const result = action === 3 ? new Bank(player) : new Inventory(player);
-  result.setItems(destination.getCopiedItems());
-  const before = result.getAmount(outputId);
-  if (before + outputAmount > MAX) {
-    player.sendMessage(`You do not have enough ${action === 3 ? "bank" : "inventory"} space to collect that offer.`);
-    return;
+  const parts = [];
+  // Each part lands on a copy first, so a collection that does not fit hands over nothing.
+  const results = new Map();
+  for (const paid of payout(offer)) {
+    const baseId = paid.itemId === COINS || paid.itemId === PLATINUM_TOKEN ? paid.itemId : ItemDefinition.forId(paid.itemId).unNote();
+    const outputId = collectionOutputId(baseId, paid.amount, action, forceNotes);
+    const destination = action === 3 ? player.getBank(Bank.getTabForItem(player, baseId)) : inventory;
+    let result = results.get(destination)?.result;
+    if (!result) {
+      result = action === 3 ? new Bank(player) : new Inventory(player);
+      result.setItems(destination.getCopiedItems());
+      results.set(destination, { result });
+    }
+    const before = result.getAmount(outputId);
+    result.add(new Item(outputId, paid.amount), false);
+    if (before + paid.amount > MAX || result.getAmount(outputId) !== before + paid.amount) {
+      player.sendMessage(`You do not have enough ${action === 3 ? "bank" : "inventory"} space to collect that offer.`);
+      return;
+    }
+    parts.push({ outputId, amount: paid.amount, destination });
   }
-  result.add(new Item(outputId, outputAmount), false);
-  if (result.getAmount(outputId) !== before + outputAmount) {
-    player.sendMessage(`You do not have enough ${action === 3 ? "bank" : "inventory"} space to collect that offer.`);
-    return;
-  }
-  destination.setItems(result.getItems());
+  for (const [destination, { result }] of results) destination.setItems(result.getItems());
   if (action !== 3) inventory.refreshItems();
   // Plugins may change what the collection hands over (e.g. a bought bond
   // arrives untradeable) before the offer is cleared and saved below.
-  pluginApi.emitCustomEvent("ge:offer-collected", {
-    player,
-    itemId: outputId,
-    amount: outputAmount,
-    destination: action === 3 ? "bank" : "inventory",
-    container: destination,
-  });
+  for (const { outputId, amount, destination } of parts) {
+    pluginApi.emitCustomEvent("ge:offer-collected", {
+      player,
+      itemId: outputId,
+      amount,
+      destination: action === 3 ? "bank" : "inventory",
+      container: destination,
+    });
+  }
   delete completedOffers(player)[slot];
   saveOffers(player);
   const sender = player.getPacketSender();
@@ -509,7 +526,9 @@ function collect(player, action, slot = viewing.get(player), forceNotes = false)
     { [COLLECTIONS[slot]]: collection() });
   if (player.getInterfaceId() === GE) home(player);
   refreshCollectionBox(player);
-  sender.sendMessage(`Collected ${outputAmount.toLocaleString("en-US")} x ${ItemDefinition.forId(outputId).getName()}.`);
+  for (const { outputId, amount } of parts) {
+    sender.sendMessage(`Collected ${amount.toLocaleString("en-US")} x ${ItemDefinition.forId(outputId).getName()}.`);
+  }
 }
 
 /** Abort offer (465:23, dynamic child 0): an offer still trading stops; its input waits in the collection. */
@@ -712,6 +731,8 @@ module.exports = {
     sellPrice,
     changePrice,
     collectionOutputId,
+    payout,
+    MAX_TRADE,
     fillDelayMs,
     remainingLimit,
     recordLimit,
