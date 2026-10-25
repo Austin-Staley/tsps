@@ -1,4 +1,7 @@
-import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot } from "../protocol/ClientProtocol";
+import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot,
+  SONG_NO_FADES,
+  type SongFades,
+} from "../protocol/ClientProtocol";
 import { BIT_MASKS } from "../../game/cache/codec/rs/MathConstants";
 import { PacketBuilder } from "./PacketBuilder";
 import { ValueType } from "./ValueType";
@@ -187,16 +190,25 @@ export class PacketSender {
     return this.sendSoundEffect(soundId, 1, delay, volume);
   }
 
-  sendSong(id: number): this {
-    if (this.player.getSession().sendClientPacket(encodePlaySong(id))) {
+  sendSong(id: number, fades?: SongFades): this {
+    if (this.player.getSession().sendClientPacket(encodePlaySong(id, fades))) {
       const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
       PluginManager.emitCustomEvent("audio:play-song", { player: this.player, trackId: id });
     }
     return this;
   }
 
-  sendJingle(id: number, delayTicks: number): this {
-    if (this.player.getSession().sendClientPacket(encodePlayJingle(id, delayTicks))) return this;
+  /**
+   * A jingle. Live sends the current track with zero fades on the same tick first (every one of the
+   * 1,584 jingles in rsprox revs 236-239), and the client resumes that track when the jingle ends.
+   * `delay` is the old 24-bit length field, which the client no longer reads.
+   */
+  sendJingle(id: number, delay = 0): this {
+    const session = this.player.getSession();
+    const track = session.getCurrentMusicTrack?.() ?? -1;
+    if (track >= 0) session.sendClientPacket(encodePlaySong(track, SONG_NO_FADES));
+    session.sendClientPacket(encodePlayJingle(id, delay));
+    return this;
   }
 
   sendAreaSound(

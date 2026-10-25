@@ -283,3 +283,63 @@ test('invalid music cape is banked when full and destroyed for ultimate ironmen'
     api.core.EquipPacketListener.unequip = originalUnequip;
   }
 });
+
+// Live's packets around music (rsprox revs 236-239, 1,584 jingles): a region change carries the
+// MidiSongV2 defaults 0/60/60/0 (fade-out delay/speed, fade-in delay/speed, in client cycles),
+// and every jingle is preceded on the same tick by the current track with all four fades 0; the
+// client resumes that track itself when the jingle ends.
+test('encodePlaySong carries the live fade defaults, or the fades it is given', () => {
+  const { encodePlaySong } = require('../dist/net/protocol/ClientProtocol');
+  const body = (packet) => packet.subarray(packet.length - 10);
+  assert.deepEqual([...body(encodePlaySong(454))], [1, 198, 0, 0, 0, 60, 0, 60, 0, 0]);
+  assert.deepEqual([...body(encodePlaySong(454, { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 }))], [1, 198, 0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
+test('sendJingle first re-sends the current track with zero fades, then the jingle, and returns the sender', async () => {
+  await setup();
+  const frames = [];
+  const player = { getSession: () => ({ sendClientPacket: (frame) => { frames.push(frame); return true; }, getCurrentMusicTrack: () => 454 }) };
+  const sender = new PacketSender(player);
+  const emit = PluginManager.emitCustomEvent;
+  PluginManager.emitCustomEvent = () => {};
+  try {
+    assert.equal(sender.sendJingle(18), sender);
+  } finally {
+    PluginManager.emitCustomEvent = emit;
+  }
+  assert.deepEqual(frames.map((f) => f[0]), [133, 132], 'PLAY_SONG then PLAY_JINGLE');
+  assert.deepEqual([...frames[0].subarray(frames[0].length - 10)], [1, 198, 0, 0, 0, 0, 0, 0, 0, 0], 'the current track, zero fades');
+  assert.deepEqual([...frames[1].subarray(frames[1].length - 5)], [0, 18, 0, 0, 0]);
+
+  frames.length = 0;
+  const silent = { getSession: () => ({ sendClientPacket: (frame) => { frames.push(frame); return true; }, getCurrentMusicTrack: () => -1 }) };
+  const quiet = new PacketSender(silent);
+  assert.equal(quiet.sendJingle(18), quiet);
+  assert.deepEqual(frames.map((f) => f[0]), [132], 'no known track: only the jingle');
+});
+
+test('PlayerSession remembers the track it started for the region, for the pre-jingle re-send', async () => {
+  await setup();
+  const trackId = api.core.Music.forRegion(12850);
+  const songs = [];
+  const player = {
+    getLocation: () => new Location(3222, 3218, 0),
+    getArea: () => null,
+    getAudioSettings: () => ({ 18: 0 }),
+    getPacketSender: () => ({ sendSong: (id) => { songs.push(id); } }),
+  };
+  const session = new PlayerSession({ isOpen: true });
+  session.setPlayer(player);
+  session.lastGroundItemRegion = 12850;
+  session.lastGroundItemLevel = 0;
+  assert.equal(session.getCurrentMusicTrack(), -1, 'nothing before the first flush');
+  const emit = PluginManager.emitCustomEvent;
+  PluginManager.emitCustomEvent = () => {};
+  try {
+    try { session.flush(); } catch { /* the fake player stops the rest of flush; music ran first */ }
+  } finally {
+    PluginManager.emitCustomEvent = emit;
+  }
+  assert.deepEqual(songs, [trackId]);
+  assert.equal(session.getCurrentMusicTrack(), trackId);
+});
