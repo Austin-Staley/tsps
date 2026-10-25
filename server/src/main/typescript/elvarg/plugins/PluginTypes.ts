@@ -243,6 +243,11 @@ export interface PluginNpcSpawnDefinition {
   owner?: any;
   /** Hide the NPC from everyone except `owner` (quest instances). */
   ownerOnly?: boolean;
+  /**
+   * A key only one live NPC may hold (a shared or instanced boss): while one holding it is
+   * in the world, queued to join it or dying, spawning another returns null.
+   */
+  unique?: string;
 }
 
 export interface PluginCanAttackEvent {
@@ -852,7 +857,8 @@ export interface PluginApi {
   onZoneExit(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
   /**
    * Spawns an NPC from a plugin. `ownerOnly` keeps it visible (and aggressive)
-   * only for `owner`, for instanced/quest spawns. Returns the NPC or null.
+   * only for `owner`, for instanced/quest spawns; `unique` keeps a boss single. The NPC
+   * remembers the plugin that spawned it. Returns the NPC or null.
    */
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
