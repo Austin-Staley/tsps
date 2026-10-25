@@ -3,7 +3,7 @@
  * a grave. The mine's own items are gone, and Pete keeps the rest ("Petrified Pete has retrieved
  * some of your items. You can collect them from him on Fossil Island."). Retrieve hands them back for
  * 150 Numulite ("Death charges you 150 x Numulite."). Dying in the mine again before collecting
- * loses the older lot (Wiki).
+ * loses the older lot, and so does any unsafe death elsewhere (Wiki).
  */
 const Common = require("./Common.VolcanicMine");
 const Game = require("./Game.VolcanicMine");
@@ -36,7 +36,20 @@ function beforeDeath(event) {
   const items = [...take(player.getInventory()), ...take(player.getEquipment())];
   player.getUpdateFlag?.().flag?.(Common.core.Flag?.APPEARANCE);
   player.setAttribute(Common.data.attributes.stored, items.length ? items : null);
+  // This death's own drop (two ticks on) must not count as the "later" death that loses it.
+  player.__volcanicMineStoring = true;
   if (items.length) Common.later(MESSAGE_TICKS, () => player.sendMessage(Common.message("retrieved")));
+}
+
+/** An unsafe death outside the mine loses what Pete holds (safe deaths drop nothing, so keep it). */
+function deathDrops(event) {
+  const { player } = event;
+  if (player.__volcanicMineStoring) {
+    player.__volcanicMineStoring = false;
+    return;
+  }
+  if (Game.gameOf(player)) return;
+  if (stored(player)) player.setAttribute(Common.data.attributes.stored, null);
 }
 
 /** Retrieve (Pete's op 5, or asking him): 150 Numulite from the pack, else from what he holds. */
@@ -77,10 +90,11 @@ function retrieve(player) {
 function attachRetrieval(api) {
   api.persistAttribute(Common.data.attributes.stored);
   api.onPlayerBeforeDeath(beforeDeath);
+  api.onPlayerDeathDrops(deathDrops);
   api.onNpcClick(Common.data.npcs.pete, 5, ({ player }) => {
     retrieve(player);
     return true;
   });
 }
 
-module.exports = { attachRetrieval, retrieve, beforeDeath, stored };
+module.exports = { attachRetrieval, retrieve, beforeDeath, deathDrops, stored };

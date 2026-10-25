@@ -35,6 +35,7 @@ before(() => {
     onNpcHitModify: (handler) => { hooks.npcHit = handler; },
     onNpcDeath: (handler) => { hooks.npcDeath = handler; },
     onPlayerBeforeDeath: (handler) => { (hooks.beforeDeath ??= []).push(handler); },
+    onPlayerDeathDrops: (handler) => { (hooks.deathDrops ??= []).push(handler); },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     emitCustomEvent: (name, request) => {
       if (name === 'mining:best-pickaxe') request.pickaxe = { id: 11920, animation: new core.Animation(7139) };
@@ -639,4 +640,17 @@ test('a live game brings out a lava beast once it starts, none in the lobby', ()
   ticks(1 + 22);
   assert.ok(game.beasts.size >= 1, 'a beast within the respawn window');
   game.end();
+});
+
+test("Pete's lot is lost to an unsafe death outside the mine, but not to the mine death's own drop", () => {
+  const p = enter();
+  const game = Game.gameOf(p);
+  ticks(51);
+  p.inventory.adds(4151, 1);
+  for (const handler of hooks.beforeDeath) handler({ player: p, preventDeath: false });
+  game.area.leave(p, false);
+  for (const handler of hooks.deathDrops) handler({ player: p, killer: null, items: [], untradeables: [] });
+  assert.deepEqual(Retrieval.stored(p).map((i) => i.id), [4151], "the mine death's own drop keeps it");
+  for (const handler of hooks.deathDrops) handler({ player: p, killer: null, items: [], untradeables: [] });
+  assert.equal(Retrieval.stored(p), null, 'a later unsafe death elsewhere loses it');
 });
