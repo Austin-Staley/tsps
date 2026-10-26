@@ -26,6 +26,7 @@
  */
 const Data = require("./Data.Slayer");
 const State = require("./State.Slayer");
+const SlaughterBracelet = require("./SlaughterBracelet.Slayer");
 
 const COMPLETE = "<col=ef1020>You have completed your task! You killed</col> {amount} {name}<col=ef1020>. You gained</col> {xp} xp<col=ef1020>.";
 const FREE_TASK = "<col=ef1020>You've completed </col>{streak} {tasks}<col=ef1020> and will need </col>{more} more<col=ef1020> before you start receiving Slayer points; return to a Slayer master.</col>";
@@ -364,6 +365,7 @@ function npcKilled({ killer, npc }) {
   if (xp > 0) player.getSkillManager().addExperiences(core.Skill.SLAYER, xp);
   player.setAttribute(TASK_XP_ATTRIBUTE, (Number(player.getAttribute(TASK_XP_ATTRIBUTE)) || 0) + (kill.taskXp ?? kill.xp) * boost);
   if (task.modifier) killModifiers.set(npc, { player, modifier: task.modifier });
+  if (SlaughterBracelet.preventsDecrement(player, npc)) return;
   const remaining = task.count - 1;
   State.setVarp(player, "slayer_count", remaining);
   if (remaining > 0) return;
