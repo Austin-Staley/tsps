@@ -7,9 +7,10 @@
  * (Wiki, Mural (Pyramid Plunder)). It opens interface ntk_scores, the handwritten scroll with ten
  * lines. A chest counts when its search goes ahead (Containers.PyramidPlunder.js), swarm or not.
  *
- * Not from a recording or the Wiki: how the counts are worded. The Wiki only describes them, so
- * each room is one line, "Room N: X", in room order, under the first line "Grand Gold Chests
- * pillaged:".
+ * Not from a recording or the Wiki: how the counts are worded. The Wiki's text gives only the
+ * no-pillaging line (its screenshot, File:Mural (Pyramid Plunder) interface.png, has no
+ * transcription and wasn't used), so each room is one line, "Room N: X", in room order, under
+ * the first line "Grand Gold Chests pillaged:".
  */
 
 const Common = require("./Common.PyramidPlunder");

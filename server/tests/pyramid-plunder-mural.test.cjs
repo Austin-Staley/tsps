@@ -55,7 +55,8 @@ function realPlayer(t, thieving = 99) {
   const { Skill } = C.getCore();
   p.getSkillManager().setMaxLevel(Skill.THIEVING, thieving).setCurrentLevel(Skill.THIEVING, thieving);
   const sender = p.getPacketSender();
-  p.sent = { interfaces: [], texts: new Map() };
+  p.sent = { interfaces: [], texts: new Map(), messages: [] };
+  t.mock.method(p, 'sendMessage', (message) => p.sent.messages.push(message));
   const original = { sendInterface: sender.sendInterface, sendString: sender.sendString };
   t.mock.method(sender, 'sendInterface', function (id) { p.sent.interfaces.push(id); return original.sendInterface.apply(this, arguments); });
   t.mock.method(sender, 'sendString', function (text, uid) { p.sent.texts.set(uid, text); return original.sendString.apply(this, arguments); });
@@ -71,13 +72,24 @@ function click(player, objectId = MURAL) {
 }
 
 /** The room's Grand Gold Chest searched, through Containers.PyramidPlunder.js. */
-function searchChest(player, room) {
+/** A fresh visit to `room` (its chest closed again), as moving on through the rooms gives. */
+function visit(player, room) {
   const run = C.sessionOf(player) ?? (C.startRun(player, () => 0), C.sessionOf(player));
-  if (run.room !== room) { run.room = room; run.cleared = new Set(); player.getPacketSender().sendVarbit(C.ids().varbit.chest, 0); }
-  run.busyUntil = 0;
+  run.room = room;
+  run.cleared = new Set();
+  player.getPacketSender().sendVarbit(C.ids().varbit.chest, 0);
+  return run;
+}
+
+/**
+ * The room's Grand Gold Chest searched, through Containers.PyramidPlunder.js. 0.5 rolls no swarm
+ * at 99 Thieving and no sceptre; `idle` lets the last search's ticks pass first.
+ */
+function searchChest(player, room, { roll = 0.5, idle = true } = {}) {
+  const run = C.sessionOf(player)?.room === room ? C.sessionOf(player) : visit(player, room);
+  if (idle) run.busyUntil = 0;
   const b = C.roomData(room).bounds;
-  // 0.5: no swarm at 99 Thieving, no sceptre.
-  T.Containers.searchChest({ player, objectId: C.ids().chest, location: { x: b.minX + 2, y: b.minY + 2, z: 0 } }, () => 0.5);
+  T.Containers.searchChest({ player, objectId: C.ids().chest, location: { x: b.minX + 2, y: b.minY + 2, z: 0 } }, () => roll);
 }
 
 const text = (p, n) => p.sent.texts.get(LINE(n));
@@ -94,8 +106,7 @@ test('chests searched in rooms 1, 1 and 5 show by room; a second search of one c
   const p = realPlayer(t);
   searchChest(p, 1);
   searchChest(p, 1); // the same chest again this visit: "already looted", not counted
-  C.sessionOf(p).cleared = new Set();
-  p.getPacketSender().sendVarbit(C.ids().varbit.chest, 0);
+  visit(p, 1);
   searchChest(p, 1); // a later visit to room 1
   searchChest(p, 5);
   click(p);
@@ -105,7 +116,25 @@ test('chests searched in rooms 1, 1 and 5 show by room; a second search of one c
   assert.equal(text(p, 10), '');
 });
 
-test('the counts are a saved attribute starting empty, and survive a save and load', (t) => {
+test('a swarm from the chest still counts its pillaging', (t) => {
+  const p = realPlayer(t);
+  searchChest(p, 2, { roll: 0.999 }); // past the no-swarm chance even at 99 Thieving
+  assert.ok(p.sent.messages.includes(C.MESSAGES.swarm), 'the swarm came out');
+  click(p);
+  assert.equal(text(p, 3), 'Room 2: 1');
+});
+
+test('a click while the last search is still going is ignored, and not counted', (t) => {
+  const p = realPlayer(t);
+  searchChest(p, 3);
+  visit(p, 3).busyUntil = C.getCore().World.getProcessCycle() + 3; // the search's 3 ticks still running
+  searchChest(p, 3, { idle: false });
+  click(p);
+  assert.equal(text(p, 4), 'Room 3: 1');
+});
+
+// A JSON round trip of the attribute, as the save stores it; not the real PlayerSave.
+test('the counts are a saved attribute starting empty, and come back from their JSON', (t) => {
   assert.deepEqual(hooks.persisted.get(M.CHESTS_ATTRIBUTE), []);
   const p = realPlayer(t);
   M.chestPillaged(p, 8);
