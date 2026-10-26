@@ -158,21 +158,48 @@ test("Zorya's flow: the special buffs accuracy and damage, a landed hit buffs th
 });
 
 
-test("uncharge keeps all charges when the real inventory cannot fit every rune refund", () => {
-    const owner = { getUsername: () => "test", getPacketSender: () => ({}) };
-    const inv = new Inventory(owner);
-    inv.refreshItems = () => inv;
-    const tome = new Item(I.ZORYAS_TOME, 1);
-    tome.setMetaValue(CHARGES_META_KEY, 1);
-    inv.setItem(0, tome);
-    inv.setItem(1, new Item(I.ASTRAL_RUNE, MAX_STACK_AMOUNT));
-    for (let slot = 2; slot < 28; slot++) inv.setItem(slot, new Item(I.COINS, 1));
-    const player = { getInventory: () => inv, sendMessage() {} };
+test("real cache-backed inventory refuses capped refunds and accepts exact headroom", async () => {
+    const path = require('node:path');
+    const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+    const { Player } = require('../dist/game/entity/impl/player/Player');
+    await CachePipeline.initialize(path.resolve(__dirname, '..'));
+    require('../plugins/items/ItemDefinitionLoader.plugin').register(PluginManager.createApi('ZoryaRefundCapacityTest'));
 
-    Zorya._test.uncharge({ player, item: tome });
+    function actualPlayer(name) {
+        const player = new Player(null);
+        player.setUsername(name);
+        player.setSession?.({ sendClientPacket: () => true, write() {} });
+        player.getSession = () => ({ sendClientPacket: () => true, write() {} });
+        player.sendMessage = () => {};
+        player.getInventory().refreshItems = () => player.getInventory();
+        player.getEquipment().refreshItems = () => player.getEquipment();
+        return player;
+    }
+    function fill(player, headroom) {
+        const inv = player.getInventory();
+        const tome = new Item(I.ZORYAS_TOME, 1);
+        tome.setMetaValue(CHARGES_META_KEY, 1);
+        inv.setItem(0, tome);
+        const astral = new Item(I.ASTRAL_RUNE, headroom ? MAX_STACK_AMOUNT - 3 : MAX_STACK_AMOUNT);
+        const nature = new Item(I.NATURE_RUNE, headroom ? MAX_STACK_AMOUNT - 2 : MAX_STACK_AMOUNT);
+        inv.setItem(1, astral);
+        inv.setItem(2, nature);
+        for (let slot = 3; slot < 28; slot++) inv.setItem(slot, new Item(I.COINS, 1));
+        return { inv, tome };
+    }
+    const blocked = actualPlayer('zorya-capped-refund');
+    const capped = fill(blocked, false);
+    const before = JSON.stringify(capped.inv.getItems().map((item) => [item.getId(), item.getAmount(), item.getMeta()]));
+    Zorya._test.uncharge({ player: blocked, item: capped.tome });
+    assert.equal(Zorya._test.chargesOf(capped.tome), 1);
+    assert.equal(capped.tome.getId(), I.ZORYAS_TOME);
+    assert.equal(JSON.stringify(capped.inv.getItems().map((item) => [item.getId(), item.getAmount(), item.getMeta()])), before);
 
-    assert.equal(Zorya._test.chargesOf(tome), 1);
-    assert.equal(tome.getId(), I.ZORYAS_TOME);
-    assert.equal(inv.getAmount(I.ASTRAL_RUNE), MAX_STACK_AMOUNT);
-    assert.equal(inv.getAmount(I.NATURE_RUNE), 0);
+    const available = actualPlayer('zorya-exact-refund-headroom');
+    const exact = fill(available, true);
+    assert.equal(exact.inv.getFreeSlots(), 0);
+    Zorya._test.uncharge({ player: available, item: exact.tome });
+    assert.equal(Zorya._test.chargesOf(exact.tome), 0);
+    assert.equal(exact.inv.getAmount(I.ASTRAL_RUNE), MAX_STACK_AMOUNT);
+    assert.equal(exact.inv.getAmount(I.NATURE_RUNE), MAX_STACK_AMOUNT);
 });

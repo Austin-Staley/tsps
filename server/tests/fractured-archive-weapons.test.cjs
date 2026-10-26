@@ -291,39 +291,54 @@ test('real Obligator thrust applies incoming equipment reactions only to the sel
     } finally { Math.random = random; }
 });
 
-test("uncharge refuses atomically when actual refund stacks are capped", () => {
-    const owner = { getUsername: () => "test", getPacketSender: () => ({}) };
-    const inventory = new Inventory(owner);
-    inventory.refreshItems = () => inventory;
-    // Cache-backed ItemDefinition is intentionally unavailable in this unit test; mirror the
-    // production container's stack-capacity calculation over this real Inventory's slots.
-    inventory.getAddableAmount = function (item) {
-        const held = this.getItems().find((candidate) => candidate.getId() === item.getId() &&
-            JSON.stringify(candidate.getMeta() ?? null) === JSON.stringify(item.getMeta() ?? null));
-        return held ? Math.min(item.getAmount(), Math.max(0, MAX_STACK_AMOUNT - held.getAmount()))
-            : this.getFreeSlots() > 0 ? Math.min(item.getAmount(), MAX_STACK_AMOUNT) : 0;
-    };
-    const mace = new Item(ItemIdentifiers.OBLIGATOR, 1);
-    mace.setMetaValue(Obligator._test.CHARGES_META_KEY, 10);
-    inventory.setItem(0, mace);
-    inventory.setItem(1, new Item(ItemIdentifiers.ASCENSION_SHARDS, MAX_STACK_AMOUNT));
-    inventory.setItem(2, new Item(ItemIdentifiers.NATURE_RUNE, MAX_STACK_AMOUNT));
-    inventory.setItem(3, new Item(ItemIdentifiers.DEATH_RUNE, MAX_STACK_AMOUNT));
-    for (let slot = 4; slot < 28; slot++) inventory.setItem(slot, new Item(ItemIdentifiers.COINS, 1));
-    const user = {
-        getInventory: () => inventory,
-        getEquipment: () => ({ refreshItems() {} }),
-        getUpdateFlag: () => ({ flag() {} }),
-        sendMessage() {},
-    };
+test("real cache-backed inventory refuses capped refunds and accepts exact headroom", async () => {
+    const path = require('node:path');
+    const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+    const { PluginManager } = require('../dist/plugins/PluginManager');
+    const { Player } = require('../dist/game/entity/impl/player/Player');
+    await CachePipeline.initialize(path.resolve(__dirname, '..'));
+    const api = PluginManager.createApi('ObligatorRefundCapacityTest');
+    require('../plugins/items/ItemDefinitionLoader.plugin').register(api);
+    Obligator.register(api);
+    Obligator._test.initializeIds();
 
-    Obligator._test.uncharge({ player: user, item: mace });
+    function actualPlayer(name) {
+        const player = new Player(null);
+        player.setUsername(name);
+        player.setSession?.({ sendClientPacket: () => true, write() {} });
+        player.getSession = () => ({ sendClientPacket: () => true, write() {} });
+        player.sendMessage = () => {};
+        player.getInventory().refreshItems = () => player.getInventory();
+        player.getEquipment().refreshItems = () => player.getEquipment();
+        return player;
+    }
+    function fill(player, headroom) {
+        const inv = player.getInventory();
+        const mace = new Item(ItemIdentifiers.OBLIGATOR, 1);
+        mace.setMetaValue(Obligator._test.CHARGES_META_KEY, 10);
+        inv.setItem(0, mace);
+        const refunds = [
+            [ItemIdentifiers.ASCENSION_SHARDS, 1],
+            [ItemIdentifiers.NATURE_RUNE, 20],
+            [ItemIdentifiers.DEATH_RUNE, 20],
+        ];
+        refunds.forEach(([id, amount], index) => inv.setItem(index + 1,
+            new Item(id, headroom ? MAX_STACK_AMOUNT - amount : MAX_STACK_AMOUNT)));
+        for (let slot = 4; slot < 28; slot++) inv.setItem(slot, new Item(ItemIdentifiers.COINS, 1));
+        return { inv, mace, refunds };
+    }
+    const blocked = actualPlayer('obligator-capped-refund');
+    const capped = fill(blocked, false);
+    const before = JSON.stringify(capped.inv.getItems().map((item) => [item.getId(), item.getAmount(), item.getMeta()]));
+    Obligator._test.uncharge({ player: blocked, item: capped.mace });
+    assert.equal(Obligator._test.charges(capped.mace), 10);
+    assert.equal(capped.mace.getId(), ItemIdentifiers.OBLIGATOR);
+    assert.equal(JSON.stringify(capped.inv.getItems().map((item) => [item.getId(), item.getAmount(), item.getMeta()])), before);
 
-    assert.equal(Obligator._test.charges(mace), 10);
-    assert.equal(mace.getId(), ItemIdentifiers.OBLIGATOR);
-    assert.deepEqual([
-        inventory.getAmount(ItemIdentifiers.ASCENSION_SHARDS),
-        inventory.getAmount(ItemIdentifiers.NATURE_RUNE),
-        inventory.getAmount(ItemIdentifiers.DEATH_RUNE),
-    ], [MAX_STACK_AMOUNT, MAX_STACK_AMOUNT, MAX_STACK_AMOUNT]);
+    const available = actualPlayer('obligator-exact-refund-headroom');
+    const exact = fill(available, true);
+    assert.equal(exact.inv.getFreeSlots(), 0);
+    Obligator._test.uncharge({ player: available, item: exact.mace });
+    assert.equal(Obligator._test.charges(exact.mace), 0);
+    for (const [id] of exact.refunds) assert.equal(exact.inv.getAmount(id), MAX_STACK_AMOUNT);
 });
