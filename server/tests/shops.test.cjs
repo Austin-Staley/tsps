@@ -247,14 +247,14 @@ DEFINITIONS[STICKS] = { name: "Trading sticks", stackable: true, value: 1 };
 DEFINITIONS[RED_TOPAZ] = { name: "Red topaz", value: 200 };
 const GEM_SHOP = 902;
 
-/** A shop with the Wiki's store multipliers, a line kept at 0 and no stocking of what it buys. */
+/** A shop with the Wiki's store multipliers and a line kept at 0 whatever is sold into it. */
 function openGemShop(sticks) {
   ShopManager.registerItemCurrency(STICKS, { name: "Trading sticks", unit: "trade sticks" });
   ShopDefinition.replace([
     new ShopDefinition(GEM_SHOP, "Gem trader", "TRADING STICKS", [
       { id: STEEL_AXE, amount: 5, restockTicks: null, price: null },
       { id: RED_TOPAZ, amount: 0, restockTicks: null, price: null },
-    ], 100, 100, 100, "test", { sellMultiplier: 1200, buyMultiplier: 600, stocksSoldItems: false }),
+    ], 100, 100, 100, "test", { sellMultiplier: 1200, buyMultiplier: 600, emptyLinesStayEmpty: true }),
   ]);
   ShopManager.initialize();
   const player = createPlayer();
@@ -263,7 +263,7 @@ function openGemShop(sticks) {
   return player;
 }
 
-test("store multipliers price from value; a line at 0 is bought and, when the shop doesn't stock sales, stays 0", () => {
+test("store multipliers price from value; a line at 0 is bought and can stay 0, while a stocked line restocks from sales", () => {
   const player = openGemShop(300);
   ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.ITEMS_INTERFACE_ID, slot: 1, itemId: RED_TOPAZ, amount: 0 });
   assert.deepEqual(player.messages, ["Red topaz: currently costs 240 trade sticks."]);
@@ -278,4 +278,6 @@ test("store multipliers price from value; a line at 0 is bought and, when the sh
   assert.equal(player.getInventory().getAmount(STICKS), 180);
   buy(player, 0, STEEL_AXE);
   assert.equal(player.messages.at(-1), "You don't have enough trade sticks.");
+  sell(player, 1);
+  assert.deepEqual(stockOf(GEM_SHOP), [[STEEL_AXE, 5], [RED_TOPAZ, 0]], "a stocked line takes sales back into stock");
 });

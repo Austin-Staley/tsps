@@ -32,7 +32,7 @@ interface RawShopDefinition {
     soldItemDestockTicks?: unknown;
     sellMultiplier?: unknown;
     buyMultiplier?: unknown;
-    stocksSoldItems?: unknown;
+    emptyLinesStayEmpty?: unknown;
 }
 
 let presetShopPricesEnabled = false;
@@ -196,7 +196,7 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             {
                 sellMultiplier: this.parseMultiplier(raw.sellMultiplier),
                 buyMultiplier: this.parseMultiplier(raw.buyMultiplier),
-                stocksSoldItems: raw.stocksSoldItems !== false,
+                emptyLinesStayEmpty: raw.emptyLinesStayEmpty === true,
             }
         );
     }

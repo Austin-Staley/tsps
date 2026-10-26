@@ -10,12 +10,12 @@ export interface ShopStockDefinition {
 /**
  * Optional per-shop rules, as the Wiki's store tables give them: what share of an item's value
  * the shop sells and buys at (per mille: `sellmultiplier=1200`, `buymultiplier=600`), and
- * whether items players sell to it join its stock.
+ * whether what players sell into a line the shop lists at 0 is taken without joining its stock.
  */
 export interface ShopDefinitionOptions {
     sellMultiplier?: number | null;
     buyMultiplier?: number | null;
-    stocksSoldItems?: boolean;
+    emptyLinesStayEmpty?: boolean;
 }
 
 export class ShopDefinition {
@@ -90,8 +90,8 @@ export class ShopDefinition {
         return this.options.buyMultiplier ?? null;
     }
 
-    /** False when what players sell to the shop is taken without joining its stock. */
-    public stocksSoldItems(): boolean {
-        return this.options.stocksSoldItems !== false;
+    /** True when a line listed at 0 takes what players sell without stocking it. */
+    public emptyLinesStayEmpty(): boolean {
+        return this.options.emptyLinesStayEmpty === true;
     }
 }

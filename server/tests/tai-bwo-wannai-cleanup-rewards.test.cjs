@@ -490,3 +490,14 @@ test("the grove's teak and mahogany wait for the first sticks, with the recorded
   PluginManager.emitCustomEvent('woodcutting:validate-tree', allowed);
   assert.equal(allowed.allow, true);
 });
+
+test('the grove: a player moved away before the step pays nothing and is not pulled back', (t) => {
+  const p = villager(t, { sticks: 150, at: OUTSIDE });
+  login(p);
+  door(p, 'Quick-Pay(100)');
+  p.moveTo(new Location(2795, 3066, 0)); // a teleport on the click's tick
+  tick(3);
+  assert.deepEqual(where(p), [2795, 3066]);
+  assert.equal(held(p, STICKS), 150);
+  assert.equal(Grove._passing.has(p), false);
+});

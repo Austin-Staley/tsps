@@ -79,6 +79,11 @@ function walkThrough(player, fee = 0) {
       movement.setBlockMovement(false);
       passing.delete(player);
     };
+    // Moved off by something else (a teleport) since the click: no fee, no pull back.
+    const start = player.getLocation();
+    const atDoor = start.getZ() === grove().doorTiles[0][2] && grove().doorTiles.some(([x, y]) =>
+      Math.abs(start.getX() - x) <= 1 && Math.abs(start.getY() - y) <= 1);
+    if (!atDoor) return done();
     const inventory = player.getInventory();
     if (fee > 0) {
       if (inventory.getAmount(sticksId()) < fee) {

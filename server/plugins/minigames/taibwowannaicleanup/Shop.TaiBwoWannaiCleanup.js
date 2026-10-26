@@ -5,7 +5,8 @@
  * sells at 120% of an item's value and buys at 60%; with Karamja gloves worn, 100% and 80%
  * (Wiki). It lists 30 lines in the order rsprox 227/01858 shows them (tick 17116), the gems and
  * the gout tuber at 0: they are bought (red topaz +120, jade +90 in 01858) but never join the
- * stock, which stays at 0 after a sale. The generated shops.json has only the 23 stocked lines and
+ * stock, which stays at 0 after a sale; what is sold back into a stocked line (a machete) is
+ * stocked as in any shop. The generated shops.json has only the 23 stocked lines and
  * no prices, so both versions are given here (registerDefinitionSource), with the Wiki's store
  * multipliers. The two versions keep their own stock.
  *
@@ -63,7 +64,7 @@ function cooperativeDefinitions() {
     originalStock,
     sellMultiplier: multipliers[version].sell,
     buyMultiplier: multipliers[version].buy,
-    stocksSoldItems: false,
+    emptyLinesStayEmpty: true,
   }));
 }
 

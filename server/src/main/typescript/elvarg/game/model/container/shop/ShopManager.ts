@@ -711,7 +711,7 @@ export class ShopManager {
             player.sendMessage("This item has no value.");
             return;
         }
-        const stocks = shop.definition.stocksSoldItems();
+        const stocks = !(shop.definition.emptyLinesStayEmpty() && shop.originalAmounts.get(stockId) === 0);
         if (stocks && (shop.stock.get(stockId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
             player.sendMessage("The shop is currently full.");
             return;
@@ -735,7 +735,7 @@ export class ShopManager {
             shop.definition.getCurrency(),
             quantity * price
         );
-        // Some shops take what they buy without stocking it (Gabooty's gems stay at 0).
+        // Some shops take what they buy into an empty line without stocking it (Gabooty's gems stay at 0).
         if (stocks) this.addStock(shop, stockId, quantity);
         Sounds.sendSound(player, Sound.DROP_ITEM);
         this.refresh(shop.definition.getId());
