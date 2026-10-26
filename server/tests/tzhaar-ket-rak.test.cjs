@@ -14,7 +14,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Dialogue, Challenge, Rewards, Scoreboard, tasks, events, spawned, walks, cancelled, removedObjects;
+let Common, Dialogue, Challenge, Rewards, Scoreboard, tasks, events, spawned, walks, cancelled, removedObjects, eliteKaramja = false;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -36,6 +36,7 @@ before(async () => {
     persistAttribute: () => {},
     emitCustomEvent(name, event) {
       events.push([name, event]);
+      if (name === 'diary:tokkul' && eliteKaramja) event.amount *= 2;
     },
     spawnNpc: ({ id, x, y, face }) => {
       const npc = fakeNpc(id, x, y);
@@ -51,6 +52,7 @@ before(async () => {
 });
 
 beforeEach(() => {
+  eliteKaramja = false;
   tasks = [];
   events = [];
   spawned = [];
@@ -460,6 +462,26 @@ test('the first sixth unlocks the JalRek-Jad metamorphosis; later sixths only pa
   finish();
   assert.deepEqual(said(), [Dialogue.VARIANT.sixthAgain]);
   assert.equal(player.getInventory().amount(core.ItemIdentifiers.TOKKUL), 7430 * 2);
+});
+
+test('the Elite Karamja Diary doubles the TokKul of a completed challenge', () => {
+  eliteKaramja = true;
+  const player = fakePlayer();
+  const original = core.World.getProcessCycle;
+  let cycle = 1000;
+  core.World.getProcessCycle = () => cycle;
+  try {
+    const challenge = begin(player, 1);
+    spawned[0].hp = 0;
+    cycle = 1074;
+    tick(challenge);
+    cycle += Common.data.endTicks;
+    tick(challenge);
+  } finally {
+    core.World.getProcessCycle = original;
+  }
+  flush();
+  assert.equal(player.getInventory().amount(core.ItemIdentifiers.TOKKUL), 160);
 });
 
 test('a full inventory gets its TokKul on the floor, never lost', () => {

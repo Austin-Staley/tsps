@@ -31,6 +31,13 @@ function give(player, itemId, amount) {
   core.ItemOnGroundManager.registerLocation(player, new core.Item(itemId, amount), player.getLocation().clone(), null);
 }
 
+/** The Elite Karamja Diary doubles the TokKul (Wiki: Karamja Diary). */
+function tokkulFor(player, amount) {
+  const request = { player, amount };
+  Common.api.emitCustomEvent("diary:tokkul", request);
+  return request.amount;
+}
+
 function sendCounts(player) {
   const sender = player.getPacketSender();
   for (let challenge = 1; challenge <= Common.SIX; challenge++) {
@@ -99,7 +106,7 @@ function lastJadDown(player, challenge) {
   }
   const variant = number !== Common.SIX ? Dialogue.VARIANT.completed
     : firstSixth ? Dialogue.VARIANT.sixthFirst : Dialogue.VARIANT.sixthAgain;
-  challenge.result = { tokkul: data.rewards[number - 1], unlocked, variant };
+  challenge.result = { tokkul: tokkulFor(player, data.rewards[number - 1]), unlocked, variant };
   // After the challenge's own lines, and once the reward is safe.
   for (const task of tasks) api.emitCustomEvent("combat-achievements:complete", { player, task });
 }
@@ -132,7 +139,7 @@ function failed(player, challenge, { logout = false, died = false } = {}) {
     }
   }
   if (kills > 0) {
-    const tokkul = data.rewards[kills - 1];
+    const tokkul = tokkulFor(player, data.rewards[kills - 1]);
     give(player, Common.ids.objs.tokkul, tokkul);
     if (!logout) {
       Dialogue.say(player, Dialogue.VARIANT.completed, { challenge: challenge.number, tokkul, npcLine: data.messages.notBad });
