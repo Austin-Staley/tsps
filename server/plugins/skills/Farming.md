@@ -248,6 +248,32 @@ and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update
 The regression checks drive the actual shared keypad and storage handlers;
 menu rendering and scheduled ticks use the existing Bank PIN test fixture.
 
+## Native Farming menu choices
+
+The Farming chooser translates one-based native option resumes into its displayed
+action list. Its interface-action adapter also handles the legacy widget input
+before the shared fallback changes the index. The adapter owns only the exact
+options widget and a Farming-created current dialogue; other plugins' menus and
+the shared DialogueManager are unchanged.
+The action stays private to that adapter, so an unrelated widget cannot reach it
+through the shared legacy dialogue fallback.
+
+Choices validate bounds, current dialogue/chatbox ownership and player state
+before closing the interface. Repeated or stale choices cannot reuse a closed
+menu, and a busy/dead/newly placed player cannot accept a pending action. Single
+action menus include Cancel for the cache's two-row minimum; empty menus are not
+opened. Four entries per page and More options keep their existing order.
+
+`farming-dialogue-input.test.cjs` uses all plugins and real Player, Inventory,
+MovementQueue, PacketSender, DialogueManager and NPC.create objects. It sends
+native resume/widget packets, advances each player's actual walk-to task and
+checks Tithe seed/quantity choices and gardener payment, including capacity,
+range, duplicate input and stale/busy-state cases. The
+[Tithe Farm Wiki page](https://oldschool.runescape.wiki/w/Tithe_Farm) supplies the
+seed types/levels; the existing seed quantities and payment tables are unchanged.
+No applicable normal-world capture was found for these menus; option indexing
+comes from the cache's options interface and the server's native resume contract.
+
 ## Native Geomancy input
 
 Geomancy's cache spellbook widget (`magic_spellbook:geomancy`, 218:150 in this
