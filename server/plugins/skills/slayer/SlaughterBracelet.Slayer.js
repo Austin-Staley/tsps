@@ -21,6 +21,7 @@ function charges(player) {
   return Number.isInteger(saved) && saved > 0 && saved <= MAX_CHARGES ? saved : MAX_CHARGES;
 }
 
+/** 21184 and 21185 share the name, but the cache makes them the note and bank placeholder: neither is worn or used. */
 function isBracelet(item) {
   return item?.getId() === core.ItemIdentifiers.BRACELET_OF_SLAUGHTER;
 }
@@ -38,9 +39,11 @@ function preventsDecrement(player, npc, random = Math.random) {
   if (remaining > 0) {
     suffix = `It has ${remaining} charge${remaining === 1 ? "" : "s"} left.`;
   } else {
-    const reward = { player, tier: "Elite", unlocked: false };
+    // Wiki (Bracelet of slaughter; Combat Achievements, Elite rewards): the claimed elite rewards
+    // add a 10% chance to fully recharge instead of breaking. The wording is uncaptured.
+    const reward = { player, tier: "Elite", claimed: false };
     api.emitCustomEvent("combat-achievements:tier", reward);
-    if (reward.unlocked && random() < REGENERATION_CHANCE) {
+    if (reward.claimed && random() < REGENERATION_CHANCE) {
       suffix = "It then regenerates itself to full charge!";
     } else {
       equipment.set(core.Equipment.HANDS_SLOT, new core.Item(-1));
@@ -62,10 +65,10 @@ function check({ player, item }) {
 function breakBracelet({ player, item, slot, interfaceId }) {
   if (!isBracelet(item) || interfaceId === core.Equipment.INVENTORY_INTERFACE_ID) return false;
   const inventory = player.getInventory();
-  if (inventory.get(slot) !== item) return false;
+  if (!isBracelet(inventory.get(slot))) return false;
   inventory.deleteAtSlot(slot, 1);
   player.setAttribute(CHARGES_ATTRIBUTE, MAX_CHARGES);
-  player.sendMessage("You break the bracelet of slaughter. Your next bracelet will start with 30 charges.");
+  player.sendMessage(`You break the bracelet of slaughter. Your next bracelet will start with ${MAX_CHARGES} charges.`);
 }
 
 function attach(pluginApi) {

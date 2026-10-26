@@ -145,8 +145,14 @@ active; the next kill rolls normally.
 Charges belong to the player, shared by every bracelet of slaughter: the persisted attribute
 `slayer:slaughter-charges` starts at 30. Only activations spend charges. Replacing, banking,
 dropping or trading the bracelet does not reset the pool. The last activation resets it to 30
-and removes the worn bracelet, except for a 10% regeneration roll with the Elite Combat
-Achievements tier unlocked (`combat-achievements:tier`). Inventory Break consumes that exact
+and removes the worn bracelet, except for a 10% regeneration roll once the Elite Combat
+Achievements rewards are claimed from Ghommal (`combat-achievements:tier` answers `claimed`;
+reaching the points alone is not enough). Sources: the
+[bracelet page](https://oldschool.runescape.wiki/w/Bracelet_of_slaughter) (“the elite Combat
+Achievements rewards add a 10% chance for the bracelet to regenerate rather than disappearing”)
+and the [Elite rewards list](https://oldschool.runescape.wiki/w/Combat_Achievements#Rewards)
+(“10% chance to fully recharge instead of breaking”); the Wiki says rewards are claimed from
+Ghommal once the points are reached. Inventory Break consumes that exact
 bracelet and resets the pool; Check works in inventory and while worn. Notes and bank
 placeholders cannot use either action. This does not implement the expeditious bracelet.
 
@@ -164,7 +170,8 @@ Evidence:
   note, 21185 its bank placeholder; inventory actions are Wear/Check/Break/Drop; item param
   451 is the worn Check action. No bracelet-charge varp or varbit exists by those names.
 - Check, Break, depletion and regeneration **mechanics** follow the Wiki; their message wording
-  (and singular-charge grammar) remains unverified against live captures. No raw logs or
+  (including “It then regenerates itself to full charge!” and singular-charge grammar) is not on
+  the Wiki and remains unverified against live captures. No raw logs or
   account details are committed.
 
 Regression coverage extends `server/tests/slayer.test.cjs`: real death handlers and named item

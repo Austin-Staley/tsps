@@ -966,15 +966,18 @@ test("Jad and Zuk never consume slaughter charges or roll the effect", () => {
   assert.equal(Bracelet.charges(player), 30);
 });
 
-test("elite Combat Achievements regenerate on a roll below 10%, otherwise the bracelet disappears", t => {
+test("claimed elite Combat Achievements regenerate on a roll below 10%, otherwise the bracelet disappears", t => {
   const Bracelet = require("../plugins/skills/slayer/SlaughterBracelet.Slayer");
   const previous = handlers.events.get("combat-achievements:tier");
+  let claimed = true;
   handlers.events.set("combat-achievements:tier", [request => {
     assert.equal(request.tier, "Elite");
     request.unlocked = true;
+    request.claimed = claimed;
   }]);
   t.after(() => previous ? handlers.events.set("combat-achievements:tier", previous) : handlers.events.delete("combat-achievements:tier"));
-  for (const roll of [0.099999, 0.1]) {
+  for (const [roll, isClaimed] of [[0.099999, true], [0.1, true], [0, false]]) {
+    claimed = isClaimed;
     const player = braceletPlayer();
     giveTask(player, 3, "Bloodveld", 1);
     player.setAttribute(Bracelet.CHARGES_ATTRIBUTE, 1);
@@ -985,8 +988,9 @@ test("elite Combat Achievements regenerate on a roll below 10%, otherwise the br
     assert.equal(varp(player, "slayer_count"), 1);
     assert.equal(player.xp.length, 1);
     assert.equal(Bracelet.charges(player), 30);
-    assert.equal(player.getEquipment().get(core.Equipment.HANDS_SLOT).getId(), roll < 0.1 ? core.ItemIdentifiers.BRACELET_OF_SLAUGHTER : -1);
-    assert.match(player.typedMessages.at(-1)[1], roll < 0.1 ? /regenerates/ : /crumbles/);
+    const regenerates = isClaimed && roll < 0.1;
+    assert.equal(player.getEquipment().get(core.Equipment.HANDS_SLOT).getId(), regenerates ? core.ItemIdentifiers.BRACELET_OF_SLAUGHTER : -1);
+    assert.match(player.typedMessages.at(-1)[1], regenerates ? /regenerates/ : /crumbles/);
   }
 });
 
