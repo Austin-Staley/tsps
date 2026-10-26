@@ -168,3 +168,16 @@ Tests use real Player, inventory, equipment and cache definitions, driving the
 actual Tithe NPC/payment and reward callbacks. Menu rendering and persistence
 requests are mocked; live dialogue rendering and packet-capture verification
 are not claimed.
+
+## Storage Bank PIN protection
+
+The Seed Vault and Tool Leprechaun storage use the shared `bank-pin:guard`
+event before opening menus or moving stored items. Leprechaun Deposit-all and
+item-on-NPC tool deposits follow the same guard. Correct entry resumes the
+original action, rechecking proximity and the selected tool slot. Produce
+noting does not access stored tools and retains its existing behavior.
+
+Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki/w/Bank_PIN#Situations_requiring_a_PIN)
+and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
+The regression checks drive the actual shared keypad and storage handlers;
+menu rendering and scheduled ticks use the existing Bank PIN test fixture.
