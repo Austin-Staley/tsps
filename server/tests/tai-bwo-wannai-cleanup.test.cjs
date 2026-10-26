@@ -732,3 +732,84 @@ test('a pickup that fills the last slot during a swing: the result cuts nothing 
   assert.equal(Jungle._sessions.has(p), false);
   assert.ok(p.messages.includes('You have no space in your inventory for any further thatching spars.'));
 });
+
+// ------------------------------------------------------------------ #1347 review
+
+/** A shark on the player's tile, taken through the pickup packet's own handler. */
+function pickUpShark(t, p) {
+  const { ItemOnGroundManager } = core;
+  const { PickupItemPacketListener } = require('../dist/net/packet/impl/PickupItemPacketListener');
+  const here = p.getLocation();
+  ItemOnGroundManager.registerLocation(p, new Item(obj('shark'), 1), here.clone());
+  t.mock.method(p, 'busy', () => false);
+  PickupItemPacketListener.pickup(p, obj('shark'), here.getX(), here.getY());
+  assert.equal(p.getInventory().getAmount(obj('shark')), 1, 'picked up');
+}
+
+test('a full bag at the dig: the plant stays, still the finder\'s, and no tuber is lost', (t) => {
+  const p = villager(t, { events: true });
+  p.setLocation(new Location(LIGHT[0] + 1, LIGHT[1], 0));
+  const jungle = MapObjects.get(loc('tai_bwo_jungle_vegetation_easy_1'), at(LIGHT), null);
+  Events.revealGout(p, Common.data.jungle[0], jungle);
+  const plant = MapObjects.get(loc('village_gout_tuber'), at(LIGHT), null);
+  p.getInventory().add(new Item(obj('spade'), 1));
+  p.getInventory().add(new Item(obj('bones'), 27));
+  PluginManager.emitItemOnObject({ player: p, object: plant, objectId: plant.getId(), item: new Item(obj('spade'), 1), itemId: obj('spade'), itemSlot: 0, location: { x: LIGHT[0], y: LIGHT[1], z: 0 }, handled: false });
+  tick(6);
+  assert.equal(p.getInventory().getAmount(obj('village_rare_tuber')), 0);
+  assert.ok(MapObjects.get(loc('village_gout_tuber'), at(LIGHT), null), 'the plant is still there');
+  assert.ok(p.messages.includes("You don't have enough inventory space."));
+  assert.ok(!p.messages.includes('You dig up the plant and find a tuber.'));
+  assert.equal(Events._finders.get(`${LIGHT[0]},${LIGHT[1]},0`)?.username, p.getUsername(), 'still theirs');
+});
+
+test('a pickup filling the bag while mining: no gem taken from the rock, no XP', (t) => {
+  const p = villager(t, { events: true });
+  p.setLocation(new Location(LIGHT[0] + 1, LIGHT[1], 0));
+  p.getSkillManager().setMaxLevel(core.Skill.MINING, 60).setCurrentLevel(core.Skill.MINING, 60);
+  p.getInventory().add(new Item(obj('rune_pickaxe'), 1));
+  p.getInventory().add(new Item(obj('bones'), 26));
+  const jungle = MapObjects.get(loc('tai_bwo_jungle_vegetation_easy_1'), at(LIGHT), null);
+  Events.revealGemRock(p, Common.data.jungle[0], jungle);
+  const rock = MapObjects.get(loc('village_gem_rock1'), at(LIGHT), null);
+  t.mock.method(Math, 'random', () => 0);
+  PluginManager.emitObjectInteraction({ player: p, object: rock, objectId: rock.getId(), definition: ObjectDefinition.forPlayer(rock.getId(), p), clickType: 1, location: { x: LIGHT[0], y: LIGHT[1], z: 0 }, handled: false });
+  pickUpShark(t, p);
+  const before = p.getSkillManager().getExperience(core.Skill.MINING);
+  tick(20);
+  assert.equal(p.getInventory().getAmount(obj('uncut_opal')), 0);
+  assert.equal(p.getSkillManager().getExperience(core.Skill.MINING), before);
+  assert.ok(MapObjects.get(loc('village_gem_rock1'), at(LIGHT), null), 'the rock still has its gems');
+  assert.equal(GemRock._sessions.has(p), false);
+  assert.ok(p.messages.includes('Your inventory is too full to hold any more gems.'));
+});
+
+test('a Broodoo victim takes its attacking form at full health (100), not its hidden form\'s', (t) => {
+  const p = villager(t, { events: true });
+  for (const key of ['broodooCombat', 'broodooPoison', 'broodooDisease']) {
+    const victim = spawnFor(t, p, key);
+    assert.equal(victim.getHitpoints(), 100, key);
+    assert.equal(victim.getHitpoints(), victim.getMaxHitpoints());
+  }
+});
+
+test('the poison victim weakens only when its hit lands and hurts', (t) => {
+  const p = villager(t, { events: true });
+  const skills = p.getSkillManager();
+  skills.setMaxLevel(core.Skill.ATTACK, 50).setCurrentLevel(core.Skill.ATTACK, 50);
+  const green = spawnFor(t, p, 'broodooPoison');
+  const Method = Broodoo.combatClass();
+  const blow = () => {
+    const method = new Method(green);
+    method.start(green, p);
+    return method.hits(green, p)[0].getHits()[0];
+  };
+  blow(); // dropped with its caster: never applied
+  tick(4);
+  assert.equal(skills.getCurrentLevel(core.Skill.ATTACK), 50, 'a hit that never lands drains nothing');
+  blow().notifyApplied(0);
+  assert.equal(skills.getCurrentLevel(core.Skill.ATTACK), 50, 'a hit that does nothing drains nothing');
+  blow().notifyApplied(4);
+  assert.ok(skills.getCurrentLevel(core.Skill.ATTACK) < 50);
+  assert.ok(p.messages.includes('You feel incredibly weakened.'));
+});

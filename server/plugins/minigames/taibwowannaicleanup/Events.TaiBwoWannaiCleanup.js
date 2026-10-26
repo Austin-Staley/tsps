@@ -133,7 +133,11 @@ function spawn(player, entry, location) {
   // Its attacking form comes whether or not the player is still here.
   Common.afterTicks(entry.turnAfter, () => {
     if (!spawned.has(npc) || !npc.isRegistered?.()) return;
-    if (entry.spawn) npc.setNpcTransformationId(npcId(entry.npc));
+    if (entry.spawn) {
+      npc.setNpcTransformationId(npcId(entry.npc));
+      // Its health is the attacking form's (a Broodoo victim's hidden form has 10, its own 100).
+      npc.setHitpoints(npc.getMaxHitpoints());
+    }
     if (player.isRegistered()) npc.getCombat().attack(player);
   });
   return npc;
@@ -204,8 +208,14 @@ function digGout(event) {
     const plant = Locs.find([Common.locId(events().gout.loc)], object.getLocation());
     if (!plant || finders.get(tile)?.username !== player.getUsername()) return;
     if (!player.getLocation().isWithinInteractionDistance(plant.getLocation())) return;
+    // No room: the plant stays, still theirs, for when there is.
+    const tuber = new Common.core.Item(Common.objId(dig.item), 1);
+    if (player.getInventory().getAddableAmount(tuber) < 1) {
+      player.sendMessage(Common.message("noRoom"));
+      return;
+    }
     finders.delete(tile);
-    player.getInventory().add(new Common.core.Item(Common.objId(dig.item), 1));
+    player.getInventory().add(tuber);
     Common.spam(player, dig.message);
     Locs.swap(plant, Common.locId(jungle.locs[4]), Common.data.hack.regrowTicks, Common.locId(jungle.locs[0]));
   });

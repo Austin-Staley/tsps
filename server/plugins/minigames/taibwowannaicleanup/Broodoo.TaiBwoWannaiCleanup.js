@@ -41,9 +41,12 @@ function combatClass() {
       if (!character || !target) return [];
       const hit = new PendingHit(character, target, this, { delay: Math.max(1, Math.ceil(broodoo().cast.end / 30)) });
       hit.setTotalDamage(Math.min(broodoo().maxHit, hit.getTotalDamage()));
-      if (this.weakens && target.isPlayer?.() && hit.getTotalDamage() > 0) {
+      // Only a hit that lands and hurts weakens (a hit dropped with its dead caster does nothing).
+      if (this.weakens && target.isPlayer?.()) {
         const player = target.getAsPlayer();
-        Common.later(player, Math.max(1, Math.ceil(broodoo().cast.end / 30)), () => weaken(player));
+        for (const part of hit.getHits()) part.onApplied((taken) => {
+          if (taken > 0) weaken(player);
+        });
       }
       return [hit];
     }
@@ -157,4 +160,4 @@ function attachBroodoo(api) {
   api.onItemOnNpc(feed);
 }
 
-module.exports = { attachBroodoo, feed, capHit, weaken };
+module.exports = { attachBroodoo, feed, capHit, weaken, combatClass };

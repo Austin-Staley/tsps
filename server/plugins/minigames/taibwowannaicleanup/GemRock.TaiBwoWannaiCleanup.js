@@ -81,7 +81,14 @@ function step(player, session) {
   if (session.tick++ % interval === 0) player.performAnimation(session.pickaxe.animation);
   if (session.tick % interval !== 0 || Math.random() >= chance(player)) return;
   const [item, , name] = rollGem();
-  player.getInventory().add(new Common.core.Item(Common.objId(item), 1));
+  const gemItem = new Common.core.Item(Common.objId(item), 1);
+  // The bag may have filled since the last swing (a pickup): stop with the gem still in the rock.
+  if (player.getInventory().getAddableAmount(gemItem) < 1) {
+    player.sendMessage(gem().full);
+    stop(player);
+    return;
+  }
+  player.getInventory().add(gemItem);
   Common.xp(player, "MINING", gem().xp);
   player.sendMessage(gem().mined.replace("{gem}", name));
   const next = rockIds().indexOf(rock.getId()) + 1;
