@@ -8,16 +8,28 @@ function BugIcon({ label }: { label: string }): JSX.Element {
         <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
             <text
                 x="12"
-                y="12"
+                y="9.5"
                 textAnchor="middle"
-                dominantBaseline="central"
-                fontSize="7.5"
+                fontSize="12"
                 fontWeight={800}
-                letterSpacing="0.5"
+                letterSpacing="0"
+                textLength="22"
+                lengthAdjust="spacingAndGlyphs"
                 fill="#ef5350"
                 style={{ fontFamily: "var(--rl-font-bold, Arial, sans-serif)" }}
             >
                 BUG
+            </text>
+            <text
+                x="12"
+                y="20"
+                textAnchor="middle"
+                fontSize="9"
+                fontWeight={800}
+                fill="#ef5350"
+                style={{ fontFamily: "var(--rl-font-bold, Arial, sans-serif)" }}
+            >
+                ?
             </text>
         </svg>
     );
