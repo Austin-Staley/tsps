@@ -1,0 +1,90 @@
+{
+  "_sources": "OSRS Wiki (Tai Bwo Wannai Cleanup) for requirements, XP and favour; rsprox 227/01858, 237/01102 and 231/03030 for timings, messages, sounds, animations, varbits and the stick claims. Gameval names, resolved from the cache.",
+  "quest": "jungle_potion",
+  "regions": [[2752, 2879, 3008, 3135]],
+  "varbits": {
+    "points": "vill_comm_points",
+    "max": "vill_comm_max",
+    "progress": "cleanup_progress",
+    "overlay": "tbw_overlayopen",
+    "favour": "favour_percentage"
+  },
+  "progress": { "told": 1, "hacked": 2, "repaired": 4, "claimed": 5 },
+  "maxPoints": 1000,
+  "interfaces": { "overlay": "village_community_score", "hud": "toplevel_osrs_stretch:overlay_hud" },
+  "machetes": [
+    { "item": "machette", "hack": "tbw_cleanup_player_hack", "chance": 0.55 },
+    { "item": "machette_opal", "hack": "tbw_cleanup_player_hack_opal", "chance": 0.7 },
+    { "item": "machette_jade", "hack": "tbw_cleanup_player_hack_jade", "chance": 0.85 },
+    { "item": "machette_redtopaz", "hack": "tbw_cleanup_player_hack_redtopaz", "chance": 1 }
+  ],
+  "jungle": [
+    { "type": "light", "locs": ["tai_bwo_jungle_vegetation_easy_1", "tai_bwo_jungle_vegetation_easy_2", "tai_bwo_jungle_vegetation_easy_3", "tai_bwo_jungle_vegetation_easy_4", "tai_bwo_jungle_vegetation_easy_5"], "level": 10, "xp": 32, "points": 3, "spar": "thatching_spar_light", "low": 48, "high": 180 },
+    { "type": "medium", "locs": ["tai_bwo_jungle_vegetation_med_1", "tai_bwo_jungle_vegetation_med_2", "tai_bwo_jungle_vegetation_med_3", "tai_bwo_jungle_vegetation_med_4", "tai_bwo_jungle_vegetation_med_5"], "level": 20, "xp": 55, "points": 5, "spar": "thatching_spar_med", "low": 32, "high": 160 },
+    { "type": "dense", "locs": ["tai_bwo_jungle_vegetation_hard_1", "tai_bwo_jungle_vegetation_hard_2", "tai_bwo_jungle_vegetation_hard_3", "tai_bwo_jungle_vegetation_hard_4", "tai_bwo_jungle_vegetation_hard_5"], "level": 35, "xp": 80, "points": 10, "spar": "thatching_spar_dense", "low": 8, "high": 90 }
+  ],
+  "failXp": 1,
+  "hack": { "chipEvery": 2, "resultAt": 6, "pause": 3, "favourDelay": 3, "regrowTicks": 149 },
+  "spars": [
+    { "item": "thatching_spar_light", "xp": 28.1, "points": 1 },
+    { "item": "thatching_spar_med", "xp": 42.1, "points": 3 },
+    { "item": "thatching_spar_dense", "xp": 65.1, "points": 5 }
+  ],
+  "fence": {
+    "locs": ["village_fence_rotten", "village_fence_fixed1", "village_fence_fixed2", "village_fence_fixed3", "village_fence_fixedcomplete"],
+    "startAt": 5, "doneAt": 10, "pause": 3, "decayTicks": 1000
+  },
+  "skewers": { "item": "tbw_skewer_stick", "perSpar": 5, "carcass": "village_spider_carcass", "spiderOnStick": "tbw_spider_on_stick_raw" },
+  "sticks": { "item": "village_trade_sticks", "linear": 0.0375, "square": 0.0000415 },
+  "villagerCooldown": { "claimed": 7, "ready": 1, "stepTicks": 300 },
+  "villagers": [
+    { "name": "Sharimika", "varbit": "chat_sharimika", "npc": "tbwcu_sharimika" },
+    { "name": "Mamma Bufetta", "varbit": "chat_mamma", "npc": "tbwcu_mamma_bufetta" },
+    { "name": "Layleen", "varbit": "chat_layleen", "npc": "tbwcu_layleen" },
+    { "name": "Karaday", "varbit": "chat_karaday", "npc": "tbwcu_karaday" },
+    { "name": "Safta Doc", "varbit": "chat_safta", "npc": "tbwcu_safta_doc" },
+    { "name": "Gabooty", "varbit": "chat_gabooty", "npc": "tbwcu_gabooty" },
+    { "name": "Fanellaman", "varbit": "chat_fanellaman", "npc": "tbwcu_fanellaman" },
+    { "name": "Jagbakoba", "varbit": "chat_jag", "npc": "tbwcu_jagbakoba" },
+    { "name": "Murcaily", "varbit": "chat_murc", "npc": "tbwcu_murcaily", "first": true },
+    { "name": "Rionasta", "varbit": "chat_rion", "npc": "tbwcu_rionasta" }
+  ],
+  "seqs": {
+    "success": "tbw_cleanup_player_hack_success",
+    "fail": "tbw_cleanup_player_hack_fail",
+    "prepare": "tbw_cleanup_player_prepare_wood",
+    "fenceStart": "tbw_cleanup_player_fixfence_start",
+    "fenceMid": "tbw_cleanup_player_fixfence_mid",
+    "fenceEnd": "tbw_cleanup_player_fixfence_end",
+    "spiderOnStick": "tbw_cleanup_player_spider_on_stick"
+  },
+  "spotanims": { "chippings": "tbw_chippings" },
+  "sounds": { "swing": 1286, "chip": 1284, "success": [1287, 1288], "fail": 1285, "prepare": 1274, "fence": 1276, "spiderOnStick": 1280 },
+  "messages": {
+    "notTold": "Perhaps you should check with the local villagers before you start hacking away at the local vegetation?",
+    "noMachete": "You need to be holding a machete to cut away this jungle.",
+    "level": "You need a Woodcutting level of {level} to hack this jungle.",
+    "fullInventory": "You have no space in your inventory for any further thatching spars.",
+    "cutBack": "This jungle has been cut back to the ground.",
+    "favourFull": "Your Favour total is now full, you cannot gain any more.<br>Talk to the villagers to get favour converted to trading sticks.",
+    "notToldFence": "Perhaps you should check with the local villagers before you start repairing the village fence?",
+    "noSpars": "You need some thatching spars in order to repair this fence.",
+    "noFenceMachete": "You need a machete to repair this fence.",
+    "skewers": "You hack the spar into skewers.",
+    "firstClaim": "Great, I saw you were fixing the fence earlier, it looks like you've got the hang of this now! Let me give you something for your effort!",
+    "claim": "Hey, I've seen you working around the village. You've been doing a lot of good work around here for us. Let me give you something for your trouble.",
+    "claimed": "You get {sticks} trading sticks. You are left with {favour}% favour.",
+    "noRoom": "You don't have enough inventory space."
+  },
+  "murcaily": {
+    "toldLine": "Well Bwana, if you're stuck for something to do",
+    "hackedLine": "I see that you've been hacking away at the jungle",
+    "conditions": {
+      "afterJunglePotion": "First time after completing Jungle Potion:",
+      "hackedNotRepaired": "First time after hacking away at jungle if the fence hasn't been repaired yet:",
+      "repaired": "First time after repairing the fence:",
+      "notHacked": "If the player hasn't hacked away at jungle:",
+      "hacked": "If the player has hacked away at jungle:"
+    }
+  }
+}
