@@ -187,7 +187,8 @@ function recoverOnLogin({ player }) {
 function endOnDeath({ player }) {
   const session = sessionOf(player);
   if (!session) return;
-  Scoreboard.died(player);
+  // Only a death in the lair itself counts (not one during the fade in, before the move).
+  if (player.getPrivateArea() === session.area) Scoreboard.died(player);
   const { World } = Common.core;
   const manager = Common.api.getItemOnGroundManager();
   for (const ground of [...World.getItems()]) {
