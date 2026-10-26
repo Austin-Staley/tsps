@@ -3,6 +3,7 @@ const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Services = require("./Services.Farming");
 const Spells = require("./Spells.Farming");
+const Geomancy = require("./Geomancy.Farming");
 const Tithe = require("./Tithe.Farming");
 const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
@@ -659,6 +660,7 @@ function refresh(player) {
     else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    Geomancy.tick();
     for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);
     for (const player of dirty) schedule(player);
@@ -747,6 +749,7 @@ function attach(api) {
     api.onPlayerLogin(Tithe.titheLogin);
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
+    api.onPlayerLogout(Geomancy.logout);
     api.onPlayerLogout(Tithe.titheLogout);
     api.onCustomEvent("level-up:popup-opened", pauseWork);
     api.onObjectInteraction(objectInteraction);
@@ -761,6 +764,7 @@ function attach(api) {
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
     api.onInterfaceActionClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Geomancy.tab);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);
     api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);
     api.onCustomEvent("farming:check-health", Guild.completeContract);

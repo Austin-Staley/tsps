@@ -69,7 +69,7 @@ test('native Cast reaches Farming once, consumes exactly the Wiki runes and awar
   await click(f);
   assert.deepEqual(f.runes(), [0, 0, 0]);
   assert.equal(f.xp() - f.startXp, 60);
-  assert.ok(f.messages.includes('You have no crops growing.'));
+  assert.equal(f.p.getInterfaceId(), core.CacheDefinitions.getInterfaceId('farming_view'));
 });
 
 test('native combat refusal keeps real runes, XP, Farming state and attacker intact', async t => {
