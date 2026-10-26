@@ -559,6 +559,39 @@ test("a Climb that Ladders would ask about goes the captured way: the Arceuus li
   assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY()], [1608, 3819]);
 });
 
+test("the Hunter Guild stairs fade as captured and land where live OSRS does, both ways", () => {
+  // Captured (226/1695, 237/4002): the fade out two ticks after arriving, the minimap off a tick
+  // later, the move on tick 4, the fade back in a tick after it, the overlay closed two ticks on.
+  const down = locAt(51641, 1556, 3048, 0);
+  const visit = explorer([1557, 3047, 0]);
+  const request = { player: visit.player, object: down, objectId: down.getId(), clickType: 1, handled: false };
+  hooks["ladders:climb"](request);
+  assert.equal(request.handled, true);
+  // A second click while on the way changes nothing: the stairs are already being taken.
+  const again = { player: visit.player, object: down, objectId: down.getId(), clickType: 1, handled: false };
+  hooks["ladders:climb"](again);
+  runTicks(visit, 6);
+  assert.deepEqual(visit.ticks, [
+    [],
+    ["open 174"],
+    ["varbit 6719=2"],
+    ["move 1558,9451,0"],
+    ["varbit 6719=0", "open 174"],
+    [],
+    ["close overlay"],
+  ]);
+  assert.equal(visit.player.getMovementQueue().isMovementBlocked(), false);
+
+  const up = locAt(51642, 1557, 9448, 0);
+  const back = explorer([1557, 9451, 0]);
+  const climb = { player: back.player, object: up, objectId: up.getId(), clickType: 1, handled: false };
+  hooks["ladders:climb"](climb);
+  assert.equal(climb.handled, true);
+  runTicks(back, 6);
+  const at = back.player.getLocation();
+  assert.deepEqual([at.getX(), at.getY(), at.getZ()], [1558, 3047, 0]);
+});
+
 test("another tile or option isn't claimed: the click falls through to whoever handles it", () => {
   const object = locAt(57591, 1288, 3133, 0);
   const visit = explorer([1289, 3136, 0]);
