@@ -94,12 +94,12 @@ export function BugReportPanel({ plugin }: { plugin: BugReportPlugin }): JSX.Ele
     );
 }
 
-/** The Report a Bug button, second on the rail so more plugin buttons never push it off. */
+/** The Report a Bug button, last on the rail, below every plugin's button. */
 export function createBugReportNavigationButton(plugin: BugReportPlugin): NavigationButton {
     return NavigationButton.builder()
         .tooltip("Report a Bug")
         .icon(BugIcon)
-        .priority(1)
+        .priority(100)
         .panel(() => <BugReportPanel plugin={plugin} />)
         .build();
 }
