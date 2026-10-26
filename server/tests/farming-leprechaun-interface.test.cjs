@@ -4,7 +4,8 @@ require('../dist/Server').Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Player } = require('../dist/game/entity/impl/player/Player');
-let core, Data, Patches, Services, action, logout;
+let core, Data, Patches, Services, logout;
+const actions = [];
 const uid = name => core.CacheDefinitions.getComponentId(name);
 before(async () => {
     await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
@@ -15,7 +16,7 @@ before(async () => {
     Services = require('../plugins/skills/farming/Services.Farming');
     Data.initializeFarmingData();
     Patches.attach(new Proxy({}, { get: (_, name) => (...args) => {
-        if (name === 'onInterfaceActionClick') action = args[0];
+        if (name === 'onInterfaceActionClick') actions.push(args[0]);
         if (name === 'onPlayerLogout') logout = args[0];
     } }));
 });
@@ -34,9 +35,12 @@ function prepare(t, stored = {}, metadata = {}) {
     const open = () => Services.farmingNpc({ player, npc, clickType: 1,
         definition: { getName: () => 'Tool Leprechaun', getActions: () => ['Exchange'] } });
     const click = (name, opId = 1) => {
-        assert.equal(typeof action, 'function', 'Farming must register the native interface action handler');
+        assert.ok(actions.length > 0, 'Farming must register native interface action handlers');
         const event = { player, buttonId: uid(name), opId, action: opId, handled: false };
-        action(event);
+        for (const action of actions) {
+            if (event.handled) break;
+            action(event);
+        }
         return event;
     };
     return { player, inventory, sender, farm, messages, open, click,

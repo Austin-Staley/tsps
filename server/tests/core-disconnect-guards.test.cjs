@@ -749,12 +749,13 @@ test('alchemy policy keeps rune and spellbook checks before neutralising a permi
   const amounts=new Map([[29573,1],[561,1],[554,5]]), item={getId:()=>29573,isTradeable:()=>false,isSellable:()=>false,
     getDefinition:()=>({getHighAlchValue:()=>0,getLowAlchValue:()=>0})};
   const inventory={capacity:()=>28,getItems:()=>[item],contains:id=>(amounts.get(id)||0)>0,getAmount:id=>amounts.get(id)||0,
-    deleteNumber:(id,n)=>amounts.set(id,(amounts.get(id)||0)-n),adds:(id,n)=>amounts.set(id,(amounts.get(id)||0)+n)};
+    deleteNumber:(id,n)=>amounts.set(id,(amounts.get(id)||0)-n),deleteAtSlot:(slot,n)=>inventory.deleteNumber(inventory.getItems()[slot].getId(),n),
+    adds:(id,n)=>amounts.set(id,(amounts.get(id)||0)+n)};
   const player={getInventory:()=>inventory,getEquipment:()=>({getWeapon:()=>null}),getSkillManager:()=>({getCurrentLevel:()=>99,addExperiences(){}}),
     getSpellbook:()=>MagicSpellbook.NORMAL,sendMessage(){},performAnimation(){},performGraphic(){},
-    getPacketSender:()=>({sendTab(){}})};
+    getPacketSender:()=>({sendTab(){}}),attributes:new Map(),getAttribute(k){return this.attributes.get(k);},setAttribute(k,v){this.attributes.set(k,v);}};
   try {
-    PluginManager.emitCustomEvent=(name,event)=>{events.push(name);if(name==='magic:alchemy-policy'){event.allowed=true;event.coins=0;}};
+    PluginManager.emitCustomEvent=(name,event)=>{events.push(name);if(name==='magic:alchemy-policy'){event.allowed=true;event.coins=0;event.confirm=false;}};
     const listener=new MagicOnItemPacketListener();
     amounts.set(561,0);listener.castOnItem(player,1178,29573,0);assert.equal(amounts.get(29573),1);
     assert.ok(!events.includes('magic:alchemy-completed'));

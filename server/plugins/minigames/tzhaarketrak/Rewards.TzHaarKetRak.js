@@ -11,10 +11,12 @@
  *   "Failure..." (no line to a player who logged out);
  * - Combat Achievements: the tasks the completion meets, by name. Its kill-count tasks ("Complete
  *   TzHaar-Ket-Rak's second challenge.") name a challenge, not a count, so no count is reported:
- *   Data.CombatAchievements would read each as "once". Best times are kept for the scoreboard.
+ *   Data.CombatAchievements would read each as "once". Completions, best times and deaths are kept for the scoreboard
+ *   (Scoreboard.TzHaarKetRak.js).
  */
 const Common = require("./Common.TzHaarKetRak");
 const Dialogue = require("./Dialogue.TzHaarKetRak");
+const Scoreboard = require("./Scoreboard.TzHaarKetRak");
 
 const SECONDS_PER_TICK = 0.6;
 const STYLES = ["MELEE", "RANGED", "MAGIC"];
@@ -82,6 +84,7 @@ function lastJadDown(player, challenge) {
     times[number] = ticks;
     player.setAttribute(Common.BEST_TIMES_ATTRIBUTE, times);
   }
+  Scoreboard.completed(number, ticks);
   sendCounts(player);
   const ordinal = data.ordinals[number - 1];
   const time = Common.formatTicks(ticks);
@@ -115,6 +118,8 @@ function completed(player, challenge, { logout = false } = {}) {
 function failed(player, challenge, { logout = false, died = false } = {}) {
   const { data } = Common;
   player.setAttribute(Common.LAST_COMPLETED_ATTRIBUTE, 0);
+  // A death once the Jads are in counts; one during the fade in, before they arrive, doesn't.
+  if (died && challenge.startTick !== -1) Scoreboard.died(player, challenge.number);
   const kills = challenge.kills;
   if (challenge.startTick !== -1) {
     const values = { time: Common.formatTicks(challenge.elapsedTicks()), end: died ? data.messages.perishing : "." };

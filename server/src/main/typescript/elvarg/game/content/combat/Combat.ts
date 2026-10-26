@@ -26,6 +26,7 @@ import type { MovementQueue } from "../../model/movement/MovementQueue";
 import type { Location } from "../../model/Location";
 import { Misc } from "../../../util/Misc";
 import { TaskManager } from "../../task/TaskManager";
+import { TimerKey } from "../../../util/timers/TimerKey";
 
 type CombatCycleState = {
     cycle: number;
@@ -47,6 +48,8 @@ const COMBAT_TARGET_PLAYER_VARP = 1075;
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
     private damageMap: Map<Player, HitDamageCache> | null = null;
+    /** The player whose damage `addDamage` recorded last. */
+    private lastDamager: Player | null = null;
     private readonly lastAttack = new TickStopwatch();
     // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
     private poisonImmunityTimer: SecondsTimer | null = null;
@@ -254,6 +257,13 @@ export class Combat {
         if (!movement.getMobility().canMove()) {
             this.trace(`bail=immobile:${movement.getMobility().constructor.name}`, target);
             state.mobilityBlocked = true;
+            // A frozen player's attack on a target out of reach ends there, as live answers it.
+            if (this.character.isPlayer() && this.character.getTimers().has(TimerKey.FREEZE)) {
+                if (this.character.getAsPlayer().isPlayerBot?.() !== true) {
+                    this.character.getAsPlayer().sendMessage("I can't reach that!");
+                }
+                this.cancelIfCurrent(target, state.generation);
+            }
             return;
         }
 
@@ -482,9 +492,16 @@ export class Combat {
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
         const player = entity as Player;
+        this.lastDamager = player;
         const cached = this.damageMap?.get(player);
         if (cached) cached.incrementDamage(amount);
         else (this.damageMap ??= new Map()).set(player, new HitDamageCache(amount));
+    }
+
+    /** The player who damaged this character most recently, while that damage still counts. */
+    public getLastDamager(): Player | null {
+        const player = this.lastDamager;
+        return player && player.isRegistered() && this.damageMapContains(player) ? player : null;
     }
 
     public getKiller(clearMap: boolean): Player | null {

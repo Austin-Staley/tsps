@@ -146,8 +146,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const COLOUR_NAMES = ["white", "red", "yellow", "blue", "orange", "green", "purple"];
 
   const MAST_OBJECT_ID = ObjectIdentifiers.MAST_6; // 16640 (Ahoy shipwreck mast)
-  /** 57722 is the cache transform parent of the Energy Barrier (16105/57723). */
-  const ENERGY_BARRIER_ID = 57722;
   const COFFIN_ID = ObjectIdentifiers.COFFIN_14; // 16644
   const COFFIN_OPEN_ID = ObjectIdentifiers.COFFIN_15; // 16645
   const LOCKED_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_28; // 16116 AHOY_CHEST_LOCKED
@@ -1401,22 +1399,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
       event.handled = true;
       return;
     }
-    /** Port Phasmatys energy barrier: 2 ecto-tokens, free once the quest is done. */
-    if (objectId === ENERGY_BARRIER_ID && (option.includes("pass") || option.includes("pay-toll"))) {
-      event.handled = true;
-      const barrierY = location?.y ?? player.getLocation().getY();
-      if (!quest.isComplete(player)) {
-        if (player.getInventory().getAmount(ECTO_TOKEN) < 2) {
-          player.sendMessage("You need 2 ecto-tokens to pass through the barrier.");
-          return;
-        }
-        player.getInventory().deleteNumber(ECTO_TOKEN, 2);
-      }
-      const destinationY = player.getLocation().getY() < barrierY ? barrierY + 1 : barrierY - 1;
-      player.moveTo(new Location(player.getLocation().getX(), destinationY, player.getLocation().getZ()));
-      player.sendMessage("You pass through the energy barrier.");
-      return;
-    }
+    // The Port Phasmatys energy barriers are plugins/areas/PortPhasmatysBarrier.plugin.js.
     if (SHIPWRECK_GANGPLANKS.has(objectId)) {
       player.sendMessage("You cross the gangplank.");
       if (location) {

@@ -53,7 +53,7 @@ This is **not a verified 1:1 implementation**. In particular:
 - Geomancy, seed-vault storage, contracts, and Tithe rewards use existing
   dialogue menus; their original dedicated interfaces are not reproduced.
   Leprechaun storage uses the native main and side screens described below.
-  The Tithe overlay is separate work in PR #1291.
+  The native Tithe status overlay is mounted during a run (details below).
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
@@ -94,6 +94,46 @@ supplies storage capacities and noted deposits/withdrawals. No ordinary-world
 recording shows every quantity/Banknotes path: their op order follows the cache;
 Banknotes uses the selected quantity, and X remembers a positive amount for the
 open session. The amount prompt wording is ours. Produce noting is unchanged.
+
+### Other Farming verification
+
+Geomancy refuses casting while attacking or being attacked, before rune
+consumption, Magic XP, animation or patch updates. It retains the existing
+shared combat definition and ordinary casting checks once combat ends.
+RSProx recording 1221 (revision 238, click `magic_spellbook:geomancy` at
+tick 5769) supplies the exact refusal text. That recording is a Leagues world;
+no League rune-restoration, timing or reward rules are imported. The
+[Geomancy article](https://oldschool.runescape.wiki/w/Geomancy) documents
+the ordinary 65 Magic, 60 XP and 3 astral/3 nature/8 earth rune cost.
+The dedicated native interface remains a separate fidelity limit above.
+
+Ordinary tree stumps yield one to four roots at eight-level intervals above
+the crop's planting level: oak 15/23/31/39, willow 30/38/46/54, maple
+45/53/61/69, yew 60/68/76/84 and magic 75/83/91/99. The current Farming
+level when digging includes temporary boosts and drains. Inventory capacity
+is checked for the complete reward before clearing the stump.
+Source: [Tree roots (Farming)](https://oldschool.runescape.wiki/w/Tree_roots_(Farming)).
+Regression checks drive the object interaction with real inventories and
+cache definitions, including every threshold, boost/drain, repeat clicks,
+missing spades, full inventory and dead/fruit-tree exclusions.
+
+### Native Tithe status overlay
+
+The revision241 cache resolves `hosidius_strip_farming` to group241 and
+`toplevel_osrs_stretch:overlay_hud` to161:8. Entry/relogin mounts this existing
+overlay; its onLoad1193 and renderer1195 read `hosidius_tithe_type`4901,
+`hosidius_tithe_score`4900 and `hosidius_tithe_rewardpoints`4893. Existing
+inventory/varp transmit scripts refresh the fruit icon, batch count and points.
+Planting the final seed does not clear the selected crop. Leaving/logging out
+closes the interface only if the Tithe group is still mounted, preserving any
+replacement HUD. `zeah_tithe_minigame_unlocked`4909 stays unlocked on exit.
+
+Sources: local cache widget241 and scripts1193/1195, plus the
+[Tithe Farm](https://oldschool.runescape.wiki/w/Tithe_Farm) batch/point rules.
+The local RSProx index has no recording naming this overlay; exact packet timing
+is not claimed. Regression checks use real Player inventories and PacketSender
+mount tracking for all three crops, relog, last-seed planting, deposit and cleanup.
+The reward shop remains a separate interface gap.
 
 Coral yields use the post-19-August-2026 six harvest lives and the published
 low/high calculator endpoints: Elkhorn 85/182, Pillar 25/180 and Umbral -50/178.
@@ -207,3 +247,20 @@ Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki
 and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
 The regression checks drive the actual shared keypad and storage handlers;
 menu rendering and scheduled ticks use the existing Bank PIN test fixture.
+
+## Native Geomancy input
+
+Geomancy's cache spellbook widget (`magic_spellbook:geomancy`, 218:150 in this
+cache) reaches the Farming handler through `onInterfaceActionClick`, as well as
+the existing legacy button hook. Only the Cast action is accepted; a busy or
+dead player cannot pay for a cast. The existing combat refusal, spellbook/level
+checks, rune consumption and XP award remain in the same handler.
+
+RSProx `238/01221` and `238/04128` identify the widget; the former records
+"You can't commune with the land while fighting." Both recordings are special
+worlds, so no League resource/timing rules are imported. The
+[Geomancy Wiki page](https://oldschool.runescape.wiki/w/Geomancy) supplies the
+ordinary 65 Magic requirement, 3 astral/3 nature/8 earth cost and 60 XP.
+`farming-geomancy-input.test.cjs` drives widget packets through the real network
+dispatcher, with all plugins and real Player/Inventory/PacketSender objects.
+The native Geomancy browser remains separate interface work.
