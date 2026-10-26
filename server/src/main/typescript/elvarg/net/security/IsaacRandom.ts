@@ -235,4 +235,18 @@ export class IsaacRandom {
     }
     return this.results[this.count] | 0;
   }
+
+  /** A cipher at the same position, so a short packet read can be discarded. */
+  public clone(): IsaacRandom {
+    const copy = new IsaacRandom([]);
+    for (let i = 0; i < IsaacRandom.SIZE; i++) {
+      copy.results[i] = this.results[i];
+      copy.state[i] = this.state[i];
+    }
+    copy.count = this.count;
+    copy.accumulator = this.accumulator;
+    copy.last = this.last;
+    copy.counter = this.counter;
+    return copy;
+  }
 }

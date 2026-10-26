@@ -80,6 +80,10 @@ if (process.argv.includes("--precompress")) {
 }
 
 const PORT = Number(process.env.PORT) || 3000;
+// package.json "homepage" is /play, so the build references /play/static/... and /play/caches/....
+// Strip that prefix so the same build serves from / without a play -> build junction.
+// BASE_PATH overrides it; set BASE_PATH=/ to disable.
+const BASE_PATH = (process.env.BASE_PATH ?? "/play").replace(/\/+$/, "");
 const HOST = process.env.HOST || "0.0.0.0";
 // /caches/ is served from CACHE_DIR if set, else from build/caches if the build contains it,
 // else from the server's cache folder (server/caches, filled by server/scripts/ensure-cache.ts).
@@ -206,7 +210,10 @@ const server = http.createServer((req, res) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
         return respond(req, res, 405, { Allow: "GET, HEAD" });
     }
-    const urlPath = new URL(req.url || "/", "http://localhost").pathname;
+    let urlPath = new URL(req.url || "/", "http://localhost").pathname;
+    if (BASE_PATH && (urlPath === BASE_PATH || urlPath.startsWith(BASE_PATH + "/"))) {
+        urlPath = urlPath.slice(BASE_PATH.length) || "/";
+    }
     const notFound = () =>
         respond(req, res, 404, {
             ...isolationHeaders(req.headers["user-agent"] || ""),
