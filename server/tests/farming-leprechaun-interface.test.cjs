@@ -4,7 +4,8 @@ require('../dist/Server').Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Player } = require('../dist/game/entity/impl/player/Player');
-let core, Data, Patches, Services, logout;
+let core, Data, Patches, Services, logoutHooks = [];
+function logout(event) { for (const handler of logoutHooks) handler(event); }
 const actions = [];
 const uid = name => core.CacheDefinitions.getComponentId(name);
 before(async () => {
@@ -17,7 +18,7 @@ before(async () => {
     Data.initializeFarmingData();
     Patches.attach(new Proxy({}, { get: (_, name) => (...args) => {
         if (name === 'onInterfaceActionClick') actions.push(args[0]);
-        if (name === 'onPlayerLogout') logout = args[0];
+        if (name === 'onPlayerLogout') logoutHooks.push(args[0]);
     } }));
 });
 function prepare(t, stored = {}, metadata = {}) {
