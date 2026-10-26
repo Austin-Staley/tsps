@@ -8,7 +8,7 @@ import type { OsrsClient } from "../../OsrsClient";
 import type { WidgetActionEvent } from "../../widgets/widgetActionPayload";
 import { createBugReportNavigationButton } from "./BugReportPanel";
 import { ClientLogBuffer, captureConsole } from "./ClientLogBuffer";
-import { buildIssueUrl, redactAddresses, formatDiagnosticsSection } from "./bugReportLink";
+import { buildIssueUrl, openIssueTab, redactAddresses, formatDiagnosticsSection } from "./bugReportLink";
 import { collectBugDiagnostics } from "./clientDiagnostics";
 import { composeGameFrame, frameToPngBlob } from "./gameScreenshot";
 
@@ -97,14 +97,8 @@ export class BugReportPlugin extends Plugin {
             const title = description.split("\n")[0] ?? description;
             const diagnostics = collectBugDiagnostics(this.client, this.logs);
             const url = buildIssueUrl(title, description, formatDiagnosticsSection(diagnostics));
-            const opened = window.open(url, "_blank", "noopener,noreferrer");
-            if (!opened) {
-                this.update({
-                    notice: "The popup was blocked: allow popups for this site, then press Open GitHub issue again.",
-                });
-                return;
-            }
-            this.update({ notice: "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V." });
+            const notice = openIssueTab(url, (target) => window.open(target, "_blank", "noopener,noreferrer"));
+            this.update({ notice });
         } catch (error) {
             console.warn("[bug-report] open issue failed", error);
             this.update({

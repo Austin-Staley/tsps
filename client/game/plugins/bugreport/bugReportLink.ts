@@ -51,6 +51,23 @@ function codePoints(text: string): number {
     return Array.from(text).length;
 }
 
+/** What the panel says after the issue tab is opened. */
+export const ISSUE_TAB_NOTICE = "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V.";
+
+/**
+ * Opens the issue tab and returns the notice to show.
+ *
+ * `window.open` with `noopener` returns `null` even when the tab really opens (Chrome keeps
+ * the handle hidden from the opener), so its return value cannot tell a success from a
+ * blocked popup. Reporting "popup blocked" on a `null` return claimed failure on every
+ * successful click, so the notice is the same either way and the player is never told to
+ * retry a tab that is already there.
+ */
+export function openIssueTab(url: string, open: (url: string) => unknown): string {
+    open(url);
+    return ISSUE_TAB_NOTICE;
+}
+
 /**
  * The prefilled issue link: `title` plus the markdown `body`.
  *

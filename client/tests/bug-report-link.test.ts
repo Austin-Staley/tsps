@@ -2,11 +2,13 @@ import { strict as assert } from "node:assert";
 
 import {
     BUG_REPORT_ISSUE_URL,
+    ISSUE_TAB_NOTICE,
     MAX_ISSUE_URL_LENGTH,
     buildIssueUrl,
     coarseBrowser,
     formatDiagnosticsSection,
     formatErrorLines,
+    openIssueTab,
     redactAddresses,
     resolvePlayer,
     truncateCodePoints,
@@ -86,6 +88,19 @@ function testCoarseBrowser(): void {
     assert.equal(coarseBrowser(chrome), "Chrome");
     assert.equal(coarseBrowser("Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"), "Firefox");
     assert.equal(coarseBrowser("经过"), "Other");
+}
+
+function testOpenIssueTab(): void {
+    // window.open with `noopener` returns null on success (Chrome hides the handle), so a
+    // null return must never be reported as a blocked popup.
+    const opened: string[] = [];
+    const notice = openIssueTab("https://example.test/issue", (url) => {
+        opened.push(url);
+        return null;
+    });
+    assert.deepEqual(opened, ["https://example.test/issue"], "the url is opened once");
+    assert.equal(notice, ISSUE_TAB_NOTICE);
+    assert.ok(!/blocked/i.test(notice), "a null handle is not called a blocked popup");
 }
 
 function testFormUrl(): void {
@@ -178,6 +193,7 @@ testTruncation();
 testRedaction();
 testResolvePlayer();
 testCoarseBrowser();
+testOpenIssueTab();
 testFormUrl();
 testUrlCap();
 testDiagnosticsAllowlist();
