@@ -26,7 +26,7 @@ function bestPickaxe(player) {
 function wearsChargedGlory(player) {
   const neck = player.getEquipment().getItems()[Common.core.Equipment.AMULET_SLOT];
   const name = neck ? Common.core.CacheDefinitions.getItem(neck.getId())?.name ?? "" : "";
-  return /^Amulet of glory.*\((t?\d|inf)\)$/i.test(name);
+  return /^Amulet of (glory.*\((t?\d|inf)\)|eternal glory)$/i.test(name);
 }
 
 function chance(player) {

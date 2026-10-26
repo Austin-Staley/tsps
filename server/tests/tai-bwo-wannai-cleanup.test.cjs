@@ -571,6 +571,8 @@ test("a gout tuber: the plant, the finder's to dig with a spade, two digs, the t
   assert.equal(locAt(LIGHT) ?? MapObjects.get(loc('village_gout_tuber'), at(LIGHT), null)?.getId(), loc('village_gout_tuber'));
   assert.ok(finder.messages.includes('You hack away at the remaining bush to reveal an unusual plant.'));
   const plant = MapObjects.get(loc('village_gout_tuber'), at(LIGHT), null);
+  // Both online, as the world's player list would say.
+  t.mock.method(core.World, 'getPlayerByName', (name) => [finder, other].find((q) => q.getUsername() === name));
   const spade = (p) => PluginManager.emitItemOnObject({ player: p, object: plant, objectId: plant.getId(), item: new Item(obj('spade'), 1), itemId: obj('spade'), itemSlot: 0, location: { x: LIGHT[0], y: LIGHT[1], z: 0 }, handled: false });
   other.getInventory().add(new Item(obj('spade'), 1));
   spade(other);
@@ -642,18 +644,23 @@ test("kills: the threat's favour to the killer with the recorded message; mosqui
 test('a tribesman leaves only bones', (t) => {
   const p = villager(t, { events: true });
   const tribesman = spawnFor(t, p, 'tribesman');
-  const dropped = [];
-  t.mock.method(core.ItemOnGroundManager, 'registerLocation', (owner, item) => { dropped.push(item.getId()); });
-  PluginManager.emitNpcDeath({ npc: tribesman, killer: p, npcId: tribesman.getId(), location: { x: 0, y: 0, z: 0 } });
-  assert.ok(dropped.includes(obj('bones')));
+  // NpcDrops' own pass: no table for this tribesman any more, and the bones added as content loot.
+  const drops = [];
+  PluginManager.emitCustomEvent('npc-drops:add', { player: p, npc: tribesman, npcId: tribesman.getId(), drops });
+  assert.deepEqual(drops, [{ itemId: obj('bones'), amount: 1, noted: false }]);
 });
 
 test("Broodoo victims: a player's hits do at most 3; the right item hurts, with XP; the wrong one does nothing", (t) => {
   const p = villager(t, { events: true });
   const white = spawnFor(t, p, 'broodooCombat');
-  const hit = { getAttacker: () => p, total: 20, getTotalDamage() { return this.total; }, setTotalDamage(n) { this.total = n; } };
-  Broodoo.capHit({ npc: white, hit });
-  assert.equal(hit.total, 3);
+  // A multi-hit blow (claws, say): 3 in all between its hits, as it is queued (before its XP).
+  const { HitDamage, HitMask } = core;
+  const parts = [new HitDamage(20, HitMask.RED), new HitDamage(5, HitMask.RED), new HitDamage(0, HitMask.BLUE)];
+  let total = null;
+  const hit = { getHits: () => parts, getHandleAfterHitEffects: () => false, getAttacker: () => p, getTarget: () => white, getTotalDamage: () => total ?? 25, updateTotalDamage() { total = parts.reduce((sum, d) => sum + d.getDamage(), 0); } };
+  PluginManager.emitPlayerDealtDamage({ player: p, target: white, hit });
+  assert.deepEqual(parts.map((d) => d.getDamage()), [3, 0, 0]);
+  assert.equal(total, 3);
   p.getInventory().add(new Item(obj('bones'), 1));
   const use = (n, item) => PluginManager.emitItemOnNpc({ player: p, target: n, npcId: n.getId(), targetIndex: 1, item: new Item(item, 1), itemId: item, slot: 0, interfaceId: 149, handled: false });
   use(white, obj('bones'));
@@ -661,15 +668,24 @@ test("Broodoo victims: a player's hits do at most 3; the right item hurts, with 
   p.getInventory().add(new Item(obj('cabbage'), 1));
   t.mock.method(Math, 'random', () => 0);
   const cooking = p.getSkillManager().getExperience(core.Skill.COOKING);
+  const hp = white.getHitpoints();
   use(white, obj('cabbage'));
   assert.equal(p.getInventory().getAmount(obj('cabbage')), 0);
+  assert.equal(white.getHitpoints(), hp - 10);
   assert.equal(p.getSkillManager().getExperience(core.Skill.COOKING) - cooking, 20, 'twice the 10 it took');
+  assert.equal(white.getCombat().getKiller(false), p, "the feeder's damage makes the kill theirs");
+  p.getInventory().add(new Item(obj('cabbage') + 1, 1)); // noted
+  use(white, obj('cabbage') + 1);
+  assert.equal(white.getHitpoints(), hp - 10, 'a noted one does nothing');
+  assert.equal(p.getInventory().getAmount(obj('cabbage') + 1), 1);
   const green = spawnFor(t, p, 'broodooPoison');
-  const antipoison = Broodoo.findItemByName('Antipoison(4)');
-  p.getInventory().add(new Item(antipoison, 1));
-  use(green, antipoison);
-  assert.equal(p.getInventory().getAmount(antipoison), 0);
-  assert.equal(p.getInventory().getAmount(Broodoo.findItemByName('Antipoison(3)')), 1, 'one dose used');
+  const family = { itemId: obj('4doseantipoison'), family: null };
+  PluginManager.emitCustomEvent('potions:dose-family', family);
+  const [, , , three, four] = family.family.byDose;
+  p.getInventory().add(new Item(four, 1));
+  use(green, four);
+  assert.equal(p.getInventory().getAmount(four), 0);
+  assert.equal(p.getInventory().getAmount(three), 1, 'one dose used');
 });
 
 test("the poison victim's hit weakens: 1-3 off five combat stats, with the message", (t) => {

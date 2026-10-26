@@ -73,15 +73,31 @@ function weaken(player) {
   Common.sound(player, drain.sound);
 }
 
-/** A player's own hits on a victim do at most 3 (Wiki). */
-function capHit({ npc, hit }) {
-  if (!ids().includes(npc?.getId?.())) return;
-  if (!hit?.getAttacker?.()?.isPlayer?.()) return;
-  if (hit.getTotalDamage() > broodoo().playerMaxHit) hit.setTotalDamage(broodoo().playerMaxHit);
+/**
+ * A player's own blow on a victim does at most 3 in all (Wiki): capped as it is queued, before its
+ * combat XP is paid, a multi-hit special sharing the 3 between its hits.
+ */
+function capHit({ target, hit }) {
+  if (!ids().includes(target?.getId?.())) return;
+  let left = broodoo().playerMaxHit;
+  for (const damage of hit.getHits()) {
+    const value = Math.min(damage.getDamage(), left);
+    damage.setDamage(value);
+    left -= value;
+  }
+  hit.updateTotalDamage();
 }
 
-const isFood = (id) => (Common.core.CacheDefinitions.getItem(id)?.inventoryActions ?? []).includes("Eat");
-const potionOf = (id) => /^(.*)\((\d)\)$/.exec(Common.core.CacheDefinitions.getItem(id)?.name ?? "");
+const item = (id) => Common.core.CacheDefinitions.getItem(id);
+const isNoted = (id) => item(id)?.noteTemplate >= 0;
+const isFood = (id) => (item(id)?.inventoryActions ?? []).includes("Eat");
+/** The potion's name without its dose, and its family (Potions' "potions:dose-family"). */
+function potionOf(id) {
+  const request = { itemId: id, family: null };
+  Common.api.emitCustomEvent("potions:dose-family", request);
+  const name = /^(.*)\((\d)\)$/.exec(item(id)?.name ?? "")?.[1];
+  return request.family && name ? { name, family: request.family } : null;
+}
 
 function questComplete(player, key) {
   const request = { player, key };
@@ -89,28 +105,13 @@ function questComplete(player, key) {
   return request.complete === true;
 }
 
-/** One dose used: the next lower dose, or the empty vial after the last. */
-function useDose(player, id, base, doses) {
+/** One dose used: the next lower dose, or the family's empty vessel after the last. */
+function useDose(player, id, family) {
+  const dose = family.byDose.indexOf(id);
   const inventory = player.getInventory();
   inventory.delete(id, 1);
-  const next = doses > 1 ? findItemByName(`${base}(${doses - 1})`) : Common.objId("vial_empty");
-  if (next >= 0) inventory.add(new Common.core.Item(next, 1));
-}
-
-const itemsByName = new Map();
-function findItemByName(name) {
-  if (itemsByName.has(name)) return itemsByName.get(name);
-  const { CacheDefinitions } = Common.core;
-  let found = -1;
-  for (const id of CacheDefinitions.getObjNames().keys()) {
-    const item = CacheDefinitions.getItem(id);
-    if (item?.name === name && !(item.noteTemplate >= 0) && !(item.placeholderTemplate >= 0)) {
-      found = id;
-      break;
-    }
-  }
-  itemsByName.set(name, found);
-  return found;
+  const next = family.byDose[Math.max(0, dose - 1)];
+  if (next > 0) inventory.add(new Common.core.Item(next, 1));
 }
 
 /** The right thing on the right victim hurts it; anything else does nothing. */
@@ -120,33 +121,40 @@ function feed(event) {
   if (!name) return false;
   event.handled = true;
   const rule = broodoo().feed[name];
+  if (npc.getHitpoints() <= 0 || npc.isDyingFunction?.()) return true;
   let damage = 0;
-  if (rule.kind === "food" && isFood(itemId)) {
+  let use = null;
+  if (isNoted(itemId)) {
+    damage = 0;
+  } else if (rule.kind === "food" && isFood(itemId)) {
     damage = between(rule.damage);
-    player.getInventory().delete(itemId, 1);
+    use = () => player.getInventory().delete(itemId, 1);
   } else if (rule.kind === "potion") {
-    const dose = potionOf(itemId);
-    const base = dose?.[1];
-    if (base && rule.potions[base] !== undefined) {
-      damage = rule.potions[base];
-      useDose(player, itemId, base, Number(dose[2]));
+    const potion = potionOf(itemId);
+    if (potion && rule.potions[potion.name] !== undefined) {
+      damage = rule.potions[potion.name];
+      use = () => useDose(player, itemId, potion.family);
     }
   }
-  if (damage <= 0) {
+  if (damage <= 0 || !use) {
     player.sendMessage(broodoo().nothing);
     return true;
   }
+  use();
   const { HitDamage, HitMask } = Common.core;
-  npc.addTickHit?.(npc.decrementHealth(new HitDamage(Math.min(damage, npc.getHitpoints()), HitMask.RED)));
-  if (rule.kind === "food" || !rule.quest || questComplete(player, rule.quest)) Common.xp(player, rule.skill, damage * 2);
+  const dealt = npc.decrementHealth(new HitDamage(Math.min(damage, npc.getHitpoints()), HitMask.RED));
+  npc.addTickHit?.(dealt);
+  // Counted as the player's damage, so the kill (favour, drops) is theirs.
+  npc.getCombat().addDamage(player, dealt.getDamage());
+  if (rule.kind === "food" || !rule.quest || questComplete(player, rule.quest)) Common.xp(player, rule.skill, dealt.getDamage() * 2);
   if (!npc.getCombat().getTarget?.()) npc.getCombat().attack(player);
   return true;
 }
 
 function attachBroodoo(api) {
   api.registerNpcCombatMethodProvider(ids(), combatClass(), { singleton: false });
-  api.onNpcHitModify(capHit);
+  api.onPlayerDealtDamage(capHit);
   api.onItemOnNpc(feed);
 }
 
-module.exports = { attachBroodoo, feed, capHit, weaken, findItemByName };
+module.exports = { attachBroodoo, feed, capHit, weaken };

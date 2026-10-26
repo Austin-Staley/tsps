@@ -74,11 +74,8 @@ function pick() {
 
 /** Everyone in view sees the bush shake and the chippings fly. */
 function shake(player, object) {
-  const { Animation, Graphic, World } = Common.core;
-  const animation = new Animation(Common.seqId(events().bushShake));
-  World.forEachNetworkPlayer?.((viewer) => {
-    if (object.getLocation().isViewableFrom(viewer.getLocation())) viewer.getPacketSender().sendObjectAnimation(object, animation);
-  });
+  const { Animation, Graphic } = Common.core;
+  object.performAnimation(new Animation(Common.seqId(events().bushShake)));
   const chippings = Common.core.CacheDefinitions.getSpotanimId(Common.data.spotanims.chippings);
   player.getPacketSender().sendGlobalGraphic(new Graphic(chippings), object.getLocation());
 }
@@ -111,12 +108,20 @@ function stepBack(player, bush) {
   Common.animate(player, stepback.seq, stepback.delay);
   if ((dx === 0) === (dy === 0)) return;
   const to = new Location(at.getX() + dx, at.getY() + dy, at.getZ());
-  if (RegionManager.blocked(to, player.getPrivateArea())) return;
+  // A wall or anything solid in the way: the player stays put (237/01102).
+  const area = player.getPrivateArea();
+  // (canMoveIsBlocked answers whether the step is clear.)
+  if (RegionManager.blocked(to, area) || !RegionManager.canMoveIsBlocked(at, stepDirection(dx, dy), area)) return;
   // ForceMovement directions: 0 north, 1 east, 2 south, 3 west; the player faces the bush.
   const facing = dy < 0 ? 0 : dx < 0 ? 1 : dy > 0 ? 2 : 3;
   player.getMovementQueue().reset();
   TaskManager.submit(new ForceMovementTask(player, 1,
     new ForceMovement(at.clone(), new Location(dx, dy), stepback.speed, stepback.reverse, facing, Common.seqId(stepback.seq))));
+}
+
+/** RegionManager's direction index for a one-tile step (1 north, 4 east, 6 south, 3 west). */
+function stepDirection(dx, dy) {
+  return dy > 0 ? 1 : dx > 0 ? 4 : dy < 0 ? 6 : 3;
 }
 
 function spawn(player, entry, location) {
@@ -125,7 +130,8 @@ function spawn(player, entry, location) {
   npc.__skipDefaultRespawn = true;
   spawned.set(npc, { player, entry, due: World.getProcessCycle() + events().lifeTicks });
   World.getAddNPCQueue().push(npc);
-  Common.later(player, entry.turnAfter, () => {
+  // Its attacking form comes whether or not the player is still here.
+  Common.afterTicks(entry.turnAfter, () => {
     if (!spawned.has(npc) || !npc.isRegistered?.()) return;
     if (entry.spawn) npc.setNpcTransformationId(npcId(entry.npc));
     if (player.isRegistered()) npc.getCombat().attack(player);
@@ -153,7 +159,7 @@ function expire() {
 
 // ------------------------------------------------------------------ gout tuber and gem rock
 
-/** By tile: who found a gout tuber plant (only they may dig it while logged in, Wiki). */
+/** By tile: who found a gout tuber plant or gem rock (only they may dig it while logged in, Wiki), by username. */
 const finders = new Map();
 const tileKey = (location) => `${location.getX()},${location.getY()},${location.getZ()}`;
 
@@ -162,7 +168,11 @@ function revealGout(player, jungle, bush) {
   player.sendMessage(gout.message);
   Common.sound(player, gout.sound);
   const plant = Locs.swap(bush, Common.locId(gout.loc), gout.lifeTicks, Common.locId(jungle.locs[0]));
-  finders.set(tileKey(plant.getLocation()), { player, jungle });
+  finders.set(tileKey(plant.getLocation()), { username: player.getUsername(), jungle });
+}
+
+function online(username) {
+  return Common.core.World.getPlayerByName?.(username)?.isRegistered?.() === true;
 }
 
 function jungleOfStump(location) {
@@ -177,13 +187,13 @@ function digGout(event) {
   const { dig } = events().gout;
   const tile = tileKey(object.getLocation());
   const finder = finders.get(tile);
-  if (finder && finder.player !== player && finder.player.isRegistered()) {
+  if (finder && finder.username !== player.getUsername() && online(finder.username)) {
     player.sendMessage(dig.notYours);
     return true;
   }
   const jungle = jungleOfStump(object.getLocation());
   // Starting to dig makes it the digger's.
-  finders.set(tile, { player, jungle });
+  finders.set(tile, { username: player.getUsername(), jungle });
   const digOnce = () => {
     Common.animate(player, dig.seq);
     Common.sound(player, dig.sound);
@@ -192,7 +202,7 @@ function digGout(event) {
   Common.later(player, dig.again, digOnce);
   Common.later(player, dig.doneAt, () => {
     const plant = Locs.find([Common.locId(events().gout.loc)], object.getLocation());
-    if (!plant || finders.get(tile)?.player !== player) return;
+    if (!plant || finders.get(tile)?.username !== player.getUsername()) return;
     if (!player.getLocation().isWithinInteractionDistance(plant.getLocation())) return;
     finders.delete(tile);
     player.getInventory().add(new Common.core.Item(Common.objId(dig.item), 1));
@@ -206,7 +216,7 @@ function revealGemRock(player, jungle, bush) {
   const { gem } = events();
   player.sendMessage(gem.message);
   const rock = Locs.swap(bush, Common.locId(gem.locs[0]), gem.lifeTicks, Common.locId(jungle.locs[0]));
-  finders.set(tileKey(rock.getLocation()), { player, jungle });
+  finders.set(tileKey(rock.getLocation()), { username: player.getUsername(), jungle });
 }
 
 // ------------------------------------------------------------------ kills
@@ -220,7 +230,6 @@ function rewardKill({ npc, killer }) {
   const entry = events().table.find((candidate) => candidate.npc && npcId(candidate.npc) === npc.getId());
   const spawn = spawned.get(npc);
   if (spawn) spawned.delete(npc);
-  if (entry?.bones) dropBones(npc, player ?? spawn?.player);
   if (!player) return;
   const wild = !entry && npc.getCurrentDefinition?.(player)?.getName?.() === events().wildSpider.name && Favour.inVillage(player);
   if (!entry && !wild) return;
@@ -234,30 +243,39 @@ function rewardKill({ npc, killer }) {
 }
 
 /**
- * Tribesmen disturbed in the cleanup drop only bones (Wiki, and every recorded kill); the generic
- * tribesman table is removed for them in npc-drop-overrides.json, so the bones come from here.
+ * Tribesmen disturbed in the cleanup drop only bones (Wiki, and every recorded kill). The generic
+ * tribesman table is no longer theirs (npc-drop-overrides.json), so NpcDrops rolls nothing and the
+ * bones join its drops here, as other content's own loot does ("npc-drops:add").
  */
-function dropBones(npc, owner) {
-  if (!owner) return;
-  const { Item, ItemOnGroundManager } = Common.core;
-  ItemOnGroundManager.registerLocation(owner, new Item(Common.objId("bones"), 1), npc.getLocation().clone());
+function addBones(event) {
+  const entry = events().table.find((candidate) => candidate.bones && npcId(candidate.npc) === event.npcId);
+  if (entry) event.drops.push({ itemId: Common.objId("bones"), amount: 1, noted: false });
+}
+
+/** Removed by anything else (a death, a reset): forget it, so it doesn't hold its player. */
+function forgetRemoved() {
+  for (const npc of [...spawned.keys()]) {
+    if (!npc.isRegistered?.() && !Common.core.World.getAddNPCQueue().includes(npc)) spawned.delete(npc);
+  }
 }
 
 function attachEvents(api) {
   const { Task, TaskManager } = Common.core;
   api.onItemOnObject("Spade", Common.core.CacheDefinitions.getObject(Common.locId(events().gout.loc)).name, digGout);
   api.onNpcDeath(rewardKill);
+  api.onCustomEvent("npc-drops:add", addBones);
   TaskManager.submit(new (class extends Task {
     constructor() {
       super(1, "tai-bwo-wannai-cleanup:spawns", false);
     }
     execute() {
       expire();
+      forgetRemoved();
     }
   })());
 }
 
 module.exports = {
-  attachEvents, roll, counted, goutChance, pick, spawn, remove, digGout, rewardKill, isOurs, revealGout, revealGemRock,
+  attachEvents, roll, counted, goutChance, pick, spawn, remove, digGout, rewardKill, addBones, isOurs, revealGout, revealGemRock,
   COUNTER, _spawned: spawned, _finders: finders,
 };
