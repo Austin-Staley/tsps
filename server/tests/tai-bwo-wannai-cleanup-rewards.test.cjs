@@ -288,6 +288,24 @@ test("Rionasta's parcels: 10 sticks per item, stacks counted per item, to the ba
   assert.equal(held(p, STICKS), 70);
 });
 
+test('parcels: a stale click naming an item no longer in its slot sends nothing, also through Pack-X', (t) => {
+  const p = villager(t, { sticks: 300 });
+  login(p);
+  give(p, 'teak_logs', 1);
+  npcOp(p, 'tbwcu_rionasta', 3);
+  const slot = p.getInventory().getItems().findIndex((item) => item?.getId() === obj('teak_logs'));
+  const stale = () => ({ player: p, buttonId: itemsUid(), action: 2, slot, itemId: obj('teak_logs'), handled: false }); // Pack-1
+  PluginManager.emitInterfaceActionClick(stale());
+  assert.equal(banked(p, 'teak_logs'), 1);
+  assert.equal(held(p, STICKS), 290);
+  // The emptied slot fills with a mahogany log before the second, queued teak click arrives.
+  p.getInventory().set?.(slot, new Item(obj('mahogany_logs'), 1)) ?? give(p, 'mahogany_logs', 1);
+  assert.equal(p.getInventory().getItems()[slot]?.getId(), obj('mahogany_logs'));
+  PluginManager.emitInterfaceActionClick(stale());
+  assert.equal(banked(p, 'mahogany_logs'), 0, 'the mahogany stays');
+  assert.equal(held(p, STICKS), 290, 'nothing more charged');
+});
+
 test('parcels: currencies, Karamjan rum and too few sticks are refused with their messages', (t) => {
   const p = villager(t, { sticks: 25 });
   login(p);

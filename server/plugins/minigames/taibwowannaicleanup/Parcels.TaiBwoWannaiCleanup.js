@@ -87,9 +87,12 @@ function onItemClick(event) {
   const { ops } = parcels();
   const item = player.getInventory().getItems()[event.slot];
   if (!item || item.getId() <= 0) return;
+  // The packet names the item it was clicked on; a slot that has since changed is a stale click.
+  const itemId = Number.isInteger(event.itemId) && event.itemId > 0 ? event.itemId : item.getId();
+  if (item.getId() !== itemId) return;
   const amount = ops.amounts[String(event.action)];
-  if (amount !== undefined) send(player, event.slot, item.getId(), amount);
-  else if (event.action === ops.x) promptAmount(player, event.slot, item.getId());
+  if (amount !== undefined) send(player, event.slot, itemId, amount);
+  else if (event.action === ops.x) promptAmount(player, event.slot, itemId);
   else if (event.action === ops.value) player.sendMessage(Common.message("parcelValue", { item: item.getDefinition().getName() }));
   else if (event.action === ops.examine) player.sendMessage(item.getDefinition().getExamine() || item.getDefinition().getName());
 }
