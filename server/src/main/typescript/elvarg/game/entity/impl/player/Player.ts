@@ -1,4 +1,5 @@
 import { GameConstants } from "../../../GameConstants";
+import { MAIN_PROFILE, type PlayerProfile } from "./persistence/PlayerProfile";
 import { Sound } from "../../../Sound";
 import { PrayerData, PrayerHandler } from "../../../content/PrayerHandler";
 import { CombatFactory } from "../../../content/combat/CombatFactory";
@@ -130,6 +131,8 @@ export class Player extends Mobile {
     private isDiscordLogin: boolean = false;
     private cachedDiscordAccessToken: string = "";
     public longUsername: bigint = 0n;
+    /** See getProfile. Bots and tests build players outside login, so it defaults to the main profile. */
+    private profile: PlayerProfile = MAIN_PROFILE;
     private session: PlayerSession;
     public status: PlayerStatus = PlayerStatus.NONE;
     public interfaceId: number = -1
@@ -781,6 +784,16 @@ export class Player extends Mobile {
 
     public setUsername(username: string): Player {
         this.username = username;
+        return this;
+    }
+
+    /** Which of the account's characters this is: the main one unless login asked for another. Runtime only; the save never carries it. */
+    public getProfile(): PlayerProfile {
+        return this.profile;
+    }
+
+    public setProfile(profile: PlayerProfile): Player {
+        this.profile = profile;
         return this;
     }
 
