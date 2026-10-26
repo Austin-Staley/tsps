@@ -594,10 +594,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
       sender.sendVarbit(BOSS_DEAD_VARBITS.blue, moonDead(player, MOON_BLUE_BIT) ? 1 : 0);
       sender.sendVarbit(BOSS_DEAD_VARBITS.eclipse, moonDead(player, MOON_ECLIPSE_BIT) ? 1 : 0);
     }
-    sender.sendVarbit(
-      EYATLALLI_VIS_VARBIT,
-      stageOf(player) >= STAGE_EYAT_FOUND && stageOf(player) < STAGE_COMPLETE ? 1 : 0
-    );
+    // Still 1 after the quest (rsprox 237/01104, 234/03276 at login): it shows the shrine's
+    // post-quest Eyatlalli (pmoon_eyatlalli_postquest -> _vis_postquest, with Scoreboard).
+    sender.sendVarbit(EYATLALLI_VIS_VARBIT, stageOf(player) >= STAGE_EYAT_FOUND ? 1 : 0);
   }
 
   // ==========================================================================
