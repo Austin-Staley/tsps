@@ -220,3 +220,20 @@ Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki
 and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
 The regression checks drive the actual shared keypad and storage handlers;
 menu rendering and scheduled ticks use the existing Bank PIN test fixture.
+
+## Native Geomancy input
+
+Geomancy's cache spellbook widget (`magic_spellbook:geomancy`, 218:150 in this
+cache) reaches the Farming handler through `onInterfaceActionClick`, as well as
+the existing legacy button hook. Only the Cast action is accepted; a busy or
+dead player cannot pay for a cast. The existing combat refusal, spellbook/level
+checks, rune consumption and XP award remain in the same handler.
+
+RSProx `238/01221` and `238/04128` identify the widget; the former records
+"You can't commune with the land while fighting." Both recordings are special
+worlds, so no League resource/timing rules are imported. The
+[Geomancy Wiki page](https://oldschool.runescape.wiki/w/Geomancy) supplies the
+ordinary 65 Magic requirement, 3 astral/3 nature/8 earth cost and 60 XP.
+`farming-geomancy-input.test.cjs` drives widget packets through the real network
+dispatcher, with all plugins and real Player/Inventory/PacketSender objects.
+The native Geomancy browser remains separate interface work.

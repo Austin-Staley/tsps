@@ -760,6 +760,7 @@ function attach(api) {
     api.onCustomEvent(core.Bank.INVENTORY_OP_EVENT, Guild.bankStorageOp);
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Spells.farmingButton);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);
     api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);
     api.onCustomEvent("farming:check-health", Guild.completeContract);
