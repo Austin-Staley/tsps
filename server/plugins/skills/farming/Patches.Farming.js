@@ -374,7 +374,9 @@ function dig(player, patch) {
     if (crop.type === "REDWOOD" && state.status === "grown") { player.sendMessage("Ask Alexandra to remove the redwood tree."); return; }
     if (state.status === "dead" || state.stump) {
         if (state.stump && crop.type === "TREE") {
-            const roots = 1 + Math.min(3, Math.floor((player.getSkillManager().getCurrentLevel(core.Skill.FARMING) - crop.level) / 15));
+            // Wiki Tree_roots_(Farming): one more root every eight levels above planting,
+            // capped at four; temporary boosts apply when the stump is dug.
+            const roots = 1 + Math.min(3, Math.floor((player.getSkillManager().getCurrentLevel(core.Skill.FARMING) - crop.level) / 8));
             if (!give(player, Data.itemId(`${crop.name} roots`), Math.max(1, roots))) return;
         }
         clearPatch(player, patch); animate(player, ANIM.DIG); return;

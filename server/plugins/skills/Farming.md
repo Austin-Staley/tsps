@@ -70,6 +70,26 @@ This is **not a verified 1:1 implementation**. In particular:
 
 ## Verification
 
+Geomancy refuses casting while attacking or being attacked, before rune
+consumption, Magic XP, animation or patch updates. It retains the existing
+shared combat definition and ordinary casting checks once combat ends.
+RSProx recording 1221 (revision 238, click `magic_spellbook:geomancy` at
+tick 5769) supplies the exact refusal text. That recording is a Leagues world;
+no League rune-restoration, timing or reward rules are imported. The
+[Geomancy article](https://oldschool.runescape.wiki/w/Geomancy) documents
+the ordinary 65 Magic, 60 XP and 3 astral/3 nature/8 earth rune cost.
+The dedicated native interface remains a separate fidelity limit above.
+
+Ordinary tree stumps yield one to four roots at eight-level intervals above
+the crop's planting level: oak 15/23/31/39, willow 30/38/46/54, maple
+45/53/61/69, yew 60/68/76/84 and magic 75/83/91/99. The current Farming
+level when digging includes temporary boosts and drains. Inventory capacity
+is checked for the complete reward before clearing the stump.
+Source: [Tree roots (Farming)](https://oldschool.runescape.wiki/w/Tree_roots_(Farming)).
+Regression checks drive the object interaction with real inventories and
+cache definitions, including every threshold, boost/drain, repeat clicks,
+missing spades, full inventory and dead/fruit-tree exclusions.
+
 ### Native Tithe status overlay
 
 The revision241 cache resolves `hosidius_strip_farming` to group241 and
@@ -187,3 +207,16 @@ Tests use real Player, inventory, equipment and cache definitions, driving the
 actual Tithe NPC/payment and reward callbacks. Menu rendering and persistence
 requests are mocked; live dialogue rendering and packet-capture verification
 are not claimed.
+
+## Storage Bank PIN protection
+
+The Seed Vault and Tool Leprechaun storage use the shared `bank-pin:guard`
+event before opening menus or moving stored items. Leprechaun Deposit-all and
+item-on-NPC tool deposits follow the same guard. Correct entry resumes the
+original action, rechecking proximity and the selected tool slot. Produce
+noting does not access stored tools and retains its existing behavior.
+
+Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki/w/Bank_PIN#Situations_requiring_a_PIN)
+and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
+The regression checks drive the actual shared keypad and storage handlers;
+menu rendering and scheduled ticks use the existing Bank PIN test fixture.
