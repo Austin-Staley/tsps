@@ -340,7 +340,8 @@ export class PendingHit {
         const guaranteed =
             traits.guaranteedHit === true ||
             forceAccurate ||
-            (hitIndex === 0 && traits.guaranteedFirstAccuracyRoll === true);
+            (hitIndex === 0 && traits.guaranteedFirstAccuracyRoll === true) ||
+            (traits.guaranteedHitOnUnsuspectingTarget === true && this.target.getCombat().getLastDamager() !== this.attacker);
         const rollCount = Math.max(1, Math.trunc(traits.accuracyRollCount ?? 1));
         let successfulRolls: number;
         if (guaranteed || !rollAccuracyFlag) {
