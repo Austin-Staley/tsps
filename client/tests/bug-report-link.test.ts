@@ -8,6 +8,7 @@ import {
     formatDiagnosticsSection,
     formatErrorLines,
     redactAddresses,
+    resolvePlayer,
     truncateCodePoints,
 } from "../game/plugins/bugreport/bugReportLink";
 import type { BugReportDiagnostics } from "../game/plugins/bugreport/bugReportLink";
@@ -64,6 +65,19 @@ function testRedaction(): void {
     assert.equal(redactAddresses("uptime 12:30:45 ok"), "uptime 12:30:45 ok");
     assert.equal(redactAddresses("ratio 1:2 kept"), "ratio 1:2 kept");
     assert.equal(redactAddresses("nothing to hide"), "nothing to hide");
+}
+
+function testResolvePlayer(): void {
+    // A logout keeps the old name on the client; the report must not repeat it.
+    assert.deepEqual(resolvePlayer(false, "Zezima", { x: 1, y: 2, plane: 0 }), {
+        name: "(logged out)",
+        position: undefined,
+    });
+    assert.deepEqual(resolvePlayer(true, "Zezima", { x: 1, y: 2, plane: 0 }), {
+        name: "Zezima",
+        position: { x: 1, y: 2, plane: 0 },
+    });
+    assert.equal(resolvePlayer(true, "  ", undefined).name, "(unknown)");
 }
 
 function testCoarseBrowser(): void {
@@ -158,6 +172,7 @@ function testErrorLines(): void {
 
 testTruncation();
 testRedaction();
+testResolvePlayer();
 testCoarseBrowser();
 testFormUrl();
 testUrlCap();

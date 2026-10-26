@@ -89,6 +89,21 @@ export function formatErrorLines(lines: readonly string[], maxLines = 10, maxCha
 
 export type BugReportPosition = { x: number; y: number; plane: number };
 
+/**
+ * Who the report may name. Login state wins over whatever the client still holds:
+ * after a logout `localPlayerName` keeps the previous account, so a logged-out
+ * report must never emit it (or its position) in the `Player:` line.
+ */
+export function resolvePlayer(
+    loggedIn: boolean,
+    rawName: string | undefined,
+    position: BugReportPosition | undefined,
+): { name: string; position: BugReportPosition | undefined } {
+    if (!loggedIn) return { name: "(logged out)", position: undefined };
+    const name = rawName?.trim() ? rawName : "(unknown)";
+    return { name, position };
+}
+
 /** The diagnostics allowlist, as plain data: no user agent, language, timezone, page URL,
  * world address, inventory, skills, varps, interfaces or full console. Account state
  * (name, position) is in; anything identifying a real person is out. */

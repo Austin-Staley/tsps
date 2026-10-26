@@ -1,3 +1,5 @@
+import { GameStateChanged } from "@runelite/api/events";
+import { GameState } from "@runelite/api/GameState";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
 import { ClientToolbar } from "@runelite/client/ui/ClientToolbar";
@@ -121,9 +123,15 @@ export class BugReportPlugin extends Plugin {
     private captureFlight?: Promise<void>;
 
     private async takeScreenshot(): Promise<void> {
-        if (!this.client.isLoggedIn()) return;
+        // A new attempt always drops the previous frame first: after a logout this
+        // clears the old session's screenshot instead of leaving it reusable.
         const capture = ++this.captures;
-        this.update({ capturing: true, screenshot: undefined });
+        this.update({ screenshot: undefined });
+        if (!this.client.isLoggedIn()) {
+            this.update({ capturing: false });
+            return;
+        }
+        this.update({ capturing: true });
         const flight = this.captureFrame(capture);
         this.captureFlight = flight;
         await flight;
@@ -139,7 +147,16 @@ export class BugReportPlugin extends Plugin {
             console.warn("[bug-report] screenshot failed", error);
         }
         if (capture !== this.captures) return;
+        // A logout during the capture must not publish the old session's frame.
+        if (!this.client.isLoggedIn()) screenshot = undefined;
         this.update({ capturing: false, screenshot });
+    }
+
+    /** A session change drops the previous session's screenshot and pending capture. */
+    onGameStateChanged(event: GameStateChanged): void {
+        if (event.getGameState() === GameState.LOGGED_IN) return;
+        this.captures++;
+        this.update({ screenshot: undefined, capturing: false, notice: undefined });
     }
 
     handleClientCommand(command: string): boolean {

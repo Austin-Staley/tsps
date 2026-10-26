@@ -7,7 +7,7 @@ import { getSkillName } from "../../../rs/skill/skills";
 import type { OsrsClient } from "../../OsrsClient";
 import { getRendererName } from "../../GameRenderers";
 import type { ClientLogBuffer } from "./ClientLogBuffer";
-import { formatErrorLines, type BugReportDiagnostics } from "./bugReportLink";
+import { formatErrorLines, resolvePlayer, type BugReportDiagnostics } from "./bugReportLink";
 
 /** A section that fails to read is left out rather than losing the report. */
 function read<T>(section: () => T): T | undefined {
@@ -27,18 +27,23 @@ function read<T>(section: () => T): T | undefined {
  * Anything that fails to read is left out.
  */
 export function collectBugDiagnostics(client: OsrsClient, logs: ClientLogBuffer): BugReportDiagnostics {
-    const player = read(() => {
-        const index = client.playerEcs.getIndexForServerId(client.controlledPlayerServerId);
-        const position =
-            index === undefined || index < 0
-                ? undefined
-                : {
-                      x: client.playerEcs.getX(index) >> 7,
-                      y: client.playerEcs.getY(index) >> 7,
-                      plane: client.playerEcs.getLevel(index),
-                  };
-        return { name: client.localPlayerName, position };
-    });
+    const loggedIn = read(() => client.isLoggedIn()) ?? false;
+    // Name and position resolve through the login gate: after a logout the client still
+    // holds the previous account's name, which a logged-out report must never emit.
+    const player = loggedIn
+        ? read(() => {
+              const index = client.playerEcs.getIndexForServerId(client.controlledPlayerServerId);
+              const position =
+                  index === undefined || index < 0
+                      ? undefined
+                      : {
+                            x: client.playerEcs.getX(index) >> 7,
+                            y: client.playerEcs.getY(index) >> 7,
+                            plane: client.playerEcs.getLevel(index),
+                        };
+              return resolvePlayer(true, client.localPlayerName, position);
+          })
+        : resolvePlayer(false, undefined, undefined);
     const failedPlugins = read(() => {
         const failed: Record<string, string> = {};
         const manager = client.runeLite.pluginManager;
@@ -93,7 +98,7 @@ export function collectBugDiagnostics(client: OsrsClient, logs: ClientLogBuffer)
             .map((message) => String(message.text ?? "")),
     );
     return {
-        loggedIn: read(() => client.isLoggedIn()) ?? false,
+        loggedIn,
         player: player?.name ?? "(logged out)",
         position: player?.position,
         world: read(() => client.loginState.serverName) ?? "(unknown world)",
