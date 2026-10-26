@@ -54,6 +54,26 @@ function codePoints(text: string): number {
     return Array.from(text).length;
 }
 
+/**
+ * Which frame a Copy click puts on the clipboard.
+ *
+ * A click captures again (`fresh`). When that capture yields no frame, the frame from before
+ * the click may stand in — but only while the session it belongs to still exists: a logout or
+ * a newer capture moves the capture generation on, and that frame then belongs to a session
+ * that no longer exists.
+ */
+export function resolveCopyFrame<T>(frame: {
+    fresh: T | undefined;
+    previous: T | undefined;
+    expectedGeneration: number;
+    generation: number;
+    loggedIn: boolean;
+}): T | undefined {
+    if (frame.fresh !== undefined) return frame.fresh;
+    const sameSession = frame.loggedIn && frame.generation === frame.expectedGeneration;
+    return sameSession ? frame.previous : undefined;
+}
+
 /** What the panel says after the issue tab is opened. */
 export const ISSUE_TAB_NOTICE = "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V.";
 

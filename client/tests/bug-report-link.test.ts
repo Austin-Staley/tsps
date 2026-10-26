@@ -10,6 +10,7 @@ import {
     formatErrorLines,
     openIssueTab,
     redactAddresses,
+    resolveCopyFrame,
     resolvePlayer,
     truncateCodePoints,
 } from "../game/plugins/bugreport/bugReportLink";
@@ -88,6 +89,31 @@ function testCoarseBrowser(): void {
     assert.equal(coarseBrowser(chrome), "Chrome");
     assert.equal(coarseBrowser("Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"), "Firefox");
     assert.equal(coarseBrowser("经过"), "Other");
+}
+
+function testResolveCopyFrame(): void {
+    const previous = "old-session-frame";
+    const fresh = "fresh-frame";
+    // A fresh capture always wins.
+    assert.equal(
+        resolveCopyFrame({ fresh, previous, expectedGeneration: 2, generation: 2, loggedIn: true }),
+        fresh,
+    );
+    // A capture that produced nothing falls back to the pre-click frame within the same session.
+    assert.equal(
+        resolveCopyFrame({ fresh: undefined, previous, expectedGeneration: 2, generation: 2, loggedIn: true }),
+        previous,
+    );
+    // Logout while Copy awaited a frame bumps the generation: the old frame must not come back.
+    assert.equal(
+        resolveCopyFrame({ fresh: undefined, previous, expectedGeneration: 2, generation: 3, loggedIn: false }),
+        undefined,
+    );
+    // Same for a logout that was observed even if the generation happened to match.
+    assert.equal(
+        resolveCopyFrame({ fresh: undefined, previous, expectedGeneration: 2, generation: 2, loggedIn: false }),
+        undefined,
+    );
 }
 
 function testOpenIssueTab(): void {
@@ -194,6 +220,7 @@ testRedaction();
 testResolvePlayer();
 testCoarseBrowser();
 testOpenIssueTab();
+testResolveCopyFrame();
 testFormUrl();
 testUrlCap();
 testDiagnosticsAllowlist();
