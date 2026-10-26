@@ -705,4 +705,28 @@ test('a spawn left alone goes after 50 minutes', (t) => {
   assert.equal(Events._spawned.has(snake), true);
   tick(2);
   assert.equal(Events._spawned.has(snake), false);
+test('a pickup that fills the last slot during a swing: the result cuts nothing and gives nothing', (t) => {
+  const p = villager(t);
+  t.mock.method(Math, 'random', () => 0);
+  p.getInventory().add(new Item(obj('bones'), 27));
+  const xpBefore = xp(p);
+  click(p, LIGHT, 'Hack');
+  tick(5);
+  // A shark on the player's own tile, taken through the pickup packet's own handler.
+  const { ItemOnGroundManager } = core;
+  const { PickupItemPacketListener } = require('../dist/net/packet/impl/PickupItemPacketListener');
+  const here = p.getLocation();
+  ItemOnGroundManager.registerLocation(p, new Item(obj('shark'), 1), here.clone());
+  t.mock.method(p, 'busy', () => false);
+  PickupItemPacketListener.pickup(p, obj('shark'), here.getX(), here.getY());
+  // Standing on it, the walk-to completes at once (the listener's own callback).
+  if (p.getInventory().getAmount(obj('shark')) === 0) p.getMovementQueue().process?.();
+  assert.equal(p.getInventory().getFreeSlots(), 0, 'the shark took the last slot');
+  tick(2);
+  assert.equal(locAt(LIGHT), loc('tai_bwo_jungle_vegetation_easy_1'), 'the jungle is not cut');
+  assert.equal(xp(p), xpBefore, 'no XP');
+  tick(3);
+  assert.equal(Favour.points(p), 0, 'no favour');
+  assert.equal(Jungle._sessions.has(p), false);
+  assert.ok(p.messages.includes('You have no space in your inventory for any further thatching spars.'));
 });

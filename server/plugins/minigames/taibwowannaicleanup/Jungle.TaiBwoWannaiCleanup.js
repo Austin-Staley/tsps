@@ -77,10 +77,17 @@ function result(player, session, current) {
     Common.xp(player, "WOODCUTTING", Common.data.failXp);
     return;
   }
+  // The bag may have filled during the swing (a pickup): no room, no cut, nothing lost.
+  const spar = new Common.core.Item(Common.objId(jungle.spar), 1);
+  if (player.getInventory().getAddableAmount(spar) < 1) {
+    stop(player);
+    player.sendMessage(Common.message("fullInventory"));
+    return;
+  }
   Common.animate(player, "success", 30);
   for (const id of Common.data.sounds.success) Common.sound(player, id);
+  player.getInventory().add(spar);
   Locs.swap(current, Common.locId(jungle.locs[found.stage + 1]), Common.data.hack.regrowTicks, Common.locId(jungle.locs[0]));
-  player.getInventory().add(new Common.core.Item(Common.objId(jungle.spar), 1));
   Common.xp(player, "WOODCUTTING", jungle.xp);
   Common.advance(player, Common.data.progress.hacked);
   Favour.gain(player, jungle.points, Common.data.hack.favourDelay);
