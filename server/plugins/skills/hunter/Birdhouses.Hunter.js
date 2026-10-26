@@ -127,14 +127,27 @@ function logTier(player) {
     && level(player) >= t.level && level(player, H.core.Skill.CRAFTING) >= t.crafting);
 }
 
-/** Captures (recording 716): birdhouse_make, the birdhouse made two ticks later and placed a tick after that. */
-function makeAndPlace(player, object, delay = 0) {
+/** Gives a clockwork held back for a rebuild to the player, or drops it when the bag is full. */
+function returnClockwork(player) {
+  const item = [H.core.ItemIdentifiers.CLOCKWORK, 1];
+  if (!exchange(player, [], [item])) drop(player, [item], player.getLocation());
+}
+
+/**
+ * Captures (recording 716): birdhouse_make, the birdhouse made two ticks later and placed a tick after that.
+ * Reset passes `heldClockwork` when the emptied house's clockwork found no free slot: it goes straight
+ * into the new house, and is given back (or dropped) if the rebuild stops.
+ */
+function makeAndPlace(player, object, delay = 0, heldClockwork = false) {
   const I = H.core.ItemIdentifiers;
+  const giveBack = heldClockwork ? () => returnClockwork(player) : undefined;
   const making = () => {
     const tier = logTier(player);
-    if (!tier) { player.sendMessage("You need logs to make a birdhouse."); return; }
-    if (!hasTool(player, I.HAMMER) || !hasTool(player, I.CHISEL)) { player.sendMessage("You need a hammer and a chisel."); return; }
-    if (!exchange(player, [[tier.logs, 1], [I.CLOCKWORK, 1]], [[tier.item, 1]])) { player.sendMessage("You need a clockwork to make a birdhouse."); return; }
+    const fail = message => { player.sendMessage(message); giveBack?.(); };
+    if (!tier) { fail("You need logs to make a birdhouse."); return; }
+    if (!hasTool(player, I.HAMMER) || !hasTool(player, I.CHISEL)) { fail("You need a hammer and a chisel."); return; }
+    const inputs = heldClockwork ? [[tier.logs, 1]] : [[tier.logs, 1], [I.CLOCKWORK, 1]];
+    if (!exchange(player, inputs, [[tier.item, 1]])) { fail("You need a clockwork to make a birdhouse."); return; }
     player.getSkillManager().addExperiences(H.core.Skill.CRAFTING, tier.craftXp);
     begin(player, 1, NO_ANIMATION, () => place(player, object, tier));
   };
@@ -142,7 +155,7 @@ function makeAndPlace(player, object, delay = 0) {
     if (!begin(player, 2, makeAnimation(player), making)) return;
     player.getPacketSender().sendSound(MAKE_SOUND, 1, 0);
   };
-  if (delay) begin(player, delay, ANIM.PICKUP, making);
+  if (delay) { if (!begin(player, delay, ANIM.PICKUP, making, giveBack)) giveBack?.(); }
   else make();
 }
 
@@ -238,7 +251,13 @@ function collect(event, destroy = false, rebuild = false) {
     pickup(player);
     const items = destroy ? [[H.core.ItemIdentifiers.CLOCKWORK, 1]] : loot(player, state);
     delete houses(player)[object.getId()];
-    for (const item of items) if (!exchange(player, [], [item])) drop(player, [item], player.getLocation());
+    // Reset keeps a clockwork that doesn't fit for the new house rather than dropping it.
+    let held = false;
+    for (const item of items) {
+      if (exchange(player, [], [item])) continue;
+      if (rebuild && item[0] === H.core.ItemIdentifiers.CLOCKWORK) held = true;
+      else drop(player, [item], player.getLocation());
+    }
     sync({ player });
     if (destroy) { player.sendMessage("You dismantle the birdhouse and recover the clockwork."); return; }
     drop(player, [[H.core.ItemIdentifiers.RAW_BIRD_MEAT, BIRDS]], player.getLocation());
@@ -246,7 +265,7 @@ function collect(event, destroy = false, rebuild = false) {
     xp(player, hunterXp, "birdhouse");
     const feathers = items.find(([id]) => id === H.core.ItemIdentifiers.FEATHER)[1];
     player.sendMessage(`You dismantle and discard the trap, retrieving ${nests(items)}, ${BIRDS} dead birds, ${feathers} feathers and ${hunterXp} Hunter XP.`);
-    if (rebuild) makeAndPlace(player, object, 2);
+    if (rebuild) makeAndPlace(player, object, 2, held);
   });
   return true;
 }
