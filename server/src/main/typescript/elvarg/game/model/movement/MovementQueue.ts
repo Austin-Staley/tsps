@@ -299,7 +299,11 @@ export class MovementQueue {
         if (this.character.getTimers().has(TimerKey.FREEZE)) {
             return Mobility.FROZEN_SPELL;
         }
+        return this.getMobilityIgnoringFreeze();
+    }
 
+    /** Every lock besides a freeze: a stun, a pending placement, a busy trade or duel still stops a frozen player's interactions. */
+    private getMobilityIgnoringFreeze(): Mobility {
         if (this.character.getTimers().has(TimerKey.STUN)) {
             return Mobility.STUNNED;
         }
@@ -1183,6 +1187,20 @@ export class MovementQueue {
         };
     }
 
+    /** The reach check respects shape, rotation and access flags, from the player's own tile. */
+    private reachesObject(object: GameObject, routeSpec: ReturnType<MovementQueue["buildObjectRouteSpec"]>): boolean {
+        return PathFinder.reachedObject(
+            this.player,
+            routeSpec.objectX,
+            routeSpec.objectY,
+            routeSpec.reachWidth,
+            routeSpec.reachLength,
+            routeSpec.reachAngle,
+            routeSpec.reachShape,
+            routeSpec.reachBlockAccessFlags
+        ) || this.isMountedDecorationReachable(object, routeSpec.reachBlockAccessFlags, routeSpec.reachAngle);
+    }
+
     /**
      * A wall-mounted decoration is operable through the wall it is mounted on only when the
      * resolved access mask declares exactly one front edge, the player is on that edge, and a
@@ -1235,8 +1253,12 @@ export class MovementQueue {
         allowOverlappingTiles = false
     ) {
         let mobility = this.getMobility();
-        if (!mobility.canMove()) {
-            mobility.sendMessage(this.player);
+        // Frozen players still interact with what they reach from their tile (see below),
+        // unless another lock (a stun) holds them too.
+        const frozen = mobility === Mobility.FROZEN_SPELL;
+        const blocking = frozen ? this.getMobilityIgnoringFreeze() : mobility;
+        if (!blocking.canMove()) {
+            blocking.sendMessage(this.player);
             this.reset();
             return;
         }
@@ -1279,6 +1301,10 @@ export class MovementQueue {
         if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
+            return;
+        }
+        if (frozen) {
+            this.player.sendMessage("I can't reach that!");
             return;
         }
 
@@ -1438,9 +1464,19 @@ export class MovementQueue {
             return;
         }
 
+        const routeSpec = this.buildObjectRouteSpec(object, routeEvent.blockAccessFlags);
+        // A frozen player still operates what they reach from where they stand (a ladder, a
+        // cave entrance: Wiki, Freeze); anything further is "I can't reach that!" as live.
+        // Another lock (a stun) still stops a frozen player.
         let mobility = this.getMobility();
-        if (!mobility.canMove()) {
-            mobility.sendMessage(this.player);
+        const frozen = mobility === Mobility.FROZEN_SPELL;
+        const blocking = frozen ? this.getMobilityIgnoringFreeze() : mobility;
+        if (!blocking.canMove() || (frozen && !this.reachesObject(object, routeSpec))) {
+            if (blocking.canMove()) {
+                this.player.sendMessage("I can't reach that!");
+            } else {
+                blocking.sendMessage(this.player);
+            }
             this.reset();
             return;
         }
@@ -1454,7 +1490,6 @@ export class MovementQueue {
 
         this.walkToReset();
 
-        const routeSpec = this.buildObjectRouteSpec(object, routeEvent.blockAccessFlags);
         const objectX = routeSpec.objectX;
         const objectY = routeSpec.objectY;
         const type = routeSpec.type;
@@ -1472,7 +1507,9 @@ export class MovementQueue {
             routeSpec.routeBlockingMask
         );
 
-        queueObjectRoute();
+        if (!frozen) {
+            queueObjectRoute();
+        }
 
         const finalDestinationX = this.player.getMovementQueue().pathX;
         const finalDestinationY = this.player.getMovementQueue().pathY;
@@ -1493,16 +1530,7 @@ export class MovementQueue {
             }
             // The reach check already respects shape, rotation and access flags.
             // Accept either reachable side, even if the original route ended elsewhere.
-            if (this.points.length === 0 && (PathFinder.reachedObject(
-                this.player,
-                objectX,
-                objectY,
-                routeSpec.reachWidth,
-                routeSpec.reachLength,
-                routeSpec.reachAngle,
-                routeSpec.reachShape,
-                routeSpec.reachBlockAccessFlags
-            ) || this.isMountedDecorationReachable(object, routeSpec.reachBlockAccessFlags, routeSpec.reachAngle))) {
+            if (this.points.length === 0 && this.reachesObject(object, routeSpec)) {
                 // Arrival is not a failed route: operate on the following cycle.
                 // No extra arriveDelay here: in OSRS that delay only applies to actions that
                 // move you. Banks, tables, shops and NPCs fire the tick after you arrive, which
@@ -1599,9 +1627,7 @@ export class MovementQueue {
         let message: string;
 
         switch (this) {
-            case Mobility.FROZEN_SPELL:
-                message = "A magical spell has made you unable to move.";
-                break;
+            // FROZEN_SPELL: live sends nothing when a frozen player clicks to walk.
             case Mobility.STUNNED:
                 message = "You're stunned!";
                 break;
@@ -1652,9 +1678,7 @@ class Mobility {
         let message: string;
 
         switch (this) {
-            case Mobility.FROZEN_SPELL:
-                message = "A magical spell has made you unable to move.";
-                break;
+            // FROZEN_SPELL: live sends nothing when a frozen player clicks to walk.
             case Mobility.STUNNED:
                 message = "You're stunned!";
                 break;
