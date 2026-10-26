@@ -797,10 +797,9 @@ export class CombatFactory {
 
             // Prayer effects.
             // Redemption checks after the damage lands (HitQueue -> handleRedemption).
-            if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
-                    CombatFactory.handleSmite(attacker, playerTarget, damage);
-                }
+            // Smite follows the damage dealt, so guaranteed damage on a failed roll (Hammer Blow) drains too.
+            if (damage > 0 && PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
+                CombatFactory.handleSmite(attacker, playerTarget, damage);
             }
         }
 
@@ -1094,13 +1093,16 @@ export class CombatFactory {
     @param target
     */
     public static handleSkull(attacker: Player, target: Player) {
-        if (attacker.isSkulled()) {
-            return;
-        }
-
         const attackerInWilderness = Wilderness.isIn(attacker);
         const targetInWilderness = Wilderness.isIn(target);
         if (!attackerInWilderness || !targetInWilderness) {
+            return;
+        }
+
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
+        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        if (attacker.isSkulled()) {
+            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1132,6 +1134,13 @@ export class CombatFactory {
     }
 
     public static readonly PVP_SKULL_SECONDS = 30 * 60;
+    /** Wiki: an amulet of avarice skull lasts 20 minutes after it comes off; a cape of skulls 20 from putting it on. */
+    public static readonly ITEM_SKULL_SECONDS = 20 * 60;
+
+    /** Keeps a skull (and its colour) for at least `seconds` more, without the skulled message. */
+    static extendSkull(player: Player, seconds: number) {
+        player.setSkullTimer(Math.max(player.getSkullTimer(), Misc.getTicks(seconds)));
+    }
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);
@@ -1255,11 +1264,16 @@ export class CombatFactory {
     }
 
     /** `message` is what a frozen player is told (some bosses send their own, coloured). */
-    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!") {
-        CombatFactory.freezeTicks(character, Misc.getTicks(seconds), message);
+    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!", source: Mobile | null = null) {
+        CombatFactory.freezeTicks(character, Misc.getTicks(seconds), message, source);
     }
 
-    static freezeTicks(character: Mobile, ticks: number, message: string = "You have been frozen!") {
+    /**
+     * `source` is who froze them and `kind` names the freeze ("ice", "bind") for the
+     * `combat:frozen` listeners, which own the rules that depend on either. A null `message`
+     * sends nothing here.
+     */
+    static freezeTicks(character: Mobile, ticks: number, message: string | null = "You have been frozen!", source: Mobile | null = null, kind: string | null = null) {
         if (character.getTimers().has(TimerKey.FREEZE) || character.getTimers().has(TimerKey.FREEZE_IMMUNITY)) {
             return;
         }
@@ -1274,9 +1288,12 @@ export class CombatFactory {
         character.getMovementQueue().reset();
 
         if (character.isPlayer()) {
-            character.getAsPlayer().sendMessage(message);
+            if (message != null) {
+                character.getAsPlayer().sendMessage(message);
+            }
             character.getAsPlayer().getPacketSender().sendEffectTimer(Misc.getSeconds(ticks), EffectTimer.FREEZE);
         }
+        PluginManager.emitCustomEvent("combat:frozen", { target: character, source, ticks, kind });
     }
 
     /**

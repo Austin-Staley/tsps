@@ -11,6 +11,8 @@ export type AttackTypeName = "stab" | "slash" | "crush" | "magic" | "range";
 export class ItemDefinition {
     /** The cache's item param for a weapon's attack speed in ticks (the "attack rate"). */
     public static readonly ATTACK_SPEED_PARAM = 14;
+    /** The cache's item param for a weapon's attack range in tiles (OSRS Wiki: Attack range). */
+    public static readonly ATTACK_RANGE_PARAM = 13;
 
     /**
      * The cache's equipment stat params, in getBonuses() order: stab/slash/crush/magic/ranged
@@ -106,6 +108,8 @@ export class ItemDefinition {
     private deathComponents: number[] = [];
     /** Ticks between attacks from the cache (ATTACK_SPEED_PARAM), or -1 when the cache has none. */
     private attackSpeed: number = -1;
+    /** Tiles a weapon reaches from the cache (ATTACK_RANGE_PARAM), or -1 when the cache has none. */
+    private attackRange: number = -1;
     private weight: number;
     private bonuses: number[];
     private requirements: number[];
@@ -150,6 +154,8 @@ export class ItemDefinition {
         }
         const attackSpeed = cached.params?.get(ItemDefinition.ATTACK_SPEED_PARAM);
         this.attackSpeed = typeof attackSpeed === "number" && attackSpeed > 0 ? attackSpeed : -1;
+        const attackRange = cached.params?.get(ItemDefinition.ATTACK_RANGE_PARAM);
+        this.attackRange = typeof attackRange === "number" && attackRange > 0 ? attackRange : -1;
         if (this.equipmentType.getSlot() === -1 && EQUIPMENT_SLOTS.has(cached.wearPos)) {
             this.equipmentType = new EquipmentType(cached.wearPos);
         }
@@ -175,6 +181,11 @@ export class ItemDefinition {
     /** OSRS Grand Exchange quote from data/definitions/item-prices.json; falls back to the store value. */
     public getGrandExchangeValue(): number {
         return this.grandExchangeValue > 0 ? this.grandExchangeValue : this.value;
+    }
+
+    /** Whether item-prices.json has a Grand Exchange quote for this item. */
+    public hasGrandExchangeValue(): boolean {
+        return this.grandExchangeValue > 0;
     }
 
     /** The guide sell quote, falling back to the buy quote when there is none. */
@@ -301,6 +312,10 @@ export class ItemDefinition {
 
     public getAttackSpeed(): number {
         return this.attackSpeed;
+    }
+
+    public getAttackRange(): number {
+        return this.attackRange;
     }
 
     public getWeaponInterface(): WeaponInterfaces {

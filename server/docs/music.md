@@ -6,7 +6,30 @@ On a successful song packet or an authoritative region change, the Music plugin 
 
 Olaf the Bard sells the Music cape and hood for 99,000 coins after every non-holiday unlock slot is complete. The cape's Air Guitar emote flag is permanently granted on purchase. Using the cape requires the non-holiday tracks to remain complete; its teleport leads to Falo. Trimming additionally requires every cache-listed music unlock slot, every quest, and every Achievement Diary tier. Holiday status is determined by matching cache track titles against the current OSRS Wiki holiday-track list.
 
-Track unlocks send a message once: "You have unlocked a new music track: <col=ff3045>Name" on a transparent chatbox, `<col=e00a19>` on an opaque one (varbit 4608), with no closing tag or full stop. No jingle is played: live sends only the unlock varp and the message. Across the 988 unlock messages in the rsprox recordings (revs 224-239, e.g. 224/01437), the few ticks that also carry a jingle owe it to something else, such as a League task notification; 234/03275 shows the colour switch when transparency is turned on. Missing quest, event and holiday unlock sources still need implementation; cape requirements include their native slots.
+Track unlocks send a message once: "You have unlocked a new music track: <col=ff3045>Name" on a transparent chatbox, `<col=e00a19>` on an opaque one (varbit 4608), with no closing tag or full stop. No jingle is played: live sends only the unlock varp and the message. Across the 988 unlock messages in the rsprox recordings (revs 224-239, e.g. 224/01437), the few ticks that also carry a jingle owe it to something else, such as a League task notification; 234/03275 shows the colour switch when transparency is turned on. Cape requirements include every native slot, whatever unlocks it.
+
+## Quest, minigame and event unlocks
+
+The cache's unlock hints (DB table 44, column 2: "in Varrock.", "during the Dragon Slayer II quest.",
+"after completing the While Guthix Sleeps and Dragon Slayer II quests.", "during a Christmas event.")
+say where each track plays. Area tracks unlock from `music-data.json` region changes, boss and
+minigame tracks from their own plugins' `music:unlock-track` events.
+
+Quest tracks are the live floor: live unlocks each the first time it plays, somewhere inside the
+quest, and a quest plugin that knows the moment emits `music:unlock-track` there (Below Ice Mountain,
+Meat and Greet). `QuestUnlocks.Music.js` reads every quest-naming hint, and on `quest:completed` the
+Music plugin unlocks the tracks whose hint names that quest, once every quest the hint needs is
+complete ("and": all; "or": either; asked through `quest:is-complete` by name). At login the same
+runs silently for quests completed before this existed, before the unlock varps are restored. A
+hint's name may be the registered one, "<name> Quest" (Observatory, Waterfall, Legends'), the first
+of a numbered pair ("Monkey Madness" is Monkey Madness I), or a cache spelling listed in
+`CACHE_QUEST_NAMES` ("Digsite" is The Dig Site). `tests/music.test.cjs` lists the hinted quests the
+server has not got (While Guthix Sleeps, The Blood Moon Rises, Song of the Elves, A Night at the
+Theatre, Garden of Death, and the General's Shadow and Lair of Tarn Razorlor miniquests): their tracks
+stay locked until those arrive.
+
+Holiday-event tracks ("during a Christmas event.", 15 slots) have no event plugins to unlock them yet;
+`data/music-holiday-tracks.json` keeps them out of the music cape requirement.
 
 ## Jingles and fades
 

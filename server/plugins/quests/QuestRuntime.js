@@ -298,29 +298,36 @@ function showCompletedScroll(player, quest, questPoints) {
 }
 
 /**
- * quest:is-complete / quest:is-started { player, key, complete | started }: answered for quests
- * registered here, by each quest's own stage values. An unknown key is left unanswered (null).
+ * quest:is-complete / quest:is-started { player, key | name, complete | started }: answered for
+ * quests registered here, by each quest's own stage values, looked up by key or (as the cache's
+ * music unlock hints name them) by name. An unknown quest is left unanswered (null).
  */
+function requestedQuest(request) {
+  if (request?.key !== undefined) return quests.find((entry) => entry.key === request.key);
+  return request?.name === undefined ? undefined : questNamed(request.name);
+}
+
 function answerIsComplete(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.complete = quest.isComplete(request.player);
 }
 
 function answerIsStarted(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.started = quest.isStarted(request.player);
 }
 
 function answerGetStage(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.stage = quest.getStage(request.player);
 }
 
 /** A shop version named after a quest: "Fremennik Isles", "After Lunar Diplomacy", "Before Contact!". */
 const QUEST_SHOP_VERSION = /\((?:(After|During|Before) )?([^()]+)\)$/;
 
+/** Case, a leading "The" and punctuation don't count: "Another Slice of H.A.M" is "Another Slice of H.A.M.". */
 function questNamed(name) {
-  const plain = (text) => text.toLowerCase().replace(/^the /, "");
+  const plain = (text) => String(text).toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
   return quests.find((quest) => plain(quest.name) === plain(name));
 }
 

@@ -91,12 +91,14 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
       getPrivateArea: () => area, setArea(a) {area=a;}, getWildernessLevel: () => 0,
       getLocation: () => location, moveTo(p) { location = p; },
       getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-      getPacketSender: () => ({ sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id,value) => configs.set(id,value), sendProjectile() {}, sendGraphic() {} }),
+      getPacketSender: () => ({ sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id,value) => configs.set(id,value), sendProjectile() {}, sendGraphic() {}, sendSound() {} }),
       getCombat: () => ({ getTarget: () => null, getAttacker: () => null, getHitQueue: () => ({ addPendingDamage() {} }) }),
       getPrayerActive: () => ({}),
       getMovementQueue: () => ({ canWalk: () => false, reset() {} }),
       getForceMovement: () => force, setForceMovement(f) {force=f;}, getUpdateFlag: () => ({flag(){}}), getRunEnergy: () => 50, setRunEnergy() {},
-      performAnimation() {}, sendMessage() {},
+      performAnimation(a) { this.animations.push(a.getId()); }, sendMessage(text) { this.messages.push(text); },
+      animations: [], messages: [], statements: [],
+      getDialogueManager() { const statements = this.statements; return { startDialogues(chain) { statements.push(chain); } }; },
     };
   }
   const p = player(), stranger = player();
@@ -183,31 +185,86 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     p.counts.clear(); Math.random = () => 0;
 
     const [baseId] = Houses.bases.keys(), houseObject = new core.GameObject(baseId, p.getLocation().clone(), 10, 0, null);
+    const varp = () => p.configs.get(Houses.bases.get(baseId).transformVarp);
+    const statementText = () => [...p.statements.at(-1).dialogues.values()].map(d => d.text).join("\n");
     p.counts.set(I.BIRD_HOUSE, 1); p.counts.set(I.HAMMERSTONE_SEED, 10);
-    Houses.use({ player: p, object: houseObject, objectId: baseId, itemId: I.BIRD_HOUSE }); advance(2);
+    Houses.use({ player: p, object: houseObject, objectId: baseId, itemId: I.BIRD_HOUSE });
+    assert.equal(p.counts.has(I.BIRD_HOUSE), false, "a carried birdhouse is placed on the arrival tick");
+    assert.equal(varp(), 1); assert.equal(p.animations.at(-1), 827, "human_pickupfloor");
+    // Seeds only reports the seed level (captures 545, 1863, 1875).
     Houses.seeds({ player: p, object: houseObject });
+    assert.equal(p.counts.get(I.HAMMERSTONE_SEED), 10, "Seeds does not take seeds");
+    assert.match(statementText(), /seed level is: 0\/10/);
+    Houses.use({ player: p, object: houseObject, objectId: baseId, itemId: I.HAMMERSTONE_SEED });
     const state = p.attrs.get(Houses.ATTRIBUTE)[baseId];
-    assert.equal(state.seeds, 10); assert.equal(Houses.status(state), 1);
+    assert.equal(state.seeds, 10); assert.equal(p.counts.has(I.HAMMERSTONE_SEED), false);
+    assert.equal(Houses.status(state), 2); assert.equal(varp(), 3, "full of seed shows the Empty/Reset variant at once (varp 22->24 live)");
+    assert.match(statementText(), /now full of seed and will start to catch birds/);
+    Houses.seeds({ player: p, object: houseObject });
+    assert.match(statementText(), /set and consuming seed\. Seed level is: 10\/10/);
+    state.filled = Date.now() - Houses.DURATION * 0.75;
+    assert.equal(Houses.seedLevel(state), 3, "a seed per bird, a bird per tenth of the wait");
+    state.filled = Date.now();
     Houses.empty({ player: p, object: houseObject }); advance(2);
     assert.equal(p.attrs.get(Houses.ATTRIBUTE)[baseId], state, "timer cannot be bypassed");
     state.filled = Date.now() - Houses.DURATION;
     const restored = JSON.parse(JSON.stringify(p.attrs.get(Houses.ATTRIBUTE)));
     p.attrs.set(Houses.ATTRIBUTE, restored); Houses.login({ player: p });
-    assert.equal(p.configs.get(Houses.bases.get(baseId).transformVarp), 3);
-    const beforeXp = p.experience.get(Skill.HUNTER);
-    Houses.empty({ player: p, object: houseObject }); advance(2);
+    assert.equal(varp(), 3);
+    const beforeXp = p.experience.get(Skill.HUNTER), dropsBefore = drops.length;
+    Houses.empty({ player: p, object: houseObject });
+    assert.equal(p.counts.has(I.CLOCKWORK), false, "the empty lands a tick after arrival");
+    advance(1);
     assert.equal(p.experience.get(Skill.HUNTER) - beforeXp, 112);
     assert.equal(p.counts.get(I.CLOCKWORK), 1);
+    assert.equal(p.counts.has(I.RAW_BIRD_MEAT), false, "raw bird meat never goes to the inventory");
+    const meat = drops.slice(dropsBefore).filter(args => args[1].getId() === I.RAW_BIRD_MEAT);
+    assert.equal(meat.length, 10, "ten raw bird meat on the floor");
+    assert.ok([30, 40, 50, 60].includes(p.counts.get(I.FEATHER)));
+    assert.equal(varp(), 0);
+    assert.match(p.messages.at(-1), /^You dismantle and discard the trap, retrieving (a nest|\d+ nests), 10 dead birds, \d0 feathers and 112 Hunter XP\.$/);
     Houses.empty({ player: p, object: houseObject }); advance(2);
     assert.equal(p.counts.get(I.CLOCKWORK), 1, "birdhouse loot only collected once");
+    // Feathers are always 30, 40, 50 or 60 (Wiki); the old roll gave anything from 30 to 100.
+    const feathers = new Set();
+    for (const r of [0, 0.3, 0.6, 0.99]) { Math.random = () => r; feathers.add(Houses.loot(p, { tier: 0 }).find(([id]) => id === I.FEATHER)[1]); }
+    Math.random = () => 0;
+    assert.deepEqual([...feathers].sort((a, b) => a - b), [30, 40, 50, 60]);
+    // Wiki Bird house trapping/Seeds: these take ten to fill; only herb seeds from ranarr up and wildblood take five.
+    for (const seed of [I.WATERMELON_SEED, I.SNAPE_GRASS_SEED, I.WHITEBERRY_SEED, I.POISON_IVY_SEED, I.WHITE_LILY_SEED, I.BARLEY_SEED])
+      assert.equal(Houses.seedValue(seed), 1, core.ItemDefinition.forId(seed).getName());
+    for (const seed of [I.RANARR_SEED, I.TORSTOL_SEED, I.WILDBLOOD_SEED]) assert.equal(Houses.seedValue(seed), 2);
+    // Reset without logs still empties, then fails two ticks later (recording 716).
+    p.counts.clear(); p.messages.length = 0;
+    p.attrs.get(Houses.ATTRIBUTE)[baseId] = { tier: 0, seeds: 10, filled: Date.now() - Houses.DURATION };
+    Houses.reset({ player: p, object: houseObject }); advance(1);
+    assert.equal(p.counts.get(I.CLOCKWORK), 1, "reset empties before checking for logs");
+    advance(2);
+    assert.equal(p.messages.at(-1), "You need logs to make a birdhouse.");
+    assert.equal(p.attrs.get(Houses.ATTRIBUTE)[baseId], undefined);
     p.counts.clear(); p.counts.set(I.CLOCKWORK, 1);
     p.attrs.get(Houses.ATTRIBUTE)[baseId] = { tier: 0, seeds: 10, filled: Date.now() - Houses.DURATION };
     p.counts.set(I.LOGS, 1); p.counts.set(I.HAMMER, 1); p.counts.set(I.CHISEL, 1);
-    Houses.reset({ player: p, object: houseObject }); advance(2);
+    Houses.reset({ player: p, object: houseObject }); advance(4);
     assert.equal(p.attrs.get(Houses.ATTRIBUTE)[baseId].seeds, 0, "reset rebuilds an unseeded birdhouse");
     assert.equal(p.counts.get(I.CLOCKWORK), 1, "reset reuses clockwork without creating another");
     assert.equal(p.counts.has(I.LOGS), false);
     assert.equal(p.experience.get(Skill.CRAFTING), 15);
+    // Build on an empty space with no birdhouse makes one from logs: crafted two ticks in, placed a tick later.
+    delete p.attrs.get(Houses.ATTRIBUTE)[baseId]; p.counts.clear();
+    p.counts.set(I.CLOCKWORK, 1); p.counts.set(I.LOGS, 1); p.counts.set(I.HAMMER, 1); p.counts.set(I.CHISEL, 1);
+    Houses.build({ player: p, object: houseObject });
+    assert.equal(p.animations.at(-1), 7057, "birdhouse_make");
+    advance(2);
+    assert.equal(p.counts.get(I.BIRD_HOUSE), 1); assert.equal(p.experience.get(Skill.CRAFTING), 30);
+    advance(1);
+    assert.equal(p.counts.has(I.BIRD_HOUSE), false); assert.equal(varp(), 1);
+    delete p.attrs.get(Houses.ATTRIBUTE)[baseId]; p.counts.clear(); p.counts.set(I.REDWOOD_BIRD_HOUSE, 1);
+    p.levels.set(Skill.HUNTER, 10);
+    Houses.build({ player: p, object: houseObject });
+    assert.equal(p.messages.at(-1), "You do not have a birdhouse with the required hunter level to build here.");
+    assert.equal(p.counts.get(I.REDWOOD_BIRD_HOUSE), 1);
+    p.levels.delete(Skill.HUNTER);
     p.counts.clear(); p.counts.set(I.SNOWY_KNIGHT, 1); p.levels.set(Skill.HITPOINTS, 50);
     Catching.release({ player: p, itemId: I.SNOWY_KNIGHT });
     assert.equal(p.levels.get(Skill.HITPOINTS), 58); assert.equal(p.counts.get(I.BUTTERFLY_JAR), 1);
