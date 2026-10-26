@@ -79,17 +79,18 @@ export function encodeLoginPacket(options: {
   reconnect?: boolean;
 }): { opcode: number; packet: Buffer } {
   const version = options.version ?? 241;
-  const rsaPlain = Buffer.alloc(rsaSize(options.material));
   const rsa = new JagOut();
   rsa.p1(1);
   for (const part of options.seed) rsa.p4(part);
   rsa.p8(options.sessionId);
   rsa.p1(OTP_NONE).p4(0);
   rsa.p1(AUTH_PASSWORD).pjstr(options.password);
+  // Like the client: encrypt just the written bytes, not a modulus-sized block.
   const rsaBytes = rsa.toBuffer();
-  if (rsaBytes.length > rsaPlain.length) throw new Error("rev241 RSA plaintext exceeds the modulus");
-  rsaBytes.copy(rsaPlain);
-  const encrypted = rsaPublicEncrypt(options.material, rsaPlain);
+  if (BigInt("0x" + rsaBytes.toString("hex")) >= BigInt(options.material.modulus)) {
+    throw new Error("rev241 RSA plaintext exceeds the modulus");
+  }
+  const encrypted = rsaPublicEncrypt(options.material, rsaBytes);
   const xteaPlain = new JagOut().pjstr(options.username).toBuffer();
   const padded = Buffer.alloc((xteaPlain.length + 7) & ~7);
   xteaPlain.copy(padded);
@@ -105,7 +106,4 @@ export function encodeLoginPacket(options: {
   return { opcode: packet[0], packet };
 }
 
-function rsaSize(material: RsaMaterial): number {
-  const hex = BigInt(material.modulus).toString(16);
-  return (hex.length + 1) >> 1;
-}
+

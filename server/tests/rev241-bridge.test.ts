@@ -24,7 +24,7 @@ import {
   referenceZone,
 } from "../src/main/typescript/elvarg/net/rev241/Packets";
 import { packCoord, PlayerInfoState, singleCellOpcode } from "../src/main/typescript/elvarg/net/rev241/PlayerInfo";
-import { generateRsaMaterial } from "../src/main/typescript/elvarg/net/rev241/RsaKeys";
+import { generateRsaMaterial, rsaPrivateDecrypt } from "../src/main/typescript/elvarg/net/rev241/RsaKeys";
 import { Rev241Server } from "../src/main/typescript/elvarg/net/rev241/Rev241Server";
 import { Rev241Translator, splitCustomFrames } from "../src/main/typescript/elvarg/net/rev241/Translate";
 import { decodeRev241Packet } from "../src/main/typescript/elvarg/net/rev241/Inbound";
@@ -90,6 +90,19 @@ describe("rev 241 bytes", () => {
     assert.equal(REV241, 241);
   });
 
+  it("decrypts a short RSA block the way Java BigInteger does (no left padding)", () => {
+    const material = generateRsaMaterial();
+    const plain = Buffer.from([1, 0, 0, 0, 5, 0xab, 0xcd]);
+    // What the client sends: new BigInteger(plain).modPow(65537, n).toByteArray()
+    const m = BigInt("0x" + plain.toString("hex"));
+    const n = BigInt(material.modulus);
+    let r = 1n, b = m, e = 65537n;
+    while (e > 0n) { if (e & 1n) r = (r * b) % n; b = (b * b) % n; e >>= 1n; }
+    let hex = r.toString(16); if (hex.length % 2) hex = "0" + hex;
+    let cipher = Buffer.from(hex, "hex");
+    if (cipher[0] & 0x80) cipher = Buffer.concat([Buffer.from([0]), cipher]);
+    assert.deepEqual(rsaPrivateDecrypt(material, cipher), plain);
+  });
   it("decrypts a login block with our RSA key", () => {
     const material = generateRsaMaterial();
     const seed = [5, 6, 7, 8];

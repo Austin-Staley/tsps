@@ -88,18 +88,39 @@ export function rsaBlockSize(material: RsaMaterial): number {
 }
 
 /** Raw RSA, no padding. Input length must equal the modulus size. */
+/**
+ * Textbook RSA exactly as the Java client and rsprot `decipherRsa` do it:
+ * `new BigInteger(block).modPow(exp, mod).toByteArray()`. The client encrypts only the bytes
+ * it wrote (check byte 1, seeds, session, auth), not a modulus-sized block, so the plaintext
+ * must come back without left padding. Node's RSA_NO_PADDING returned a 128-byte block whose
+ * first byte was the 0 padding, which the login read as "check byte 0".
+ */
 export function rsaPrivateDecrypt(material: RsaMaterial, block: Buffer): Buffer {
-  return crypto.privateDecrypt(
-    { key: material.privatePem, padding: crypto.constants.RSA_NO_PADDING },
-    block,
-  );
+  return modPowBytes(block, BigInt(material.privateExponent), BigInt(material.modulus));
 }
 
 export function rsaPublicEncrypt(material: RsaMaterial, block: Buffer): Buffer {
-  return crypto.publicEncrypt(
-    { key: material.publicPem, padding: crypto.constants.RSA_NO_PADDING },
-    block,
-  );
+  return modPowBytes(block, BigInt(PUBLIC_EXPONENT), BigInt(material.modulus));
+}
+
+function modPowBytes(block: Buffer, exponent: bigint, modulus: bigint): Buffer {
+  let base = block.length === 0 ? 0n : BigInt("0x" + block.toString("hex")) % modulus;
+  let e = exponent;
+  let result = 1n;
+  while (e > 0n) {
+    if (e & 1n) result = (result * base) % modulus;
+    base = (base * base) % modulus;
+    e >>= 1n;
+  }
+  return javaByteArray(result);
+}
+
+/** BigInteger.toByteArray for a non-negative value: minimal big-endian, sign byte if the top bit is set. */
+export function javaByteArray(value: bigint): Buffer {
+  let hex = value.toString(16);
+  if (hex.length % 2) hex = "0" + hex;
+  const bytes = Buffer.from(hex, "hex");
+  return bytes.length > 0 && bytes[0] & 0x80 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes;
 }
 
 /** Hex modulus, no leading 00, for a client that wants the raw big-endian integer. */
