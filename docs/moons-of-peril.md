@@ -378,9 +378,11 @@ sulphurous essence used on her is 50 Runecraft xp each. The dialogue and message
 Her Scoreboard (Wiki, Eyatlalli) is op3 of the post-quest Eyatlalli: the shrine spawn is
 `pmoon_eyatlalli_postquest` (12868) at (1523, 9578, 0) facing west, as rsprox 237/01104 and
 234/03276 show it, which the client shows as `pmoon_eyatlalli_vis_postquest` (12870, Talk-to and
-Scoreboard) while varbit `pmoon_eyatlalli_vis` is 1. Those recordings log in after the quest with
-it at 1, so Perilous Moons now keeps it at 1 from finding her onwards (it used to clear it at the
-end). The board opens `perilous_moons_scoreboard` (870): the player's Lunar Chest count (the
+Scoreboard) while varbit `pmoon_eyatlalli_vis` is 1. Every recording with it at 1 has the quest
+done (`pmoon_quest` 36: 237/01104 at login, 234/03276 later in the session), and nothing else reads
+it, so Perilous Moons sends 1 once the quest is complete (it used to send 1 only during the quest)
+and again on completion. The Wiki's two 12869 pins at the shrine are a lasting skip in
+`npc-spawn-sync.json`, so the Wiki sync leaves them out. The board opens `perilous_moons_scoreboard` (870): the player's Lunar Chest count (the
 chest's own) and deaths in a Moon's arena, then the world's, kept in
 `data/saves/moons-of-peril-scoreboard.json`. No recording reads it; numbers are written as the
 other boss boards' recordings show them.

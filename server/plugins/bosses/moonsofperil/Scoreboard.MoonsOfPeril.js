@@ -8,7 +8,7 @@
  * Global Chest Count and Global Deaths under "Perilous Moons Statistics".
  *
  * The chest count is the Lunar Chest's own (Chest.MoonsOfPeril.js counts it on each Claim); a
- * death counts when it ends a Moon's fight in its arena (Arena.MoonsOfPeril.js). No recording
+ * death counts when it happens in a Moon's arena (Arena.MoonsOfPeril.js). No recording
  * reads this board, so the numbers are written as the other boss boards' recordings show them
  * ("84,327,725"; "0" with none).
  */

@@ -20,6 +20,7 @@ const { Location } = require('../dist/game/model/Location');
 const Common = require('../plugins/bosses/moonsofperil/Common.MoonsOfPeril');
 const attachChest = require('../plugins/bosses/moonsofperil/Chest.MoonsOfPeril');
 const Arena = require('../plugins/bosses/moonsofperil/Arena.MoonsOfPeril');
+const Cycle = require('../plugins/bosses/moonsofperil/Cycle.MoonsOfPeril');
 const Scoreboard = require('../plugins/bosses/moonsofperil/Scoreboard.MoonsOfPeril');
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'moons-scoreboard-'));
@@ -120,6 +121,25 @@ test("the world's numbers are every player's, a reader's own rows stay theirs", 
   assert.equal(text(a, 'pd_content'), '0');
   assert.equal(text(a, 'gkc_content'), '3');
   assert.equal(text(a, 'gd_content'), '1');
+});
+
+test("a death inside a Moon's arena counts, through Arena.MoonsOfPeril.js's own death hook", (t) => {
+  const p = realPlayer(t);
+  // The Blood Moon's arena as the server sets it up (its Moon not spawned): the player enters the
+  // area for real, with the Moon already subdued so no fight starts.
+  if (!Cycle.arenas.has('blood')) Cycle.arenas.set('blood', new Cycle.MoonArena('blood'));
+  t.after(() => Cycle.arenas.delete('blood'));
+  Common.setDead(p, 'blood', true);
+  const area = Arena.areas.get('blood');
+  const [x, y, z] = Common.data.moons.blood.tile;
+  p.setLocation(new Location(x, y, z));
+  area.enter(p);
+  assert.ok(Arena.arenaOfPlayer(p), 'in the arena');
+  for (const handler of hooks.deaths) handler({ player: p, killer: null, handled: false });
+  area.leave(p, false);
+  readBoard(p);
+  assert.equal(text(p, 'pd_content'), '1');
+  assert.equal(text(p, 'gd_content'), '1');
 });
 
 test('a death outside the Moons\' arenas is not counted', (t) => {

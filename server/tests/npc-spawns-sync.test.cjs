@@ -122,6 +122,26 @@ test('the actual CLI refuses ambiguous raw Wiki variants before its add-only heu
   assert.match(output, /ambiguous Wiki identities/);
 });
 
+test("the actual CLI leaves out the Wiki's quest-form Eyatlalli at the Ancient Shrine (npc-spawn-sync.json)", t => {
+  const fs = require('node:fs'), os = require('node:os'), cp = require('node:child_process');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npc-spawn-eyatlalli-'));
+  assert.equal(path.dirname(temp), path.resolve(os.tmpdir()));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const wiki = { loclines: [], monsters: [], npcs: [{ page_name: 'Eyatlalli', npc_id: [12869] }],
+    npcMaps: { Eyatlalli: '|id = 12869\n|map = {{Map|1525,9580|1512,9580}}' }, locLineText: {} };
+  const source = '[\n  {"level":0,"name":"Eyatlalli","x":1523,"y":9578,"id":12868,"direction":3,"source":"rsprox","wanderRadius":0}\n]\n';
+  const file = path.join(temp, 'spawns.json'), wikiFile = path.join(temp, 'wiki.json');
+  fs.writeFileSync(file, source); fs.writeFileSync(wikiFile, JSON.stringify(wiki));
+  const output = cp.execFileSync(process.execPath, [require.resolve('ts-node/dist/bin.js'),
+    'scripts/sync-npc-spawns.ts', '--spawns', file, '--wiki', wikiFile,
+    '--box', '1500,9570,1530,9590,0', '--write'], {
+    cwd: path.resolve(__dirname, '..'), encoding: 'utf8',
+    env: { ...process.env, TS_NODE_COMPILER_OPTIONS: '{"target":"es2020"}' },
+  });
+  assert.equal(fs.readFileSync(file, 'utf8'), source, 'nothing re-added');
+  assert.match(output, /to add: 0/);
+});
+
 test("reads the Wiki's coordinate forms", () => {
   assert.deepEqual(parsePoint('x:2580,y:8589'), { x: 2580, y: 8589 });
   assert.deepEqual(parsePoint('2615,8625'), { x: 2615, y: 8625 });
