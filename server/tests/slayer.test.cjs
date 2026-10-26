@@ -1004,3 +1004,17 @@ test("notes and placeholders cannot Check or Break the shared slaughter charges"
     assert.equal(player.messages.length, 0);
   }
 });
+
+test("leaving the Fight Cave clears a Jad task, with the Wiki's message and the streak kept", () => {
+  const player = createPlayer();
+  const jad = npcNamed("TzTok-Jad");
+  const leave = (who, npcId) => handlers.events.get("slayer:leave-task-area").forEach((fn) => fn({ player: who, npcId, message: "the fight cave" }));
+  giveTask(player, MORTIMER, "TzTok-Jad", 2);
+  setVarbit(player, "slayer_tasks_completed", 7);
+  leave(player, npcNamed("Bloodveld").getId());
+  assert.equal(varp(player, "slayer_count"), 2, "another monster's area leaves it be");
+  leave(player, jad.getId());
+  assert.equal(varp(player, "slayer_count"), 0);
+  assert.equal(player.messages.at(-1), "You no longer have a slayer task as you left the fight cave.");
+  assert.equal(varbit(player, "slayer_tasks_completed"), 7, "the streak is not reset");
+});
