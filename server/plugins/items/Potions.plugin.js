@@ -1502,6 +1502,17 @@ function cureFromHealthOrb({ player }) {
   if (!fallback.handled) player.sendMessage("You haven't got anything capable of curing your poison.");
 }
 
+/**
+ * "potions:dose-family" `{ itemId, family }`: an unnoted potion's family for decanting, from the cache's
+ * dose enum where it has one (`doseFamily`): `{ byDose, doses, max }`, `byDose[0]` the empty vessel.
+ * Left null for anything else.
+ */
+function answerDoseFamily(request) {
+  const family = request?.itemId > 0 ? doseFamily(request.itemId) : null;
+  if (!family || family.doses <= 0) return;
+  request.family = { byDose: [...family.byDose], doses: family.doses, max: family.max };
+}
+
 module.exports = {
   name: "Potions",
   isPotionItem(itemId) {
@@ -1520,6 +1531,7 @@ module.exports = {
   },
   register(api) {
     api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
+    api.onCustomEvent("potions:dose-family", answerDoseFamily);
     api.onCustomEvent("prayer:activated", notePreserveActivated);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);

@@ -1165,8 +1165,11 @@ test('reversed large doors (1513 south of 1511, as cached at 3287,3172) pick the
 });
 
 // --- Al Kharid toll gate -----------------------------------------------------
-// Open a guard dialogue, answer the 10gp conditions, and on payment swing the
-// two leaves for that player only, force-walk them through and shut the gate again.
+// Before Prince Ali Rescue: open a guard dialogue, answer the 10gp conditions,
+// and on payment swing the leaves, force-walk the player through and shut the
+// gate again. After it, Open swings the gate and walks the player straight
+// through: sound, swing and step on one tick, shut two ticks later (rsprox 321,
+// 326, 1050, 1051, 1693).
 
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const { NpcIdentifiers } = require('../dist/util/NpcIdentifiers');
@@ -1240,6 +1243,7 @@ function alKharidPlayer(coins, x, y) {
   const packets = [];
   const messages = [];
   const steps = [];
+  const sounds = [];
   let location = new Location(x, y, 0);
   const player = {
     getInventory: () => ({
@@ -1255,6 +1259,7 @@ function alKharidPlayer(coins, x, y) {
     getPacketSender: () => ({
       sendObject: (object) => packets.push(['add', object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]),
       sendObjectRemoval: (object) => packets.push(['del', object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]),
+      sendSoundEffect: (id) => sounds.push(id),
     }),
     getMovementQueue: () => ({ reset: () => {}, setBlockMovement: () => {}, handleRegionChange: () => {} }),
     getForceMovement: () => null,
@@ -1269,6 +1274,7 @@ function alKharidPlayer(coins, x, y) {
     packets,
     messages,
     steps,
+    sounds,
   };
   viewers.push(player);
   return player;
@@ -1285,18 +1291,32 @@ function walkCrossing(task, player) {
   return ticks;
 }
 
+// inviswall on the closed tiles, inacmetalgateopenl/r swung west (rsprox 1050, 1051).
+const INVISWALL = 38848;
+const OPEN_LEFT = 1573;
+const OPEN_RIGHT = 1574;
+const GATE_SOUND = 69;
 const GATE_OPEN_PACKETS = [
   ['del', AL_KHARID_LEAF_SOUTH, 3268, 3227, 0],
   ['del', AL_KHARID_LEAF_NORTH, 3268, 3228, 0],
-  ['add', 1571, 3267, 3227, 3],
-  ['add', 1572, 3267, 3228, 1],
+  ['add', INVISWALL, 3268, 3227, 0],
+  ['add', INVISWALL, 3268, 3228, 0],
+  ['add', OPEN_LEFT, 3267, 3227, 3],
+  ['add', OPEN_RIGHT, 3267, 3228, 1],
 ];
 const GATE_CLOSE_PACKETS = [
-  ['del', 1571, 3267, 3227, 3],
-  ['del', 1572, 3267, 3228, 1],
+  ['del', OPEN_LEFT, 3267, 3227, 3],
+  ['del', OPEN_RIGHT, 3267, 3228, 1],
   ['add', AL_KHARID_LEAF_SOUTH, 3268, 3227, 0],
   ['add', AL_KHARID_LEAF_NORTH, 3268, 3228, 0],
 ];
+const OPEN_PACKET_COUNT = GATE_OPEN_PACKETS.length;
+
+/** The crossing's walk task (the runner's) and the gate's close timer, in either order. */
+const crossingTasks = (h) => ({
+  walk: h.submitted.filter((task) => task.isImmediate?.()),
+  close: h.submitted.filter((task) => !task.isImmediate?.()),
+});
 
 function payAtGate(h, player, npcId) {
   h.handlers.custom.get('door:toggle')({
@@ -1309,7 +1329,7 @@ function payAtGate(h, player, npcId) {
 
 const gateLeaf = (id, y) => new GameObject(id, new Location(3268, y, 0), 0, 0, null);
 
-test('opening the Al Kharid gate talks to the border guard', () => {
+test('opening the Al Kharid gate before Prince Ali Rescue talks to the border guard', () => {
   const h = buildAlKharidHarness();
   try {
     const player = alKharidPlayer(50, 3267, 3227);
@@ -1321,20 +1341,57 @@ test('opening the Al Kharid gate talks to the border guard', () => {
       variant: 'before-completing-prince-ali-rescue-quest',
     }]);
 
-    const afterQuest = alKharidPlayer(0, 3269, 3228);
-    afterQuest.setAttribute('quest.prince_ali_rescue.stage', 110);
-    h.dialogues.length = 0;
-    h.handlers.custom.get('door:toggle')({
-      player: afterQuest, objectId: AL_KHARID_LEAF_NORTH, object: gateLeaf(AL_KHARID_LEAF_NORTH, 3228), handled: false,
-    });
-    assert.deepEqual(h.dialogues, [{
-      npcId: NpcIdentifiers.BORDER_GUARD_2, page: 'Border Guard',
-      variant: 'after-completing-prince-ali-rescue-quest',
-    }]);
 
     const otherDoor = { player, objectId: 12345, object: gateLeaf(12345, 3227), handled: false };
     h.handlers.custom.get('door:toggle')(otherDoor);
     assert.equal(otherDoor.handled, false, 'other doors are left to the Doors plugin');
+  } finally {
+    h.restore();
+  }
+});
+
+test('after Prince Ali Rescue, Open walks the player through on the tick the gate swings', () => {
+  const h = buildAlKharidHarness();
+  try {
+    for (const stage of [100, 110]) {
+      h.submitted.length = 0;
+      const player = alKharidPlayer(0, 3267, 3227);
+      player.setAttribute('quest.prince_ali_rescue.stage', stage);
+      const event = { player, objectId: AL_KHARID_LEAF_SOUTH, object: gateLeaf(AL_KHARID_LEAF_SOUTH, 3227), handled: false };
+      h.handlers.custom.get('door:toggle')(event);
+      assert.equal(event.handled, true);
+      assert.deepEqual(h.dialogues, [], `no guard dialogue at stage ${stage}`);
+      assert.deepEqual(player.packets.slice(-OPEN_PACKET_COUNT), GATE_OPEN_PACKETS);
+      assert.deepEqual(player.sounds, [GATE_SOUND]);
+      assert.deepEqual(player.steps, [[3268, 3227]], 'the step lands with the swing');
+
+      const { walk: [walk], close: [close] } = crossingTasks(h);
+      assert.deepEqual(walkCrossing(walk, player), [[]], 'no second tile');
+      assert.equal(player.getAttribute('agility.obstacle'), null);
+      assert.equal(close.getDelay(), 2, 'shut two ticks after it opened');
+      close.execute();
+      assert.deepEqual(player.packets.slice(-GATE_CLOSE_PACKETS.length), GATE_CLOSE_PACKETS);
+    }
+  } finally {
+    h.restore();
+  }
+});
+
+test('from the Al Kharid side the free Open walks west, and the north leaf swings two left leaves', () => {
+  const h = buildAlKharidHarness();
+  try {
+    const player = alKharidPlayer(0, 3268, 3228);
+    player.setAttribute('quest.prince_ali_rescue.stage', 110);
+    h.handlers.custom.get('door:toggle')({
+      player, objectId: AL_KHARID_LEAF_NORTH, object: gateLeaf(AL_KHARID_LEAF_NORTH, 3228), handled: false,
+    });
+    assert.deepEqual(h.dialogues, []);
+    assert.deepEqual(player.steps, [[3267, 3228]]);
+    // rsprox 1693: clicking the north leaf sends inacmetalgateopenl for both leaves.
+    assert.deepEqual(player.packets.slice(-2), [
+      ['add', OPEN_LEFT, 3267, 3227, 3],
+      ['add', OPEN_LEFT, 3267, 3228, 1],
+    ]);
   } finally {
     h.restore();
   }
@@ -1364,18 +1421,18 @@ test('paying the toll walks the player one tile past the gate line, then shuts i
     assert.equal(player.getCoins(), 0);
     assert.equal(action.handled, true);
     assert.deepEqual(player.packets, GATE_OPEN_PACKETS);
-    assert.deepEqual(player.steps, [], 'no step on submit, even from a dialogue packet');
+    assert.deepEqual(player.sounds, [GATE_SOUND]);
+    assert.deepEqual(player.steps, [], 'no step on submit from a dialogue packet');
     assert.equal(player.getAttribute('agility.obstacle') != null, true, 'the player is locked while crossing');
 
-    const [walk] = h.submitted;
+    const { walk: [walk], close: [close] } = crossingTasks(h);
     assert.deepEqual(walkCrossing(walk, player), [[[3268, 3227]], []], 'one tile, onto the leaf tile');
     assert.equal(player.getAttribute('agility.obstacle'), null);
-    assert.equal(player.packets.length, 4, 'the gate is still open on arrival');
+    assert.equal(player.packets.length, OPEN_PACKET_COUNT, 'the gate is still open on arrival');
 
-    const close = h.submitted[1];
     assert.equal(close.getDelay(), 2);
     close.execute();
-    assert.deepEqual(player.packets.slice(4), GATE_CLOSE_PACKETS);
+    assert.deepEqual(player.packets.slice(OPEN_PACKET_COUNT), GATE_CLOSE_PACKETS);
   } finally {
     h.restore();
   }
@@ -1390,15 +1447,16 @@ test('the gate swings for everyone in view and stays open until the last crossin
     payAtGate(h, first, NpcIdentifiers.BORDER_GUARD);
     assert.deepEqual(bystander.packets, GATE_OPEN_PACKETS, 'a bystander sees the gate open');
     payAtGate(h, second, NpcIdentifiers.BORDER_GUARD_2);
-    assert.equal(bystander.packets.length, 4, 'an open gate is not re-sent');
+    assert.equal(bystander.packets.length, OPEN_PACKET_COUNT, 'an open gate is not re-sent');
 
-    walkCrossing(h.submitted[0], first);
-    h.submitted.at(-1).execute();
-    assert.equal(bystander.packets.length, 4, 'still open while the second player crosses');
+    const { walk, close } = crossingTasks(h);
+    walkCrossing(walk[0], first);
+    close[0].execute();
+    assert.equal(bystander.packets.length, OPEN_PACKET_COUNT, 'still open while the second player crosses');
 
-    walkCrossing(h.submitted[1], second);
-    h.submitted.at(-1).execute();
-    assert.deepEqual(bystander.packets.slice(4), GATE_CLOSE_PACKETS, 'shut after the last one');
+    walkCrossing(walk[1], second);
+    close[1].execute();
+    assert.deepEqual(bystander.packets.slice(OPEN_PACKET_COUNT), GATE_CLOSE_PACKETS, 'shut after the last one');
   } finally {
     h.restore();
   }
@@ -1410,7 +1468,7 @@ test('a player parked on the gate tile from the east walks one tile west', () =>
     const player = alKharidPlayer(10, 3268, 3227);
     const action = payAtGate(h, player, NpcIdentifiers.BORDER_GUARD_2);
     assert.equal(action.handled, true);
-    assert.deepEqual(walkCrossing(h.submitted[0], player), [[[3267, 3227]], []]);
+    assert.deepEqual(walkCrossing(crossingTasks(h).walk[0], player), [[[3267, 3227]], []]);
   } finally {
     h.restore();
   }
@@ -1421,10 +1479,11 @@ test('a cancelled crossing still shuts the gate', () => {
   try {
     const player = alKharidPlayer(10, 3267, 3227);
     payAtGate(h, player, NpcIdentifiers.BORDER_GUARD);
-    h.submitted[0].stop();
+    const { walk, close } = crossingTasks(h);
+    walk[0].stop();
     assert.equal(player.getAttribute('agility.obstacle'), null);
-    h.submitted[1].execute();
-    assert.deepEqual(player.packets.slice(4), GATE_CLOSE_PACKETS);
+    close[0].execute();
+    assert.deepEqual(player.packets.slice(OPEN_PACKET_COUNT), GATE_CLOSE_PACKETS);
   } finally {
     h.restore();
   }
@@ -1437,8 +1496,9 @@ test('clicking Pay-toll pays directly and refuses when the backpack is short', (
     const rich = alKharidPlayer(10, 3269, 3227);
     handler({ player: rich, object: gateLeaf(AL_KHARID_LEAF_SOUTH, 3227) });
     assert.equal(rich.getCoins(), 0);
-    assert.equal(rich.packets.length, 4);
-    walkCrossing(h.submitted[0], rich);
+    assert.equal(rich.packets.length, OPEN_PACKET_COUNT);
+    assert.deepEqual(rich.steps, [[3268, 3227]], 'the first step lands with the swing');
+    walkCrossing(crossingTasks(h).walk[0], rich);
     assert.deepEqual(rich.steps, [[3268, 3227], [3267, 3227]], 'an east-side player crosses west');
 
     const poor = alKharidPlayer(4, 3269, 3227);

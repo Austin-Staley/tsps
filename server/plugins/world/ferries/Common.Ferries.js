@@ -74,6 +74,11 @@ function npcGameval(npc, npcId) {
   return core.CacheDefinitions.getNpcNames().get(id) ?? "";
 }
 
+/** The loc's base gameval (a multiloc's own name, not the variant the player sees). */
+function locGameval(objectId) {
+  return core.CacheDefinitions.getLocNames().get(objectId) ?? "";
+}
+
 /** The NPC as the player sees it: the multi-NPC's variant names the transcript. */
 function speaker(event) {
   return { npc: event.npc ?? null, npcId: event.definition?.getId?.() ?? event.npcId ?? event.npc?.getId?.() };
@@ -99,7 +104,7 @@ function conditionSteps(steps, text) {
 }
 
 module.exports = {
-  init, route, travelling, begin, end, toLocation, later, passes, npcGameval, speaker, playTranscript,
+  init, route, travelling, begin, end, toLocation, later, passes, npcGameval, locGameval, speaker, playTranscript,
   conditionSteps, trips,
   get api() { return api; },
   get core() { return core; },

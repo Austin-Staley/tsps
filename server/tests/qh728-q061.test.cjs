@@ -67,6 +67,8 @@ function makePlayer() {
       return slots;
     },
     addItem: (item) => inventory.adds(item.getId(), item.getAmount()),
+    setItem: (slot, item) => { inventory.deleteNumber(inventory.getItems()[slot].getId(), 1); inventory.addItem(item); return inventory; },
+    refreshItems: () => inventory,
   };
   const sender = new Proxy({}, { get: (_target, prop) => (...args) => { log.push([String(prop), ...args]); return sender; } });
   return {
@@ -86,6 +88,7 @@ function makePlayer() {
       getWeapon: () => ({ getId: () => weapon }),
     }),
     getUsername: () => 'q061-test',
+    getIndex: () => 1,
     getPrivateArea: () => null,
     getPacketSender: () => sender,
     getDialogueManager: () => ({ isActive: () => false, getCurrent: () => null, startDialogues: noop, handleResume: noop, reset: noop }),

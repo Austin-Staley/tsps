@@ -64,14 +64,17 @@ function guide(name, tile) {
   };
 }
 
+/** Each guide's options, built once from ROUTES: { Follow: handler, Mines: handler, ... }. */
+const GUIDE_OPTIONS = Object.freeze(Object.fromEntries(Object.entries(ROUTES).map(([name, options]) =>
+  [name, Object.fromEntries(Object.entries(options).map(([option, tile]) => [option, guide(name, tile)]))])));
+
 module.exports = {
   name: "DorgeshuunGuides",
   members: true,
   ROUTES,
   register(pluginApi) {
     api = pluginApi;
-    for (const [name, options] of Object.entries(ROUTES)) {
-      api.onNpcInteraction(name, Object.fromEntries(Object.entries(options).map(([option, tile]) => [option, guide(name, tile)])));
-    }
+    api.onNpcInteraction("Kazgar", GUIDE_OPTIONS.Kazgar);
+    api.onNpcInteraction("Mistag", GUIDE_OPTIONS.Mistag);
   },
 };
