@@ -797,10 +797,9 @@ export class CombatFactory {
 
             // Prayer effects.
             // Redemption checks after the damage lands (HitQueue -> handleRedemption).
-            if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
-                    CombatFactory.handleSmite(attacker, playerTarget, damage);
-                }
+            // Smite follows the damage dealt, so guaranteed damage on a failed roll (Hammer Blow) drains too.
+            if (damage > 0 && PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
+                CombatFactory.handleSmite(attacker, playerTarget, damage);
             }
         }
 
