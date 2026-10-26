@@ -637,6 +637,25 @@ test("XP rewards refuse skills under 25 and rewards the player cannot afford", (
   assert.equal(Rewards.getPoints(rich), 50);
 });
 
+test("XP rewards preserve points while the ordinary lockxp command has locked experience", () => {
+  const commands = new Map();
+  require("../plugins/commands/PlayerCommands.plugin").register({
+    getWorld() {}, getItemOnGroundManager() {}, getCombatFactory() {}, getPlayerPunishment() {},
+    registerCommand: (name, handler) => commands.set(name, handler),
+  });
+  const { player, calls } = rewardPlayer({ points: 100 });
+  const before = player.getSkillManager().getExperience(Skill.ATTACK);
+  commands.get("lockxp")({ player });
+  exchangeAndConfirm(player, 2);
+  assert.equal(Rewards.getPoints(player), 100);
+  assert.equal(player.getSkillManager().getExperience(Skill.ATTACK), before);
+  assert.equal(calls.some(([name]) => name === "sendExpDrop"), false);
+  commands.get("lockxp")({ player });
+  exchangeAndConfirm(player, 2);
+  assert.equal(Rewards.getPoints(player), 0);
+  assert.equal(player.getSkillManager().getExperience(Skill.ATTACK) - before, 61600);
+});
+
 test("packs: herbs and minerals noted, seeds three rolls on the 1,061 table", () => {
   const { player } = rewardPlayer({ points: 60 });
   const inventory = player.getInventory();

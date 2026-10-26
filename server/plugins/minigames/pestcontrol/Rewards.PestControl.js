@@ -5,6 +5,7 @@
 // match https://oldschool.runescape.wiki/w/Void_Knights%27_Reward_Options.
 
 const POINTS_ATTRIBUTE = "pest-control:points";
+const XP_LOCKED_ATTRIBUTE = "skills:xp-locked";
 const MAX_COMMENDATIONS = 4000;
 const REWARD_INTERFACE = 243;
 const CONFIRM_UID = (REWARD_INTERFACE << 16) | 6;
@@ -97,6 +98,8 @@ function refusal(player, reward) {
   const skills = player.getSkillManager();
   const { Skill } = core;
   if (reward.stat !== undefined) {
+    if (player.getAttribute(XP_LOCKED_ATTRIBUTE) === true)
+      return "Unlock experience with ::lockxp before claiming an XP reward.";
     if (skills.getMaxLevel(statSkill(reward.stat)) < SKILL_LEVEL)
       return `The Void Knights will not offer training in skills for which you have a level under ${SKILL_LEVEL}.`;
   } else if (reward.skill && skills.getCurrentLevel(Skill[reward.skill]) < SKILL_LEVEL) {
