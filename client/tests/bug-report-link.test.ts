@@ -45,10 +45,12 @@ function testUrlCap(): void {
 
 function testBodyAllowlist(): void {
     const body = formatBugReportBody("The door won't open", {
+        loggedIn: true,
         player: "Zezima",
         position: { x: 3200, y: 3200, plane: 0 },
         world: "Local Development",
         worldId: "1",
+        members: true,
         tick: 1234,
         transport: "websocket",
         renderer: "WebGL",
@@ -71,6 +73,8 @@ function testBodyAllowlist(): void {
         "tick 1234",
         "WebGL",
         "50 fps",
+        "websocket, members",
+        "region 12850",
         "[warn] something creaked",
         "Attack 99",
         "Coins x1000",
@@ -84,8 +88,10 @@ function testBodyAllowlist(): void {
     }
     // Errors survive the shrink: bulky sections after them are cut first.
     const huge = formatBugReportBody("x".repeat(2000), {
+        loggedIn: true,
         player: "p",
         world: "w",
+        members: false,
         tick: 1,
         transport: "websocket",
         renderer: "r",
@@ -98,6 +104,40 @@ function testBodyAllowlist(): void {
         messages: ["msg, ".repeat(500)],
     });
     assert.ok(huge.includes("[error] keep me"), "errors survive overflow");
+    // Empty-but-logged-in reads as empty, not missing; logged-out skips account state.
+    const empty = formatBugReportBody("stuck", {
+        loggedIn: true,
+        player: "p",
+        world: "w",
+        members: true,
+        tick: 1,
+        transport: "websocket",
+        renderer: "r",
+        viewport: "v",
+        fps: 1,
+        mobile: false,
+        failedPlugins: {},
+        errors: "none",
+        messages: [],
+    });
+    assert.ok(empty.includes("Inventory: (empty)"), "empty inventory is explicit");
+    assert.ok(empty.includes("Equipment: (empty)"), "empty equipment is explicit");
+    const loggedOut = formatBugReportBody("stuck", {
+        loggedIn: false,
+        player: "(logged out)",
+        world: "w",
+        members: true,
+        tick: 1,
+        transport: "websocket",
+        renderer: "r",
+        viewport: "v",
+        fps: 1,
+        mobile: false,
+        failedPlugins: {},
+        errors: "none",
+        messages: [],
+    });
+    assert.ok(!loggedOut.includes("Inventory:"), "logged out skips account state");
     const url = buildIssueUrl("t", huge);
     assert.ok(url.length <= MAX_ISSUE_URL_LENGTH, "overflow body still fits the url");
 }

@@ -76,10 +76,12 @@ export type BugReportPosition = { x: number; y: number; plane: number };
  * world address, inventory, skills, varps, interfaces or full console. Account state
  * (name, position) is in; anything identifying a real person is out. */
 export type BugReportDiagnostics = {
+    loggedIn: boolean;
     player: string;
     position?: BugReportPosition;
     world: string;
     worldId?: string;
+    members: boolean;
     tick: number;
     transport: string;
     renderer: string;
@@ -104,12 +106,23 @@ export function formatBugReportBody(description: string, diagnostics: BugReportD
     const browser = typeof navigator === "undefined" ? "unknown" : coarseBrowser(navigator.userAgent);
     const capped = (text: string | undefined, max: number): string | undefined =>
         text ? truncateCodePoints(redactAddresses(text), max) : undefined;
+    const worldLine =
+        `World: ${diagnostics.world}${diagnostics.worldId ? ` (${diagnostics.worldId})` : ""}` +
+        `, tick ${diagnostics.tick}, ${diagnostics.transport}, ${diagnostics.members ? "members" : "free"}`;
+    const region =
+        diagnostics.position !== undefined
+            ? `, region ${((diagnostics.position.x >> 6) << 8) | (diagnostics.position.y >> 6)}`
+            : "";
     const lines = [
         description.trim(),
         "",
         "---",
-        `World: ${diagnostics.world}${diagnostics.worldId ? ` (${diagnostics.worldId})` : ""}, tick ${diagnostics.tick}, ${diagnostics.transport}`,
-        `Player: ${diagnostics.player}${diagnostics.position ? ` at ${diagnostics.position.x}, ${diagnostics.position.y}, ${diagnostics.position.plane}` : ""}`,
+        worldLine,
+        `Player: ${diagnostics.player}${
+            diagnostics.position
+                ? ` at ${diagnostics.position.x}, ${diagnostics.position.y}, ${diagnostics.position.plane}${region}`
+                : ""
+        }`,
         `Client: ${browser}, ${diagnostics.renderer}, ${diagnostics.viewport}, ${diagnostics.fps} fps${diagnostics.mobile ? ", mobile" : ""}${diagnostics.cache ? `, cache ${diagnostics.cache}` : ""}`,
     ];
     const failed = Object.entries(diagnostics.failedPlugins);
@@ -117,18 +130,22 @@ export function formatBugReportBody(description: string, diagnostics: BugReportD
         lines.push(`Failed plugins: ${failed.map(([name]) => name).join(", ")}`);
     }
     lines.push("", "Recent errors:", "```", diagnostics.errors, "```");
-    const account: string[] = [];
-    const skills = capped(diagnostics.skills, 300);
-    if (skills) account.push(`Skills: ${skills}`);
-    const inventory = capped(diagnostics.inventory, 400);
-    if (inventory) account.push(`Inventory: ${inventory}`);
-    const equipment = capped(diagnostics.equipment, 300);
-    if (equipment) account.push(`Equipment: ${equipment}`);
-    const varps = capped(diagnostics.varps, 300);
-    if (varps) account.push(`Varps: ${varps}`);
-    const interfaces = capped(diagnostics.interfaces, 150);
-    if (interfaces) account.push(`Interfaces: ${interfaces}`);
-    if (account.length > 0) lines.push("", ...account);
+    // Account state is only meaningful logged in; empty-but-logged-in shows (empty) so a
+    // missing section reads as "nothing carried" rather than "collection failed".
+    if (!diagnostics.loggedIn) {
+        lines.push("", "(Logged out: log in to include account state.)");
+    } else {
+        const account: string[] = [];
+        const skills = capped(diagnostics.skills, 300);
+        if (skills) account.push(`Skills: ${skills}`);
+        account.push(`Inventory: ${capped(diagnostics.inventory, 400) ?? "(empty)"}`);
+        account.push(`Equipment: ${capped(diagnostics.equipment, 300) ?? "(empty)"}`);
+        const varps = capped(diagnostics.varps, 300);
+        if (varps) account.push(`Varps: ${varps}`);
+        const interfaces = capped(diagnostics.interfaces, 150);
+        if (interfaces) account.push(`Interfaces: ${interfaces}`);
+        lines.push("", ...account);
+    }
     const messages = diagnostics.messages
         .slice(-8)
         .map((message) => truncateCodePoints(redactAddresses(message), 120))

@@ -80,8 +80,10 @@ export function collectBugDiagnostics(client: OsrsClient, logs: ClientLogBuffer)
         return set.length === 0 ? "none set" : `${set.length} set: ${set.join(", ")}`;
     });
     const interfaces = read(() => {
+        const parents = [...client.widgetManager.interfaceParents.keys()].slice(0, 8);
         const open = client.widgetManager.interfaceParents.size;
-        return `root ${client.widgetManager.rootInterface} (${open} open)`;
+        const list = parents.length > 0 ? `: ${parents.join(", ")}${open > parents.length ? ", …" : ""}` : "";
+        return `root ${client.widgetManager.rootInterface} (${open} open${list})`;
     });
     const messages = read(() =>
         chatHistory
@@ -91,10 +93,12 @@ export function collectBugDiagnostics(client: OsrsClient, logs: ClientLogBuffer)
             .map((message) => String(message.text ?? "")),
     );
     return {
+        loggedIn: read(() => client.isLoggedIn()) ?? false,
         player: player?.name ?? "(logged out)",
         position: player?.position,
         world: read(() => client.loginState.serverName) ?? "(unknown world)",
         worldId: read(() => client.loginState.serverWorldId),
+        members: read(() => client.isMembersWorld) ?? true,
         tick: read(() => getCurrentTick()) ?? -1,
         transport: read(() => client.loginState.serverTransport) ?? "websocket",
         renderer: read(() => getRendererName(client.renderer.type)) ?? "unknown",

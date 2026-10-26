@@ -11,7 +11,7 @@ function BugIcon({ label }: { label: string }): JSX.Element {
             role="img"
             aria-label={label}
             fill="none"
-            stroke="currentColor"
+            stroke="#ef5350"
             strokeWidth={1.8}
             strokeLinecap="round"
             strokeLinejoin="round"
