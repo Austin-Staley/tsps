@@ -97,3 +97,42 @@ test("Hammer Blow keeps its energy cost and accuracy boost for every registered 
   }
   assert.equal(special.getCombatMethod().type(), CombatType.MELEE);
 });
+
+test("Smite drains Prayer from a missed Hammer Blow's guaranteed damage at impact", () => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = (prayer) => {
+    const p = new Player(null);
+    const sender = new Proxy({}, { get: () => () => sender });
+    p.getPacketSender = () => sender;
+    p.sendMessage = () => {};
+    for (const [skill, level] of [[core.Skill.PRAYER, prayer], [core.Skill.HITPOINTS, 99], [core.Skill.ATTACK, 99], [core.Skill.STRENGTH, 99]]) {
+      p.getSkillManager().setMaxLevels(skill, level, false);
+      p.getSkillManager().setCurrentLevel(skill, level, false);
+    }
+    return p;
+  };
+  const impact = (accurate) => {
+    const attacker = player(99);
+    const target = player(99);
+    attacker.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(ItemIdentifiers.GRANITE_HAMMER));
+    attacker.setCombatSpecial(CombatSpecial.getById("granite_hammer"));
+    attacker.setSpecialActivated(true);
+    attacker.getPrayerActive()[core.PrayerHandler.SMITE] = true;
+    const original = { roll: AccuracyFormulasDpsCalc.rollAccuracyCount, max: DamageFormulas.sourceMaxHit, random: Math.random };
+    AccuracyFormulasDpsCalc.rollAccuracyCount = () => Number(accurate);
+    DamageFormulas.sourceMaxHit = () => 0;
+    Math.random = () => 0;
+    try {
+      const hit = new PendingHit(attacker, target, CombatSpecial.getById("granite_hammer").getCombatMethod());
+      assert.equal(hit.getTotalDamage(), 5);
+      core.CombatFactory.executeHit(hit);
+    } finally {
+      AccuracyFormulasDpsCalc.rollAccuracyCount = original.roll;
+      DamageFormulas.sourceMaxHit = original.max;
+      Math.random = original.random;
+    }
+    return target.getSkillManager().getCurrentLevel(core.Skill.PRAYER);
+  };
+  assert.equal(impact(true), 98, "control: a successful five-damage roll drains floor(5/4)");
+  assert.equal(impact(false), 98, "the failed roll's guaranteed five drains the same");
+});

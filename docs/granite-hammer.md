@@ -12,11 +12,20 @@ reduction path, before the existing remaining-HP cap and target immunity hooks.
 The failed accuracy result is preserved. Successful rolls retain the existing
 five-point bonus; ordinary attacks and missed spells receive no fallback.
 
+The failed accuracy result is preserved, so impact effects that follow damage
+rather than accuracy must check the damage dealt. Smite drains a quarter of any
+damage dealt, so `CombatFactory.executeHit` now gates it on damage instead of
+accuracy; a missed Hammer Blow's five damage drains one Prayer point, the same as
+a successful five-damage roll.
+
 ## Verification
 
 - The regression tests force failed accuracy rolls through the real hit pipeline.
   Before the fix, the five-damage, low-HP and protection-prayer cases each returned
-  zero and failed. All eight focused tests pass after the fix.
+  zero and failed. All nine focused tests pass after the fix.
+- A Smite regression runs real players through `PendingHit` and
+  `CombatFactory.executeHit`: before the Smite fix a missed Hammer Blow left the
+  target on 99 Prayer while a successful five-damage control drained to 98.
 - Tests also cover successful minimum/maximum damage, inactive specials, missed
   spells, the registered energy/accuracy values and Slayer weapon immunity at
   impact for Kurask and Turoth.
