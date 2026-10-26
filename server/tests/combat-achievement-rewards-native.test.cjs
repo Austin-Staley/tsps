@@ -49,7 +49,8 @@ function actor(t) {
 }
 function earned(f, tier) {
   const words = Data.TASK_VARPS.map(() => 0);
-  for (const task of Data.tasks().values()) words[task.id >>> 5] |= 1 << (task.id & 31);
+  for (const task of Data.tasks().values())
+    words[task.id >>> 5] |= 1 << (task.id & 31);
   f.p.setAttribute("combat-achievements:completed", words);
   f.p.setAttribute(
     "combat-achievements:claimed",
@@ -60,7 +61,9 @@ function earned(f, tier) {
 }
 function npc(t, f, name = "Ghommal") {
   const id =
-      name === "Ghommal" ? core.NpcIdentifiers.GHOMMAL_3 : core.NpcIdentifiers.LAIDEE_GNONOCK,
+      name === "Ghommal"
+        ? core.NpcIdentifiers.GHOMMAL_3
+        : core.NpcIdentifiers.LAIDEE_GNONOCK,
     npc = core.NPC.create(id, new core.Location(2860, 3543, 0));
   core.World.getNpcs().add(npc);
   t.after(() => core.World.getNpcs().remove(npc));
@@ -91,7 +94,9 @@ async function resume(f, choice) {
       choice == null
         ? (group << 16) | ([231, 217].includes(group) ? 5 : 0)
         : core.OptionDialogue.OPTIONS_WIDGET_ID;
-  await f.connection.dispatch([{ type: "dialogue_continue", widgetId, childIndex: choice ?? -1 }]);
+  await f.connection.dispatch([
+    { type: "dialogue_continue", widgetId, childIndex: choice ?? -1 },
+  ]);
   f.connection.processTurnPackets();
 }
 async function confirmation(f) {
@@ -124,7 +129,10 @@ async function confirmation(f) {
         .replace(/\s+/g, " ")
         .trim();
     (f.history ??= []).push(text);
-    if (text === "Yes please!" || text === "You have come very far. You have earned these rewards.")
+    if (
+      text === "Yes please!" ||
+      text === "You have come very far. You have earned these rewards."
+    )
       return;
     await resume(f);
   }
@@ -156,8 +164,9 @@ function lamp(f, tier) {
 async function lampConfirm(f) {
   const C = core.CacheDefinitions,
     choice =
-      [...C.getEnumValues(681)].find(([k, v]) => v === core.Skill.RUNECRAFTING.getClientId())[0] -
-      1;
+      [...C.getEnumValues(681)].find(
+        ([k, v]) => v === core.Skill.RUNECRAFTING.getClientId(),
+      )[0] - 1;
   await f.connection.dispatch([
     {
       type: "dialogue_continue",
@@ -172,7 +181,10 @@ function skillLevel(f, level = 20) {
   f.p.getSkillManager().setMaxLevel(core.Skill.RUNECRAFTING, level);
   f.p
     .getSkillManager()
-    .setExperience(core.Skill.RUNECRAFTING, SkillManager.getExperienceForLevel(level));
+    .setExperience(
+      core.Skill.RUNECRAFTING,
+      SkillManager.getExperienceForLevel(level),
+    );
   return f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING);
 }
 function invalidate(f, mode) {
@@ -182,25 +194,45 @@ function invalidate(f, mode) {
   if (mode === "teleport") f.p.setTeleporting(true);
   if (mode === "forced")
     f.p.setForceMovement(
-      new ForceMovement(f.p.getLocation().clone(), f.p.getLocation().clone(), 1, 1, 0, -1),
+      new ForceMovement(
+        f.p.getLocation().clone(),
+        f.p.getLocation().clone(),
+        1,
+        1,
+        0,
+        -1,
+      ),
     );
   if (mode === "remote") f.p.setLocation(new core.Location(3300, 3300, 0));
 }
 
 test("both reward NPCs grant their available tiers through canonical native confirmation exactly once", async (t) => {
   for (const name of ["Ghommal", "Laidee Gnonock"])
-    for (const tier of Data.tiers().filter((row) => name !== "Ghommal" || row.tier < 6)) {
+    for (const tier of Data.tiers().filter(
+      (row) => name !== "Ghommal" || row.tier < 6,
+    )) {
       const f = actor(t);
       earned(f, tier.tier);
       const target = npc(t, f, name);
       talk(f, target);
       await confirmation(f);
       await resume(f);
+      const nextLine = f.p.getDialogueManager().getCurrent()?.getText?.();
+      assert.doesNotMatch(
+        String(nextLine),
+        /need at least.*inventory spaces/i,
+        "successful claim must not take the no-space branch",
+      );
       assert.equal(Progress.tierStatus(f.p, tier), 2, name + " " + tier.name);
       assert.equal(f.p.getInventory().getAmount(tier.lamp), 1);
       assert.equal(f.p.getInventory().getAmount(tier.hilt), 1);
       if (tier.tier === 5)
-        assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.GHOMMALS_LUCKY_PENNY), 1);
+        assert.equal(
+          f.p
+            .getInventory()
+            .getAmount(core.ItemIdentifiers.GHOMMALS_LUCKY_PENNY),
+          1,
+        );
       await resume(f);
       assert.equal(f.p.getInventory().getAmount(tier.lamp), 1);
     }
@@ -208,7 +240,15 @@ test("both reward NPCs grant their available tiers through canonical native conf
 
 test("a delayed tier confirmation rechecks life, status, movement and the original nearby NPC", async (t) => {
   const tier = Data.tiers()[0];
-  for (const mode of ["dead", "trade", "placed", "teleport", "forced", "remote", "owner"]) {
+  for (const mode of [
+    "dead",
+    "trade",
+    "placed",
+    "teleport",
+    "forced",
+    "remote",
+    "owner",
+  ]) {
     const f = actor(t);
     earned(f, 1);
     const target = npc(t, f);
@@ -247,14 +287,29 @@ test("native earned lamp confirmation grants its sourced XP once and removes onl
   const before = skillLevel(f);
   const { slot } = lamp(f, tier);
   await lampConfirm(f);
-  assert.equal(f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING), before + 5000);
+  assert.equal(
+    f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING),
+    before + 5000,
+  );
   assert.equal(f.p.getInventory().forSlot(slot).getId(), -1);
   await lampConfirm(f);
-  assert.equal(f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING), before + 5000);
+  assert.equal(
+    f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING),
+    before + 5000,
+  );
 });
 
 test("delayed lamp confirmation refuses dead/trading/moving players and changed item IDs or metadata", async (t) => {
-  for (const mode of ["dead", "trade", "placed", "teleport", "forced", "id", "meta", "replace"]) {
+  for (const mode of [
+    "dead",
+    "trade",
+    "placed",
+    "teleport",
+    "forced",
+    "id",
+    "meta",
+    "replace",
+  ]) {
     const f = actor(t),
       tier = Data.tiers()[0];
     earned(f, 2);
@@ -262,10 +317,15 @@ test("delayed lamp confirmation refuses dead/trading/moving players and changed 
       { item, slot } = lamp(f, tier);
     if (mode === "id") item.setId(core.ItemIdentifiers.SPADE);
     else if (mode === "meta") item.setMetaValue("test:preset", true);
-    else if (mode === "replace") f.p.getInventory().setItem(slot, new core.Item(tier.lamp));
+    else if (mode === "replace")
+      f.p.getInventory().setItem(slot, new core.Item(tier.lamp));
     else invalidate(f, mode);
     await lampConfirm(f);
-    assert.equal(f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING), before, mode);
+    assert.equal(
+      f.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING),
+      before,
+      mode,
+    );
     assert.equal(f.p.getInventory().forSlot(slot).getAmount(), 1, mode);
   }
 });
@@ -288,6 +348,9 @@ test("logout invalidates pending native tier and lamp confirmations", async (t) 
   PluginManager.emitPlayerLogout({ player: g.p, username: g.p.getUsername() });
   g.p.setRegistered(false);
   await lampConfirm(g);
-  assert.equal(g.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING), before);
+  assert.equal(
+    g.p.getSkillManager().getExperience(core.Skill.RUNECRAFTING),
+    before,
+  );
   assert.equal(g.p.getInventory().forSlot(item.slot).getAmount(), 1);
 });

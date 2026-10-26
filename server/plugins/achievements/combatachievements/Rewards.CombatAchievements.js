@@ -58,7 +58,12 @@ function validPlayer(player) {
   );
 }
 function validContext(player, context) {
-  if (!context || rewardSessions.get(player) !== context || !validPlayer(player)) return false;
+  if (
+    !context ||
+    rewardSessions.get(player) !== context ||
+    !validPlayer(player)
+  )
+    return false;
   const npc = context.npc;
   return (
     npc.isRegistered() &&
@@ -74,7 +79,8 @@ function rememberInteraction(event) {
   rewardSessions.delete(player);
   if (
     !isRewardNpc(definition) ||
-    definition.getActions()?.[(event.clickType ?? 1) - 1]?.toLowerCase() !== "talk-to" ||
+    definition.getActions()?.[(event.clickType ?? 1) - 1]?.toLowerCase() !==
+      "talk-to" ||
     !validPlayer(player)
   )
     return;
@@ -90,7 +96,8 @@ function logout({ player }) {
 
 function rewardItems(tier) {
   const items = [tier.lamp, tier.hilt];
-  if (tier.tier === MASTER_TIER) items.push(pluginApi.core.ItemIdentifiers.GHOMMALS_LUCKY_PENNY);
+  if (tier.tier === MASTER_TIER)
+    items.push(pluginApi.core.ItemIdentifiers.GHOMMALS_LUCKY_PENNY);
   return items;
 }
 
@@ -108,12 +115,24 @@ function dialogueCondition({ player, definition, text }) {
       (tier) => tier.name.toLowerCase() === tierMatch[1].toLowerCase(),
     );
     if (!next || asked !== next) return false;
-    pendingClaim.set(player, { tier: next, context: rewardSessions.get(player) });
+    pendingClaim.set(player, {
+      tier: next,
+      context: rewardSessions.get(player),
+    });
     return true;
   }
   if (SPACE_CONDITION.test(String(text).trim())) {
-    const tier = pendingClaim.get(player)?.tier;
-    return !tier || player.getInventory().getFreeSlots() < rewardItems(tier).length;
+    const request = pendingClaim.get(player);
+    // The claim runs before this lazy branch. Retain its result so granting the
+    // items cannot turn a successful hand-out into the no-space conversation.
+    if (request?.granted) {
+      pendingClaim.delete(player);
+      return false;
+    }
+    const tier = request?.tier;
+    return (
+      !tier || player.getInventory().getFreeSlots() < rewardItems(tier).length
+    );
   }
   return null;
 }
@@ -133,7 +152,11 @@ function claim(player, tier, request = pendingClaim.get(player)) {
     copy = new core.Inventory(player);
   copy
     .getItems()
-    .splice(0, inventory.getItems().length, ...inventory.getItems().map((i) => i.clone()));
+    .splice(
+      0,
+      inventory.getItems().length,
+      ...inventory.getItems().map((i) => i.clone()),
+    );
   for (const itemId of rewardItems(tier)) {
     const item = new core.Item(itemId, 1);
     if (copy.getAddableAmount(item) < 1) {
@@ -144,6 +167,7 @@ function claim(player, tier, request = pendingClaim.get(player)) {
   }
   inventory.getItems().splice(0, copy.getItems().length, ...copy.getItems());
   Progress.setClaimed(player, tier);
+  pendingClaim.set(player, { ...request, granted: true });
   inventory.refreshItems();
   pluginApi.emitCustomEvent("persistence:save", {
     player,
@@ -151,10 +175,15 @@ function claim(player, tier, request = pendingClaim.get(player)) {
   });
 }
 function dialogueLine(request) {
-  if (!isRewardNpc(request?.definition) || !CLAIM_LINES.has(request.text)) return;
+  if (!isRewardNpc(request?.definition) || !CLAIM_LINES.has(request.text))
+    return;
   const { player } = request,
     pending = pendingClaim.get(player);
-  if (!pending || !validContext(player, pending.context) || pending.context.npc !== request.npc)
+  if (
+    !pending ||
+    !validContext(player, pending.context) ||
+    pending.context.npc !== request.npc
+  )
     return;
   request.after = () => claim(player, pending.tier, pending);
 }
@@ -164,7 +193,8 @@ function thrallDuration(event) {
   if (Progress.claimedTiers(event.player).has(MASTER_TIER)) event.ticks *= 2;
 }
 
-const lampTier = (itemId) => Data.tiers().find((tier) => tier.lamp === itemId) ?? null;
+const lampTier = (itemId) =>
+  Data.tiers().find((tier) => tier.lamp === itemId) ?? null;
 
 function rubLamp({ player, item, itemId, slot }) {
   const tier = lampTier(itemId);
@@ -210,7 +240,10 @@ function grantLamp(player, request, skill, name = skill.getName()) {
     return null;
   }
   inventory.deleteAtSlot(request.slot, 1);
-  pluginApi.emitCustomEvent("persistence:save", { player, reason: "combat-achievement-lamp" });
+  pluginApi.emitCustomEvent("persistence:save", {
+    player,
+    reason: "combat-achievement-lamp",
+  });
   return `<col=0000ff>Your wish has been granted!</col> You have been awarded ${request.experience.toLocaleString("en-GB")} ${name} experience!`;
 }
 
