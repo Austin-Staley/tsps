@@ -495,6 +495,7 @@ function rewardPlayer(player) {
   const other = score[opposingTeam(teamId)];
   const tickets = own === other ? (own === 0 ? 1 : 2) : own < other ? 1 : other === 0 ? 3 : 2;
   const result = own === other ? "Tie game!" : own > other ? "You won the game." : "You lost the game.";
+  api.emitCustomEvent("castlewars:player-result", { player, result: own === other ? "tie" : own > other ? "win" : "loss" });
   player.getInventory().adds(core.ItemIdentifiers.CASTLE_WARS_TICKET, tickets);
   player.sendMessage(`${result} You received ${tickets} Castle Wars ticket${tickets === 1 ? "" : "s"}.`);
 }
@@ -689,6 +690,10 @@ function endGame() {
   // Clear the flag arrows while everyone is still in the area: the hint task stops below
   // and would otherwise find no players left to clear.
   stopFlagHints();
+  const { SARADOMIN, ZAMORAK } = data.TEAM;
+  if (score[SARADOMIN] !== score[ZAMORAK]) {
+    api.emitCustomEvent("castlewars:game-won", { team: score[SARADOMIN] > score[ZAMORAK] ? SARADOMIN : ZAMORAK });
+  }
   for (const player of [...game.gameArea.getPlayers()]) {
     rewardPlayer(player);
     clearCastleWarsItems(player);
