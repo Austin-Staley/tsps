@@ -12,6 +12,7 @@
  *   Phosani's survives it, lashes out for 150 more hitpoints, then dies and reawakens by herself.
  */
 const Common = require("./Common.Nightmare");
+const Scoreboard = require("./Scoreboard.Nightmare");
 const Attacks = require("./Attacks.Nightmare");
 const Specials = require("./Specials.Nightmare");
 const Totems = require("./Totems.Nightmare");
@@ -449,6 +450,7 @@ class Fight {
     } else {
       player.sendMessage(duration + kill.personalBest.replace("[time]", Common.formatTicks(best)));
     }
+    Scoreboard.won(this.phosani, ticks);
     const monster = this.phosani ? "Phosani's Nightmare" : "The Nightmare";
     Common.api.emitCustomEvent("combat-achievements:kill", { player, monster, count: kills });
     Common.api.emitCustomEvent("collection-log:count", { player, category: "The Nightmare" });
