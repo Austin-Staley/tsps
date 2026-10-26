@@ -32,7 +32,7 @@ before(() => {
     onObjectInteraction: (name, actions) => { (hooks.objects[name] ??= []).push(actions); },
     onNpcDeath: (handler) => hooks.npcDeaths.push(handler),
     onNpcBeforeDeath() {},
-    onPlayerDeath: (handler) => hooks.playerDeaths.push(handler),
+    onPlayerDefeated: (handler) => hooks.playerDeaths.push(handler),
     onCustomEvent() {},
     onPlayerLogin() {},
     onItemAction() {},
@@ -114,7 +114,7 @@ test('kills through her death hook fill the personal and world rows, the faster 
 test("the quest's fight is not a kill, and a death outside her chamber is not a death", (t) => {
   const p = realPlayer(t);
   kill(p, 100, true);
-  for (const handler of hooks.playerDeaths) handler({ player: p });
+  for (const handler of hooks.playerDeaths) handler({ killer: null, victim: p });
   click(p, 'Read', BOARD_MULTI);
   assert.equal(text(p, 9), '0');
   assert.equal(text(p, 11), '0');
@@ -165,13 +165,13 @@ test('reading twice sends the board twice and counts nothing', (t) => {
   assert.equal(text(p, 15), '0');
 });
 
-test("another boss's Scoreboard is left to its own handler", (t) => {
+test("the Tombs of Amascut's Scabaras Ancient tablet is left to its own handler", (t) => {
   const p = realPlayer(t);
-  assert.equal(click(p, 'Read', Common.core.CacheDefinitions.getLocId('vardorvis_scoreboard')), false);
+  assert.equal(click(p, 'Read', Common.core.CacheDefinitions.getLocId('toa_scabaras_totaltiles_tablet')), false);
   assert.deepEqual(p.sent.interfaces, []);
 });
 
-test('the tablet stands before her door as a solid loc, read from the floor beside it', () => {
+test('the tablet is placed before her door as a shape-10 loc (the plain rectangle reach, no route needed)', () => {
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
   const { Location } = require('../dist/game/model/Location');

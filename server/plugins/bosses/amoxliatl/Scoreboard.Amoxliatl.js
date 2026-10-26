@@ -109,8 +109,12 @@ function read(event) {
   return true;
 }
 
-/** Only a death in her chamber itself, and not in the quest's fight, counts. */
-function diedInChamber({ player }) {
+/**
+ * Only a death in her chamber itself, and not in the quest's fight, counts. This hears every
+ * death (onPlayerDefeated): onPlayerDeath stops at the first plugin that handles the respawn,
+ * as Death's Office does for a first grave.
+ */
+function diedInChamber({ victim: player }) {
   const session = Chamber.sessionOf(player);
   if (!session || session.quest || player.getPrivateArea() !== session.area) return;
   died(player);
@@ -118,7 +122,7 @@ function diedInChamber({ player }) {
 
 function attachScoreboard(api) {
   api.persistAttribute(DEATHS_ATTRIBUTE, 0);
-  api.onPlayerDeath(diedInChamber);
+  api.onPlayerDefeated(diedInChamber);
   api.onObjectInteraction("Ancient tablet", { Read: read });
 }
 
