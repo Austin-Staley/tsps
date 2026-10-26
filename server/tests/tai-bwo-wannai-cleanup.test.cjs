@@ -74,6 +74,7 @@ const at = ([x, y, z]) => new Location(x, y, z);
 function villager(t, { told = true, machete = 'machette_redtopaz', woodcutting = 99 } = {}) {
   const p = new Player(null);
   p.setIndex(index++);
+  p.setUsername(`tbwc${p.getIndex()}`);
   p.setRegistered(true);
   p.getSession = () => ({ sendClientPacket: () => true, write: () => true });
   p.messages = [];
@@ -93,11 +94,17 @@ function villager(t, { told = true, machete = 'machette_redtopaz', woodcutting =
   return p;
 }
 
+/** A login as the login packet sends it (hooks need the username). */
+const login = (p) => PluginManager.emitPlayerLogin({ player: p, username: p.getUsername() });
 const varbit = (p, name) => p.varbits.get(id('Varbit', name));
 const xp = (p) => p.getSkillManager().getExperience(core.Skill.WOODCUTTING);
 
+const CLEANUP_LOCS = () => [...Common.data.jungle.flatMap((jungle) => jungle.locs), ...Common.data.fence.locs].map(loc);
+
+/** The option clicked on arrival: the player stands on the tile east of the loc, as walking there would. */
 function click(p, tile, option) {
-  const object = Locs.find([...Array(30).keys()].map((n) => 9010 + n), at(tile));
+  const object = Locs.find(CLEANUP_LOCS(), at(tile));
+  if (!p.getLocation().isWithinInteractionDistance(at(tile))) p.setLocation(new Location(tile[0] + 1, tile[1], tile[2]));
   assert.ok(object, `a loc at ${tile}`);
   const definition = ObjectDefinition.forPlayer(object.getId(), p);
   const clickType = definition.getInteractions().indexOf(option) + 1;
@@ -107,7 +114,7 @@ function click(p, tile, option) {
   return event;
 }
 
-const locAt = (tile) => Locs.find([...Array(30).keys()].map((n) => 9010 + n), at(tile))?.getId();
+const locAt = (tile) => Locs.find(CLEANUP_LOCS(), at(tile))?.getId();
 
 test('hacking needs Murcaily first, a wielded machete and the Woodcutting level', (t) => {
   const untold = villager(t, { told: false });
@@ -139,9 +146,10 @@ test('a hack: the result 7 ticks after the click (01858), the jungle one stage d
   assert.equal(p.getInventory().getAmount(obj('thatching_spar_light')), 1);
   assert.equal(xp(p) - before, 32);
   assert.equal(varbit(p, 'cleanup_progress'), 2);
-  assert.equal(Favour.points(p), 0, 'not yet');
+  assert.equal(Favour.points(p), 3, 'kept at once');
+  assert.equal(varbit(p, 'vill_comm_points') ?? 0, 0, 'shown 3 ticks later');
   tick(3);
-  assert.equal(Favour.points(p), 3);
+  assert.equal(varbit(p, 'vill_comm_points'), 3);
   assert.equal(varbit(p, 'favour_percentage'), 0);
   assert.equal(varbit(p, 'tbw_overlayopen'), 1, 'the overlay is up in the village');
   tick(6);
@@ -289,7 +297,7 @@ function continueAll(p) {
 test('the first sticks come from Murcaily after a repair; then the others give; each waits 1800 ticks', (t) => {
   const p = villager(t);
   // Logged in: every villager is due (1), so the client shows them holding sticks.
-  for (const v of Common.data.villagers) Common.varbit(p, v.varbit, Villagers.cooldownOf(p, v));
+  login(p);
   assert.equal(varbit(p, 'chat_murc'), 1);
   Favour.gain(p, 600);
   // Before a repair nobody gives sticks: Murcaily's own transcript plays instead.
@@ -332,7 +340,11 @@ test("Murcaily's transcript: his explanation tells the player, and his condition
   Common.advance(p, 2);
   assert.equal(ask('If the player has hacked away at jungle:'), true);
   assert.equal(ask("First time after hacking away at jungle if the fence hasn't been repaired yet:"), true);
-  assert.equal(ask("First time after hacking away at jungle if the fence hasn't been repaired yet:"), false, 'only the first time');
+  assert.equal(ask("First time after hacking away at jungle if the fence hasn't been repaired yet:"), true, 'asking is not saying it');
+  const hacked = { player: p, definition, text: "I see that you've been hacking away at the jungle...good, now if you have some thatching spars you can go and fix the fence." };
+  Villagers.toldOnLine(hacked);
+  hacked.before();
+  assert.equal(ask("First time after hacking away at jungle if the fence hasn't been repaired yet:"), false, 'only the first time it is said');
   assert.equal(ask('First time after repairing the fence:'), false, 'the claim is its own Talk-to');
 });
 
@@ -364,4 +376,108 @@ test('repairing the fence ends a hack, and hacking ends a repair', (t) => {
   click(p, LIGHT, 'Hack');
   assert.equal(Fence._sessions.has(p), false);
   assert.equal(Jungle._sessions.has(p), true);
+});
+
+test('two players on one fence: the one who finds it finished stops without spending a spar', (t) => {
+  const a = villager(t);
+  const b = villager(t);
+  a.getInventory().add(new Item(obj('thatching_spar_light'), 4));
+  b.getInventory().add(new Item(obj('thatching_spar_light'), 4));
+  click(a, FENCE, 'Repair');
+  tick(5);
+  click(b, FENCE, 'Repair');
+  tick(10 + 13 * 3);
+  assert.equal(locAt(FENCE), loc('village_fence_fixedcomplete'));
+  tick(13 * 3);
+  assert.equal(locAt(FENCE), loc('village_fence_fixedcomplete'), 'never past finished');
+  assert.equal(Fence._sessions.size, 0);
+  const left = a.getInventory().getAmount(obj('thatching_spar_light')) + b.getInventory().getAmount(obj('thatching_spar_light'));
+  assert.equal(8 - left, 4, 'one spar a stage, between them');
+});
+
+test('a teleport away ends a hack and a repair', (t) => {
+  const p = villager(t);
+  t.mock.method(Math, 'random', () => 0.999);
+  click(p, LIGHT, 'Hack');
+  tick(2);
+  p.setLocation(new Location(3222, 3218, 0));
+  tick(1);
+  assert.equal(Jungle._sessions.has(p), false);
+  const q = villager(t);
+  q.getInventory().add(new Item(obj('thatching_spar_light'), 1));
+  click(q, FENCE, 'Repair');
+  tick(2);
+  q.setLocation(new Location(3222, 3218, 0));
+  tick(10);
+  assert.equal(Fence._sessions.has(q), false);
+  assert.equal(q.getInventory().getAmount(obj('thatching_spar_light')), 1);
+  assert.equal(locAt(FENCE), loc('village_fence_rotten'));
+});
+
+test('a level-up pop-up holds the hack until it is continued', (t) => {
+  const p = villager(t);
+  t.mock.method(Math, 'random', () => 0);
+  click(p, LIGHT, 'Hack');
+  let resume = null;
+  PluginManager.emitCustomEvent('level-up:popup-opened', { player: p, skill: core.Skill.WOODCUTTING, pause: (session, onResume) => { resume = onResume; } });
+  tick(20);
+  assert.equal(locAt(LIGHT), loc('tai_bwo_jungle_vegetation_easy_1'), 'held');
+  resume();
+  tick(7);
+  assert.equal(locAt(LIGHT), loc('tai_bwo_jungle_vegetation_easy_2'));
+});
+
+test('the fence, like the jungle, waits for Jungle Potion and Murcaily', (t) => {
+  const p = villager(t, { told: false });
+  p.getInventory().add(new Item(obj('thatching_spar_light'), 1));
+  assert.equal(click(p, FENCE, 'Repair').handled, true);
+  assert.equal(Fence._sessions.has(p), false);
+  assert.equal(p.getDialogueManager().isActive(), true);
+  assert.equal(Common.progress(p), 0);
+});
+
+test('a claim with a full inventory and no sticks held is refused, and the villager stays due', (t) => {
+  const p = villager(t);
+  login(p); // the villagers' chat_ varbits, so Murcaily resolves as the player sees him
+  Common.advance(p, 4);
+  Favour.gain(p, 500);
+  p.getInventory().add(new Item(obj('bones'), 28));
+  talk(p, 'Murcaily');
+  continueAll(p);
+  assert.ok(p.messages.includes("You don't have enough inventory space."));
+  assert.equal(Favour.points(p), 500);
+  assert.equal(Villagers.cooldownOf(p, Common.data.villagers.find((v) => v.name === 'Murcaily')), 1);
+});
+
+test("My Arm's Big Adventure reads, spends and hands over favour through the cleanup's events", (t) => {
+  const p = villager(t);
+  Favour.gain(p, 650);
+  const ask = { player: p, percentage: 0 };
+  PluginManager.emitCustomEvent('tai-bwo-wannai-cleanup:favour', ask);
+  assert.equal(ask.percentage, 65);
+  PluginManager.emitCustomEvent('tai-bwo-wannai-cleanup:spend-favour', { player: p, percentage: 60 });
+  assert.equal(Favour.points(p), 50);
+  // Favour the quest granted itself before the minigame existed moves over once at login.
+  p.setAttribute('my-arms-big-adventure:tai-bwo-favour', 60);
+  login(p);
+  assert.equal(Favour.points(p), 650);
+  assert.equal(p.getAttribute('my-arms-big-adventure:tai-bwo-favour'), 0);
+  login(p);
+  assert.equal(Favour.points(p), 650, 'only once');
+  assert.equal(varbit(p, 'favour_percentage'), 65, 'one owner of the varbit');
+});
+
+test('logged in inside the village, the overlay waits for the welcome screen, then comes back', (t) => {
+  const p = villager(t);
+  Favour.gain(p, 10);
+  assert.equal(varbit(p, 'tbw_overlayopen'), 1);
+  login(p);
+  const mounts = [];
+  const sender = p.getPacketSender();
+  const sub = sender.sendSubInterface;
+  t.mock.method(sender, 'sendSubInterface', function (uid, id) { mounts.push(id); return sub.apply(this, arguments); });
+  // The welcome screen's Play, as the button packet dispatches it: the overlay goes on its gameframe.
+  PluginManager.emitInterfaceActionClick({ player: p, buttonId: (378 << 16) | 72, action: 1, handled: false });
+  assert.deepEqual(mounts, [core.CacheDefinitions.getInterfaceId('village_community_score')]);
+  assert.equal(varbit(p, 'tbw_overlayopen'), 1);
 });

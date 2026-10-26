@@ -17,8 +17,8 @@ const Favour = require("./Favour.TaiBwoWannaiCleanup");
 
 const { ATTR } = Common;
 
-/** Players whose cooldown clock is running. */
-const counting = new WeakSet();
+/** By player: the villagers whose own 300-tick clock is running. */
+const counting = new WeakMap();
 
 function cooldowns(player) {
   const saved = player.getAttribute(ATTR.COOLDOWNS);
@@ -57,9 +57,10 @@ function canClaim(player, villager) {
 }
 
 function grant(player, villager) {
+  // Re-checked once the line is continued: nothing may have changed, but nothing pays twice.
+  if (!canClaim(player, villager)) return;
   const sticks = sticksFor(Favour.points(player));
   const item = Common.objId(Common.data.sticks.item);
-  if (sticks <= 0) return;
   const inventory = player.getInventory();
   if (!inventory.contains(item) && inventory.getFreeSlots() <= 0) {
     player.sendMessage(Common.message("noRoom"));
@@ -69,7 +70,7 @@ function grant(player, villager) {
   setCooldown(player, villager, Common.data.villagerCooldown.claimed);
   inventory.add(new Common.core.Item(item, sticks));
   Common.advance(player, Common.data.progress.claimed);
-  startCooldowns(player);
+  startCooldown(player, villager);
   const { DialogueChainBuilder, EndDialogue, ItemStatementDialogue } = Common.core;
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
     new ItemStatementDialogue(0, item, Common.message("claimed", { sticks, favour: Favour.percentage(player) })),
@@ -92,49 +93,52 @@ function talkTo(event) {
   return true;
 }
 
-/** Steps every claimed villager one closer to due every 300 ticks while logged in. */
-function startCooldowns(player) {
+/** Steps `villager` one closer to due every 300 ticks from its claim while logged in. */
+function startCooldown(player, villager) {
+  const running = counting.get(player) ?? new Set();
+  counting.set(player, running);
+  if (running.has(villager.name)) return;
+  running.add(villager.name);
   const { Task, TaskManager } = Common.core;
-  if (counting.has(player)) return;
-  counting.add(player);
+  const { ready, stepTicks } = Common.data.villagerCooldown;
   TaskManager.submit(new (class extends Task {
     constructor() {
-      super(Common.data.villagerCooldown.stepTicks, null, false);
+      super(stepTicks, null, false);
     }
     execute() {
-      if (player.isRegistered() && stepCooldowns(player)) return;
-      counting.delete(player);
+      if (player.isRegistered()) {
+        const value = cooldownOf(player, villager) - 1;
+        if (value >= ready) setCooldown(player, villager, value);
+        if (value > ready) return;
+      }
+      running.delete(villager.name);
       this.stop();
     }
   })());
 }
 
-/** One step down for each claimed villager; whether any is still waiting. */
-function stepCooldowns(player) {
-  const { ready } = Common.data.villagerCooldown;
-  let waiting = false;
-  for (const villager of Common.data.villagers) {
-    const value = cooldownOf(player, villager);
-    if (value <= ready) continue;
-    setCooldown(player, villager, value - 1);
-    waiting ||= value - 1 > ready;
-  }
-  return waiting;
-}
-
 function sendOnLogin({ player }) {
-  for (const villager of Common.data.villagers) Common.varbit(player, villager.varbit, cooldownOf(player, villager));
-  if (Common.data.villagers.some((villager) => cooldownOf(player, villager) > Common.data.villagerCooldown.ready)) startCooldowns(player);
+  for (const villager of Common.data.villagers) {
+    Common.varbit(player, villager.varbit, cooldownOf(player, villager));
+    if (cooldownOf(player, villager) > Common.data.villagerCooldown.ready) startCooldown(player, villager);
+  }
 }
 
 // ------------------------------------------------------------------ Murcaily's transcript
 
-/** His "if you're stuck for something to do" is where he explains the cleanup. */
+/**
+ * His "if you're stuck for something to do" is where he explains the cleanup; his "I see that
+ * you've been hacking away" is said once. Both count when the page is reached (`before`).
+ */
 function toldOnLine(event) {
   if (event.definition?.getName?.() !== "Murcaily") return;
-  if (!String(event.text ?? "").startsWith(Common.data.murcaily.toldLine)) return;
+  const text = String(event.text ?? "");
   const { player } = event;
-  event.before = () => Common.advance(player, Common.data.progress.told);
+  if (text.startsWith(Common.data.murcaily.toldLine)) {
+    event.before = () => Common.advance(player, Common.data.progress.told);
+  } else if (text.startsWith(Common.data.murcaily.hackedLine)) {
+    event.before = () => player.setAttribute(ATTR.HACK_TOLD, true);
+  }
 }
 
 /** His transcript's cleanup conditions, from the progress (the first claim itself is talkTo). */
@@ -147,11 +151,7 @@ function answerCondition(event) {
   switch (event.text) {
     // His welcome back, until he has told the player about the cleanup.
     case conditions.afterJunglePotion: return stage < progress.told;
-    case conditions.hackedNotRepaired: {
-      const due = stage === progress.hacked && player.getAttribute(ATTR.HACK_TOLD) !== true;
-      if (due) player.setAttribute(ATTR.HACK_TOLD, true);
-      return due;
-    }
+    case conditions.hackedNotRepaired: return stage === progress.hacked && player.getAttribute(ATTR.HACK_TOLD) !== true;
     case conditions.repaired: return false;
     case conditions.notHacked: return stage < progress.hacked;
     case conditions.hacked: return stage >= progress.hacked;
@@ -168,4 +168,4 @@ function attachVillagers(api) {
   api.onCustomEvent("npc-dialogue:line", toldOnLine);
 }
 
-module.exports = { attachVillagers, talkTo, canClaim, sticksFor, cooldownOf, stepCooldowns, villagerOf, answerCondition, toldOnLine };
+module.exports = { attachVillagers, talkTo, canClaim, sticksFor, cooldownOf, villagerOf, answerCondition, toldOnLine };

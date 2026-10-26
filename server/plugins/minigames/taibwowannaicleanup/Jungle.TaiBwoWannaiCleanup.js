@@ -80,7 +80,7 @@ function result(player, session, current) {
   player.getInventory().add(new Common.core.Item(Common.objId(jungle.spar), 1));
   Common.xp(player, "WOODCUTTING", jungle.xp);
   Common.advance(player, Common.data.progress.hacked);
-  Common.later(player, Common.data.hack.favourDelay, () => Favour.gain(player, jungle.points));
+  Favour.gain(player, jungle.points, Common.data.hack.favourDelay);
   if (found.stage + 1 >= 4) {
     stop(player);
     Common.later(player, Common.data.hack.pause, () => player.sendMessage(Common.message("cutBack")));
@@ -114,16 +114,17 @@ function step(player, session) {
 
 function process() {
   for (const [player, session] of [...sessions]) {
-    if (!player.isRegistered() || player.getHitpoints?.() <= 0) {
-      sessions.delete(player);
-      continue;
-    }
-    if (player.getMovementQueue()?.size?.() > 0 || Common.wieldedMachete(player) !== session.machete) {
+    if (session.paused) continue;
+    if (Common.interrupted(player, session.location) || Common.wieldedMachete(player) !== session.machete) {
       stop(player);
       continue;
     }
     step(player, session);
   }
+}
+
+function pause(event) {
+  Common.pauseOnLevelUp(event, sessions, stop);
 }
 
 function forget({ player }) {
@@ -137,6 +138,7 @@ function attachJungle(api) {
   }
   Common.onStop(stop);
   api.onPlayerLogout(forget);
+  api.onCustomEvent("level-up:popup-opened", pause);
   TaskManager.submit(new (class extends Task {
     constructor() {
       super(1, "tai-bwo-wannai-cleanup:jungle", false);

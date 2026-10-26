@@ -109,6 +109,30 @@ function stopActions(player) {
   for (const stop of stops) stop(player);
 }
 
+/**
+ * "level-up:popup-opened" holds a session until the pop-up is continued (SkillLevelUp), as
+ * Woodcutting's is; with no pause offered it ends.
+ */
+function pauseOnLevelUp(event, sessions, stop) {
+  const { player } = event;
+  const session = sessions.get(player);
+  if (!session) return;
+  if (!event.pause) return stop(player);
+  session.paused = true;
+  event.pause(session, () => {
+    if (sessions.get(player) === session) session.paused = false;
+  }, () => {
+    if (sessions.get(player) === session) stop(player);
+  });
+}
+
+/** Whether a session should end this tick: logged out, dead, walked or teleported off. */
+function interrupted(player, location) {
+  if (!player.isRegistered() || player.getHitpoints?.() <= 0) return true;
+  if (player.getMovementQueue()?.size?.() > 0) return true;
+  return !player.getLocation().isWithinInteractionDistance(location);
+}
+
 const progress = (player) => Number(player.getAttribute(ATTR.PROGRESS)) || 0;
 
 /** Moves the progress on to `stage` (never back). */
@@ -120,7 +144,7 @@ function advance(player, stage) {
 
 module.exports = {
   init, ATTR, later, varbit, animate, sound, message, spam, statement, level, xp, locId, objId, seqId,
-  wieldedMachete, hasMachete, questComplete, progress, advance, onStop, stopActions,
+  wieldedMachete, hasMachete, questComplete, progress, advance, onStop, stopActions, pauseOnLevelUp, interrupted,
   get api() { return api; },
   get core() { return core; },
   get data() { return data; },

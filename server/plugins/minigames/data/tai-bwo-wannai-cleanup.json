@@ -67,6 +67,7 @@
     "fullInventory": "You have no space in your inventory for any further thatching spars.",
     "cutBack": "This jungle has been cut back to the ground.",
     "favourFull": "Your Favour total is now full, you cannot gain any more.<br>Talk to the villagers to get favour converted to trading sticks.",
+    "notToldFence": "Perhaps you should check with the local villagers before you start repairing the village fence?",
     "noSpars": "You need some thatching spars in order to repair this fence.",
     "noFenceMachete": "You need a machete to repair this fence.",
     "skewers": "You hack the spar into skewers.",
@@ -77,6 +78,7 @@
   },
   "murcaily": {
     "toldLine": "Well Bwana, if you're stuck for something to do",
+    "hackedLine": "I see that you've been hacking away at the jungle",
     "conditions": {
       "afterJunglePotion": "First time after completing Jungle Potion:",
       "hackedNotRepaired": "First time after hacking away at jungle if the fence hasn't been repaired yet:",

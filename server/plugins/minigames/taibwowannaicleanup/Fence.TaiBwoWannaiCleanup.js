@@ -38,6 +38,10 @@ function start(event, reinforce) {
   const stage = stageOf(object.getId());
   if (stage < 0 || (stage === finished()) !== reinforce) return false;
   event.handled = true;
+  if (!Common.questComplete(player) || Common.progress(player) < Common.data.progress.told) {
+    Common.statement(player, Common.message("notToldFence"));
+    return true;
+  }
   if (!Common.hasMachete(player)) {
     player.sendMessage(Common.message("noFenceMachete"));
     return true;
@@ -65,6 +69,8 @@ function finish(player, session, current) {
     return false;
   }
   const stage = stageOf(current.getId());
+  // Someone else may have finished it (or it fell back to rotten) since this repair began.
+  if (session.reinforce ? stage !== finished() : stage >= finished()) return false;
   const next = session.reinforce ? stage : stage + 1;
   Common.animate(player, "fenceEnd");
   player.getInventory().delete(Common.objId(spar.item), 1);
@@ -97,16 +103,17 @@ function step(player, session) {
 
 function process() {
   for (const [player, session] of [...sessions]) {
-    if (!player.isRegistered() || player.getHitpoints?.() <= 0) {
-      sessions.delete(player);
-      continue;
-    }
-    if (player.getMovementQueue()?.size?.() > 0) {
+    if (session.paused) continue;
+    if (Common.interrupted(player, session.location)) {
       stop(player);
       continue;
     }
     step(player, session);
   }
+}
+
+function pause(event) {
+  Common.pauseOnLevelUp(event, sessions, stop);
 }
 
 function forget({ player }) {
@@ -120,6 +127,7 @@ function attachFence(api) {
   api.onObjectInteraction(names[names.length - 1], { Reinforce: reinforce });
   Common.onStop(stop);
   api.onPlayerLogout(forget);
+  api.onCustomEvent("level-up:popup-opened", pause);
   TaskManager.submit(new (class extends Task {
     constructor() {
       super(1, "tai-bwo-wannai-cleanup:fence", false);
