@@ -4,7 +4,7 @@
  * The scoreboard by TzHaar-Ket-Rak (jad_challenge_scoreboard, "Scoreboard": Read), interface
  * jad_challenge_scoreboard: one scrolling text the client's jad_challenge_setup script lays out.
  *
- * rsprox 227/00216 (and 00234, 00223, 00190): Read runs toplevel_mainmodal_open [-1, -1], opens
+ * rsprox 227/00216 (and 00234, 00223; 00190 has the click only, the board never opened): Read runs toplevel_mainmodal_open [-1, -1], opens
  * the interface on the main modal and runs jad_challenge_setup with a single string, a block per
  * challenge separated by "<br><br><br>":
  *   "TzHaar-Ket-Rak's First Challenge<br><br>Personal Completions: 3<br>Global Completions: -<br><br>
@@ -16,7 +16,8 @@
  * kept here and the League-Only block is left out.
  *
  * A completion and its time are the ones the completion lines tell (Rewards.TzHaarKetRak.js);
- * a death counts when the player dies in a challenge before its last Jad falls. The Infinite
+ * a death counts when the player dies in a challenge after the Jads arrive and before the last
+ * one falls (a death during the fade in, before they arrive, is not a challenge death). The Infinite
  * Challenge isn't in yet, so its lines stay at 0.
  */
 
@@ -142,14 +143,16 @@ function read(event) {
   return true;
 }
 
-function attachScoreboard(api) {
+function attach(api) {
   api.persistAttribute(DEATHS_ATTRIBUTE, {});
   api.onObjectInteraction("Scoreboard", { Read: read });
 }
 
 module.exports = {
-  attachScoreboard, completed, died, read, text, formatTicks,
+  attach, completed, died, read, text, formatTicks,
   SCOREBOARD_LOC, INTERFACE_NAME, SCRIPT, DEATHS_ATTRIBUTE,
+  /** The world's records, as the board reads them. */
+  worldRecords: () => records(),
   /** Tests: read and write the world records at `file` instead, from scratch. */
   _useFile(file) { FILE = file; world = null; },
 };

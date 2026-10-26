@@ -17,6 +17,6 @@ module.exports = {
     Dialogue.attach(api, { start: Challenge.start });
     Challenge.attach(api, { lastJadDown: Rewards.lastJadDown, completed: Rewards.completed, failed: Rewards.failed, refused: Rewards.refused });
     Rewards.attach(api);
-    Scoreboard.attachScoreboard(api);
+    Scoreboard.attach(api);
   },
 };

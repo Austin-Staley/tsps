@@ -34,7 +34,7 @@ before(() => {
   }, { get: (target, key) => target[key] ?? (() => {}) });
   Common.init(api);
   Rewards.attach(api);
-  Scoreboard.attachScoreboard(api);
+  Scoreboard.attach(api);
   INTERFACE = api.core.CacheDefinitions.getInterfaceId('jad_challenge_scoreboard');
   BOARD = api.core.CacheDefinitions.getLocId('jad_challenge_scoreboard');
 });
@@ -99,12 +99,13 @@ test('a completion through lastJadDown fills the personal and world lines, the f
   assert.match(block(p, 'Second'), /Personal Completions: 0<br>Global Completions: 0/);
 });
 
-test('a death in a challenge counts; leaving, logging out and a death after the last Jad do not', (t) => {
+test('a death in a challenge counts through failed(died); leaving, logging out and a death in the fade in do not', (t) => {
   const p = realPlayer(t);
   Rewards.failed(p, challenge(4, 30), { died: true });
   Rewards.failed(p, challenge(4, 30), { died: true });
   Rewards.failed(p, challenge(4, 30), {}); // the cave exit
   Rewards.failed(p, challenge(4, 30), { logout: true });
+  Rewards.failed(p, challenge(4, 0, { startTick: -1 }), { died: true }); // before the Jads arrive
   click(p, BOARD);
   assert.match(block(p, 'Fourth'), /Personal Deaths: 2<br>Global Deaths: 2$/);
   assert.match(block(p, 'Fourth'), /Personal Completions: 0/);

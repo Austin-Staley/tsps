@@ -118,7 +118,8 @@ function completed(player, challenge, { logout = false } = {}) {
 function failed(player, challenge, { logout = false, died = false } = {}) {
   const { data } = Common;
   player.setAttribute(Common.LAST_COMPLETED_ATTRIBUTE, 0);
-  if (died) Scoreboard.died(player, challenge.number);
+  // A death once the Jads are in counts; one during the fade in, before they arrive, doesn't.
+  if (died && challenge.startTick !== -1) Scoreboard.died(player, challenge.number);
   const kills = challenge.kills;
   if (challenge.startTick !== -1) {
     const values = { time: Common.formatTicks(challenge.elapsedTicks()), end: died ? data.messages.perishing : "." };

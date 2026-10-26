@@ -14,7 +14,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const core = PluginManager.getCoreApi();
 
-let Common, Dialogue, Challenge, Rewards, tasks, events, spawned, walks, cancelled, removedObjects;
+let Common, Dialogue, Challenge, Rewards, Scoreboard, tasks, events, spawned, walks, cancelled, removedObjects;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -23,7 +23,8 @@ before(async () => {
   Challenge = require('../plugins/minigames/tzhaarketrak/Challenge.TzHaarKetRak');
   Rewards = require('../plugins/minigames/tzhaarketrak/Rewards.TzHaarKetRak');
   // Completions and deaths reach the scoreboard's world records: keep them out of data/saves.
-  require('../plugins/minigames/tzhaarketrak/Scoreboard.TzHaarKetRak')._useFile(path.join(require('node:os').tmpdir(), `ket-rak-scoreboard-${process.pid}.json`));
+  Scoreboard = require('../plugins/minigames/tzhaarketrak/Scoreboard.TzHaarKetRak');
+  Scoreboard._useFile(path.join(require('node:os').tmpdir(), `ket-rak-scoreboard-${process.pid}.json`));
   const api = new Proxy({
     core: {
       ...core,
@@ -479,9 +480,11 @@ test('dying, the cave exit and logging out fail it: nothing lost, the copy gone,
   assert.equal(teleport.allow, false);
   flush();
   player.messages = [];
+  const deathsBefore = Scoreboard.worldRecords().deaths[1];
   const death = { player, handled: false };
   Challenge.onDeath(death);
   assert.equal(death.handled, true);
+  assert.equal(Scoreboard.worldRecords().deaths[1], deathsBefore + 1, 'a death in the challenge reaches the scoreboard');
   assert.equal(Challenge.challengeOf(player), null);
   assert.match(player.messages.at(-1), /^You survived for <col=ff0000>\d:\d\d\.\d<\/col> but failed to kill JalTok-Jad before perishing\.$/);
   assert.deepEqual(player.fades.at(-1), 'closed');
@@ -500,11 +503,15 @@ test('dying, the cave exit and logging out fail it: nothing lost, the copy gone,
   Challenge.start(player, 1);
   Challenge.leaveWorld({ player });
   assert.equal(Challenge.challengeOf(player), null);
+  assert.equal(Scoreboard.worldRecords().deaths[1], deathsBefore + 1, 'the cave exit and logging out are not deaths');
   assert.deepEqual(said(), [], 'no line to a player logging out');
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], Common.data.outside, 'saved outside');
   const keepOutside = { player, shouldDrop: true };
   Challenge.keepItems(keepOutside);
   assert.equal(keepOutside.shouldDrop, true);
+  Challenge.start(player, 1);
+  Challenge.onDeath({ player, handled: false }); // in the fade in, before the Jads arrive
+  assert.equal(Scoreboard.worldRecords().deaths[1], deathsBefore + 1, 'a death before the Jads arrive is not counted');
 });
 
 test('a failure with kills: how many fell, and the TokKul of the challenge with that many Jads', () => {
@@ -606,10 +613,14 @@ test('dying to a last hit after every Jad is down still completes it; while dyin
   player.dying = true;
   tick(challenge);
   assert.ok(Challenge.challengeOf(player), 'not completed during the death animation');
+  const deathsBefore = Scoreboard.worldRecords().deaths[1];
+  const completionsBefore = Scoreboard.worldRecords().completions[1];
   const death = { player, handled: false };
   Challenge.onDeath(death);
   assert.equal(death.handled, true, 'nothing lost, not the default respawn');
   assert.equal(Common.completions(player, 1), 1);
+  assert.equal(Scoreboard.worldRecords().deaths[1], deathsBefore, 'a death after the last Jad is not a scoreboard death');
+  assert.equal(Scoreboard.worldRecords().completions[1], completionsBefore, 'its completion was counted when the last Jad fell');
   flush();
   assert.deepEqual(said(), [Dialogue.VARIANT.completed]);
 });
