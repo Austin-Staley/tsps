@@ -69,11 +69,14 @@ export class EffectSpells extends Spell {
                 if (EffectSpells.vengeanceOnCooldown(player)) {
                     return true;
                 }
+                // Pays the runes from the inventory and any rune source (rune pouch).
+                if (!spell.canCast(player, true)) {
+                    return true;
+                }
 
                 // No chat message on a successful cast (rsprox captures).
                 player.setHasVengeance(true);
                 EffectSpells.startVengeanceCooldown(player);
-                player.getInventory().deleteItemSet(spell.itemsToConsume(player));
                 player.performAnimation(new Animation(8316));
                 player.performGraphic(new Graphic(726, GraphicHeight.HIGH));
                 player.getSkillManager().addExperiences(Skill.MAGIC, spell.baseExperience());
