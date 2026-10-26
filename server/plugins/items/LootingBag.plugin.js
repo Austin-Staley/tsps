@@ -7,6 +7,7 @@
 const { ItemOnGroundManager } = require("../../src/main/typescript/elvarg/game/entity/impl/grounditem/ItemOnGroundManager");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
+const { MAX_STACK_AMOUNT } = require("../../src/main/typescript/elvarg/game/model/container/StackType");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 const Food = require("./Food.plugin");
@@ -95,11 +96,14 @@ function canStore(item) {
 
 /**
  * How much of `entry` (`{ id, amount, meta }`) the bag can take: 28 slots, where stackable items
- * stack as they do in the inventory and every other item takes a slot of its own (Wiki).
+ * stack as they do in the inventory, up to the same maximum stack, and every other item takes a
+ * slot of its own (Wiki).
  */
 function room(items, entry) {
   if (isStackable(entry.id)) {
-    return items.some((stored) => entryKey(stored) === entryKey(entry)) || items.length < BAG_SIZE ? entry.amount : 0;
+    const existing = items.find((stored) => entryKey(stored) === entryKey(entry));
+    if (existing) return Math.min(entry.amount, Math.max(0, MAX_STACK_AMOUNT - existing.amount));
+    return items.length < BAG_SIZE ? Math.min(entry.amount, MAX_STACK_AMOUNT) : 0;
   }
   return Math.min(entry.amount, BAG_SIZE - items.length);
 }

@@ -242,6 +242,38 @@ test("using an item on the bag asks how many, with the captured choices for each
   assert.equal(coins.inv.count(COINS), 380);
 });
 
+test("a stack in the bag stops at the maximum stack; what doesn't fit stays where it was", () => {
+  const MAX = 2147483647;
+  const exact = bagWith(OPEN_BAG, [{ id: COINS, amount: MAX - 2 }]);
+  const p = player({ items: [exact, item(COINS, 2)] });
+  hooks.actions.Deposit({ player: p, item: exact });
+  clickBag(p, 1, 3);
+  assert.equal(stored(exact)[0].amount, MAX, "an exact fit fills the stack");
+  assert.equal(p.inv.count(COINS), 0);
+
+  const over = bagWith(OPEN_BAG, [{ id: COINS, amount: MAX - 1 }]);
+  const q = player({ items: [over, item(COINS, 5)] });
+  hooks.actions.Deposit({ player: q, item: over });
+  clickBag(q, 1, 3);
+  assert.equal(stored(over)[0].amount, MAX, "only the headroom goes in");
+  assert.equal(q.inv.count(COINS), 4, "the rest stays in the inventory");
+  clickBag(q, 1, 3);
+  assert.equal(q.messages.at(-1), "The bag's too full.");
+  assert.equal(stored(over)[0].amount, MAX);
+  assert.equal(q.inv.count(COINS), 4);
+
+  const pickup = { player: q, groundItem: { getItem: () => item(COINS, 2) }, handled: false };
+  hooks.pickup(pickup);
+  assert.equal(pickup.handled, false, "a pickup that would overflow stays on the ground");
+  assert.deepEqual(q.spam, ["You don't have space in your looting bag for that."]);
+  assert.equal(stored(over)[0].amount, MAX);
+
+  const loot = { player: q, items: [{ id: COINS, amount: 1 }] };
+  LootingBag._test.storeLoot(loot);
+  assert.equal(loot.result, "full");
+  assert.equal(stored(over)[0].amount, MAX);
+});
+
 test("Settings: store everything without asking, and keep picked-up supplies out (rsprox 1545)", () => {
   const bag = bagWith(OPEN_BAG);
   const p = player({ items: [bag, item(KARAMBWAN), item(KARAMBWAN), item(KARAMBWAN)] });
