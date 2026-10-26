@@ -40,6 +40,7 @@
     "test:weapon-special-traits": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/weapon-special-traits-smoke.ts",
     "test:voice-chat": "yarn build && node --test tests/voice-chat.test.cjs",
     "test:protocol": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/login-protocol-harness.ts",
+    "test:rev241": "TS_NODE_TRANSPILE_ONLY=1 TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' node --require ts-node/register --test tests/rev241-bridge.test.ts",
     "test:quest-list": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/quest-list-smoke.ts",
     "test:quest-runtime": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/quest-runtime-smoke.ts",
     "test:projectile-origin": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/projectile-origin-smoke.ts",

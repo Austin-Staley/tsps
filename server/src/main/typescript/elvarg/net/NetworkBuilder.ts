@@ -380,6 +380,11 @@ export class ClientConnection {
     return this.player;
   }
 
+  /** The rev 241 socket does not deliver browser frames through onData, so idle time is recorded here. */
+  public noteActivity(): void {
+    this.lastFrameAt = Date.now();
+  }
+
   public getLoginFailure(): string | undefined {
     return this.loginFailure;
   }

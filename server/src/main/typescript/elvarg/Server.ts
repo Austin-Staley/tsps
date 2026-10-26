@@ -15,6 +15,7 @@ import { CachePipeline } from "./game/cache/CachePipeline";
 import { World } from "./game/World";
 import { ObjectManager } from "./game/entity/impl/object/ObjectManager";
 import { NetworkBuilder } from "./net/NetworkBuilder";
+import { startRev241Bridge } from "./net/rev241/WorldLogin";
 import { NetworkConstants } from "./net/NetworkConstants";
 import { PluginManager } from "./plugins/PluginManager";
 import { Flooder } from "./util/flood/Flooder";
@@ -240,6 +241,7 @@ export class Server {
       new GameBuilder().initialize();
       Server.releaseStartupMemory();
       new NetworkBuilder().initialize(NetworkConstants.WEBSOCKET_PORT);
+      startRev241Bridge();
     } catch (e) {
       console.log(e, "error");
       console.error(`An error occurred while binding the Bootstrap: ${e}`);
