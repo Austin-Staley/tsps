@@ -236,11 +236,16 @@ function graveOutside(request) {
   request.tile = { x, y, z };
 }
 
-/** A death in the ritual site itself counts on the tablet, for the fight it happened in. */
-function diedAtSite({ player }) {
+/**
+ * A death in the ritual site while his fight is on counts on the tablet, for that fight (as
+ * Site.Leviathan.js counts its deaths). It hears every death (onPlayerDefeated): onPlayerDeath
+ * stops at the first plugin that handles the respawn, as Death's Office does for a first grave.
+ */
+function diedAtSite({ victim: player }) {
   const session = sessionOf(player);
-  if (!session || player.getPrivateArea() !== session.area) return;
-  Scoreboard.died(player, session.fight ? session.fight.awakened : session.awakened);
+  const fight = session?.fight;
+  if (!fight || fight.over || fight.stopped || player.getPrivateArea() !== session.area) return;
+  Scoreboard.died(player, fight.awakened);
 }
 
 function attachSite(api) {
@@ -251,7 +256,7 @@ function attachSite(api) {
   api.onObjectSecondClick([site.exitLoc], leaveByRocks);
   api.onObjectInteraction("Tendril", { "Quick-escape": quickEscape });
   api.onCustomEvent("gravestones:grave-location", graveOutside);
-  api.onPlayerDeath(diedAtSite);
+  api.onPlayerDefeated(diedAtSite);
 }
 
 module.exports = { attachSite, enter, leave, sessionOf, diedAtSite, LOC_SHAPE };

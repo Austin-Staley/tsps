@@ -10,9 +10,10 @@
  * labels the rows Personal Killcount / Deaths / Best Time and Global Killcount / Deaths / Best
  * Time, titled "Vardorvis Statistics". The personal kill counts and best times are the kill
  * messages' own (Fight.Vardorvis.js); a death counts when it happens in the ritual site
- * (Site.Vardorvis.js). Like the other DT2 boards it reads only after Desert Treasure II. Numbers
- * and times are written as the Araxxor board's recording shows them ("151,908,082", "2:12.60",
- * "-" with none).
+ * (Site.Vardorvis.js), while his fight is still on. Like the other DT2 boards it reads only after
+ * Desert Treasure II, and it writes their way (docs/leviathan-normal-evidence.md): the counts this
+ * server keeps from now on read "N (recorded)", with no invented history, and a missing time
+ * "No recorded best". Times are m:ss.cc, as the Araxxor board's recording shows them ("2:12.60").
  */
 
 const fs = require("node:fs");
@@ -90,10 +91,12 @@ function died(player, awakened) {
 
 const number = (value) => count(value).toLocaleString("en-US");
 
-/** m:ss.cc, as the board shows times; "-" with none. */
+const recorded = (value) => `${number(value)} (recorded)`;
+
+/** m:ss.cc, as the board shows times; "No recorded best" with none, as the other DT2 boards. */
 function formatTicks(ticks) {
   const centis = count(ticks) * 60;
-  if (!centis) return "-";
+  if (!centis) return "No recorded best";
   const minutes = Math.floor(centis / 6000);
   const seconds = Math.floor((centis % 6000) / 100);
   return `${minutes}:${String(seconds).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
@@ -105,10 +108,10 @@ function lines(player, mode) {
   return new Map([
     [COMPONENT.title, TITLE[mode]],
     [COMPONENT.kills, number(player.getAttribute(own.kills))],
-    [COMPONENT.deaths, number(player.getAttribute(own.deaths))],
+    [COMPONENT.deaths, recorded(player.getAttribute(own.deaths))],
     [COMPONENT.best, formatTicks(player.getAttribute(own.best))],
-    [COMPONENT.worldKills, number(totals.kills)],
-    [COMPONENT.worldDeaths, number(totals.deaths)],
+    [COMPONENT.worldKills, recorded(totals.kills)],
+    [COMPONENT.worldDeaths, recorded(totals.deaths)],
     [COMPONENT.worldBest, formatTicks(totals.bestTicks)],
   ]);
 }

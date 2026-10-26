@@ -144,13 +144,15 @@ with Read and Read (Awakened). Both open interface `vardorvis_scoreboard` (832):
 count, deaths and best time, then the world's (Wiki, Ancient Tablet (Vardorvis), which gives the
 normal and awakened figures separately; the labels and "Vardorvis Statistics" title are the cache's).
 Read shows the normal fight, Read (Awakened) the awakened one, titled "Vardorvis (Awakened)
-Statistics" (no source has that title). The kill counts and best times are the kill messages' own;
-a death in the ritual site counts for the fight it happened in. The world's numbers are kept in
+Statistics" (the Wiki's awakened screenshot hasn't been checked for it). The kill counts and best
+times are the kill messages' own; a death in the ritual site while his fight is on counts for that
+fight (as the Leviathan's), heard through onPlayerDefeated, which every death reaches. The world's numbers are kept in
 `data/saves/vardorvis-scoreboard.json`. Like the other DT2 boards it reads only after Desert
 Treasure II, and a click that kept the map loc's null name still reads (Site.Leviathan.js). Nothing
 sets `dt2_scoreboards` to 2 yet (all four awakened bosses killed), so Read (Awakened) only shows once
-that is added. No recording opens the tablet (rsprox 235/03344 clicks it and walks on), so the
-formats follow the Araxxor board's recording.
+that is added. No recording opens the tablet (rsprox 235/03344 clicks it and walks on). It writes as
+the other DT2 boards do (docs/leviathan-normal-evidence.md): the server's own counts read
+"N (recorded)" and a missing time "No recorded best"; times are m:ss.cc as the Araxxor recording.
 
 ## Combat Achievements
 

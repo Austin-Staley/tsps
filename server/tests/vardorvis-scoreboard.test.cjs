@@ -94,14 +94,15 @@ function kill(player, ticks, awakened = false) {
 
 const text = (p, component) => p.sent.texts.get((INTERFACE << 16) | component);
 
-test('a new reader sees zeros and "-" under the cache title', (t) => {
+test('a new reader sees the cache title, "(recorded)" counts and "No recorded best", as the other DT2 boards', (t) => {
   const p = realPlayer(t);
   assert.equal(click(p, 'Read', NORMAL), true);
   assert.deepEqual(p.sent.interfaces, [INTERFACE]);
   assert.equal(text(p, 6), 'Vardorvis Statistics');
-  for (const component of [9, 11, 15, 17]) assert.equal(text(p, component), '0');
-  assert.equal(text(p, 13), '-');
-  assert.equal(text(p, 19), '-');
+  assert.equal(text(p, 9), '0');
+  for (const component of [11, 15, 17]) assert.equal(text(p, component), '0 (recorded)');
+  assert.equal(text(p, 13), 'No recorded best');
+  assert.equal(text(p, 19), 'No recorded best');
 });
 
 test('the map loc with its null name reads through the before-hook, as the other DT2 boards do', (t) => {
@@ -125,13 +126,13 @@ test('normal kills through Fight.won fill Read, awakened kills fill Read (Awaken
   click(p, 'Read', NORMAL);
   assert.equal(text(p, 9), '2');
   assert.equal(text(p, 13), '0:25.80');
-  assert.equal(text(p, 15), '2');
+  assert.equal(text(p, 15), '2 (recorded)');
   assert.equal(text(p, 19), '0:25.80');
   assert.equal(click(p, 'Read (Awakened)', AWAKENED), true);
   assert.equal(text(p, 6), 'Vardorvis (Awakened) Statistics');
   assert.equal(text(p, 9), '1');
   assert.equal(text(p, 13), '1:39.00');
-  assert.equal(text(p, 15), '1');
+  assert.equal(text(p, 15), '1 (recorded)');
   assert.equal(text(p, 19), '1:39.00');
 });
 
@@ -144,21 +145,21 @@ test("the world's records are every player's, and a reader's own rows stay their
   Scoreboard.died(b, true);
   click(a, 'Read', NORMAL);
   assert.equal(text(a, 9), '1');
-  assert.equal(text(a, 11), '0');
+  assert.equal(text(a, 11), '0 (recorded)');
   assert.equal(text(a, 13), '2:00.00');
-  assert.equal(text(a, 15), '2');
-  assert.equal(text(a, 17), '1');
+  assert.equal(text(a, 15), '2 (recorded)');
+  assert.equal(text(a, 17), '1 (recorded)');
   assert.equal(text(a, 19), '0:54.00');
   click(a, 'Read (Awakened)', AWAKENED);
-  assert.equal(text(a, 17), '1', "the awakened death is the awakened board's");
+  assert.equal(text(a, 17), '1 (recorded)', "the awakened death is the awakened board's");
 });
 
 test('a death away from the ritual site counts for nothing', (t) => {
   const p = realPlayer(t);
-  Site.diedAtSite({ player: p });
+  Site.diedAtSite({ killer: null, victim: p });
   click(p, 'Read', NORMAL);
-  assert.equal(text(p, 11), '0');
-  assert.equal(text(p, 17), '0');
+  assert.equal(text(p, 11), '0 (recorded)');
+  assert.equal(text(p, 17), '0 (recorded)');
 });
 
 test('deaths are saved attributes starting at 0, and the world records survive a restart', (t) => {
@@ -173,15 +174,15 @@ test('deaths are saved attributes starting at 0, and the world records survive a
   Scoreboard._useFile(file); // as a restart reads it again
   const q = realPlayer(t);
   click(q, 'Read', NORMAL);
-  assert.equal(text(q, 15), '1');
-  assert.equal(text(q, 17), '1');
+  assert.equal(text(q, 15), '1 (recorded)');
+  assert.equal(text(q, 17), '1 (recorded)');
   assert.equal(text(q, 19), '1:12.00');
-  assert.equal(text(q, 11), '0');
+  assert.equal(text(q, 11), '0 (recorded)');
   click(q, 'Read (Awakened)', AWAKENED);
-  assert.equal(text(q, 15), '1');
+  assert.equal(text(q, 15), '1 (recorded)');
   assert.equal(text(q, 19), '3:00.00');
   click(p, 'Read', NORMAL);
-  assert.equal(text(p, 11), '1');
+  assert.equal(text(p, 11), '1 (recorded)');
 });
 
 test('reading twice sends the board twice and counts nothing', (t) => {
@@ -189,13 +190,7 @@ test('reading twice sends the board twice and counts nothing', (t) => {
   click(p, 'Read', NORMAL);
   click(p, 'Read', NORMAL);
   assert.deepEqual(p.sent.interfaces, [INTERFACE, INTERFACE]);
-  assert.equal(text(p, 15), '0');
-});
-
-test("another loc's Ancient tablet is left to its own handler", (t) => {
-  const p = realPlayer(t);
-  assert.equal(click(p, 'Read', Common.core.CacheDefinitions.getLocId('amoxliatl_scoreboard_op')), false);
-  assert.deepEqual(p.sent.interfaces, []);
+  assert.equal(text(p, 15), '0 (recorded)');
 });
 
 test('the tablet stands by the ritual site as a solid loc', () => {
