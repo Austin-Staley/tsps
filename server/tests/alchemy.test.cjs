@@ -23,6 +23,7 @@ const FIRE_RUNE = 554;
 const RUNE_PLATELEGS = 1079;
 const RUNE_PLATEBODY = 1127;
 const IBANS_STAFF_BROKEN = 1410;
+const DRAGON_DEFENDER = 12954;
 
 function fakeItem(id, { tradeable = true, high = 38400, low = 25600, presetUntradeable = false } = {}) {
   return {
@@ -52,6 +53,9 @@ function fakePlayer(items) {
       const slot = slots.findIndex((item) => item?.getId() === id);
       if (slot >= 0) slots[slot] = null;
       else amounts.set(id, (amounts.get(id) || 0) - amount);
+    },
+    deleteAtSlot(slot) {
+      slots[slot] = null;
     },
     adds: (id, amount) => amounts.set(id, (amounts.get(id) || 0) + amount),
   };
@@ -199,6 +203,21 @@ test('server-flagged untradeables (PvP preset items) and coins are still refused
   assert.deepEqual(player.log.messages, ['This spell can not be cast on this item.', 'This spell can not be cast on this item.']);
   assert.equal(player.log.dialogues.length, 0);
   assert.equal(player.amounts.get(NATURE_RUNE), 100);
+});
+
+// The cast deleted the first item of that id, so a PvP preset copy in an earlier slot was alched
+// in place of the clicked one.
+test('the clicked item is the one alched, not a preset copy in an earlier slot', (t) => {
+  const { listener } = harness(t);
+  const preset = fakeItem(DRAGON_DEFENDER, { tradeable: false, high: 40804, presetUntradeable: true });
+  const plain = fakeItem(DRAGON_DEFENDER, { tradeable: false, high: 40804 });
+  const player = fakePlayer([preset, plain]);
+  listener.castOnItem(player, HIGH_ALCHEMY, DRAGON_DEFENDER, 1);
+  const [, options] = player.log.dialogues[0];
+  options.execute(1);
+  assert.equal(coins(player), 40804);
+  assert.equal(player.slots[0], preset, 'the preset defender stays');
+  assert.equal(player.slots[1], null, 'the clicked defender is the one alched');
 });
 
 // Pest Control's ban on alchemy rides onSpellDisabled, which the alchemy cast never asked.

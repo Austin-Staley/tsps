@@ -58,6 +58,12 @@ function createContainer(capacity, initial = []) {
     delete(id, amount) {
       return container.deleteNumber(id, amount);
     },
+    deleteAtSlot(slot, amount = 1) {
+      const item = items[slot];
+      item.setAmount(item.getAmount() - amount);
+      if (item.getAmount() <= 0) items.splice(slot, 1);
+      return container;
+    },
     deletes(item) {
       return container.deleteNumber(item.getId(), item.getAmount());
     },

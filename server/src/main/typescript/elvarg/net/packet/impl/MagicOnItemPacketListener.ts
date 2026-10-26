@@ -297,7 +297,8 @@ export class MagicOnItemPacketListener {
       return;
     }
 
-    inventory.deleteNumber(itemId, 1);
+    // The clicked slot, not the first of that id: a preset-protected copy may sit earlier.
+    inventory.deleteAtSlot(slot, 1);
     this.consumeRunes(player, runes);
     player.setAttribute(MagicOnItemPacketListener.ALCH_NEXT_CAST_ATTRIBUTE, now + policy.castTicks);
 
