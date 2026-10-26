@@ -13,7 +13,7 @@
  * - challenge_total, the nine added up (01852: 17:37.80), and overall_total, the whole raid
  *   (20:00.60);
  * - active (the invocations on, "23") and raid_level ("530").
- * It then runs script 6590 once per party member: [name, damage dealt, damage taken, deaths,
+ * It then runs script 6590 once per party member, most damage dealt first: [name, damage dealt, damage taken, deaths,
  * title struct, -1, slot, party size, is the reader]. The script prints the three numbers and
  * the title's name (struct param 1525, "The Brawler"), or "-" for a title of -1.
  */
@@ -23,8 +23,6 @@ const Raid = require("./RaidState.TombsOfAmascut");
 
 const LOC_NAME = "toa_vault_scoreboard";
 const INTERFACE_NAME = "toa_raid_summary";
-/** Clientscripts the recordings run: toplevel_mainmodal_open and the summary's member row. */
-const SCRIPT = { MAINMODAL_OPEN: 2524, MEMBER_ROW: 6590 };
 /** No title: the row's title cell reads "-". */
 const NO_TITLE = -1;
 
@@ -44,13 +42,9 @@ const ROOM_TIMES = [
 const cache = () => Shared.core().CacheDefinitions;
 const uid = (component) => cache().getComponentId(`${INTERFACE_NAME}:${component}`);
 
-/** m:ss.cc, as the summary prints times; "-" for a room not done. */
+/** m:ss.cc (h:mm:ss.cc past an hour), as the summary prints times; "-" for a room not done. */
 function formatTicks(ticks) {
-  if (!(ticks > 0)) return "-";
-  const centis = ticks * 60;
-  const minutes = Math.floor(centis / 6000);
-  const seconds = Math.floor((centis % 6000) / 100);
-  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
+  return ticks > 0 ? Shared.formatTicksHundredths(ticks) : "-";
 }
 
 /** The component texts for `raid`, in the recording's order. */
@@ -68,9 +62,13 @@ function texts(raid) {
   ];
 }
 
-/** Script 6590's arguments for each member still in the raid, in party order. */
+/**
+ * Script 6590's arguments for each member still in the raid. Every recording lists them by
+ * damage dealt, most first, and numbers the slots in that order (in each, the reader also dealt
+ * the most, so "reader first" would fit them as well).
+ */
 function rows(raid, reader) {
-  const members = [...raid.members.entries()];
+  const members = [...raid.members.entries()].sort(([, a], [, b]) => b.damageDone - a.damageDone);
   return members.map(([player, member], slot) => [
     Shared.displayName(player),
     Math.max(0, Math.trunc(member.damageDone)),
@@ -90,10 +88,10 @@ function read(event) {
   const raid = Raid.raidOf(player);
   if (!raid) return false;
   const sender = player.getPacketSender();
-  sender.sendInterfaceScript(SCRIPT.MAINMODAL_OPEN, [-1, -1]);
+  sender.sendInterfaceScript(Shared.SCRIPT.MAINMODAL_OPEN, [-1, -1]);
   sender.sendInterface(cache().getInterfaceId(INTERFACE_NAME));
   for (const [component, text] of texts(raid)) sender.sendString(text, uid(component));
-  for (const row of rows(raid, player)) sender.sendInterfaceScript(SCRIPT.MEMBER_ROW, row);
+  for (const row of rows(raid, player)) sender.sendInterfaceScript(Shared.SCRIPT.SUMMARY_MEMBER_ROW, row);
   return true;
 }
 
@@ -102,4 +100,4 @@ module.exports = function registerTombsSummary(api) {
   api.onObjectInteraction("Scoreboard", { Read: read });
 };
 
-Object.assign(module.exports, { read, texts, rows, formatTicks, ROOM_TIMES, LOC_NAME, INTERFACE_NAME, SCRIPT });
+Object.assign(module.exports, { read, texts, rows, formatTicks, ROOM_TIMES, LOC_NAME, INTERFACE_NAME });

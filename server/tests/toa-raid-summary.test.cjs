@@ -12,7 +12,6 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 
-const Shared = require('../plugins/minigames/toa/Shared.TombsOfAmascut');
 const Raid = require('../plugins/minigames/toa/RaidState.TombsOfAmascut');
 const { InvocationSettings } = require('../plugins/minigames/toa/Invocations.TombsOfAmascut');
 const Summary = require('../plugins/minigames/toa/Summary.TombsOfAmascut');
@@ -90,21 +89,31 @@ test('Read opens the summary with the recorded times, totals, level and invocati
     apmeken_time: '1:41.40', crondis_time: '0:39.00', het_time: '1:07.80', active: '23', raid_level: '530',
   };
   for (const [name, text] of Object.entries(expected)) assert.equal(shown.get(component(name)), text, name);
+  // The texts in the recording's order, all before the member rows.
+  const order = a.sent.filter(([kind]) => kind === 'text').map(([, id]) => id);
+  assert.deepEqual(order, Object.keys(expected).map(component));
+  const lastText = a.sent.findLastIndex(([kind]) => kind === 'text');
+  const firstRow = a.sent.findIndex(([kind, id]) => kind === 'script' && id === 6590);
+  assert.ok(firstRow > lastText, 'the 6590 rows follow the texts');
   raid.destroy?.();
   Raid.raids.delete(raid);
 });
 
-test('one 6590 row per member: damage dealt, taken, deaths, no title, slot, size, the reader', (t) => {
+test('one 6590 row per member, most damage dealt first: dealt, taken, deaths, no title, rank, size, the reader', (t) => {
   const a = realPlayer(t, 'Alpha');
   const b = realPlayer(t, 'Bravo');
-  const raid = raidOf([a, b]);
-  Object.assign(raid.member(a), { damageDone: 19827, damageTaken: 648, deaths: 0 });
-  Object.assign(raid.member(b), { damageDone: 11215.6, damageTaken: 648, deaths: 2 });
-  click(b, BOARD);
-  const rows = b.sent.filter(([kind, id]) => kind === 'script' && id === 6590).map(([, , args]) => args);
+  const c = realPlayer(t, 'Charlie');
+  const raid = raidOf([a, b, c]);
+  // Party order is Alpha, Bravo, Charlie; the most damage is the second member's.
+  Object.assign(raid.member(a), { damageDone: 11215.6, damageTaken: 648, deaths: 2 });
+  Object.assign(raid.member(b), { damageDone: 19827, damageTaken: 648, deaths: 0 });
+  Object.assign(raid.member(c), { damageDone: 2241, damageTaken: 879, deaths: 1 });
+  click(a, BOARD);
+  const rows = a.sent.filter(([kind, id]) => kind === 'script' && id === 6590).map(([, , args]) => args);
   assert.deepEqual(rows, [
-    ['Alpha', 19827, 648, 0, -1, -1, 0, 2, 0],
-    ['Bravo', 11215, 648, 2, -1, -1, 1, 2, 1],
+    ['Bravo', 19827, 648, 0, -1, -1, 0, 3, 0],
+    ['Alpha', 11215, 648, 2, -1, -1, 1, 3, 1],
+    ['Charlie', 2241, 879, 1, -1, -1, 2, 3, 0],
   ]);
   Raid.raids.delete(raid);
 });
@@ -121,6 +130,12 @@ test('rooms not done read "-", and a reader outside any raid is left alone', (t)
   const outsider = realPlayer(t, 'Charlie');
   assert.equal(click(outsider, BOARD), false);
   assert.deepEqual(outsider.sent, []);
+});
+
+test('a raid over an hour reads h:mm:ss.cc', () => {
+  assert.equal(Summary.formatTicks(6000), '1:00:00.00');
+  assert.equal(Summary.formatTicks(6205), '1:02:03.00');
+  assert.equal(Summary.formatTicks(2001), '20:00.60');
 });
 
 test('reading twice resends the same summary', (t) => {
@@ -151,5 +166,4 @@ test('the board is in the burial chamber, as the cache places it', () => {
   assert.ok(board);
   assert.equal(board.getType(), 10);
   assert.equal(Summary.formatTicks(0), '-');
-  assert.equal(Shared.displayName({ getUsername: () => 'x' }), 'x');
 });
