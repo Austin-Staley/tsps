@@ -172,6 +172,12 @@ export class CombatFactory {
     }
 
     static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
+        return CombatFactory.applyIncomingHitDamage(entity, victim, type,
+            CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits));
+    }
+
+    /** Rolls damage and protection prayers without spending or reacting with defensive equipment. */
+    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): HitDamage {
         const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
@@ -217,6 +223,11 @@ export class CombatFactory {
                 }
             }
         }
+        return hitDamage;
+    }
+
+    /** Reacts once to the selected damage roll, before any per-hit multiplier and HP cap. */
+    public static applyIncomingHitDamage(entity: Mobile, victim: Mobile, type: CombatType, hitDamage: HitDamage): HitDamage {
         // The Elysian spirit shield cuts damage by 25% 70% of the time (Wiki).
         if (victim.isPlayer() && Math.random() < CombatConstants.ELYSIAN_ACTIVATION_CHANCE) {
             if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD) {

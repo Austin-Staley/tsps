@@ -38,6 +38,8 @@ export interface WeaponCombatProfile {
     fireSound?: Sound;
     ammoRequired?: number;
     boltEffects?: boolean;
+    /** Scales the enchanted bolt effects' chance (the Ascension crossbows halve it). */
+    boltEffectChanceMultiplier?: number;
     rangedDefenceType?: "light" | "standard" | "heavy";
 }
 
@@ -325,6 +327,22 @@ export class WeaponProfiles {
             projectiles: [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 44, endHeight: 35 }],
             fireSound: Sound.SHOOT_CROSSBOW,
             boltEffects: true,
+        });
+        // Wiki (Ascension crossbows): 3 ticks (cache param 14), range 6, 8 on Longrange. The shot alternates
+        // tfa_human_ascension_crossbow_fire_left/right (15113/15115, _pvn 15114/15116); the plugin flips
+        // sides, this is the left one. Projectile heights are the standard crossbow's (an estimate).
+        this.register({
+            itemIds: [ItemIdentifiers.ASCENSION_CROSSBOWS],
+            attackAnimation: 15113,
+            npcAttackAnimation: 15114,
+            attackDistance: 6,
+            longRangeFightType: FightType.CROSSBOW_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_CROSSBOW,
+            boltEffects: true,
+            // Wiki (Ascension crossbows): the chance to trigger enchanted bolt effects is reduced by 50%.
+            boltEffectChanceMultiplier: 0.5,
         });
         // Machetes, sickles and canes share the slash-sword/mace interfaces but swing one tick slower.
         this.register({
