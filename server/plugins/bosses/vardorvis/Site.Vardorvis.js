@@ -12,6 +12,7 @@
  *   a grave).
  */
 const Common = require("./Common.Vardorvis");
+const Scoreboard = require("./Scoreboard.Vardorvis");
 
 const MINIMAP_STATE_VARBIT = 6719;
 const MINIMAP_OFF = 2;
@@ -235,6 +236,13 @@ function graveOutside(request) {
   request.tile = { x, y, z };
 }
 
+/** A death in the ritual site itself counts on the tablet, for the fight it happened in. */
+function diedAtSite({ player }) {
+  const session = sessionOf(player);
+  if (!session || player.getPrivateArea() !== session.area) return;
+  Scoreboard.died(player, session.fight ? session.fight.awakened : session.awakened);
+}
+
 function attachSite(api) {
   const { site } = Common.data;
   api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
@@ -243,6 +251,7 @@ function attachSite(api) {
   api.onObjectSecondClick([site.exitLoc], leaveByRocks);
   api.onObjectInteraction("Tendril", { "Quick-escape": quickEscape });
   api.onCustomEvent("gravestones:grave-location", graveOutside);
+  api.onPlayerDeath(diedAtSite);
 }
 
-module.exports = { attachSite, enter, leave, sessionOf, LOC_SHAPE };
+module.exports = { attachSite, enter, leave, sessionOf, diedAtSite, LOC_SHAPE };
