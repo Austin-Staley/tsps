@@ -1,5 +1,6 @@
 /**
- * What starts a ferry (plugins/world/data/ferries.json): a ferryman's right-click option, a
+ * What starts a ferry (plugins/world/data/ferries.json): a ferryman's right-click option, a loc's
+ * option (the Fremennik boat to Ungael, rsprox 229/2334, once Dragon Slayer II shows its Travel), a
  * transcript's travel step, a line a ferryman ends on (Veos's and Captain Bentley's talk has no
  * travel step), and `ferries:travel` { player, route } from quest plugins that own a crossing.
  *
@@ -114,6 +115,27 @@ function npcOption(event) {
   sail(player, entry.route);
 }
 
+/** The locs entry a click matches: the visible loc's name and label, and its base gameval. */
+function locRoute(event) {
+  const label = event.definition?.getInteractions?.()?.[event.clickType - 1];
+  const name = event.definition?.getName?.() ?? "";
+  const gameval = Common.locGameval(event.objectId);
+  return (Common.data.locs ?? []).find((entry) => entry.loc === name && entry.option === label
+    && (!entry.from || entry.from.includes(gameval))) ?? null;
+}
+
+/**
+ * A loc's travel option. The multiloc shows it only when the player's varbit says so (the
+ * Ungael boat's Travel needs ds2_frem 20 or more), and the click carries the variant they see.
+ */
+function locOption(event) {
+  const entry = locRoute(event);
+  if (!entry) return;
+  event.handled = true;
+  if (Common.travelling(event.player)) return;
+  sail(event.player, entry.route);
+}
+
 function stepRoute(step, event) {
   if (typeof step === "string") return { route: step };
   if (step.byNpc) return { route: step.byNpc[Common.npcGameval(event.npc, event.npcId)] };
@@ -175,6 +197,7 @@ function travelEvent(request) {
 
 function attach(api) {
   api.onNpcInteraction(npcOption);
+  api.onObjectInteraction(locOption);
   api.onNpcDialogueCondition(answerEntrana);
   api.onCustomEvent("npc-dialogue:action", transcriptStep);
   api.onCustomEvent("npc-dialogue:choice", rememberChoice);
@@ -182,4 +205,4 @@ function attach(api) {
   api.onCustomEvent("ferries:travel", travelEvent);
 }
 
-module.exports = { attach, npcOption, transcriptStep, answerEntrana, contraband, sailAfterLine, rememberChoice, travelEvent };
+module.exports = { attach, npcOption, locOption, transcriptStep, answerEntrana, contraband, sailAfterLine, rememberChoice, travelEvent };

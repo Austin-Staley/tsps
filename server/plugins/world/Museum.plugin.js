@@ -30,6 +30,7 @@ const KUDOS_ATTRIBUTE = "museum:kudos";
 const STATE_ATTRIBUTE = "museum:state";
 const VARBIT_VM_KUDOS = 3637; // cache gameval vm_kudos: varp 1010, bits 0-10
 const KUDOS_EVENT = "museum:get-kudos";
+const HAS_KIT_EVENT = "archaeology:has-kit";
 const KUDOS_CHANGED_EVENT = "museum:kudos-changed";
 
 const DIG_SITE_KEY = "the_dig_site";
@@ -332,6 +333,11 @@ function hasCleaningTools(player) {
   const worn = (ids) => equipment.some((item) => ids.has(item?.getId?.()));
   return has(player, ITEM.TROWEL) && has(player, ITEM.ROCK_PICK) && has(player, ITEM.SPECIMEN_BRUSH)
     && worn(ITEM.LEATHER_GLOVES) && worn(ITEM.LEATHER_BOOTS);
+}
+
+/** HAS_KIT_EVENT `{ player, hasKit }`: the full kit, for other cleaning benches (Fossil Island's). */
+function answerHasKit(request) {
+  if (request?.player) request.hasKit = hasCleaningTools(request.player);
 }
 
 function cleanFind(event) {
@@ -644,6 +650,7 @@ module.exports = {
     pluginApi.persistAttribute(KUDOS_ATTRIBUTE, 0);
     pluginApi.persistAttribute(STATE_ATTRIBUTE, null);
     pluginApi.onCustomEvent(KUDOS_EVENT, answerGetKudos);
+    pluginApi.onCustomEvent(HAS_KIT_EVENT, answerHasKit);
     pluginApi.onCustomEvent("npc-dialogue:menu", startMinasConversation);
     pluginApi.onCustomEvent("npc-dialogue:condition", recordMinasCondition);
     pluginApi.onCustomEvent("npc-dialogue:condition", recordArtefactCondition);

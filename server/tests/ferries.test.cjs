@@ -13,6 +13,8 @@ const { Item } = require("../dist/game/model/Item");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { ObjectDefinition } = require("../dist/game/definition/ObjectDefinition");
+const { Player } = require("../dist/game/entity/impl/player/Player");
 const Ferries = require("../plugins/world/Ferries.plugin");
 
 const { Common, Voyages, Routes } = Ferries._test;
@@ -21,7 +23,7 @@ const npcId = (name) => CacheDefinitions.getNpcId(name);
 let tasks = [];
 let quests = { complete: new Set(), started: new Set() };
 const starts = [];
-const hooks = { npc: [], events: new Map(), conditions: [], logout: [], shutdown: [] };
+const hooks = { npc: [], object: [], events: new Map(), conditions: [], logout: [], shutdown: [] };
 
 class Task {
   constructor(delay, key) {
@@ -75,6 +77,7 @@ const api = {
     StatementDialogue: { send: (player, text) => player.sent.boxes.push(text) },
   },
   onNpcInteraction: (handler) => hooks.npc.push(handler),
+  onObjectInteraction: (handler) => hooks.object.push(handler),
   onNpcDialogueCondition: (handler) => hooks.conditions.push(handler),
   onCustomEvent: (name, handler) => hooks.events.set(name, [...(hooks.events.get(name) ?? []), handler]),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
@@ -178,6 +181,7 @@ const at = (player) => [player.getLocation().getX(), player.getLocation().getY()
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  ObjectDefinition.init();
   Ferries.register(api);
 });
 
@@ -311,6 +315,59 @@ test("Torfinn's fade: spam on boarding, the minimap off from the first tick, Ung
   assert.equal(player.blocked, false);
   tick(2);
   assert.ok(player.sent.closed.includes((161 << 16) | 1));
+});
+
+/** A real Player whose packets are recorded; `varbits` answers what the client was last sent. */
+function realPlayer(at, varbits = new Map()) {
+  const player = new Player(null);
+  const sent = { spam: [], subs: [], varbits: new Map(), closed: [] };
+  const sender = new Proxy({
+    sendTypedMessage: (type, text) => (sent.spam.push(text), sender),
+    sendSubInterface: (uid, id, type, options) => (sent.subs.push({ uid, id, options }), sender),
+    closeSubInterface: (uid) => (sent.closed.push(uid), sender),
+    sendVarbit: (id, value) => (sent.varbits.set(id, value), sender),
+    getVarbit: (id) => varbits.get(id) ?? 0,
+    getVarp: () => 0,
+  }, { get: (target, key) => target[key] ?? (() => sender) });
+  player.getPacketSender = () => sender;
+  player.setUsername("ungaelboat");
+  player.setRegistered(true);
+  player.setLocation(at);
+  return { player, sent };
+}
+
+/** Op1 on the Rellekka boat as the client sends it: the base multiloc, the variant the player sees. */
+function clickBoat(player) {
+  const BOAT = CacheDefinitions.getLocId("fremennik_boat_ungael");
+  const event = { player, objectId: BOAT, clickType: 1, definition: ObjectDefinition.forPlayer(BOAT, player), location: { x: 2638, y: 3696, z: 0 }, handled: false };
+  for (const handler of hooks.object) handler(event);
+  return event;
+}
+
+test("the Rellekka boat's Travel sails to Ungael as Torfinn's boat does; without it there is no option", () => {
+  const frem = CacheDefinitions.getVarbitId("ds2_frem");
+  // Recorded (229/2334) after Dragon Slayer II: the boat shows Travel and sails as Torfinn's does.
+  const after = realPlayer(new Location(2639, 3697, 0), new Map([[frem, 30]]));
+  const event = clickBoat(after.player);
+  assert.equal(event.definition.getInteractions()[0], "Travel");
+  assert.equal(event.handled, true);
+  assert.deepEqual(after.sent.spam, ["You board the boat and travel to Ungael."]);
+  // A second click while sailing doesn't start another voyage.
+  clickBoat(after.player);
+  assert.deepEqual(after.sent.spam, ["You board the boat and travel to Ungael."]);
+  assert.equal(after.player.getMovementQueue().isMovementBlocked(), true);
+  tick(3);
+  assert.deepEqual(at(after.player), [2277, 4034, 0]);
+  tick(4);
+  assert.equal(after.player.getMovementQueue().isMovementBlocked(), false);
+
+  // Before the quest gets there (ds2_frem under 20) the boat has no option, so nothing sails.
+  const before = realPlayer(new Location(2639, 3697, 0), new Map([[frem, 19]]));
+  const early = clickBoat(before.player);
+  assert.equal(early.definition.getInteractions()?.[0], undefined);
+  assert.equal(early.handled, false);
+  assert.deepEqual(before.sent.spam, []);
+  assert.deepEqual(at(before.player), [2639, 3697, 0]);
 });
 
 test("Veos's ship fades with the sea's song and says where it sails as the player lands", () => {
