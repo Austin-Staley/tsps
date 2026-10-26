@@ -538,3 +538,27 @@ test("a sweep or smite never starts on a step: it stands still and starts 2 tick
   blaster.fight.attack(player);
   assert.equal(blaster.fight.special.kind, "blast", "the blast lets it move, so it goes ahead");
 });
+
+test("a flicked smite is queued at 0: the player's Ring of life isn't spent on a dummy roll", (t) => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const { NPC } = require("../dist/game/entity/impl/npc/NPC");
+  const { Equipment } = require("../dist/game/model/container/impl/Equipment");
+  const { Skill } = require("../dist/game/model/Skill");
+  require("../plugins/items/RingOfLife.plugin").register(PluginManager.createApi("RingOfLifeMadAngelTest"));
+  const teleports = [];
+  t.mock.method(core.TeleportHandler, "checkReqs", () => true);
+  t.mock.method(core.TeleportHandler, "teleport", (...args) => teleports.push(args));
+
+  const player = new Player(null);
+  t.mock.method(player, "getSession", () => ({ sendClientPacket: () => true }));
+  player.setLocation(new Location(2530, 2205, 0));
+  player.getSkillManager().setMaxLevel(Skill.HITPOINTS, 99);
+  player.getSkillManager().setCurrentLevel(Skill.HITPOINTS, 10, false);
+  player.getEquipment().getItems()[Equipment.RING_SLOT] = new core.Item(core.ItemIdentifiers.RING_OF_LIFE);
+  const npc = new NPC(Common.data.npcs.fighting, new Location(2532, 2215, 0));
+
+  new Fight({ player }, npc).blow("smite");
+
+  assert.equal(player.getEquipment().getItems()[Equipment.RING_SLOT].getId(), core.ItemIdentifiers.RING_OF_LIFE, "the ring is kept");
+  assert.equal(teleports.length, 0, "no teleport");
+});

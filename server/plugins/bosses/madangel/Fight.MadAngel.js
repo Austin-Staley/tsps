@@ -208,11 +208,15 @@ class Fight {
     return !!row && x >= row[1] && x <= row[2] && location.getZ() === 0;
   }
 
-  /** A scripted blow on the player, landing in their own turn this tick; `resolveBlow` rolls it. */
+  /**
+   * A scripted blow on the player, landing in their own turn this tick; `resolveBlow` rolls it.
+   * It's queued at 0, not rolled as a swing: a rolled hit would run the player's incoming-damage
+   * effects (a Ring of life) on damage the blow never deals.
+   */
   blow(kind) {
     const { PendingHit, CombatFactory } = this.core;
-    const hit = new PendingHit(this.npc, this.player, meleeStyle(), { delay: 0, rollAccuracy: false, experience: false });
-    hit.setTotalDamage(0);
+    const hit = new PendingHit(this.npc, this.player, meleeStyle(),
+      { delay: 0, rollAccuracy: false, experience: false, damage: 0, bypassProtectionPrayer: true });
     blows.set(hit, kind);
     CombatFactory.addPendingHit(hit);
   }
