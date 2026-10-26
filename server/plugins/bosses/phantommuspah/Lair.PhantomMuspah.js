@@ -9,6 +9,7 @@
 const Common = require("./Common.PhantomMuspah");
 const Fight = require("./Fight.PhantomMuspah");
 const Corruption = require("./Corruption.PhantomMuspah");
+const Scoreboard = require("./Scoreboard.PhantomMuspah");
 
 const SECRETS_OF_THE_NORTH = "secrets_of_the_north";
 
@@ -186,6 +187,7 @@ function recoverOnLogin({ player }) {
 function endOnDeath({ player }) {
   const session = sessionOf(player);
   if (!session) return;
+  Scoreboard.died(player);
   const { World } = Common.core;
   const manager = Common.api.getItemOnGroundManager();
   for (const ground of [...World.getItems()]) {
