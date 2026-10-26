@@ -9,9 +9,6 @@
 /** Where the player's browser opens a prefilled issue. */
 export const BUG_REPORT_ISSUE_URL = "https://github.com/RSPSApp/tsps/issues/new";
 
-/** Issue forms ignore the `body` query parameter: prefill goes through the template plus field ids. */
-export const BUG_REPORT_TEMPLATE = "bug_report.yml";
-
 /**
  * GitHub and browsers stop handling very long `issues/new` URLs (around 8 KB), so the
  * whole URL is capped. The body shrinks to fit; nothing else grows to fill it.
@@ -55,24 +52,31 @@ function codePoints(text: string): number {
 }
 
 /**
- * The prefilled form link: `template` selects the issue form (which ignores `body`),
- * then `title`, `description` and `diagnostics` fill its fields. The diagnostics shrink
- * first; the player's own description is only touched when nothing else fits.
+ * The prefilled issue link: `title` plus the markdown `body`.
+ *
+ * `body` is the only prefill GitHub applies without an issue form on the default branch.
+ * Form-field parameters (`description`, `diagnostics`) are ignored while
+ * `.github/ISSUE_TEMPLATE/bug_report.yml` is not merged yet, which is what a link built
+ * from them did: it opened an empty issue with only the title. `body` keeps working
+ * either way, so it carries the whole report and the template only serves manual filing.
  */
 export function buildIssueUrl(title: string, description: string, diagnostics: string): string {
     const safeTitle = truncateCodePoints(title.trim(), 80);
-    const base = `${BUG_REPORT_ISSUE_URL}?template=${BUG_REPORT_TEMPLATE}&title=${encodeURIComponent(safeTitle)}`;
+    const base = `${BUG_REPORT_ISSUE_URL}?title=${encodeURIComponent(safeTitle)}`;
     let safeDesc = description.trim();
     let safeDiag = diagnostics;
-    const url = () => `${base}&description=${encodeURIComponent(safeDesc)}&diagnostics=${encodeURIComponent(safeDiag)}`;
+    const url = () =>
+        `${base}&body=${encodeURIComponent([safeDesc, "", "---", safeDiag].join("\n"))}`;
     let built = url();
     while (built.length > MAX_ISSUE_URL_LENGTH) {
-        if (codePoints(safeDiag) > 0) {
-            safeDiag = truncateCodePoints(safeDiag, Math.max(0, codePoints(safeDiag) - Math.max(1, Math.ceil((built.length - MAX_ISSUE_URL_LENGTH) / 3))));
-        } else if (codePoints(safeDesc) > 0) {
-            safeDesc = truncateCodePoints(safeDesc, Math.max(0, codePoints(safeDesc) - Math.max(1, Math.ceil((built.length - MAX_ISSUE_URL_LENGTH) / 3))));
+        // Diagnostics shrink first; the player's own words are only cut when nothing else is left.
+        const target = codePoints(safeDiag) > 0 ? "diag" : codePoints(safeDesc) > 0 ? "desc" : undefined;
+        if (!target) break;
+        const overshoot = Math.max(1, Math.ceil((built.length - MAX_ISSUE_URL_LENGTH) / 3));
+        if (target === "diag") {
+            safeDiag = truncateCodePoints(safeDiag, Math.max(0, codePoints(safeDiag) - overshoot));
         } else {
-            break;
+            safeDesc = truncateCodePoints(safeDesc, Math.max(0, codePoints(safeDesc) - overshoot));
         }
         built = url();
     }
