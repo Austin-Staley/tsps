@@ -31,6 +31,7 @@ before(() => {
     onObjectFirstClick: (ids, handler) => ids.forEach((id) => hooks.click.set(id, handler)),
     onCanTeleport() {},
     onPlayerLogout() {},
+    onPlayerLogin() {},
     onNpcInteraction() {},
     onCustomEvent() {},
     emitCustomEvent() {},
