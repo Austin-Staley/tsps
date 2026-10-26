@@ -7,17 +7,6 @@ export interface ShopStockDefinition {
     price: number | null;
 }
 
-/**
- * Optional per-shop rules, as the Wiki's store tables give them: what share of an item's value
- * the shop sells and buys at (per mille: `sellmultiplier=1200`, `buymultiplier=600`), and
- * whether what players sell into a line the shop lists at 0 is taken without joining its stock.
- */
-export interface ShopDefinitionOptions {
-    sellMultiplier?: number | null;
-    buyMultiplier?: number | null;
-    emptyLinesStayEmpty?: boolean;
-}
-
 export class ShopDefinition {
     private static definitions = new Map<number, ShopDefinition>();
 
@@ -29,8 +18,7 @@ export class ShopDefinition {
         private readonly defaultRestockTicks: number,
         private readonly defaultDestockTicks: number,
         private readonly soldItemDestockTicks: number,
-        private readonly source: string,
-        private readonly options: ShopDefinitionOptions = {}
+        private readonly source: string
     ) {}
 
     public static replace(definitions: ShopDefinition[]): void {
@@ -78,20 +66,5 @@ export class ShopDefinition {
 
     public getSource(): string {
         return this.source;
-    }
-
-    /** Per mille of an item's value the shop sells it for, or null for the default. */
-    public getSellMultiplier(): number | null {
-        return this.options.sellMultiplier ?? null;
-    }
-
-    /** Per mille of an item's value the shop pays for it, or null for the default. */
-    public getBuyMultiplier(): number | null {
-        return this.options.buyMultiplier ?? null;
-    }
-
-    /** True when a line listed at 0 takes what players sell without stocking it. */
-    public emptyLinesStayEmpty(): boolean {
-        return this.options.emptyLinesStayEmpty === true;
     }
 }

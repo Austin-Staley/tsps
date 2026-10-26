@@ -1,5 +1,5 @@
 {
-  "_sources": "OSRS Wiki (Tai Bwo Wannai Cleanup) for requirements, XP and favour; rsprox 227/01858, 237/01102 and 231/03030 for timings, messages, sounds, animations, varbits and the stick claims. Gameval names, resolved from the cache. Part 3 (rewards): the Wiki's Gabooty's Tai Bwo Wannai Cooperative, Safta Doc, Rionasta and Hardwood Grove pages; rsprox 227/01858, 237/01102, 227/01757 and 231/03030 for the shop stock and messages, Safta's machete, the grove doors and Murcaily's warning; the cache for the parcel interface's ops (scripts 2851/2855).",
+  "_sources": "OSRS Wiki (Tai Bwo Wannai Cleanup) for requirements, XP and favour; rsprox 227/01858, 237/01102 and 231/03030 for timings, messages, sounds, animations, varbits and the stick claims. Gameval names, resolved from the cache. Part 3 (rewards): the Wiki's Gabooty's Tai Bwo Wannai Cooperative, Safta Doc, Rionasta and Hardwood Grove pages; rsprox 227/01858, 237/01102, 227/01757 and 231/03030 for the shop messages, Safta's machete, the grove doors and Murcaily's warning; the cache for the parcel interface's ops (scripts 2851/2855).",
   "quest": "jungle_potion",
   "regions": [[2752, 2879, 3008, 3135]],
   "varbits": {
@@ -102,45 +102,10 @@
     }
   },
   "shop": {
-    "_note": "Stock in the order 01858 shows it (inv tai_bwo_wannai_cooperative): [item, stock, restock ticks] from the Wiki's store table. Multipliers are the Wiki's per mille of value.",
-    "currency": "TRADING STICKS",
     "coop": "Gabooty's Tai Bwo Wannai Cooperative.",
     "drinks": "Gabooty's Tai Bwo Wannai Drinky Store.",
     "versions": {"default": " (Default)", "gloves": " (Karamja gloves)"},
-    "multipliers": {"default": {"sell": 1200, "buy": 600}, "gloves": {"sell": 1000, "buy": 800}},
     "gloves": ["atjun_gloves_easy", "atjun_gloves_med", "atjun_gloves_hard", "atjun_gloves_elite"],
-    "stock": [
-      ["tbw_villager_shirt_cream", 50, 100],
-      ["tbw_villager_robe_cream", 50, 100],
-      ["tbw_villager_hat_cream", 50, 100],
-      ["tbw_villager_sandals_cream", 50, 100],
-      ["tbw_villager_armband_cream", 50, 100],
-      ["machette_opal", 50, 100],
-      ["machette_jade", 50, 100],
-      ["machette_redtopaz", 50, 100],
-      ["tbw_villager_shirt_blue", 50, 100],
-      ["tbw_villager_robe_blue", 50, 100],
-      ["tbw_villager_hat_blue", 50, 100],
-      ["tbw_villager_sandals_blue", 50, 100],
-      ["tbw_villager_armband_blue", 50, 100],
-      ["uncut_opal", 0, 50],
-      ["uncut_jade", 0, 50],
-      ["uncut_red_topaz", 0, 50],
-      ["tbw_villager_shirt_yellow", 50, 100],
-      ["tbw_villager_robe_yellow", 50, 100],
-      ["tbw_villager_hat_yellow", 50, 100],
-      ["tbw_villager_sandals_yellow", 50, 100],
-      ["tbw_villager_armband_yellow", 50, 100],
-      ["opal", 0, 50],
-      ["jade", 0, 50],
-      ["red_topaz", 0, 50],
-      ["tbw_villager_shirt_purple", 50, 100],
-      ["tbw_villager_robe_purple", 50, 100],
-      ["tbw_villager_hat_purple", 50, 100],
-      ["tbw_villager_sandals_purple", 50, 100],
-      ["tbw_villager_armband_purple", 50, 100],
-      ["village_rare_tuber", 0, 15]
-    ],
     "asked": {"option": "What do you do here?", "condition": "If the player has asked Gabooty what he does in Tai Bwo Wannai:"}
   },
   "safta": {

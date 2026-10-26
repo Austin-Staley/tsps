@@ -711,8 +711,7 @@ export class ShopManager {
             player.sendMessage("This item has no value.");
             return;
         }
-        const stocks = !(shop.definition.emptyLinesStayEmpty() && shop.originalAmounts.get(stockId) === 0);
-        if (stocks && (shop.stock.get(stockId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
+        if ((shop.stock.get(stockId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
             player.sendMessage("The shop is currently full.");
             return;
         }
@@ -735,8 +734,7 @@ export class ShopManager {
             shop.definition.getCurrency(),
             quantity * price
         );
-        // Some shops take what they buy into an empty line without stocking it (Gabooty's gems stay at 0).
-        if (stocks) this.addStock(shop, stockId, quantity);
+        this.addStock(shop, stockId, quantity);
         Sounds.sendSound(player, Sound.DROP_ITEM);
         this.refresh(shop.definition.getId());
         this.ensureRestockTask();
@@ -841,9 +839,8 @@ export class ShopManager {
         return removed;
     }
 
-    /** A general store buys anything; any other shop what it lists, a line kept at 0 included. */
     private static buysItem(shop: RuntimeShop, itemId: number): boolean {
-        return this.isGeneralStore(shop) || shop.originalAmounts.has(itemId);
+        return this.isGeneralStore(shop) || (shop.originalAmounts.get(itemId) ?? 0) > 0;
     }
 
     private static isBloodMoneyShopItem(itemId: number): boolean {
@@ -875,10 +872,7 @@ export class ShopManager {
 
     private static sellPrice(shop: RuntimeShop, definition: ItemDefinition): number {
         const buyPrice = this.itemPrice(shop, definition);
-        const multiplier = shop.definition.getBuyMultiplier();
-        const price = multiplier != null
-            ? Math.floor(this.baseValue(shop, definition) * multiplier / 1000)
-            : buyPrice > 1 ? Math.floor(buyPrice * this.SALES_TAX) : buyPrice;
+        const price = buyPrice > 1 ? Math.floor(buyPrice * this.SALES_TAX) : buyPrice;
         const request = {
             shopId: shop.definition.getId(), shopName: shop.definition.getName(),
             itemId: definition.getId(), buyPrice, price,
@@ -892,12 +886,6 @@ export class ShopManager {
         if (override != null && override > 0) {
             return override;
         }
-        const multiplier = shop.definition.getSellMultiplier();
-        const value = this.baseValue(shop, definition);
-        return multiplier != null ? Math.floor(value * multiplier / 1000) : value;
-    }
-
-    private static baseValue(shop: RuntimeShop, definition: ItemDefinition): number {
         return shop.definition.getCurrency() === "BLOOD_MONEY"
             ? Number(definition.getBloodMoneyValue?.() ?? 0)
             : Number(definition.getValue?.() ?? 0);

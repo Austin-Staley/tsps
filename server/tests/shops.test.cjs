@@ -241,43 +241,26 @@ test("the quantity buttons set what an item's left-click buys, and the choice is
   assert.equal(player.getInventory().getAmount(BRONZE_AXE), 2, "buys up to 5, capped at the 2 in stock");
 });
 
-const STICKS = 6306;
-const RED_TOPAZ = 1613;
-DEFINITIONS[STICKS] = { name: "Trading sticks", stackable: true, value: 1 };
-DEFINITIONS[RED_TOPAZ] = { name: "Red topaz", value: 200 };
-const GEM_SHOP = 902;
-
-/** A shop with the Wiki's store multipliers and a line kept at 0 whatever is sold into it. */
-function openGemShop(sticks) {
+test("a currency with a unit uses OSRS's wording: costs, buy-back and too few", () => {
+  const STICKS = 6306;
+  DEFINITIONS[STICKS] = { name: "Trading sticks", stackable: true, value: 1 };
   ShopManager.registerItemCurrency(STICKS, { name: "Trading sticks", unit: "trade sticks" });
   ShopDefinition.replace([
-    new ShopDefinition(GEM_SHOP, "Gem trader", "TRADING STICKS", [
+    new ShopDefinition(902, "Stick shop", "TRADING STICKS", [
       { id: STEEL_AXE, amount: 5, restockTicks: null, price: null },
-      { id: RED_TOPAZ, amount: 0, restockTicks: null, price: null },
-    ], 100, 100, 100, "test", { sellMultiplier: 1200, buyMultiplier: 600, emptyLinesStayEmpty: true }),
+    ], 100, 100, 100, "test"),
   ]);
   ShopManager.initialize();
   const player = createPlayer();
-  if (sticks > 0) player.getInventory().add(new Item(STICKS, sticks), false);
-  ShopManager.open(player, GEM_SHOP);
-  return player;
-}
-
-test("store multipliers price from value; a line at 0 is bought and can stay 0, while a stocked line restocks from sales", () => {
-  const player = openGemShop(300);
-  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.ITEMS_INTERFACE_ID, slot: 1, itemId: RED_TOPAZ, amount: 0 });
-  assert.deepEqual(player.messages, ["Red topaz: currently costs 240 trade sticks."]);
-  player.getInventory().add(new Item(RED_TOPAZ, 1), false);
-  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.INVENTORY_INTERFACE_ID, slot: 1, itemId: RED_TOPAZ, amount: 0 });
-  assert.equal(player.messages.at(-1), "Red topaz: shop will buy for 120 trade sticks.");
-  sell(player, 1);
-  assert.equal(player.getInventory().getAmount(STICKS), 420);
-  assert.deepEqual(stockOf(GEM_SHOP), [[STEEL_AXE, 5], [RED_TOPAZ, 0]]);
-  buy(player, 0, STEEL_AXE, "Buy 5");
-  assert.equal(player.getInventory().getAmount(STEEL_AXE), 1, "240 each");
-  assert.equal(player.getInventory().getAmount(STICKS), 180);
+  player.getInventory().add(new Item(STICKS, 100), false);
+  player.getInventory().add(new Item(STEEL_AXE, 1), false);
+  ShopManager.open(player, 902);
+  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.ITEMS_INTERFACE_ID, slot: 0, itemId: STEEL_AXE, amount: 0 });
+  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.INVENTORY_INTERFACE_ID, slot: 1, itemId: STEEL_AXE, amount: 0 });
   buy(player, 0, STEEL_AXE);
-  assert.equal(player.messages.at(-1), "You don't have enough trade sticks.");
-  sell(player, 1);
-  assert.deepEqual(stockOf(GEM_SHOP), [[STEEL_AXE, 5], [RED_TOPAZ, 0]], "a stocked line takes sales back into stock");
+  assert.deepEqual(player.messages, [
+    "Steel axe: currently costs 200 trade sticks.",
+    "Steel axe: shop will buy for 170 trade sticks.",
+    "You don't have enough trade sticks.",
+  ]);
 });

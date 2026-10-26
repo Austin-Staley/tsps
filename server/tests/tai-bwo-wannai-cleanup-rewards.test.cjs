@@ -154,59 +154,41 @@ test("Trade-Co-op waits for \"What do you do here?\"; asking it unlocks both sho
   assert.ok(pending(p).options.includes('Can you open the shop please?'));
 });
 
-test('the Cooperative: the recorded 30 lines, 120% to buy, 60% back, with the recorded messages', (t) => {
+test('Trade-Co-op opens the generated Cooperative, with the live message wording', (t) => {
   const p = villager(t, { sticks: 3000 });
   p.setAttribute(Shop.ASKED_ATTRIBUTE, true);
   login(p);
   npcOp(p, 'tbwcu_gabooty', 3);
-  const { stock } = shopState(p);
-  assert.equal(stock.length, 30);
-  assert.deepEqual(stock.slice(5, 8).map((entry) => entry.itemId), ['machette_opal', 'machette_jade', 'machette_redtopaz'].map(obj));
-  assert.deepEqual([stock[13].amount, stock[21].amount, stock[29].amount], [0, 0, 0], 'uncut opal, opal and the gout tuber at 0');
-  value(p, 'red_topaz');
-  value(p, 'machette_redtopaz');
+  const shop = shopState(p);
+  assert.equal(shop.name, "Gabooty's Tai Bwo Wannai Cooperative. (Default)");
+  assert.equal(Shop.shopId(shop.name), core.ShopDefinition.all().find((d) => d.getName() === shop.name).getId(), 'the generated shop');
+  assert.ok(slotOf(p, 'machette_redtopaz') >= 0);
   value(p, 'tbw_villager_hat_cream');
-  assert.deepEqual(p.messages, [
-    'Red topaz: currently costs 240 trade sticks.',
-    'Red topaz machete: currently costs 2,400 trade sticks.',
-    'Villager hat: currently costs 240 trade sticks.',
-  ]);
-  // Selling gems in: 60%, and the 0 line stays 0 (01858: red topaz +120, jade +90).
-  give(p, 'red_topaz');
-  give(p, 'jade');
-  give(p, 'uncut_red_topaz');
-  p.messages.length = 0;
-  shopAction(p, 'value', 3823, p.getInventory().getItems().findIndex((i) => i?.getId() === obj('uncut_red_topaz')), obj('uncut_red_topaz'));
-  assert.deepEqual(p.messages, ['Uncut red topaz: shop will buy for 24 trade sticks.']);
-  sell(p, 'red_topaz');
-  sell(p, 'jade');
-  assert.equal(held(p, STICKS), 3000 + 120 + 90);
-  assert.equal(shopState(p).stock[slotOf(p, 'red_topaz')].amount, 0, 'not added to the stock');
-  buy(p, 'red_topaz');
-  assert.equal(held(p, 'red_topaz'), 0, 'nothing to buy at 0');
-  // A full villager set (5 pieces) is 1,200 (01102).
-  for (const piece of ['shirt', 'robe', 'hat', 'sandals', 'armband']) buy(p, `tbw_villager_${piece}_yellow`);
-  assert.equal(held(p, STICKS), 3210 - 1200);
+  const price = shop.stock[slotOf(p, 'tbw_villager_hat_cream')].price;
+  assert.deepEqual(p.messages, [`Villager hat: currently costs ${price.toLocaleString('en-US')} trade sticks.`]);
+  buy(p, 'tbw_villager_hat_cream');
+  assert.equal(held(p, 'tbw_villager_hat_cream'), 1);
+  assert.equal(held(p, STICKS), 3000 - price);
 });
 
-test('Karamja gloves worn: 100% to buy, 80% back, from Trade-Co-op and from his transcript', (t) => {
+test('Karamja gloves worn: the gloves version opens, from Trade-Co-op and from his transcript', (t) => {
   const p = villager(t, { sticks: 2500 });
   p.setAttribute(Shop.ASKED_ATTRIBUTE, true);
   login(p);
   p.getEquipment().setItem(Equipment.HANDS_SLOT, new Item(obj('atjun_gloves_med'), 1));
   npcOp(p, 'tbwcu_gabooty', 3);
   assert.equal(shopState(p).name, "Gabooty's Tai Bwo Wannai Cooperative. (Karamja gloves)");
-  buy(p, 'machette_redtopaz');
-  assert.equal(held(p, STICKS), 500, 'red topaz machete for 2,000 (01858)');
-  give(p, 'red_topaz');
-  sell(p, 'red_topaz');
-  assert.equal(held(p, STICKS), 660);
-  // The transcript's open_shop picks the same version.
   core.ShopManager.close(p);
   p.setStatus(core.PlayerStatus.NONE);
   npcOp(p, 'tbwcu_gabooty', 1);
   play(p, ['Can you open the shop please?']);
   assert.equal(shopState(p)?.name, "Gabooty's Tai Bwo Wannai Cooperative. (Karamja gloves)");
+  // Taken off, the Default version again.
+  core.ShopManager.close(p);
+  p.setStatus(core.PlayerStatus.NONE);
+  p.getEquipment().setItem(Equipment.HANDS_SLOT, null);
+  npcOp(p, 'tbwcu_gabooty', 3);
+  assert.equal(shopState(p).name, "Gabooty's Tai Bwo Wannai Cooperative. (Default)");
 });
 
 test("too few sticks: \"You don't have enough trade sticks.\"", (t) => {

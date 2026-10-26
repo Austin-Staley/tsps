@@ -1,22 +1,17 @@
 /**
- * Tai Bwo Wannai Cleanup: Gabooty's shops, where the trading sticks are spent.
+ * Tai Bwo Wannai Cleanup: Gabooty's shops, where the trading sticks are spent
+ * (https://oldschool.runescape.wiki/w/Gabooty%27s_Tai_Bwo_Wannai_Cooperative.).
  *
- * The Cooperative (https://oldschool.runescape.wiki/w/Gabooty%27s_Tai_Bwo_Wannai_Cooperative.)
- * sells at 120% of an item's value and buys at 60%; with Karamja gloves worn, 100% and 80%
- * (Wiki). It lists 30 lines in the order rsprox 227/01858 shows them (tick 17116), the gems and
- * the gout tuber at 0: they are bought (red topaz +120, jade +90 in 01858) but never join the
- * stock, which stays at 0 after a sale; what is sold back into a stocked line (a machete) is
- * stocked as in any shop. The generated shops.json has only the 23 stocked lines and
- * no prices, so both versions are given here (registerDefinitionSource), with the Wiki's store
- * multipliers. The two versions keep their own stock.
- *
- * Both of Gabooty's shops open only once the player has asked him "What do you do here?" (Wiki);
- * his transcript's "Can you open the shop please?" is guarded by that. Trade-Co-op and
+ * The generated shops.json splits each into a Default and a Karamja gloves version; the gloves
+ * one opens while any Karamja gloves are worn (Wiki), from Trade-Co-op and from his transcript's
+ * open_shop steps. Both shops open only once the player has asked Gabooty "What do you do here?"
+ * (Wiki); his transcript's "Can you open the shop please?" is guarded by that. Trade-Co-op and
  * Trade-Drinks before it play his conversation instead (not recorded). The generated data binds
  * both shops to op 3, which Shopkeepers drops as a conflict, so the ops are bound here.
+ *
+ * Data gap: the generated shops lack the Wiki's 0-stock gem and gout tuber lines and its
+ * 120%/60% (100%/80% with gloves) prices; selling gems to Gabooty waits on the shop import.
  */
-const fs = require("fs");
-const path = require("path");
 const Common = require("./Common.TaiBwoWannaiCleanup");
 
 const ASKED_ATTRIBUTE = "tai-bwo-wannai-cleanup:asked-gabooty";
@@ -39,33 +34,6 @@ function versionFor(player, shop) {
 
 function shopId(name) {
   return Common.core.ShopDefinition.all().find((definition) => definition.getName() === name)?.getId() ?? null;
-}
-
-/** The generated ids of the Cooperative's two versions, read from shops.json by name. */
-function generatedIds() {
-  const file = path.join(Common.core.GameConstants.DEFINITIONS_DIRECTORY, "shops.json");
-  const shops = JSON.parse(fs.readFileSync(file, "utf8"));
-  const ids = new Map();
-  for (const version of Object.keys(shopData().versions)) {
-    const found = shops.find((shop) => shop?.name === versionName(shopData().coop, version));
-    if (found) ids.set(version, found.id);
-  }
-  return ids;
-}
-
-/** Both Cooperative versions, with the recorded stock order and the Wiki's multipliers. */
-function cooperativeDefinitions() {
-  const { currency, coop, multipliers, stock } = shopData();
-  const originalStock = stock.map(([item, amount, restockTicks]) => ({ id: Common.objId(item), amount, restockTicks }));
-  return [...generatedIds()].map(([version, id]) => ({
-    id,
-    name: versionName(coop, version),
-    currency,
-    originalStock,
-    sellMultiplier: multipliers[version].sell,
-    buyMultiplier: multipliers[version].buy,
-    emptyLinesStayEmpty: true,
-  }));
 }
 
 const isGabooty = (event) => event.definition?.getName?.() === "Gabooty";
@@ -113,7 +81,6 @@ function canShop(event) {
 
 function attachShop(api) {
   api.persistAttribute(ASKED_ATTRIBUTE, false);
-  api.registerDefinitionSource("shops", { name: "tai-bwo-wannai-cooperative", load: cooperativeDefinitions });
   api.onNpcInteraction("Gabooty", { "Trade-Co-op": tradeCoop, "Trade-Drinks": tradeDrinks });
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onNpcDialogueCondition(answerCondition);
@@ -121,4 +88,4 @@ function attachShop(api) {
   api.onCanShop(canShop);
 }
 
-module.exports = { attachShop, ASKED_ATTRIBUTE, wearsKaramjaGloves, versionFor, shopId, cooperativeDefinitions, answerCondition };
+module.exports = { attachShop, ASKED_ATTRIBUTE, wearsKaramjaGloves, versionFor, shopId, answerCondition };
