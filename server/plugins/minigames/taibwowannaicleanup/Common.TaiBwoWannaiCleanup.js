@@ -48,6 +48,20 @@ function later(player, ticks, action) {
   })());
 }
 
+/** Runs `action` `ticks` ticks from now (at least one), whoever is logged in. */
+function afterTicks(ticks, action) {
+  const { Task, TaskManager } = core;
+  TaskManager.submit(new (class extends Task {
+    constructor() {
+      super(Math.max(1, ticks), null, false);
+    }
+    execute() {
+      this.stop();
+      action();
+    }
+  })());
+}
+
 function varbit(player, name, value) {
   player.getPacketSender().sendVarbit(cache().getVarbitId(data.varbits[name] ?? name), value);
 }
@@ -143,7 +157,7 @@ function advance(player, stage) {
 }
 
 module.exports = {
-  init, ATTR, later, varbit, animate, sound, message, spam, statement, level, xp, locId, objId, seqId,
+  init, ATTR, later, afterTicks, varbit, animate, sound, message, spam, statement, level, xp, locId, objId, seqId,
   wieldedMachete, hasMachete, questComplete, progress, advance, onStop, stopActions, pauseOnLevelUp, interrupted,
   get api() { return api; },
   get core() { return core; },

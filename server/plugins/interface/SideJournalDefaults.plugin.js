@@ -55,6 +55,8 @@ let pluginApi;
 function mountSideJournalContent(player, groupId, tabIndex) {
   player.getPacketSender().sendSubInterface(SIDE_JOURNAL_TAB_CONTAINER_UID, groupId);
   player.getPacketSender().sendVarbit(VARBIT_SIDE_JOURNAL_SELECTED_TAB, tabIndex);
+  // Other journal content (the Leagues tab) learns its panel was replaced.
+  pluginApi?.emitCustomEvent("journal:tab-mounted", { player, groupId, tabIndex });
   if (groupId === INTERFACE_QUEST_LIST_ID) {
     // The client renders the quest list only while 399 is mounted and purges the
     // row flags on unmount, so the quest runtime repopulates on every open.
