@@ -91,13 +91,26 @@ export class BugReportPlugin extends Plugin {
      * The screenshot is never attached automatically: copy it first, then paste it in.
      */
     openIssue(): void {
-        const description = redactAddresses(this.state.description.trim());
-        if (!description) return;
-        const title = description.split("\n")[0] ?? description;
-        const diagnostics = collectBugDiagnostics(this.client, this.logs);
-        const url = buildIssueUrl(title, description, formatDiagnosticsSection(diagnostics));
-        window.open(url, "_blank", "noopener,noreferrer");
-        this.update({ notice: "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V." });
+        try {
+            const description = redactAddresses(this.state.description.trim());
+            if (!description) return;
+            const title = description.split("\n")[0] ?? description;
+            const diagnostics = collectBugDiagnostics(this.client, this.logs);
+            const url = buildIssueUrl(title, description, formatDiagnosticsSection(diagnostics));
+            const opened = window.open(url, "_blank", "noopener,noreferrer");
+            if (!opened) {
+                this.update({
+                    notice: "The popup was blocked: allow popups for this site, then press Open GitHub issue again.",
+                });
+                return;
+            }
+            this.update({ notice: "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V." });
+        } catch (error) {
+            console.warn("[bug-report] open issue failed", error);
+            this.update({
+                notice: `Couldn't open the issue page: ${error instanceof Error ? error.message : String(error)}`,
+            });
+        }
     }
 
     /** Copies the game screenshot to the clipboard, waiting for an in-flight capture. */
