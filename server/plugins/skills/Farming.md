@@ -51,7 +51,8 @@ This is **not a verified 1:1 implementation**. In particular:
   (120 seconds), including time offline. Woodcutting Guild redwoods retain
   Forestry's 440-tick depletion timer and 199-tick respawn.
 - Geomancy, storage, contracts, and Tithe rewards use existing dialogue menus;
-  the original dedicated interfaces and Tithe overlay are not reproduced.
+  their original dedicated interfaces are not reproduced. The native Tithe
+  status overlay is mounted during a run (details below).
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
@@ -68,6 +69,24 @@ This is **not a verified 1:1 implementation**. In particular:
   included in the patch coverage claim. No in-game or smoke tests were run.
 
 ## Verification
+
+### Native Tithe status overlay
+
+The revision241 cache resolves `hosidius_strip_farming` to group241 and
+`toplevel_osrs_stretch:overlay_hud` to161:8. Entry/relogin mounts this existing
+overlay; its onLoad1193 and renderer1195 read `hosidius_tithe_type`4901,
+`hosidius_tithe_score`4900 and `hosidius_tithe_rewardpoints`4893. Existing
+inventory/varp transmit scripts refresh the fruit icon, batch count and points.
+Planting the final seed does not clear the selected crop. Leaving/logging out
+closes the interface only if the Tithe group is still mounted, preserving any
+replacement HUD. `zeah_tithe_minigame_unlocked`4909 stays unlocked on exit.
+
+Sources: local cache widget241 and scripts1193/1195, plus the
+[Tithe Farm](https://oldschool.runescape.wiki/w/Tithe_Farm) batch/point rules.
+The local RSProx index has no recording naming this overlay; exact packet timing
+is not claimed. Regression checks use real Player inventories and PacketSender
+mount tracking for all three crops, relog, last-seed planting, deposit and cleanup.
+The reward shop remains a separate interface gap.
 
 Coral yields use the post-19-August-2026 six harvest lives and the published
 low/high calculator endpoints: Elkhorn 85/182, Pillar 25/180 and Umbral -50/178.
