@@ -486,6 +486,29 @@ test("a gem pre-roll hit gives a gem instead of the ore: no XP, no sound, the ro
   }
 });
 
+test("a gem going into an open gem bag: the find line first, then the bag's (Wiki Transcript:Gem bag)", () => {
+  const GemBag = require("../plugins/items/storage/GemBag.StorageItems");
+  const player = createPlayer();
+  // An open gem bag answering "storage:gather" as StorageItems does: it takes the gem and says so.
+  const h = harness({
+    emit: (key, request) => {
+      if (key !== "storage:gather") return;
+      request.stored = request.amount;
+      request.player.sendMessage(GemBag.STRAIGHT_IN);
+    },
+  });
+  const restoreRandom = scriptRandom([face(255), 0.6], 0.99);
+  const { restore } = mineRock(h, player, "Iron rocks", loc("ironrock1"));
+  try {
+    h.tick(2);
+    assert.deepEqual(player.messages.slice(-2), ["You just found a Sapphire!", GemBag.STRAIGHT_IN]);
+    assert.deepEqual(player.added, [], "the bag took it");
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
 test("a charged amulet of glory adds a 3/256 gem roll when the first one misses", () => {
   const { ItemIdentifiers } = core;
   for (const [amulet, expected] of [[ItemIdentifiers.AMULET_OF_GLORY_4_, ItemIds.UNCUT_SAPPHIRE], [ItemIdentifiers.AMULET_OF_ETERNAL_GLORY, ItemIds.UNCUT_SAPPHIRE], [ItemIdentifiers.AMULET_OF_GLORY, ItemIds.IRON_ORE], [-1, ItemIds.IRON_ORE]]) {

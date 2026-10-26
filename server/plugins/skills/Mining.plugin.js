@@ -366,11 +366,14 @@ function rollAttempt(player, rock) {
   return { outcome: rock.outcomes ? rollOutcome(rock) : null };
 }
 
-/** A gem-table hit: the gem (or nothing), no XP, and the rock is left as it was. */
+/**
+ * A gem-table hit: the gem (or nothing), no XP, and the rock is left as it was. The find line comes
+ * before an open gem bag's own line (Wiki Transcript:Gem bag).
+ */
 function giveGem(player, { itemId }) {
   if (itemId == null) return;
-  giveOre(player, itemId, 1);
   player.sendMessage(gemMessage(itemId));
+  giveOre(player, itemId, 1);
 }
 
 function outcomeAmount(outcome) {
