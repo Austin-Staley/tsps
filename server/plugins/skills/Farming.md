@@ -50,7 +50,7 @@ This is **not a verified 1:1 implementation**. In particular:
   1/11 roll per successful log and regrows independently after 200 game ticks
   (120 seconds), including time offline. Woodcutting Guild redwoods retain
   Forestry's 440-tick depletion timer and 199-tick respawn.
-- Geomancy, seed-vault storage, contracts, and Tithe rewards use existing
+- Seed-vault storage, contracts, and Tithe rewards use existing
   dialogue menus; their original dedicated interfaces are not reproduced.
   Leprechaun storage uses the native main and side screens described below.
   The native Tithe status overlay is mounted during a run (details below).
@@ -105,7 +105,7 @@ tick 5769) supplies the exact refusal text. That recording is a Leagues world;
 no League rune-restoration, timing or reward rules are imported. The
 [Geomancy article](https://oldschool.runescape.wiki/w/Geomancy) documents
 the ordinary 65 Magic, 60 XP and 3 astral/3 nature/8 earth rune cost.
-The dedicated native interface remains a separate fidelity limit above.
+Geomancy uses the native Farming browser described below.
 
 Ordinary tree stumps yield one to four roots at eight-level intervals above
 the crop's planting level: oak 15/23/31/39, willow 30/38/46/54, maple
@@ -289,4 +289,4 @@ worlds, so no League resource/timing rules are imported. The
 ordinary 65 Magic requirement, 3 astral/3 nature/8 earth cost and 60 XP.
 `farming-geomancy-input.test.cjs` drives widget packets through the real network
 dispatcher, with all plugins and real Player/Inventory/PacketSender objects.
-The native Geomancy browser remains separate interface work.
+The native Geomancy browser is documented in [farming-geomancy.md](../../docs/farming-geomancy.md).
