@@ -107,13 +107,14 @@ export class BugReportPlugin extends Plugin {
         }
     }
 
-    /** Copies the game screenshot to the clipboard, waiting for an in-flight capture. */
+    /** Takes a fresh screenshot and copies it; never copies the frame the panel opened with. */
     async copyScreenshotToClipboard(): Promise<void> {
         await this.captureFlight;
-        if (!this.state.screenshot && !this.state.capturing) {
-            await this.takeScreenshot();
-        }
-        const screenshot = this.state.screenshot;
+        const previous = this.state.screenshot;
+        // Always capture again: a copy on click is "the game as it is now", not the frame the
+        // panel opened with. The previous frame only stands in when the capture yields nothing.
+        await this.takeScreenshot();
+        const screenshot = this.state.screenshot ?? previous;
         if (!screenshot) {
             this.update({ notice: "No screenshot to copy: log in to take one, or paste your own." });
             return;
