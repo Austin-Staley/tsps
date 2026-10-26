@@ -83,6 +83,7 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] }
     setPositionToFace() {},
     forceChat() {},
     sendMessage: (message) => state.messages.push(message),
+    getDialogueManager: () => ({ startDialogues: () => { state.mesboxes = (state.mesboxes ?? 0) + 1; } }),
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getSkillManager: () => ({
@@ -747,4 +748,53 @@ test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets
   } finally {
     for (const name of answers) delete hooks.answers[name];
   }
+});
+
+/** A real Player whose packet sender records game messages; levels set through its SkillManager. */
+function realPlayer(x, y, z, agility) {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = new Player(null);
+  const messages = [];
+  const sender = new Proxy({ sendMessage: (text) => (messages.push(text), sender) }, { get: (target, key) => target[key] ?? (() => sender) });
+  player.getPacketSender = () => sender;
+  player.setUsername(`crevice${Math.random()}`.slice(0, 12));
+  player.setRegistered(true);
+  player.setLocation(new Location(x, y, z));
+  player.getSkillManager().setCurrentLevel(Skill.AGILITY, agility, false).setMaxLevels(Skill.AGILITY, agility, false);
+  return { player, messages };
+}
+
+test("the Waterbirth crevice goes one way, from the crab room down; from below it's slippery", () => {
+  const CREVICE = 53258;
+  // From the crab room (rsprox 1057, 1851, 3433): crawl, then out at the foot.
+  const down = realPlayer(1852, 4406, 3, 81);
+  assert.notEqual(operate(down.player, CREVICE, [1853, 4406, 3]), false);
+  assert.deepEqual(tileOf(down.player), [1862, 4406, 1]);
+  assert.ok(down.messages.includes("You crawl through the narrow crevice."));
+  assert.equal(down.player.getMovementQueue().isMovementBlocked(), false);
+
+  // From below (rsprox 2950): the game message and the same line in a message box; no move.
+  const slip = "You try to go up the crevice, but it's slippery and you slide back down. Looks like this is one way only.";
+  const up = realPlayer(1862, 4406, 1, 99);
+  operate(up.player, CREVICE, [1861, 4406, 1]);
+  assert.deepEqual(tileOf(up.player), [1862, 4406, 1]);
+  assert.deepEqual(up.messages, [slip]);
+  assert.ok(up.player.getDialogueManager().getCurrent(), "the message box is open");
+  // Clicking again only repeats the refusal; a low level below gets the same slip, not a level check.
+  operate(up.player, CREVICE, [1861, 4406, 1]);
+  assert.deepEqual(tileOf(up.player), [1862, 4406, 1]);
+  assert.deepEqual(up.messages, [slip, slip]);
+  const novice = realPlayer(1862, 4406, 1, 1);
+  operate(novice.player, CREVICE, [1861, 4406, 1]);
+  assert.deepEqual(novice.messages, [slip]);
+
+  // Below the level, the crab room side refuses before anything moves.
+  const low = realPlayer(1852, 4406, 3, 80);
+  operate(low.player, CREVICE, [1853, 4406, 3]);
+  assert.deepEqual(tileOf(low.player), [1852, 4406, 3]);
+  assert.deepEqual(low.messages, ["You need an Agility level of at least 81 to attempt this."]);
+});
+
+test("a refuse entry is a message or a mesbox, and nothing else", () => {
+  assert.throws(() => build({ name: "x", object: 1, level: 1, refuse: { text: "no" } }, 0), /refuse needs a message or a mesbox/);
 });
