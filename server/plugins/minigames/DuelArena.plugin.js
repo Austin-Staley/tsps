@@ -321,7 +321,7 @@ function end(session, loser) {
   const fought = session.stage === "fight";
   // Remove both links before resetting players: death/close/disconnect may re-enter.
   for (const player of session.players) sessions.delete(player);
-  // A duel fought to a finish: its record (the Emir's Arena scoreboards hear it).
+  // A duel that reached the arena and has a loser: its record (the Emir's Arena scoreboards hear it).
   const winner = fought && loser ? session.players.find(player => player !== loser) : null;
   if (winner) pluginApi.emitCustomEvent("duelarena:duel-won", { winner, loser });
   for (const player of session.players) {

@@ -4,13 +4,16 @@
  * The Emir's Arena scoreboards (pvpa_scoreboard, "Scoreboard": View), interface
  * pvp_arena_scoreboard. Wiki (Scoreboard (Emir's Arena)): "Records how many fights you've been
  * in"; away from the PvP Arena world it shows the reader's Legacy Duels record. This server has
- * the legacy duels only (DuelArena.plugin.js), so the board shows those: a duel fought to a
- * finish counts a win for one player and a loss for the other. A duel declined before the fight,
- * or one that ends with nobody beaten, counts for neither.
+ * the legacy duels only (DuelArena.plugin.js), so the board shows those. A duel that reaches the
+ * arena and has a loser counts a win for one player and a loss for the other: a death, a forfeit,
+ * leaving the arena or logging out, including during the 3-2-1 countdown (the plugin's fight
+ * stage starts there). When both die in the same tick, the first death processed loses, as the
+ * stake settlement already decides. A duel declined before the arena, or one that ends with
+ * nobody beaten, counts for neither.
  *
- * Not from a recording or the Wiki: the board's wording. The cache's onLoad writes the title
- * ("Arena Scoreboard"); the text line under it is the server's, "Legacy Duels", then the wins
- * and losses.
+ * Not from a recording or the Wiki: the board's wording. The cache's onLoad (script 227, the
+ * generic frame script) writes only the title, "Arena Scoreboard"; no cache script reads a var
+ * for the text, so the line under it is the server's: "Legacy Duels", then the wins and losses.
  */
 
 const SCOREBOARD_LOC = "pvpa_scoreboard";
@@ -28,7 +31,7 @@ function bump(player, attribute) {
   player.setAttribute(attribute, count(player.getAttribute(attribute)) + 1);
 }
 
-/** A legacy duel fought to a finish, from DuelArena.plugin.js's duelarena:duel-won event. */
+/** A legacy duel with a loser, from DuelArena.plugin.js's duelarena:duel-won event. */
 function duelWon({ winner, loser }) {
   if (!winner || !loser || winner === loser) return;
   bump(winner, WINS_ATTRIBUTE);

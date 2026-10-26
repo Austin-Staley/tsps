@@ -15,7 +15,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const DuelArena = require('../plugins/minigames/DuelArena.plugin');
 const Scoreboard = require('../plugins/minigames/duelarena/Scoreboard.DuelArena');
 
-const hooks = { objects: {}, custom: {}, persisted: new Map() };
+const hooks = { objects: {}, custom: {}, persisted: new Map(), options: [], deaths: [], logouts: [] };
 let INTERFACE, BOARD, TEXT;
 let index = 1;
 
@@ -28,6 +28,9 @@ before(() => {
     onObjectInteraction: (name, actions) => { (hooks.objects[name] ??= []).push(actions); },
     onCustomEvent: (name, handler) => { (hooks.custom[name] ??= []).push(handler); },
     emitCustomEvent: (name, payload) => { for (const handler of hooks.custom[name] ?? []) handler(payload); },
+    onPlayerOption: (handler) => hooks.options.push(handler),
+    onPlayerDeath: (handler) => hooks.deaths.push(handler),
+    onPlayerLogout: (handler) => hooks.logouts.push(handler),
   }, { get: (target, key) => target[key] ?? noop }); // DuelArena's other hooks are not under test
   DuelArena.register(api);
   const cache = api.core.CacheDefinitions;
@@ -53,12 +56,19 @@ function realPlayer(t) {
   return p;
 }
 
-/** A legacy duel between a and b at `stage`, ended the way DuelArena.plugin.js ends one. */
-function duel(a, b, stage, loser) {
+/** A legacy duel between a and b at `stage`, as DuelArena.plugin.js keeps one once both accept. */
+function begin(a, b, stage) {
   const session = { players: [a, b], mask: 0, accepted: new Set(), offers: new Map([[a, new Map()], [b, new Map()]]), stage };
-  DuelArena._test.sessions.set(a, session);
-  DuelArena._test.sessions.set(b, session);
-  DuelArena._test.end(session, loser);
+  for (const [player, other] of [[a, b], [b, a]]) {
+    DuelArena._test.sessions.set(player, session);
+    player.getDueling().setInteract(other);
+  }
+  return session;
+}
+
+/** ...ended the way the plugin ends one. */
+function duel(a, b, stage, loser) {
+  DuelArena._test.end(begin(a, b, stage), loser);
 }
 
 function view(player, objectId = BOARD) {
@@ -84,6 +94,21 @@ test('a duel fought to a finish counts a win and a loss, each for its own player
   assert.ok(a.sent.messages.includes('You won the duel!'));
   duel(a, b, 'fight', a);
   duel(a, b, 'fight', b);
+  view(a);
+  view(b);
+  assert.equal(board(a), 'Legacy Duels<br><br>Wins: 2<br>Losses: 1');
+  assert.equal(board(b), 'Legacy Duels<br><br>Wins: 1<br>Losses: 2');
+});
+
+test("through the plugin's own hooks: a forfeit, a death and a logout each lose the duel", (t) => {
+  const a = realPlayer(t);
+  const b = realPlayer(t);
+  begin(a, b, 'fight'); // the 3-2-1 countdown counts as the fight: forfeiting then loses too
+  for (const handler of hooks.options) handler({ player: b, target: a, option: 6, handled: false }); // Forfeit
+  begin(a, b, 'fight');
+  for (const handler of hooks.deaths) handler({ player: a, killer: b, handled: false });
+  begin(a, b, 'fight');
+  for (const handler of hooks.logouts) handler({ player: b });
   view(a);
   view(b);
   assert.equal(board(a), 'Legacy Duels<br><br>Wins: 2<br>Losses: 1');
@@ -141,7 +166,7 @@ test('the cache places both boards at the arena, each with an open tile beside i
     assert.ok(object, `${x},${y}`);
     const def = ObjectDefinition.forId(BOARD);
     const rotated = object.getFace() % 2 === 1;
-    const [w, l] = rotated ? [def.getSizeY?.() ?? 3, def.getSizeX?.() ?? 2] : [def.getSizeX?.() ?? 2, def.getSizeY?.() ?? 3];
+    const [w, l] = rotated ? [def.getSizeY(), def.getSizeX()] : [def.getSizeX(), def.getSizeY()];
     let reachable = 0;
     for (let dx = -2; dx <= w + 1; dx++) for (let dy = -2; dy <= l + 1; dy++) {
       const tile = { getLocation: () => new Location(x + dx, y + dy, 0), getSize: () => 1, getPrivateArea: () => null };
