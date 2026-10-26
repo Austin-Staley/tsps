@@ -83,6 +83,8 @@ checks are not an interactive visual certification.
   missing completion-item recovery through Talk.
 - The QA server was stopped through its gameUpdate command after saving.
 
-This completes the current active Adventure Paths item, not the whole
-Clues, achievements & collections section. Other tracker entries need their own
-source and gameplay audits.
+The Jon/progression/modal route is implemented here. A companion integration is
+still needed for the native journal icon (629:26): the existing client maps that
+tab to generic menu 187, rather than the Adventure Paths focus panel 644. Its
+Disable operation must also be wired. This item and the overall Clues,
+achievements & collections section are not yet certified complete.

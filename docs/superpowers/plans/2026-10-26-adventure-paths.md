@@ -42,6 +42,12 @@
 
 ### Task4: Ship
 
-- [ ] Final exact-source full suite (build, focused tests, native walkthrough and client VM have passed).
+- [x] Implementation6bc2196df full suite:8219/8219; build, focused27, native walkthrough and client VM pass.
 - [x] IndependentCodex review, fix/retest anddescribe limitations accurately.
 - [ ] Commit, push fork, open ready PR, attach and update coordination. Owned QA servers are stopped.
+
+## Follow-up discovered during the broader section audit
+
+The native journal icon629:26 and its Disable operation need a separate companion
+patch. Existing client tab3 maps to generic menu187; current Adventure Paths focus
+is644. Keep the item claim open until that integration is verified.
