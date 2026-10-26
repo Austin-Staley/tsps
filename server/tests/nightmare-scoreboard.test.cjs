@@ -78,9 +78,16 @@ function click(player, objectId) {
   return false;
 }
 
-/** A kill counted for `player` through Fight.Nightmare.js's own count. */
-function kill(player, phosani, ticks, team = 1) {
-  Fight.Fight.prototype.count.call({ phosani }, player, ticks, team);
+/** A kill, as Fight.Nightmare.js's won() reports it: the world's once, then each player's own count. */
+function kill(players, phosani, ticks) {
+  const team = [].concat(players);
+  Scoreboard.won(phosani, ticks, team.length);
+  for (const player of team) Fight.Fight.prototype.count.call({ phosani }, player, ticks, team.length);
+}
+
+/** Enable precise timing (option_precise_timing), as the settings interface sets it. */
+function precise(player) {
+  player.getPacketSender().sendVarbit(cache.getVarbitId('option_precise_timing'), 1);
 }
 
 /** A death in a dream, through Dream.Nightmare.js's own death hook. */
@@ -103,8 +110,9 @@ test('the Nightmare board: a new reader sees the cache title, zeros and "-"', (t
   assert.equal(text(p, 'ms12'), '-');
 });
 
-test("Phosani's board as rsprox 231/00392 lays it out: 10 kills, no deaths, 7:51.00", (t) => {
+test("Phosani's board as rsprox 231/00392 lays it out, precise timing on: 10 kills, no deaths, 7:51.00", (t) => {
   const p = realPlayer(t);
+  precise(p);
   for (let i = 0; i < 9; i++) kill(p, true, 900);
   kill(p, true, 785); // 7:51.00
   assert.equal(click(p, PHOSANI_BOARD), true);
@@ -117,9 +125,21 @@ test("Phosani's board as rsprox 231/00392 lays it out: 10 kills, no deaths, 7:51
   assert.equal(text(p, 'ms12'), '7:51.00');
 });
 
+test('without precise timing the times are m:ss, as rsprox 234/03284 and the kill messages print them', (t) => {
+  const p = realPlayer(t);
+  kill(p, true, 375); // 3:45
+  click(p, PHOSANI_BOARD);
+  assert.equal(text(p, 'ms2'), '1');
+  assert.equal(text(p, 'ms4'), '0');
+  assert.equal(text(p, 'ms6'), '3:45');
+  assert.equal(text(p, 'ms12'), '3:45');
+  assert.ok(p.sent.messages.some((m) => m.includes('3:45')), 'the kill message agrees');
+});
+
 test('each board keeps its own version: a Nightmare kill is not a Phosani kill', (t) => {
   const p = realPlayer(t);
-  kill(p, false, 400, 5);
+  precise(p);
+  kill(p, false, 400);
   click(p, PHOSANI_BOARD);
   assert.equal(text(p, 'ms2'), '0');
   assert.equal(text(p, 'ms8'), '0');
@@ -132,9 +152,9 @@ test('each board keeps its own version: a Nightmare kill is not a Phosani kill',
 test('a team kill counts once for each player credited, the faster run the world best', (t) => {
   const a = realPlayer(t);
   const b = realPlayer(t);
-  kill(a, false, 500, 2);
-  kill(b, false, 500, 2);
-  kill(b, false, 300, 1);
+  precise(a);
+  kill([a, b], false, 500);
+  kill(b, false, 300);
   click(a, NIGHTMARE_BOARD);
   assert.equal(text(a, 'ms2'), '1');
   assert.equal(text(a, 'ms6'), '5:00.00');
@@ -174,11 +194,20 @@ test('deaths are saved attributes starting at 0, and the world records survive a
   dieInDream(p, true);
   Scoreboard._useFile(file); // as a restart reads it again
   const q = realPlayer(t);
+  precise(q);
   click(q, PHOSANI_BOARD);
   assert.equal(text(q, 'ms2'), '0', "a reader's own rows are theirs");
   assert.equal(text(q, 'ms8'), '1');
   assert.equal(text(q, 'ms10'), '1');
   assert.equal(text(q, 'ms12'), '4:06.00');
+});
+
+test('a team kill writes the world file once', (t) => {
+  const file = path.join(scratch, 'writes.json');
+  Scoreboard._useFile(file);
+  const writes = t.mock.method(fs, 'renameSync');
+  kill([realPlayer(t), realPlayer(t), realPlayer(t)], false, 600);
+  assert.equal(writes.mock.calls.filter((call) => call.arguments[1] === file).length, 1);
 });
 
 test('reading twice sends the board twice and counts nothing', (t) => {

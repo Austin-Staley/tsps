@@ -8,14 +8,16 @@
  * rsprox 231/00392 (Phosani's board): Read opens nightmare_scoreboard with the title "Phosani's
  * Nightmare Statistics" (title_text), then the player's kill count (ms2), deaths (ms4) and best
  * time (ms6), and the world's kill count (ms8), deaths (ms10) and best time (ms12): "10", "0",
- * "7:51.00", "24,494,091", "4,277,498", "4:06.00". The cache labels the odd rows (Personal
+ * "7:51.00", "24,494,091", "4,277,498", "4:06.00". That player has Enable precise timing on
+ * (option_precise_timing 1); rsprox 234/03284's player hasn't, and its board shows the best time
+ * as "3:45", as the kill messages print it, so times follow the reader's setting. The cache labels the odd rows (Personal
  * Killcount ... Global Best Time) and titles the interface "The Nightmare Statistics", the title
  * the Nightmare's own board keeps (Wiki, Scoreboard (The Nightmare): total kills, deaths and the
  * global best time). The kills and best times are the kill messages' own (Fight.Nightmare.js); a
  * death counts when it wakes the player by the Pool (Dream.Nightmare.js).
  *
- * rsprox 234/03284 writes "3:45" and "-" for the world rows (an event world, it seems); the
- * Wiki's figures and 231/00392 show the world's numbers and m:ss.cc times, which this follows.
+ * rsprox 234/03284 writes "-" in the three world rows (an event world, it seems); the Wiki's
+ * figures and 231/00392 show the world's numbers, which this follows.
  */
 
 const fs = require("node:fs");
@@ -26,15 +28,15 @@ const Common = require("./Common.Nightmare");
 const BOARDS = {
   nightmare: {
     loc: "nightmare_scoreboard", title: "The Nightmare Statistics",
-    kills: Common.KILLS_ATTRIBUTE, best: Common.BEST_ATTRIBUTE, deaths: "nightmare:deaths",
+    kills: Common.KILLS_ATTRIBUTE, best: Common.BEST_ATTRIBUTE, deaths: Common.DEATHS_ATTRIBUTE,
   },
   phosani: {
     loc: "nightmare_challenge_scoreboard", title: "Phosani's Nightmare Statistics",
-    kills: Common.PHOSANI_KILLS_ATTRIBUTE, best: Common.PHOSANI_BEST_ATTRIBUTE, deaths: "nightmare:phosani-deaths",
+    kills: Common.PHOSANI_KILLS_ATTRIBUTE, best: Common.PHOSANI_BEST_ATTRIBUTE, deaths: Common.PHOSANI_DEATHS_ATTRIBUTE,
   },
 };
-const DEATHS_ATTRIBUTE = BOARDS.nightmare.deaths;
-const PHOSANI_DEATHS_ATTRIBUTE = BOARDS.phosani.deaths;
+const { DEATHS_ATTRIBUTE, PHOSANI_DEATHS_ATTRIBUTE } = Common;
+const PRECISE_TIMING_VARBIT = "option_precise_timing";
 const INTERFACE_NAME = "nightmare_scoreboard";
 const COMPONENT = {
   title: "title_text", kills: "ms2", deaths: "ms4", best: "ms6",
@@ -75,10 +77,11 @@ function save() {
   }
 }
 
-/** A player's kill in `ticks`, from Fight.Nightmare.js once it has counted their own. */
-function won(phosani, ticks) {
+/** A kill in `ticks` credited to `players` players, from Fight.Nightmare.js once it has counted theirs. */
+function won(phosani, ticks, players = 1) {
+  if (!count(players)) return;
   const totals = records()[versionOf(phosani)];
-  totals.kills++;
+  totals.kills += count(players);
   const time = count(ticks);
   if (time && (!totals.bestTicks || time < totals.bestTicks)) totals.bestTicks = time;
   save();
@@ -95,26 +98,36 @@ function died(player, phosani) {
 
 const number = (value) => count(value).toLocaleString("en-US");
 
-/** m:ss.cc, as the board shows times (rsprox 231/00392); "-" with none. */
-function formatTicks(ticks) {
+/**
+ * "-" with none; m:ss.cc with precise timing on (rsprox 231/00392), else m:ss as the kill
+ * messages print it (rsprox 234/03284, Common.formatTicks).
+ */
+function formatTicks(ticks, precise = true) {
   const centis = count(ticks) * 60;
   if (!centis) return "-";
+  if (!precise) return Common.formatTicks(count(ticks));
   const minutes = Math.floor(centis / 6000);
   const seconds = Math.floor((centis % 6000) / 100);
   return `${minutes}:${String(seconds).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
 }
 
+function preciseTiming(player) {
+  const id = cache().getVarbitId(PRECISE_TIMING_VARBIT);
+  return id !== null && player.getPacketSender().getVarbit(id) === 1;
+}
+
 function lines(player, version) {
   const board = BOARDS[version];
   const totals = records()[version];
+  const precise = preciseTiming(player);
   return new Map([
     [COMPONENT.title, board.title],
     [COMPONENT.kills, number(player.getAttribute(board.kills))],
     [COMPONENT.deaths, number(player.getAttribute(board.deaths))],
-    [COMPONENT.best, formatTicks(player.getAttribute(board.best))],
+    [COMPONENT.best, formatTicks(player.getAttribute(board.best), precise)],
     [COMPONENT.worldKills, number(totals.kills)],
     [COMPONENT.worldDeaths, number(totals.deaths)],
-    [COMPONENT.worldBest, formatTicks(totals.bestTicks)],
+    [COMPONENT.worldBest, formatTicks(totals.bestTicks, precise)],
   ]);
 }
 

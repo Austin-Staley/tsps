@@ -415,6 +415,7 @@ class Fight {
     this.boss.setNpcTransformationId(this.phosani ? npcs.phosani.dead : npcs.dead);
     this.placeBarriers(Common.data.awaken.barriers.open);
     Loot.reward(this, players);
+    Scoreboard.won(this.phosani, ticks, players.length);
     for (const player of players) {
       this.count(player, ticks, players.length);
       const sender = player.getPacketSender();
@@ -450,7 +451,6 @@ class Fight {
     } else {
       player.sendMessage(duration + kill.personalBest.replace("[time]", Common.formatTicks(best)));
     }
-    Scoreboard.won(this.phosani, ticks);
     const monster = this.phosani ? "Phosani's Nightmare" : "The Nightmare";
     Common.api.emitCustomEvent("combat-achievements:kill", { player, monster, count: kills });
     Common.api.emitCustomEvent("collection-log:count", { player, category: "The Nightmare" });
