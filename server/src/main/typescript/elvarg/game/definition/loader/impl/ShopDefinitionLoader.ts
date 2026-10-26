@@ -30,6 +30,9 @@ interface RawShopDefinition {
     restockTicks?: unknown;
     defaultDestockTicks?: unknown;
     soldItemDestockTicks?: unknown;
+    sellMultiplier?: unknown;
+    buyMultiplier?: unknown;
+    stocksSoldItems?: unknown;
 }
 
 let presetShopPricesEnabled = false;
@@ -133,7 +136,9 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             for (const entry of raw.originalStock as RawShopStockDefinition[]) {
                 const itemId = Number(entry?.id);
                 const amount = this.normalizeAmount(entry?.amount ?? 1);
-                if (!Number.isInteger(itemId) || itemId <= 0 || amount <= 0) {
+                // An explicit 0 is a line the shop lists empty (and buys), as the Wiki's
+                // store tables show them.
+                if (!Number.isInteger(itemId) || itemId <= 0 || (amount <= 0 && entry?.amount !== 0)) {
                     continue;
                 }
                 const price = prices.get(itemId) ?? Number(entry?.price);
@@ -187,8 +192,18 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             defaultRestockTicks,
             defaultDestockTicks,
             soldItemDestockTicks,
-            source
+            source,
+            {
+                sellMultiplier: this.parseMultiplier(raw.sellMultiplier),
+                buyMultiplier: this.parseMultiplier(raw.buyMultiplier),
+                stocksSoldItems: raw.stocksSoldItems !== false,
+            }
         );
+    }
+
+    private parseMultiplier(value: unknown): number | null {
+        const multiplier = Number(value);
+        return value != null && Number.isFinite(multiplier) && multiplier >= 0 ? Math.floor(multiplier) : null;
     }
 
     private normalizeAmount(value: unknown): number {

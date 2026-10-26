@@ -28,6 +28,12 @@ export interface ShopCurrencyHandler {
     name: string;
     /** The inventory item the currency is paid in, if it is one. */
     itemId?: number;
+    /**
+     * How live shop messages name an amount of it ("trade sticks"). When set, price checks and
+     * refusals use OSRS's wording: "Red topaz: currently costs 240 trade sticks.", "... shop will
+     * buy for 120 trade sticks.", "You don't have enough trade sticks.".
+     */
+    unit?: string;
 }
 
 interface RuntimeShop {
@@ -96,7 +102,7 @@ export class ShopManager {
 
     public static registerItemCurrency(
         itemId: number,
-        options?: { name?: string; aliases?: string[] }
+        options?: { name?: string; aliases?: string[]; unit?: string }
     ): void {
         if (!Number.isInteger(itemId) || itemId <= 0) {
             throw new Error(`Invalid item shop currency: ${itemId}`);
@@ -108,6 +114,7 @@ export class ShopManager {
         const handler: ShopCurrencyHandler = {
             name,
             itemId,
+            unit: options?.unit,
             amount: (player) =>
                 Number(player?.getInventory?.()?.getAmount?.(itemId) ?? 0),
             add: (player, amount) => player?.getInventory?.()?.adds?.(itemId, amount),
@@ -553,6 +560,14 @@ export class ShopManager {
             player.sendMessage("This item has no value.");
             return;
         }
+        const unit = this.currencyUnit(shop.definition.getCurrency());
+        if (unit) {
+            player.sendMessage(
+                `${definition.getName()}: ${fromShop ? "currently costs" : "shop will buy for"} ` +
+                `${Misc.insertCommasToNumber(String(price))} ${unit}.`
+            );
+            return;
+        }
         player.sendMessage(
             `${definition.getName()}${fromShop ? " currently costs " : ": shop will buy for "}` +
             `${Misc.insertCommasToNumber(String(price))} x ` +
@@ -605,7 +620,8 @@ export class ShopManager {
             available
         );
         if (quantity <= 0) {
-            player.sendMessage("You can't afford that.");
+            const unit = this.currencyUnit(shop.definition.getCurrency());
+            player.sendMessage(unit ? `You don't have enough ${unit}.` : "You can't afford that.");
             return;
         }
 
@@ -695,7 +711,8 @@ export class ShopManager {
             player.sendMessage("This item has no value.");
             return;
         }
-        if ((shop.stock.get(stockId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
+        const stocks = shop.definition.stocksSoldItems();
+        if (stocks && (shop.stock.get(stockId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
             player.sendMessage("The shop is currently full.");
             return;
         }
@@ -718,7 +735,8 @@ export class ShopManager {
             shop.definition.getCurrency(),
             quantity * price
         );
-        this.addStock(shop, stockId, quantity);
+        // Some shops take what they buy without stocking it (Gabooty's gems stay at 0).
+        if (stocks) this.addStock(shop, stockId, quantity);
         Sounds.sendSound(player, Sound.DROP_ITEM);
         this.refresh(shop.definition.getId());
         this.ensureRestockTask();
@@ -823,8 +841,9 @@ export class ShopManager {
         return removed;
     }
 
+    /** A general store buys anything; any other shop what it lists, a line kept at 0 included. */
     private static buysItem(shop: RuntimeShop, itemId: number): boolean {
-        return this.isGeneralStore(shop) || (shop.originalAmounts.get(itemId) ?? 0) > 0;
+        return this.isGeneralStore(shop) || shop.originalAmounts.has(itemId);
     }
 
     private static isBloodMoneyShopItem(itemId: number): boolean {
@@ -856,7 +875,10 @@ export class ShopManager {
 
     private static sellPrice(shop: RuntimeShop, definition: ItemDefinition): number {
         const buyPrice = this.itemPrice(shop, definition);
-        const price = buyPrice > 1 ? Math.floor(buyPrice * this.SALES_TAX) : buyPrice;
+        const multiplier = shop.definition.getBuyMultiplier();
+        const price = multiplier != null
+            ? Math.floor(this.baseValue(shop, definition) * multiplier / 1000)
+            : buyPrice > 1 ? Math.floor(buyPrice * this.SALES_TAX) : buyPrice;
         const request = {
             shopId: shop.definition.getId(), shopName: shop.definition.getName(),
             itemId: definition.getId(), buyPrice, price,
@@ -870,9 +892,19 @@ export class ShopManager {
         if (override != null && override > 0) {
             return override;
         }
+        const multiplier = shop.definition.getSellMultiplier();
+        const value = this.baseValue(shop, definition);
+        return multiplier != null ? Math.floor(value * multiplier / 1000) : value;
+    }
+
+    private static baseValue(shop: RuntimeShop, definition: ItemDefinition): number {
         return shop.definition.getCurrency() === "BLOOD_MONEY"
             ? Number(definition.getBloodMoneyValue?.() ?? 0)
             : Number(definition.getValue?.() ?? 0);
+    }
+
+    private static currencyUnit(currency: ShopCurrency): string | null {
+        return this.currencyHandlers.get(currency)?.unit ?? null;
     }
 
     private static currencyAmount(player: any, currency: ShopCurrency): number {
