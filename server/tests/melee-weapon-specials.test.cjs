@@ -66,6 +66,7 @@ function fakePlayer({ weaponId, energy = 100, levels = {} }) {
     energy,
     isPlayer: () => true,
     isPlayerBot: () => false,
+    getLocation: () => ({ getX: () => 3200, getY: () => 3200, getZ: () => 0 }),
     getAsPlayer() { return this; },
     getCombatSpecial() { return this.special; },
     isSpecialActivated() { return this.activated; },
