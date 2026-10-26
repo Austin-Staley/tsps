@@ -10,7 +10,7 @@ import { describe, it } from "node:test";
 import { IsaacRandom } from "../src/main/typescript/elvarg/net/security/IsaacRandom";
 import { framePacket, frameServer, isaacPair, readClientPacket, readServerPacket } from "../src/main/typescript/elvarg/net/rev241/Frame";
 import { JagIn, JagOut } from "../src/main/typescript/elvarg/net/rev241/JagBuf";
-import { prepareJs5Buffer, readJs5Request, stripVersionTrailer } from "../src/main/typescript/elvarg/net/rev241/Js5";
+import { buildMasterIndex, prepareJs5Buffer, readJs5Request, stripVersionTrailer, trimToContainer } from "../src/main/typescript/elvarg/net/rev241/Js5";
 import { decodeLoginPacket, encodeLoginPacket } from "../src/main/typescript/elvarg/net/rev241/LoginBlock";
 import { NpcInfoState } from "../src/main/typescript/elvarg/net/rev241/NpcInfo";
 import { CLIENT_PACKET_SIZES, ClientOp, LoginOp, REV241, ServerOp } from "../src/main/typescript/elvarg/net/rev241/opcodes";
@@ -114,6 +114,40 @@ describe("rev 241 bytes", () => {
     if (request?.request.kind === "group") assert.equal(request.request.group, 10);
   });
 
+  it("reads every JS5 message as opcode + 3 bytes (rsprot Js5ClientProt size 3)", () => {
+    const stream = Buffer.from([3, 0, 0, 0, 4, 0x5a, 0, 0, 1, 255, 0, 255]);
+    const a = readJs5Request(stream);
+    assert.deepEqual(a, { request: { kind: "priority", high: false }, consumed: 4 });
+    const b = readJs5Request(stream.subarray(4));
+    assert.deepEqual(b, { request: { kind: "xor", key: 0x5a }, consumed: 4 });
+    const c = readJs5Request(stream.subarray(8));
+    assert.deepEqual(c, { request: { kind: "group", urgent: true, archive: 255, group: 255 }, consumed: 4 });
+    assert.equal(readJs5Request(Buffer.from([4, 1])), null);
+    assert.throws(() => readJs5Request(Buffer.from([6, 0, 0, 0])));
+  });
+
+  it("trims groups to their container instead of always dropping 2 bytes", () => {
+    const table = Buffer.from([0, 0, 0, 0, 3, 9, 8, 7]);
+    assert.deepEqual(trimToContainer(table), table);
+    assert.deepEqual(trimToContainer(Buffer.concat([table, Buffer.from([0, 5])])), table);
+    const gz = Buffer.from([2, 0, 0, 0, 1, 0, 0, 0, 9, 0xaa, 0, 1]);
+    assert.equal(trimToContainer(gz).length, 10);
+  });
+
+  it("builds the 255/255 master index as crc + version per archive", () => {
+    const t0 = Buffer.from([0, 0, 0, 0, 5, 6, 0, 0, 0, 42]);
+    const index = buildMasterIndex(
+      3,
+      (a) => (a === 0 ? t0 : null),
+      (c) => c.subarray(5),
+      () => 0xdeadbeef,
+    );
+    assert.equal(index[0], 0);
+    assert.equal(index.readInt32BE(1), 24);
+    assert.equal(index.readUInt32BE(5), 0xdeadbeef);
+    assert.equal(index.readInt32BE(9), 42);
+    assert.equal(index.readUInt32BE(13), 0);
+  });
   it("pads login OK to the client's hardcoded 37 bytes", () => {
     const packet = encodeLoginOk({ index: 1, member: true, accountHash: 99n });
     assert.equal(packet.length, 2 + LOGIN_OK_PAYLOAD);

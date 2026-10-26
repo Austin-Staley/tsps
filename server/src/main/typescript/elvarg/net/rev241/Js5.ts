@@ -51,32 +51,85 @@ export function stripVersionTrailer(group: Buffer): Buffer {
 
 export type Js5Request =
   | { kind: "group"; urgent: boolean; archive: number; group: number }
+  | { kind: "priority"; high: boolean }
   | { kind: "xor"; key: number };
 
-/** Reads one JS5 request. Returns null if the buffer is short. */
+/**
+ * Every Js5ClientProt message is the opcode plus 3 bytes (rsprot `Js5ClientProt`, size 3):
+ * 0/1 carry archive byte + group short, 2/3 (priority change, sent on login state change)
+ * and 4 (XOR key byte) pad to 3. Treating 2/3 as group requests or reading XOR as 2 bytes
+ * desynchronises the stream. Returns null if the buffer is short.
+ */
+export const JS5_REQUEST_SIZE = 4;
+
 export function readJs5Request(data: Buffer): { request: Js5Request; consumed: number } | null {
   if (data.length < 1) return null;
   const opcode = data[0];
+  if (opcode > Js5Op.XOR) {
+    throw new Error(`rev241 JS5 opcode ${opcode} is not in Js5ClientProtId 0..4`);
+  }
+  if (data.length < JS5_REQUEST_SIZE) return null;
   if (opcode === Js5Op.XOR) {
-    if (data.length < 2) return null;
-    return { request: { kind: "xor", key: data[1] }, consumed: 2 };
+    return { request: { kind: "xor", key: data[1] }, consumed: JS5_REQUEST_SIZE };
   }
-  if (
-    opcode === Js5Op.PREFETCH || opcode === Js5Op.URGENT
-    || opcode === Js5Op.PRIORITY_HIGH || opcode === Js5Op.PRIORITY_LOW
-  ) {
-    if (data.length < 4) return null;
-    const archive = data[1];
-    const group = (data[2] << 8) | data[3];
-    return {
-      request: {
-        kind: "group",
-        urgent: opcode === Js5Op.URGENT || opcode === Js5Op.PRIORITY_HIGH,
-        archive,
-        group,
-      },
-      consumed: 4,
-    };
+  if (opcode === Js5Op.PRIORITY_HIGH || opcode === Js5Op.PRIORITY_LOW) {
+    return { request: { kind: "priority", high: opcode === Js5Op.PRIORITY_HIGH }, consumed: JS5_REQUEST_SIZE };
   }
-  throw new Error(`TODO: rev241 JS5 opcode ${opcode} is not in Js5ClientProtId 0..4`);
+  return {
+    request: {
+      kind: "group",
+      urgent: opcode === Js5Op.URGENT,
+      archive: data[1],
+      group: (data[2] << 8) | data[3],
+    },
+    consumed: JS5_REQUEST_SIZE,
+  };
+}
+
+/**
+ * Cuts a stored group to its container: compression byte, int length, (int uncompressed
+ * length if compressed), payload. Whatever follows (the 2-byte version trailer most
+ * archives carry; archive 255 has none) is dropped. Blindly removing 2 bytes truncated
+ * the reference tables, which have no trailer.
+ */
+export function trimToContainer(group: Buffer): Buffer {
+  if (group.length < 5) return group;
+  const compression = group[0];
+  const length = group.readInt32BE(1);
+  const total = (compression === 0 ? 5 : 9) + length;
+  if (compression > 3 || length < 0 || total > group.length) return group;
+  return group.subarray(0, total);
+}
+
+/**
+ * The JS5 master index (archive 255, group 255), which is not stored in the cache files.
+ * OSRS layout (as RuneLite's cache server and OpenRS2 build it): an uncompressed container
+ * holding, per archive 0..max, the CRC32 of that archive's reference table container and
+ * the table's version (0 when the table predates versioning or the archive is absent).
+ */
+export function buildMasterIndex(
+  archiveCount: number,
+  readTable: (archive: number) => Buffer | null,
+  decompress: (container: Buffer) => Buffer,
+  crc32: (data: Uint8Array) => number,
+): Buffer {
+  const body = Buffer.alloc(archiveCount * 8);
+  for (let archive = 0; archive < archiveCount; archive++) {
+    const raw = readTable(archive);
+    if (!raw || raw.length < 5) continue;
+    const table = trimToContainer(raw);
+    let version = 0;
+    try {
+      const data = decompress(table);
+      if (data.length >= 5 && data[0] >= 6) version = data.readInt32BE(1);
+    } catch {
+      version = 0;
+    }
+    body.writeUInt32BE(crc32(table) >>> 0, archive * 8);
+    body.writeInt32BE(version, archive * 8 + 4);
+  }
+  const header = Buffer.alloc(5);
+  header[0] = 0;
+  header.writeInt32BE(body.length, 1);
+  return Buffer.concat([header, body]);
 }

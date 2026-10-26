@@ -15,7 +15,7 @@ import * as net from "net";
 import type { BinaryChannel } from "../BinaryChannel";
 import type { ClientMessage } from "../protocol/ClientProtocol";
 import { frameServer, isaacPair, readClientPacket } from "./Frame";
-import { prepareJs5Buffer, readJs5Request, stripVersionTrailer } from "./Js5";
+import { buildMasterIndex, prepareJs5Buffer, readJs5Request, trimToContainer } from "./Js5";
 import { decodeLoginPacket, type DecodedLogin } from "./LoginBlock";
 import { LoginOp, REV241, ServerOp } from "./opcodes";
 import { encodeLoginFailure, encodeLoginOk, rebuildNormalTail } from "./Packets";
@@ -278,12 +278,14 @@ class Rev241Socket {
         const revision = this.buffer.readInt32BE(1);
         this.buffer = this.buffer.subarray(21);
         if (revision !== REV241) {
+          console.warn(`[rev241] js5 handshake rejected: client revision ${revision}, bridge expects ${REV241}`);
           this.socket.write(Buffer.from([LoginOp.CLIENT_OUT_OF_DATE]));
           this.socket.end();
           return;
         }
         this.socket.write(Buffer.from([0]));
         this.phase = "js5";
+        console.info(`[rev241] js5 session from ${this.socket.remoteAddress} (revision ${revision})`);
       } else if (opcode === 14) {
         this.buffer = this.buffer.subarray(1);
         this.sessionId = crypto.randomBytes(8).readBigInt64BE();
@@ -306,9 +308,15 @@ class Rev241Socket {
           this.xor = request.request.key;
           continue;
         }
-        const group = this.options.readGroup?.(request.request.archive, request.request.group);
-        if (!group) continue;
-        this.socket.write(prepareJs5Buffer(request.request.archive, request.request.group, stripVersionTrailer(group), this.xor));
+        if (request.request.kind === "priority") continue;
+        const { archive, group: groupId } = request.request;
+        const group = this.options.readGroup?.(archive, groupId);
+        if (!group) {
+          // The client waits forever for a group it asked for; say which one is missing.
+          console.warn(`[rev241] js5 group ${archive}/${groupId} not in cache; client will stall`);
+          continue;
+        }
+        this.socket.write(prepareJs5Buffer(archive, groupId, trimToContainer(group), this.xor));
       }
       return;
     }
@@ -374,12 +382,47 @@ export class Rev241Server {
   }
 }
 
+let masterIndex: Buffer | null = null;
+
 export function readCacheGroup(archive: number, group: number): Buffer | null {
   try {
     const { CachePipeline } = require("../../game/cache/CachePipeline") as typeof import("../../game/cache/CachePipeline");
-    const bytes = CachePipeline.getStore().read(archive, group);
-    return Buffer.from(bytes);
+    const store = CachePipeline.getStore();
+    if (archive === 255 && group === 255) {
+      if (!masterIndex) masterIndex = buildCacheMasterIndex((a, g) => Buffer.from(store.read(a, g)));
+      return masterIndex;
+    }
+    return Buffer.from(store.read(archive, group));
   } catch {
     return null;
   }
+}
+
+/** 255/255 is generated, not stored: see buildMasterIndex. Archives run 0..last present table. */
+export function buildCacheMasterIndex(read: (archive: number, group: number) => Buffer): Buffer {
+  const { Container } = require("../../game/cache/codec/rs/cache/Container") as typeof import("../../game/cache/codec/rs/cache/Container");
+  const { ByteBuffer } = require("../../game/cache/codec/rs/io/ByteBuffer") as typeof import("../../game/cache/codec/rs/io/ByteBuffer");
+  const { crc32 } = require("../../game/cache/codec/rs/util/Crc32") as typeof import("../../game/cache/codec/rs/util/Crc32");
+  const tables = new Map<number, Buffer>();
+  let count = 0;
+  for (let a = 0; a < 255; a++) {
+    try {
+      tables.set(a, read(255, a));
+      count = a + 1;
+    } catch {
+      // absent archive: CRC/version 0
+    }
+  }
+  const out = buildMasterIndex(
+    count,
+    (a) => tables.get(a) ?? null,
+    (container) => {
+      const bytes = new Int8Array(container.buffer, container.byteOffset, container.length);
+      const data = Container.decode(new ByteBuffer(bytes.slice())).data;
+      return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+    },
+    crc32,
+  );
+  console.info(`[rev241] js5 master index: ${count} archives`);
+  return out;
 }
