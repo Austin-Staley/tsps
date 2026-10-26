@@ -283,6 +283,52 @@ describe("rev 241 bytes", () => {
     assert.equal(splitCustomFrames(frame)[0].opcode, 141);
   });
 
+  it("builds frames in write order so ISAAC opcodes stay in step", () => {
+    const observed = {
+      index: 1, x: SPAWN_X, y: SPAWN_Y, z: 0, name: "Test", member: true, npcs: [],
+      appearance: {
+        gender: 0, skull: -1, overhead: -1,
+        kits: [3, 14, 18, 26, 34, 38, 42],
+        colours: [2, 14, 5, 4, 0],
+        equipment: new Array(12).fill(-1),
+        name: "Test", combatLevel: 3, skillLevel: 32,
+      },
+    };
+    const seed = [5, 6, 7, 8];
+    const read = (out: Buffer): number[] => {
+      const ops: number[] = [];
+      let cipher = isaacPair(seed).encode;
+      let rest = out;
+      while (rest.length > 0) {
+        const next = readServerPacket(rest, cipher);
+        assert.ok(next);
+        ops.push(next.packet.opcode);
+        cipher = next.cipher;
+        rest = rest.subarray(next.consumed);
+      }
+      return ops;
+    };
+    const rebuild = Buffer.alloc(7);
+    rebuild.writeUInt16BE(SPAWN_X >> 3);
+    rebuild.writeUInt16BE(SPAWN_Y >> 3, 2);
+    // Browser order: player sync, then the rebuild, then NPC info and the tick.
+    const translator = new Rev241Translator({ observe: () => observed });
+    translator.arm(isaacPair(seed).encode, 1, "Test", true);
+    const out = translator.translate(Buffer.concat([
+      customFrame(20, Buffer.alloc(0), -2),
+      customFrame(141, rebuild, -2),
+      customFrame(21, Buffer.alloc(0), -2),
+      customFrame(1, Buffer.alloc(8), 0),
+    ]));
+    assert.deepEqual(read(out), [ServerOp.REBUILD_NORMAL_V2, ServerOp.PLAYER_INFO, ServerOp.NPC_INFO_SMALL_V6, ServerOp.SERVER_TICK_END]);
+
+    // A first burst without a rebuild still leads with the login rebuild.
+    const early = new Rev241Translator({ observe: () => observed });
+    early.arm(isaacPair(seed).encode, 1, "Test", true);
+    const first = early.translate(Buffer.concat([customFrame(20, Buffer.alloc(0), -2), customFrame(1, Buffer.alloc(8), 0)]));
+    assert.deepEqual(read(first), [ServerOp.REBUILD_NORMAL_V2, ServerOp.PLAYER_INFO, ServerOp.SERVER_TICK_END]);
+  });
+
   it("adds an NPC and then reports no movement", () => {
     const state = new NpcInfoState();
     const added = state.encode(SPAWN_X, SPAWN_Y, [{ index: 4, id: 16673, x: SPAWN_X + 1, y: SPAWN_Y, z: 0 }]);

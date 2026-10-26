@@ -150,10 +150,21 @@ export class Rev241Translator {
   public translate(data: Buffer): Buffer {
     if (!this.loggedIn) return Buffer.alloc(0);
     const frames = splitCustomFrames(data);
+    // ISAAC encrypts each opcode when its frame is built, so frames must be
+    // built in exactly the order they are written. Player and NPC info are
+    // therefore built after the lead packets, never inside the loop.
     const lead: Buffer[] = [];
-    let playerInfo: Buffer | null = null;
-    let npcInfo: Buffer | null = null;
+    let wantPlayerInfo = false;
+    let wantNpcInfo = false;
     let sawTick = false;
+    // The client reads the login rebuild (GPI block + zone) as the very first
+    // game packet. Anything earlier is misparsed, so lead with a rebuild from
+    // the observed player, or hold the burst until the player is observable.
+    const burstRebuilds = frames.some((f) => f.opcode === ServerPacketId.REBUILD_NORMAL || f.opcode === ServerPacketId.REBUILD_REGION);
+    if (this.rebuilds === 0 && !burstRebuilds) {
+      if (!this.observe()) return Buffer.alloc(0);
+      lead.push(this.rebuildNormal(Buffer.alloc(4)));
+    }
     for (const frame of frames) {
       if (frame.opcode === ServerPacketId.WELCOME || frame.opcode === ServerPacketId.HANDSHAKE || frame.opcode === ServerPacketId.LOGIN_RESPONSE) {
         continue;
@@ -163,24 +174,36 @@ export class Rev241Translator {
         continue;
       }
       if (frame.opcode === ServerPacketId.PLAYER_SYNC) {
-        playerInfo = this.playerInfo();
+        wantPlayerInfo = true;
         continue;
       }
       if (frame.opcode === ServerPacketId.NPC_INFO) {
-        npcInfo = this.npcInfo();
+        wantNpcInfo = true;
         continue;
       }
+      if (this.rebuilds === 0 && frame.opcode !== ServerPacketId.REBUILD_NORMAL && frame.opcode !== ServerPacketId.REBUILD_REGION) {
+        // Still waiting for this burst's rebuild; it is translated first below.
+        continue;
+      }
+      if (process.env.REV241_TRACE === "1" && this.traced < 200) console.info(`[rev241] trace in browser op=${frame.opcode} len=${frame.payload.length}`);
       const translated = this.one(frame);
       if (translated) lead.push(translated);
     }
     const out = [...lead];
-    if (playerInfo) out.push(playerInfo);
-    if (npcInfo) out.push(npcInfo);
-    if ((sawTick || out.length > 0) && this.cipher) out.push(frameServer(ServerOp.SERVER_TICK_END, Buffer.alloc(0), this.cipher));
+    if (wantPlayerInfo && this.rebuilds > 0) out.push(this.playerInfo());
+    if (wantNpcInfo && this.rebuilds > 0) out.push(this.npcInfo());
+    if ((sawTick || out.length > 0) && this.cipher && this.rebuilds > 0) out.push(frameServer(ServerOp.SERVER_TICK_END, Buffer.alloc(0), this.cipher));
     return out.length === 0 ? Buffer.alloc(0) : Buffer.concat(out);
   }
 
+  private traced = 0;
+
   private frame(opcode: number, payload: Buffer): Buffer {
+    if (process.env.REV241_TRACE === "1" && this.traced < 200) {
+      this.traced++;
+      const seen = this.observe();
+      console.info(`[rev241] trace out op=${opcode} len=${payload.length} rebuilds=${this.rebuilds} seen=${seen ? `${seen.index}@${seen.x},${seen.y},${seen.z}` : "none"} head=${payload.subarray(Math.max(0, payload.length - 8)).toString("hex")}`);
+    }
     return frameServer(opcode, payload, this.cipher);
   }
 
