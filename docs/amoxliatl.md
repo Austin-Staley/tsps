@@ -82,7 +82,9 @@ The Ancient tablet by her door (`amoxliatl_scoreboard` 52693, shown as `amoxliat
 cache's). The personal kill count and best time are the kill messages' own; a death in her chamber
 counts, the quest's fight doesn't. The world's numbers are kept in
 `data/saves/amoxliatl-scoreboard.json`. No recording reads it, so the number and time formats
-follow the Araxxor board's recording.
+follow the Araxxor board's recording; a missing time is the cache's default "-". Deaths are heard
+through onPlayerDefeated, which every death reaches (onPlayerDeath stops at Death's Office's first
+grave).
 
 ## Data fixes
 

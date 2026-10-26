@@ -10,7 +10,8 @@
  * Killcount / Deaths / Best Time, titled "Amoxliatl Statistics". The personal kill count and best
  * time are the ones the kill messages tell (Kills.Amoxliatl.js); a death counts when it happens in
  * her chamber, outside the quest's fight (which isn't a kill either). Numbers and times are
- * written as the Araxxor board's recording shows them ("151,908,082", "2:12.60", "-" with none).
+ * written as the Araxxor board's recording shows them ("151,908,082", "2:12.60"); with no time
+ * yet the row keeps the cache's own default text, "-".
  */
 
 const fs = require("node:fs");

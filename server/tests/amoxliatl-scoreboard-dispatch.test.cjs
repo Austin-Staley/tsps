@@ -50,7 +50,8 @@ function reader(t) {
   const p = new Player(null);
   p.setIndex(index++);
   p.setRegistered(true);
-  t.mock.method(p, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+  // Kept past the test (not t.mock), so tasks the site leaves queued still have a network to stub.
+  p.getSession = () => ({ sendClientPacket: () => true, write: () => true });
   t.mock.method(p, 'sendMessage', () => {});
   p.setLocation(new Location(1615, 9635, 0));
   quest.setStage(p, quest.completionValue ?? 2);
