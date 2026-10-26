@@ -26,7 +26,7 @@ before(async () => {
   await CachePipeline.initialize();
   const core = PluginManager.getCoreApi();
   Avarice({ core, persistAttribute() {}, onPlayerProcess() {}, ...modifierStubs() });
-  CapeOfSkulls.register({ core, onCustomEvent() {}, onPlayerLogin() {} });
+  CapeOfSkulls.register({ core, onCanEquip() {}, onCustomEvent() {}, onPlayerLogin() {} });
 });
 
 function modifierStubs() {
@@ -162,4 +162,54 @@ test("the cape of skulls skulls for 20 minutes from putting it on, even while wo
   wear(hopper, CAPE_SLOT, ItemIdentifiers.CAPE_OF_SKULLS);
   skullOnLogin({ player: hopper });
   assert.equal(hopper.skullTimer, ITEM_TICKS, "logging in with it on skulls again");
+});
+
+// Review on #1284: wearing the cape asks first. Driven through the real EquipPacketListener with
+// the plugin's hooks registered: "No" leaves equipment and skull alone, "Yes" equips and skulls.
+function nativeCapeHolder() {
+  const { Item } = PluginManager.getCoreApi();
+  const p = new Player(null);
+  p.dialogues = [];
+  p.getDialogueManager = () => ({ startDialogues: (chain) => p.dialogues.push(chain) });
+  p.getPacketSender = () => new Proxy({}, { get: () => () => p.getPacketSender() });
+  p.getInventory().setItem(0, new Item(ItemIdentifiers.CAPE_OF_SKULLS, 1));
+  PluginManager.emitPlayerLogin({ player: p, username: "skulltest" });
+  return p;
+}
+
+function answer(p, option) {
+  const { OptionDialogue } = PluginManager.getCoreApi();
+  const chain = p.dialogues.at(-1);
+  const menu = [...chain.getDialogues().values()].find((entry) => entry instanceof OptionDialogue);
+  assert.ok(menu, "the warning offers Yes / No");
+  menu.execute(option);
+}
+
+test("putting the cape of skulls on warns first; No changes nothing, Yes equips and skulls", () => {
+  const { EquipPacketListener, Inventory } = PluginManager.getCoreApi();
+  CapeOfSkulls.register(PluginManager.createApi("CapeOfSkullsTest"));
+  const capeId = () => p.getEquipment().getItems()[CAPE_SLOT].getId();
+
+  const p = nativeCapeHolder();
+  EquipPacketListener.equip(p, ItemIdentifiers.CAPE_OF_SKULLS, 0, Inventory.INTERFACE_ID);
+  assert.equal(p.dialogues.length, 1, "the warning opened");
+  assert.equal(capeId(), -1, "not worn before an answer");
+  assert.equal(p.isSkulled(), false);
+
+  answer(p, 2);
+  assert.equal(capeId(), -1, "No leaves the cape in the inventory");
+  assert.equal(p.getInventory().getItems()[0].getId(), ItemIdentifiers.CAPE_OF_SKULLS);
+  assert.equal(p.isSkulled(), false, "No leaves the skull timer alone");
+
+  EquipPacketListener.equip(p, ItemIdentifiers.CAPE_OF_SKULLS, 0, Inventory.INTERFACE_ID);
+  answer(p, 1);
+  assert.equal(capeId(), ItemIdentifiers.CAPE_OF_SKULLS, "Yes puts the cape on");
+  assert.equal(p.getSkullTimer(), ITEM_TICKS, "and skulls for 20 minutes");
+
+  const dropped = nativeCapeHolder();
+  EquipPacketListener.equip(dropped, ItemIdentifiers.CAPE_OF_SKULLS, 0, Inventory.INTERFACE_ID);
+  dropped.getInventory().setItem(0, new (PluginManager.getCoreApi().Item)(-1, 0));
+  answer(dropped, 1);
+  assert.equal(dropped.getEquipment().getItems()[CAPE_SLOT].getId(), -1, "Yes after the cape left the inventory does nothing");
+  assert.equal(dropped.isSkulled(), false);
 });

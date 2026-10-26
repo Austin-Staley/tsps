@@ -23,7 +23,9 @@ From the Wiki: [Skull (status)](https://oldschool.runescape.wiki/w/Skull_(status
   after it comes off. Its effects apply whatever the skull's source.
 - **Cape of skulls:** putting it on skulls the player for the next 20 minutes. The skull wears
   off after those 20 minutes even while the cape stays on; putting it on again, or hopping
-  worlds with it on, skulls the player again.
+  worlds with it on, skulls the player again. Putting it on asks first ("Attempting to equip
+  the cape gives a warning"); the cape goes on and skulls only on "Yes", and "No" changes
+  nothing.
 - **Abyss:** a skull from entering the Abyss lasts 10 minutes after leaving it, and entering again
   restarts it.
 
@@ -37,4 +39,5 @@ From the Wiki: [Skull (status)](https://oldschool.runescape.wiki/w/Skull_(status
   blocks attacks that would skull the player, but neither the captures nor the Wiki show how an
   attack is refused (message or menu), so it isn't implemented.
 - **Equip warnings:** the Wiki says the amulet of avarice and the cape of skulls warn before they
-  are put on, but not what the warning says.
+  are put on, but not what the warning says. The cape's warning uses our own wording, and the
+  amulet has none yet.
