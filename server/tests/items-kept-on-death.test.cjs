@@ -158,6 +158,22 @@ test('the Items Kept on Death interface shows what a death keeps, and prices the
   assert.equal(sent.strings[0], `Guide risk value:<br><col=ffffff>${risk.toLocaleString()}</col>`);
 });
 
+test('the Bounty Hunter risk skull counts what a death drops, by Grand Exchange price', () => {
+  // Store order (rune platebody 65,000 > platelegs 64,000 > sq shield 38,400 > ranger boots 200)
+  // crosses the Grand Exchange order, where the ranger boots come first: an unskulled death keeps
+  // the boots, body and legs and drops the sq shield, and the risk skull must price that shield.
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const RiskSkulls = require('../plugins/minigames/bountyhunter/RiskSkulls.BountyHunter');
+  RiskSkulls({ core: PluginManager.getCoreApi(), onPlayerLogout() {}, onServerStartup() {}, onCustomEvent() {} }, {});
+  const items = [I.RUNE_PLATEBODY, I.RUNE_PLATELEGS, I.RUNE_SQ_SHIELD, I.RANGER_BOOTS].map((id) => new Item(id, 1));
+  const player = fakePlayer({ items });
+  const shield = items[2];
+  assert.ok(shield.getDefinition().getValue() > items[3].getDefinition().getValue(), 'store value puts the shield above the boots');
+  const kept = PlayerDeathTask.getItemsToKeep(player);
+  assert.deepEqual(names(kept).sort(), ['Ranger boots', 'Rune platebody', 'Rune platelegs']);
+  assert.equal(RiskSkulls._test.riskOf(player), PlayerDeathTask.keepValue(shield));
+});
+
 test('preset items are never protected', () => {
   const staff = new Item(I.VOLATILE_NIGHTMARE_STAFF, 1);
   staff.setMetaValue(Item.UNTRADEABLE_META, true);

@@ -16,6 +16,7 @@ Opened from the Worn Equipment tab (`deathkeep`, group 4), it shows what a death
 
 - **Untradeable items are among the kept ones**: recordings 430 and 1463 list `skillcape_max_worn` and `infernal_defender` in `deathkeep_init`'s kept items. Before, the interface left untradeable items out of its ranking, so it could show a different set from the one a death kept.
 - **Guide risk value** is the Grand Exchange value of the lost tradeable items. In recording 430, turning Protect Item on moved a sanfew serum(4) (store value 300) to the kept side and the risk value fell from 108,118 to 89,549: 18,569, over sixty times its store value. Before, the risk was the store value.
+- **Bounty Hunter risk skulls** (`RiskSkulls.BountyHunter.js`) price the same lost set the same way, so the skull tier matches what a death in Daimon's Crater would drop. Before, they ranked the kept items by store value item by item, so with ranger boots and rune platebody, platelegs and sq shield the skull priced the boots as lost while a death dropped the shield.
 
 ## Upgraded Nightmare staffs (Wiki)
 
