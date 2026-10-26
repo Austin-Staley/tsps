@@ -111,8 +111,9 @@ export function collectBugDiagnostics(client: OsrsClient, logs: ClientLogBuffer)
         failedPlugins: failedPlugins ?? {},
         errors: errors ?? "(no recent warnings or errors)",
         skills,
-        inventory: inventory || undefined,
-        equipment: equipment || undefined,
+        // Empty string stays empty (a successful empty read); only failure is undefined.
+        inventory,
+        equipment,
         varps,
         interfaces,
         messages: messages ?? [],

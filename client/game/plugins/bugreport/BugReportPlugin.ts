@@ -6,7 +6,7 @@ import type { OsrsClient } from "../../OsrsClient";
 import type { WidgetActionEvent } from "../../widgets/widgetActionPayload";
 import { createBugReportNavigationButton } from "./BugReportPanel";
 import { ClientLogBuffer, captureConsole } from "./ClientLogBuffer";
-import { buildIssueUrl, redactAddresses, formatBugReportBody } from "./bugReportLink";
+import { buildIssueUrl, redactAddresses, formatDiagnosticsSection } from "./bugReportLink";
 import { collectBugDiagnostics } from "./clientDiagnostics";
 import { composeGameFrame, frameToPngBlob } from "./gameScreenshot";
 
@@ -73,11 +73,11 @@ export class BugReportPlugin extends Plugin {
         return this.state;
     }
 
-    /** Opens the panel; `description` fills an empty one (`::bug the door won't open`). */
+    /** Opens the panel with a fresh screenshot; the previous frame is never reused. */
     open(description = ""): void {
         if (description && !this.state.description.trim()) this.update({ description });
         if (this.navButton) this.clientToolbar.openPanel(this.navButton);
-        if (!this.state.screenshot && !this.state.capturing) void this.takeScreenshot();
+        void this.takeScreenshot();
     }
 
     setDescription(description: string): void {
@@ -93,13 +93,14 @@ export class BugReportPlugin extends Plugin {
         if (!description) return;
         const title = description.split("\n")[0] ?? description;
         const diagnostics = collectBugDiagnostics(this.client, this.logs);
-        const url = buildIssueUrl(title, formatBugReportBody(description, diagnostics));
+        const url = buildIssueUrl(title, description, formatDiagnosticsSection(diagnostics));
         window.open(url, "_blank", "noopener,noreferrer");
         this.update({ notice: "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V." });
     }
 
-    /** Copies the game screenshot to the clipboard, capturing a fresh one when needed. */
+    /** Copies the game screenshot to the clipboard, waiting for an in-flight capture. */
     async copyScreenshotToClipboard(): Promise<void> {
+        await this.captureFlight;
         if (!this.state.screenshot && !this.state.capturing) {
             await this.takeScreenshot();
         }
@@ -117,10 +118,19 @@ export class BugReportPlugin extends Plugin {
         }
     }
 
+    private captureFlight?: Promise<void>;
+
     private async takeScreenshot(): Promise<void> {
         if (!this.client.isLoggedIn()) return;
         const capture = ++this.captures;
-        this.update({ capturing: true });
+        this.update({ capturing: true, screenshot: undefined });
+        const flight = this.captureFrame(capture);
+        this.captureFlight = flight;
+        await flight;
+        if (this.captureFlight === flight) this.captureFlight = undefined;
+    }
+
+    private async captureFrame(capture: number): Promise<void> {
         let screenshot: Blob | undefined;
         try {
             const frame = await this.nextFrame();
@@ -129,7 +139,7 @@ export class BugReportPlugin extends Plugin {
             console.warn("[bug-report] screenshot failed", error);
         }
         if (capture !== this.captures) return;
-        this.update({ capturing: false, screenshot: screenshot ?? this.state.screenshot });
+        this.update({ capturing: false, screenshot });
     }
 
     handleClientCommand(command: string): boolean {

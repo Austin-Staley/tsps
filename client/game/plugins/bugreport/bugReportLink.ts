@@ -9,15 +9,24 @@
 /** Where the player's browser opens a prefilled issue. */
 export const BUG_REPORT_ISSUE_URL = "https://github.com/RSPSApp/tsps/issues/new";
 
+/** Issue forms ignore the `body` query parameter: prefill goes through the template plus field ids. */
+export const BUG_REPORT_TEMPLATE = "bug_report.yml";
+
 /**
  * GitHub and browsers stop handling very long `issues/new` URLs (around 8 KB), so the
  * whole URL is capped. The body shrinks to fit; nothing else grows to fill it.
  */
 export const MAX_ISSUE_URL_LENGTH = 8000;
 
-/** An IPv4 or IPv6 literal: client, relay and server addresses must never reach a public issue. */
+/** An IPv4 literal: client, relay and server addresses must never reach a public issue. */
 const IPV4 = /\b\d{1,3}(?:\.\d{1,3}){3}\b/g;
-const IPV6 = /\b[0-9a-fA-F:]*:[0-9a-fA-F:]+(?::[0-9a-fA-F:.]+)?\b/g;
+/**
+ * A real IPv6 literal: the full eight-group form, or anything with `::`. Narrower
+ * colon shapes (`12:30:45`, `Foo.ts:123:45`) are timestamps and stack frames, whose
+ * line numbers the report needs, so they are left alone.
+ */
+const IPV6 =
+    /(?<![0-9a-fA-F:.])(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(?![0-9a-fA-F:.])|(?<![0-9a-fA-F:.])[0-9a-fA-F:.]*::[0-9a-fA-F:.]*(?![0-9a-fA-F:.])/g;
 
 /** Address literals left out, keeping the line that carried them. */
 export function redactAddresses(text: string): string {
@@ -41,25 +50,33 @@ export function coarseBrowser(userAgent: string): string {
     return "Other";
 }
 
+function codePoints(text: string): number {
+    return Array.from(text).length;
+}
+
 /**
- * The `issues/new?title=…&body=…` link. The body shrinks (code-point-safe) until the
- * whole URL fits; the title is trimmed to 80 code points the same way.
+ * The prefilled form link: `template` selects the issue form (which ignores `body`),
+ * then `title`, `description` and `diagnostics` fill its fields. The diagnostics shrink
+ * first; the player's own description is only touched when nothing else fits.
  */
-export function buildIssueUrl(title: string, body: string): string {
-    let safeTitle = truncateCodePoints(title.trim(), 80);
-    let safeBody = body;
-    let url = `${BUG_REPORT_ISSUE_URL}?title=${encodeURIComponent(safeTitle)}&body=${encodeURIComponent(safeBody)}`;
-    if (url.length <= MAX_ISSUE_URL_LENGTH) return url;
-    const overhead = url.length - safeBody.length;
-    let budget = MAX_ISSUE_URL_LENGTH - overhead;
-    while (budget > 0) {
-        const cut = truncateCodePoints(safeBody, budget);
-        url = `${BUG_REPORT_ISSUE_URL}?title=${encodeURIComponent(safeTitle)}&body=${encodeURIComponent(cut)}`;
-        if (url.length <= MAX_ISSUE_URL_LENGTH) return url;
-        // encodeURIComponent expands non-ASCII; shrink by the overshoot in code points.
-        budget -= Math.max(1, Math.ceil((url.length - MAX_ISSUE_URL_LENGTH) / 3));
+export function buildIssueUrl(title: string, description: string, diagnostics: string): string {
+    const safeTitle = truncateCodePoints(title.trim(), 80);
+    const base = `${BUG_REPORT_ISSUE_URL}?template=${BUG_REPORT_TEMPLATE}&title=${encodeURIComponent(safeTitle)}`;
+    let safeDesc = description.trim();
+    let safeDiag = diagnostics;
+    const url = () => `${base}&description=${encodeURIComponent(safeDesc)}&diagnostics=${encodeURIComponent(safeDiag)}`;
+    let built = url();
+    while (built.length > MAX_ISSUE_URL_LENGTH) {
+        if (codePoints(safeDiag) > 0) {
+            safeDiag = truncateCodePoints(safeDiag, Math.max(0, codePoints(safeDiag) - Math.max(1, Math.ceil((built.length - MAX_ISSUE_URL_LENGTH) / 3))));
+        } else if (codePoints(safeDesc) > 0) {
+            safeDesc = truncateCodePoints(safeDesc, Math.max(0, codePoints(safeDesc) - Math.max(1, Math.ceil((built.length - MAX_ISSUE_URL_LENGTH) / 3))));
+        } else {
+            break;
+        }
+        built = url();
     }
-    return `${BUG_REPORT_ISSUE_URL}?title=${encodeURIComponent(safeTitle)}&body=`;
+    return built;
 }
 
 /** One error section for the issue body: last warn/error lines, redacted and shortened. */
@@ -99,13 +116,16 @@ export type BugReportDiagnostics = {
     messages: string[];
 };
 
-/** The prefilled issue body: description first, then the diagnostics allowlist. Bulky
- * account sections are capped per section and come after the errors, so if the whole
- * URL still overflows its ~8KB cap, the shrink cuts game messages first, errors last. */
-export function formatBugReportBody(description: string, diagnostics: BugReportDiagnostics): string {
+/**
+ * The diagnostics field of the prefilled form: world, player, client, errors, then the
+ * bulky account sections. Caps are per section; when the URL still overflows, the
+ * shrink in `buildIssueUrl` cuts from the end, so game messages go before errors.
+ * A failed read prints `(unavailable)`; only a successful empty read prints `(empty)`.
+ */
+export function formatDiagnosticsSection(diagnostics: BugReportDiagnostics): string {
     const browser = typeof navigator === "undefined" ? "unknown" : coarseBrowser(navigator.userAgent);
-    const capped = (text: string | undefined, max: number): string | undefined =>
-        text ? truncateCodePoints(redactAddresses(text), max) : undefined;
+    const capped = (text: string | undefined, max: number, empty = "(empty)"): string =>
+        text === undefined ? "(unavailable)" : truncateCodePoints(redactAddresses(text), max) || empty;
     const worldLine =
         `World: ${diagnostics.world}${diagnostics.worldId ? ` (${diagnostics.worldId})` : ""}` +
         `, tick ${diagnostics.tick}, ${diagnostics.transport}, ${diagnostics.members ? "members" : "free"}`;
@@ -114,8 +134,6 @@ export function formatBugReportBody(description: string, diagnostics: BugReportD
             ? `, region ${((diagnostics.position.x >> 6) << 8) | (diagnostics.position.y >> 6)}`
             : "";
     const lines = [
-        description.trim(),
-        "",
         "---",
         worldLine,
         `Player: ${diagnostics.player}${
@@ -130,21 +148,17 @@ export function formatBugReportBody(description: string, diagnostics: BugReportD
         lines.push(`Failed plugins: ${failed.map(([name]) => name).join(", ")}`);
     }
     lines.push("", "Recent errors:", "```", diagnostics.errors, "```");
-    // Account state is only meaningful logged in; empty-but-logged-in shows (empty) so a
-    // missing section reads as "nothing carried" rather than "collection failed".
+    // Account state is only meaningful logged in. A failed read already prints
+    // `(unavailable)` through `capped`, so every section renders either way.
     if (!diagnostics.loggedIn) {
         lines.push("", "(Logged out: log in to include account state.)");
     } else {
-        const account: string[] = [];
         const skills = capped(diagnostics.skills, 300);
-        if (skills) account.push(`Skills: ${skills}`);
-        account.push(`Inventory: ${capped(diagnostics.inventory, 400) ?? "(empty)"}`);
-        account.push(`Equipment: ${capped(diagnostics.equipment, 300) ?? "(empty)"}`);
-        const varps = capped(diagnostics.varps, 300);
-        if (varps) account.push(`Varps: ${varps}`);
-        const interfaces = capped(diagnostics.interfaces, 150);
-        if (interfaces) account.push(`Interfaces: ${interfaces}`);
-        lines.push("", ...account);
+        lines.push("", `Skills: ${skills}`);
+        lines.push(`Inventory: ${capped(diagnostics.inventory, 400)}`);
+        lines.push(`Equipment: ${capped(diagnostics.equipment, 300)}`);
+        lines.push(`Varps: ${capped(diagnostics.varps, 300)}`);
+        lines.push(`Interfaces: ${capped(diagnostics.interfaces, 150)}`);
     }
     const messages = diagnostics.messages
         .slice(-8)

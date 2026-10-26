@@ -23,6 +23,6 @@ body:
     id: screenshot
     attributes:
       label: Screenshot
-      description: The game copies one to your clipboard when the issue page opens. Paste it here with Ctrl+V.
+      description: In the game panel, press "Copy game screenshot to clipboard", then paste it here with Ctrl+V.
     validations:
       required: false

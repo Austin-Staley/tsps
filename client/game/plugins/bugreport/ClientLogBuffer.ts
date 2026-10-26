@@ -5,7 +5,7 @@ export type ClientLogEntry = { time: number; level: ClientLogLevel; text: string
 
 const LEVELS: readonly ClientLogLevel[] = ["debug", "log", "info", "warn", "error"];
 
-/** How far back a report's logs reach. */
+/** How far back a report's lines reach. */
 export const LOG_WINDOW_MS = 5 * 60_000;
 const MAX_ENTRY_CHARS = 2000;
 const MAX_ITEMS = 20;
@@ -13,11 +13,7 @@ const MAX_DEPTH = 2;
 
 export type LogLimits = { entries: number; chars: number };
 
-/**
- * The client logs every widget event, so ordinary lines can fill any budget within a minute:
- * warnings and errors get one of their own, and no stream of chatter pushes them out.
- */
-const CHATTER_LIMITS: LogLimits = { entries: 3000, chars: 500_000 };
+/** Only warnings and errors reach a report, so only those pay the formatting cost. */
 const ALERT_LIMITS: LogLimits = { entries: 1000, chars: 250_000 };
 
 /**
@@ -77,36 +73,33 @@ class LogQueue {
 }
 
 /**
- * The client's console over the last five minutes. Each line becomes text when it's logged, at
- * most 2,000 characters, so the buffer holds no game objects and costs no more than the line.
- * What the player typed is left out then, so the buffer never holds it.
+ * The client's warnings and errors over the last five minutes. Debug chatter is skipped
+ * entirely: formatting every widget event on the click and frame path would tax the game
+ * for lines no report reads. Each kept line becomes text when it's logged, at most 2,000
+ * characters. What the player typed is left out then, so the buffer never holds it.
  */
 export class ClientLogBuffer {
-    private readonly chatter: LogQueue;
     private readonly alerts: LogQueue;
 
     constructor(
         private readonly now: () => number = Date.now,
         private readonly windowMs = LOG_WINDOW_MS,
-        chatterLimits = CHATTER_LIMITS,
         alertLimits = ALERT_LIMITS,
     ) {
-        this.chatter = new LogQueue(chatterLimits);
         this.alerts = new LogQueue(alertLimits);
     }
 
     add(level: ClientLogLevel, args: readonly unknown[]): void {
-        const queue = level === "warn" || level === "error" ? this.alerts : this.chatter;
-        queue.push({ time: this.now(), level, text: withoutTypedText(formatLogArgs(args)) });
-        queue.prune(this.now() - this.windowMs);
+        if (level !== "warn" && level !== "error") return;
+        this.alerts.push({ time: this.now(), level, text: withoutTypedText(formatLogArgs(args)) });
+        this.alerts.prune(this.now() - this.windowMs);
     }
 
-    /** The lines from the last five minutes, oldest first. */
+    /** The warn/error lines from the last five minutes, oldest first. */
     recent(): ClientLogEntry[] {
         const cutoff = this.now() - this.windowMs;
-        this.chatter.prune(cutoff);
         this.alerts.prune(cutoff);
-        return [...this.chatter.live(), ...this.alerts.live()].sort((a, b) => a.time - b.time);
+        return this.alerts.live();
     }
 }
 
