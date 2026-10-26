@@ -187,8 +187,6 @@ function recoverOnLogin({ player }) {
 function endOnDeath({ player }) {
   const session = sessionOf(player);
   if (!session) return;
-  // Only a death in the lair itself counts (not one during the fade in, before the move).
-  if (player.getPrivateArea() === session.area) Scoreboard.died(player);
   const { World } = Common.core;
   const manager = Common.api.getItemOnGroundManager();
   for (const ground of [...World.getItems()]) {
@@ -197,6 +195,16 @@ function endOnDeath({ player }) {
     manager.registerLocation(player, ground.getItem(), exitLocation(), null);
   }
   session.end();
+}
+
+/**
+ * A death in the lair itself counts on the scoreboard (not one during the fade in, before the
+ * move). It is counted on defeat, which every death reaches: onPlayerDeath stops at the first
+ * plugin that handles the respawn, as Death's Office does for a first grave.
+ */
+function diedInLair({ victim: player }) {
+  const session = player ? sessionOf(player) : null;
+  if (session && player.getPrivateArea() === session.area) Scoreboard.died(player);
 }
 
 /** A grave from a death in the lair is left outside it, by the crevice (Wiki). */
@@ -212,7 +220,12 @@ function attachLair(api) {
   api.onPlayerLogin(recoverOnLogin);
   api.onObjectInteraction("Crevice", { Enter: enterCrevice, Escape: escape, "Quick-escape": quickEscape });
   api.onCustomEvent("gravestones:grave-location", graveOutside);
+  api.onPlayerDefeated(diedInLair);
   api.onPlayerDeath(endOnDeath);
 }
 
-module.exports = { attachLair, enter, leave, sessionOf, exitLocation };
+module.exports = {
+  attachLair, enter, leave, sessionOf, exitLocation, diedInLair,
+  /** Tests: stands `player` in a lair whose area is `area`, without building it. */
+  _setSession(player, area) { sessions.set(player, { player, area, end() { sessions.delete(player); } }); },
+};

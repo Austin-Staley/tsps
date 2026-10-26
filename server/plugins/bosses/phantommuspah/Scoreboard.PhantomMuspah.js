@@ -9,8 +9,9 @@
  * then the world's. The cache labels the rows Personal Killcount / Deaths / Best Time and Global
  * Killcount / Deaths / Best Time, titled "Phantom Muspah Statistics". The personal kill count and
  * best time are the ones the kill messages tell (Loot.PhantomMuspah.js); a death counts when it
- * ends the lair (Lair.PhantomMuspah.js). Numbers and times are written as the Araxxor board's
- * recording shows them ("151,908,082", "2:12.60", "-" with none).
+ * is in the lair (Lair.PhantomMuspah.js). Numbers and times are written as the Araxxor board's
+ * recording shows them ("151,908,082", "2:12.60"); with no time the row keeps the cache's own
+ * default text, "-".
  *
  * The cache places the board as a straight wall decoration (shape 4, rotation 0) on the cave
  * rock's west face at 2914,10317; its own tile is rock, so the shared wall-decoration reach

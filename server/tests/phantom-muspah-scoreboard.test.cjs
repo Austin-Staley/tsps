@@ -18,9 +18,10 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const Common = require('../plugins/bosses/phantommuspah/Common.PhantomMuspah');
 const Loot = require('../plugins/bosses/phantommuspah/Loot.PhantomMuspah');
 const Scoreboard = require('../plugins/bosses/phantommuspah/Scoreboard.PhantomMuspah');
+const Lair = require('../plugins/bosses/phantommuspah/Lair.PhantomMuspah');
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'muspah-scoreboard-'));
-const hooks = { objects: {}, npcDeaths: [], routes: [], persisted: new Map() };
+const hooks = { objects: {}, npcDeaths: [], routes: [], defeated: [], deaths: [], persisted: new Map() };
 let INTERFACE, BOARD_MULTI, BOARD;
 let index = 1;
 
@@ -31,6 +32,8 @@ before(() => {
     persistAttribute: (key, value) => hooks.persisted.set(key, value),
     onObjectInteraction: (name, actions) => { (hooks.objects[name] ??= []).push(actions); },
     onNpcDeath: (handler) => hooks.npcDeaths.push(handler),
+    onPlayerDefeated: (handler) => hooks.defeated.push(handler),
+    onPlayerDeath: (handler) => hooks.deaths.push(handler),
     onObjectRoute: (handler) => hooks.routes.push(handler),
     onCustomEvent() {},
     onPlayerLogin() {},
@@ -40,6 +43,7 @@ before(() => {
   Common.init(api);
   Loot.attachLoot(api);
   Scoreboard.attachScoreboard(api);
+  Lair.attachLair(api);
   const cache = api.core.CacheDefinitions;
   INTERFACE = cache.getInterfaceId('muspah_scoreboard');
   BOARD_MULTI = cache.getLocId('muspah_scoreboard_multi');
@@ -180,4 +184,30 @@ test('the route goes to the open floor west of the board, as its own tile is roc
   const other = { player: p, object: board, objectId: 12345, clickType: 1, destination: null };
   for (const handler of hooks.routes) handler(other);
   assert.equal(other.destination, null, 'other locs keep their own route');
+});
+
+test("a death in the lair counts on defeat, though Death's Office claims the death itself", (t) => {
+  const p = realPlayer(t);
+  const area = {};
+  t.mock.method(p, 'getPrivateArea', () => area);
+  Lair._setSession(p, area);
+  t.after(() => Lair.sessionOf(p)?.end());
+  // PlayerDeath reports the defeat to every plugin; the death event that follows can stop at
+  // Death's Office's first grave, so none of hooks.deaths is run here.
+  for (const handler of hooks.defeated) handler({ killer: null, victim: p });
+  click(p, 'Read', BOARD_MULTI);
+  assert.equal(text(p, 11), '1');
+  assert.equal(text(p, 17), '1');
+});
+
+test('a death outside the lair (in the fade in, or with no lair) is not counted', (t) => {
+  const p = realPlayer(t);
+  t.mock.method(p, 'getPrivateArea', () => null);
+  for (const handler of hooks.defeated) handler({ killer: null, victim: p });
+  Lair._setSession(p, {});
+  t.after(() => Lair.sessionOf(p)?.end());
+  for (const handler of hooks.defeated) handler({ killer: null, victim: p });
+  click(p, 'Read', BOARD_MULTI);
+  assert.equal(text(p, 11), '0');
+  assert.equal(text(p, 17), '0');
 });
