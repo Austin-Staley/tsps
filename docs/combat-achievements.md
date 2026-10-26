@@ -126,3 +126,7 @@ Ghommal plays the transcript's "combat-achievement-rewards" variant while a tier
 
 Reclaim UI, current lucky-penny consumption/charge effects and other tier perks
 remain separate follow-ups; this phase does not certify the whole tracker item.
+
+Native worktree checks: the prepared QA account claimed Easy and then the remaining tiers through Ghommal’s complete canonical conversation, used its earned lamp for exactly5,000 Runecraft XP, and retained inventory/tier/XP state after relog. This uses a prepared completion-bit state, not a natural completion of655 tasks. The live walkthrough caught a lazy dialogue condition reading a cleared claim after the grant; its new regression fails before the fix and passes after it. The successful result is retained only until that condition is consumed, so the success text no longer becomes a false no-space warning. Codex re-review cleared it.
+
+Natural post-quest Laidee access is a separate data gap: the shipped generated spawn still uses an obsolete ID (13647), which resolves to an unnamed/no-option NPC on the active241 cache. Native unit tests use the correct cache named NPC; this PR does not certify that spawn. Repair through the canonical spawn generator is still needed; no generated JSON was hand-edited.
