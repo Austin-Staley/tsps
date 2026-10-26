@@ -76,3 +76,67 @@ test("Entering Camelot with the Horn of Bran unlocks Zeal and uses the horn up",
   assert.equal(p.getAttribute("prayer:zeal-unlocked"), true);
   assert.equal(p.getAttribute("horn"), false);
 });
+
+
+test('native Shield Slam activation respects target policies and melee reach without spending on rejection', async () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PlayerOptionPacketListener } = require('../dist/net/packet/impl/PlayerOptionPacketListener');
+  const api = PluginManager.createApi('ShieldSlamPermissionRegression');
+  const c = api.core;
+  await c.CachePipeline.initialize();
+  c.RegionManager.init();
+  c.RegionManager.loadMapFiles(3090, 3550);
+  require('../plugins/items/ItemDefinitionLoader.plugin').register(api);
+  require('../plugins/areas/Wilderness.plugin').register(api);
+  PluginManager.emitServerStartup({});
+  rondache(api);
+  require('../plugins/combat/specials/Rondache.SpecialAttack')(api);
+  function realPlayer(name, x, y) {
+    const p = new Player(null);
+    p.setUsername(name);
+    p.getSession = () => ({ sendClientPacket: () => true, write() {} });
+    p.sendMessage = () => {};
+    p.setLocation(new c.Location(x, y));
+    p.onAdd = () => {};
+    assert(c.World.getPlayers().add(p));
+    p.setRegistered(true);
+    p.setAutoRetaliate(false);
+    api.getAreaManager().process(p);
+    for (const skill of [c.Skill.HITPOINTS, c.Skill.ATTACK, c.Skill.STRENGTH, c.Skill.DEFENCE]) {
+      p.getSkillManager().setMaxLevel(skill, 99);
+      p.getSkillManager().setCurrentLevel(skill, 99, false);
+    }
+    return p;
+  }
+  let deniedTarget = null;
+  api.onCanAttack(event => { if (event.target === deniedTarget) event.allow = false; });
+  const random = Math.random;
+  Math.random = () => 0.8;
+  try {
+    for (const scenario of ['non-pvp', 'out-of-range', 'plugin-denied', 'invalid', 'valid']) {
+      const safe = scenario === 'non-pvp';
+      const attacker = realPlayer('slam-' + scenario, safe ? 3200 : 3090, safe ? 3200 : 3550);
+      const target = realPlayer('target-' + scenario, safe ? 3220 : scenario === 'out-of-range' ? 3110 : 3091, safe ? 3200 : 3550);
+      attacker.getEquipment().set(c.Equipment.WEAPON_SLOT, new c.Item(c.ItemIdentifiers.RUNE_SCIMITAR));
+      attacker.getEquipment().set(c.Equipment.SHIELD_SLOT, new c.Item(c.ItemIdentifiers.RONDACHE));
+      attacker.setWeapon(c.WeaponInterfaces.SCIMITAR);
+      attacker.setFightType(c.WeaponInterfaces.SCIMITAR.getFightType()[0]);
+      c.CombatSpecial.assign(attacker);
+      rondache.setCharges(attacker, 20);
+      attacker.getCombat().setAttackDelay(9);
+      const energy = attacker.getSpecialPercentage();
+      PlayerOptionPacketListener.executeClientOption(attacker, target.getIndex(), 1);
+      assert.equal(attacker.getCombat().getTarget(), target);
+      deniedTarget = scenario === 'plugin-denied' ? target : null;
+      if (scenario === 'invalid') target.setRegistered(false);
+      c.CombatSpecial.activate(attacker);
+      assert.equal(attacker.getSpecialPercentage(), energy, scenario + ': special energy unchanged');
+      assert.equal(attacker.getCombat().getAttackDelay(), 9, scenario + ': instant slam preserves ordinary cooldown');
+      assert.equal(rondache.charges(attacker), scenario === 'valid' ? 0 : 20, scenario + ': charges');
+      assert.equal(target.getCombat().getHitQueue().hasPendingWork(), scenario === 'valid', scenario + ': pending hit');
+      target.getCombat().getHitQueue().process(c.World.getProcessCycle() + 5);
+      assert.equal(target.getHitpoints(), scenario === 'valid' ? 75 : 99, scenario + ': actual health');
+    }
+  } finally { Math.random = random; }
+});

@@ -176,6 +176,7 @@ test('a real PendingHit keeps the best of N rolls, scales it before the hitpoint
     const { HitMask } = require('../dist/game/content/combat/hit/HitMask');
     const { PluginManager } = require('../dist/plugins/PluginManager');
     const realGetHitDamage = CombatFactory.getHitDamage;
+    const realRollHitDamage = CombatFactory.rollHitDamage;
     const realTraits = CombatSpecial.activeTraitsFor;
     const realRoll = PluginManager.emitCombatHitRoll;
     const realDamage = PluginManager.emitCombatHitDamage;
@@ -183,7 +184,7 @@ test('a real PendingHit keeps the best of N rolls, scales it before the hitpoint
     RealHit.prototype.rollSpecialTraits = () => ({ accurate: true });
     const rolls = [10, 30, 20];
     let hooks = 0;
-    CombatFactory.getHitDamage = () => new HitDamage(rolls.shift(), HitMask.RED);
+    CombatFactory.getHitDamage = CombatFactory.rollHitDamage = () => new HitDamage(rolls.shift(), HitMask.RED);
     CombatSpecial.activeTraitsFor = () => null;
     PluginManager.emitCombatHitRoll = () => { hooks++; };
     PluginManager.emitCombatHitDamage = () => { hooks++; };
@@ -198,10 +199,88 @@ test('a real PendingHit keeps the best of N rolls, scales it before the hitpoint
         const capped = new RealHit(attacker, target(35), method, { damageMultiplier: 1.4 });
         assert.equal(capped.getTotalDamage(), 35, 'the bonus cannot overkill the target');
     } finally {
-        Object.assign(CombatFactory, { getHitDamage: realGetHitDamage });
+        Object.assign(CombatFactory, { getHitDamage: realGetHitDamage, rollHitDamage: realRollHitDamage });
         CombatSpecial.activeTraitsFor = realTraits;
         PluginManager.emitCombatHitRoll = realRoll;
         PluginManager.emitCombatHitDamage = realDamage;
         RealHit.prototype.rollSpecialTraits = realTraitsRoll;
     }
+});
+
+
+test('real Obligator thrust applies incoming equipment reactions only to the selected roll', async () => {
+    const { PluginManager } = require('../dist/plugins/PluginManager');
+    const { Player } = require('../dist/game/entity/impl/player/Player');
+    const api = PluginManager.createApi('ObligatorIncomingRegression');
+    const c = api.core;
+    await c.CachePipeline.initialize();
+    require('../plugins/items/ItemDefinitionLoader.plugin').register(api);
+    // Earlier unit cases cache a method built with doubles; load an independent real plugin instance.
+    const pluginPath = require.resolve('../plugins/items/Obligator.plugin');
+    const cached = require.cache[pluginPath];
+    delete require.cache[pluginPath];
+    const realObligator = require(pluginPath);
+    require.cache[pluginPath] = cached;
+    realObligator.register(api);
+    PluginManager.emitServerStartup({});
+    const rondache = require('../plugins/combat/effects/Rondache.EquipmentEffects');
+    rondache(api);
+    function realPlayer(name) {
+        const p = new Player(null);
+        p.setUsername(name);
+        p.getSession = () => ({ sendClientPacket: () => true, write() {} });
+        p.sendMessage = () => {};
+        for (const skill of [c.Skill.HITPOINTS, c.Skill.ATTACK, c.Skill.STRENGTH, c.Skill.DEFENCE]) {
+            p.getSkillManager().setMaxLevel(skill, 99);
+            p.getSkillManager().setCurrentLevel(skill, 99, false);
+        }
+        return p;
+    }
+    const attacker = realPlayer('obligator-incoming'), victim = realPlayer('rondache-incoming');
+    const mace = new c.Item(c.ItemIdentifiers.OBLIGATOR);
+    mace.setMetaValue(Obligator._test.CHARGES_META_KEY, 10);
+    attacker.getEquipment().set(c.Equipment.WEAPON_SLOT, mace);
+    attacker.setFightType(c.WeaponInterfaces.EXTENDING_CHAINMACE.getFightType()[0]);
+    victim.getEquipment().set(c.Equipment.SHIELD_SLOT, new c.Item(c.ItemIdentifiers.RONDACHE));
+    victim.getSkillManager().setCurrentLevel(c.Skill.DEFENCE, 1, false);
+    const method = c.CombatFactory.getMethod(attacker);
+    let incomingCalls = 0;
+    api.registerIncomingDamageModifier((entity) => { if (entity === victim) incomingCalls++; });
+    const random = Math.random;
+    Math.random = () => 0.8;
+    try {
+        const [hit] = method.hits(attacker, victim);
+        assert.equal(hit.isAccurate(), true);
+        assert.equal(hit.getTotalDamage(), 7);
+        assert.equal(Obligator._test.charges(mace), 9, 'one weapon charge for the one thrust');
+        assert.equal(rondache.charges(victim), 2, 'discarded candidates do not charge the shield');
+        assert.equal(incomingCalls, 1, 'the real incoming pipeline runs once');
+        rondache.setCharges(victim, 0);
+        const scaled = new c.PendingHit(attacker, victim, method, { bestOf: 3, damageMultiplier: 1.4, rollAccuracy: false });
+        assert.equal(scaled.getTotalDamage(), 9, 'mitigation precedes the per-hit multiplier: floor((9 - 2) x 1.4)');
+        assert.equal(rondache.charges(victim), 2);
+        assert.equal(incomingCalls, 2);
+        rondache.setCharges(victim, 0);
+        victim.getSkillManager().setCurrentLevel(c.Skill.HITPOINTS, 5, false);
+        const capped = new c.PendingHit(attacker, victim, method, { bestOf: 3, damageMultiplier: 1.4, rollAccuracy: false });
+        assert.equal(capped.getTotalDamage(), 5, 'selected roll is mitigated, multiplied, then capped to HP');
+        assert.equal(rondache.charges(victim), 2);
+        assert.equal(incomingCalls, 3);
+        const rollAccuracy = c.AccuracyFormulasDpsCalc.rollAccuracy;
+        c.AccuracyFormulasDpsCalc.rollAccuracy = () => false;
+        try {
+            const miss = new c.PendingHit(attacker, victim, method, { bestOf: 3 });
+            assert.equal(miss.isAccurate(), false);
+            assert.equal(miss.getTotalDamage(), 0);
+            assert.equal(incomingCalls, 3, 'discarded misses do not react');
+            assert.equal(rondache.charges(victim), 2);
+        } finally { c.AccuracyFormulasDpsCalc.rollAccuracy = rollAccuracy; }
+        victim.getEquipment().set(c.Equipment.SHIELD_SLOT, new c.Item(c.ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
+        let graphics = 0;
+        victim.performGraphic = () => { graphics++; };
+        Math.random = () => 0.5;
+        new c.PendingHit(attacker, victim, method, { bestOf: 4, rollAccuracy: false });
+        assert.equal(graphics, 1, 'Elysian reacts to the winner once, not each candidate');
+        assert.equal(incomingCalls, 4);
+    } finally { Math.random = random; }
 });

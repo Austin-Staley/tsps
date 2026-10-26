@@ -241,12 +241,14 @@ export class PendingHit {
             if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
             let damage: HitDamage = new HitDamage(0, HitMask.BLUE);
             this.accurate = false;
+            const bestOf = fixedDamage === undefined && this.bestOf > 1;
+            const rollDamage = bestOf ? CombatFactory.rollHitDamage : CombatFactory.getHitDamage;
             for (let attempt = fixedDamage === undefined ? this.bestOf : 1; attempt > 0; attempt--) {
                 const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
                 const rolled: HitDamage = resolved.accurate
                     ? ServerPerf.measurePhase(
                         "combat.process.method_hits.damage",
-                        () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
+                        () => rollDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
                             fixedDamage === undefined ? resolved.bounds : {
                                 minimumMultiplier: 0,
                                 maximumMultiplier: 0,
@@ -259,6 +261,9 @@ export class PendingHit {
                     damage = rolled;
                     this.accurate = resolved.accurate;
                 }
+            }
+            if (bestOf && this.accurate) {
+                damage = CombatFactory.applyIncomingHitDamage(this.attacker, this.target, this.combatType, damage);
             }
             if (this.damageMultiplier !== 1) {
                 damage.setDamage(Math.floor(damage.getDamage() * this.damageMultiplier));

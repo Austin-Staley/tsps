@@ -12,7 +12,7 @@ const MIN_CHARGES = 10;
 const ACCURACY_PER_CHARGE = 6;
 
 module.exports = function registerRondacheSpecialAttack(api) {
-  const { AccuracyFormulasDpsCalc, Animation, BonusManager, CacheDefinitions, CombatMethod, CombatSpecial, CombatType, Graphic, CombatFactory, MeleeCombatMethod, PendingHit, ItemIdentifiers } = api.core;
+  const { CanAttackResponse, AccuracyFormulasDpsCalc, Animation, BonusManager, CacheDefinitions, CombatMethod, CombatSpecial, CombatType, Graphic, CombatFactory, MeleeCombatMethod, PendingHit, ItemIdentifiers } = api.core;
 
   const roll = (max) => Math.floor(Math.random() * (max + 1));
 
@@ -45,6 +45,9 @@ module.exports = function registerRondacheSpecialAttack(api) {
         player.sendMessage("You need a target to use Shield Slam.");
         return;
       }
+      // Utility activation skips the combat loop: validate this melee slam before paying or rolling.
+      if (CombatFactory.canAttack(player, this, target) !== CanAttackResponse.CAN_ATTACK
+          || !player.getCombat().resolveCanReachForCurrentCycle(this, target)) return;
       const damage = slam(player, target);
       Effects.setCharges(player, 0);
       player.performAnimation(new Animation(CacheDefinitions.getSeqId("tfa_human_rondache_special")));
