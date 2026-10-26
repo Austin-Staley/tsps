@@ -3,7 +3,8 @@
  * The Wiki gives the Woodcutting levels (10, 20, 35), the XP (32, 55, 80; 1 for a miss) and the
  * favour (0.3%, 0.5%, 1%). rsprox 227/01858 gives the swing: the machete's hack animation every
  * tick, tbw_chippings on the jungle every 2 ticks, the result on the 6th, then 3 ticks before the
- * next swing (9 a hack). A success takes the jungle one stage down in place and gives its spar;
+ * next swing (9 a hack). Every tick before the result may instead disturb something (Events),
+ * which ends the hack. A success takes the jungle one stage down in place and gives its spar;
  * the favour follows 3 ticks later. Stage 5 has no Hack; the jungle grows back (Locs).
  *
  * The success chance is ours: the recordings (red topaz machete, Woodcutting 88 and 72) only bound
@@ -13,6 +14,7 @@
 const Common = require("./Common.TaiBwoWannaiCleanup");
 const Favour = require("./Favour.TaiBwoWannaiCleanup");
 const Locs = require("./Locs.TaiBwoWannaiCleanup");
+const Events = require("./Events.TaiBwoWannaiCleanup");
 
 /** By player: { jungle, location, machete, tick }. */
 const sessions = new Map();
@@ -67,6 +69,7 @@ function hack(event) {
 
 function result(player, session, current) {
   const { jungle } = session;
+  Events.counted(player);
   const found = jungleOf(current.getId());
   if (Math.random() >= successChance(jungle, Common.level(player, "WOODCUTTING"), session.machete)) {
     Common.animate(player, "fail", 30);
@@ -99,6 +102,11 @@ function step(player, session) {
   const current = Locs.find(session.jungle.locs.slice(0, 4).map(Common.locId), session.location);
   if (!current) return stop(player);
   if (at > timing.resultAt) return;
+  // An event takes the swing's place (its stall is the animation) and ends the hack.
+  if (at < timing.resultAt && Events.roll(player, session.jungle, current)) {
+    sessions.delete(player);
+    return;
+  }
   Common.animate(player, session.machete.hack);
   if (at === 0) {
     player.setPositionToFace(session.location);
