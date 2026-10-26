@@ -200,6 +200,24 @@ function startGame(count = 4) {
   return { game, players };
 }
 
+test('Bounty Hunter weapons work in the same live Soul Wars match, never in its lobby', () => {
+  const { game, players: [attacker, target] } = startGame(2);
+  attacker.getPrivateArea = target.getPrivateArea = () => game.area;
+  const permission = hooks.events['bounty-hunter:weapon-area'];
+  assert.equal(typeof permission, 'function');
+  const event = { attacker, target, allowed: false };
+  permission(event);
+  assert.equal(event.allowed, true);
+  target.getPrivateArea = () => null;
+  const outside = { attacker, target, allowed: false };
+  permission(outside);
+  assert.equal(outside.allowed, false);
+  game.over = true;
+  const finished = { attacker, target: attacker, allowed: false };
+  permission(finished);
+  assert.equal(finished.allowed, false);
+});
+
 /** Puts `player` on template tile [x, y] in the game's arena. */
 function place(game, player, x, y) {
   player.location = game.area.at([x, y, 0]);
