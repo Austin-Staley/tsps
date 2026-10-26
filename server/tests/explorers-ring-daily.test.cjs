@@ -195,3 +195,21 @@ test("four uses on ring3 remain spent after upgrading to ring4", (t) => {
   assert.equal(f.p.getRunEnergy(), 0);
   assert.match(f.messages.at(-1), /used all/);
 });
+
+test("spellbook refresh preserves the real ring alchemy counter", (t) => {
+  clock(t);
+  const f = actor(t);
+  f.p.setAttribute(Common.DAILY_ATTRIBUTE, {
+    day: "2026-10-26",
+    counts: { "explorers-ring-alchemy": 17 },
+  });
+  login(f);
+  for (const book of [1151, 12855, 29999, 39999]) {
+    f.p.getPacketSender().sendTabInterface(6, book);
+    assert.equal(count(f, "lumbridge_free_alchs"), 17);
+  }
+  t.mock.timers.tick(120000);
+  login(f);
+  assert.equal(count(f, "lumbridge_free_alchs"), 0);
+  assert.equal(count(f), 0);
+});
