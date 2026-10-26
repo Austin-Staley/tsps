@@ -140,3 +140,44 @@ test('native Shield Slam activation respects target policies and melee reach wit
     }
   } finally { Math.random = random; }
 });
+
+test("charging the folio during its teleport debits that replaced folio, not another one", async () => {
+  const path = require("node:path");
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const { ItemActionPacketListener } = require("../dist/net/packet/impl/ItemActionPacketListener");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+
+  const base = PluginManager.createApi("FolioChargeDuringTeleportTest");
+  const core = base.core;
+  require("../plugins/items/ItemDefinitionLoader.plugin").register(base);
+  rewards(base);
+
+  const player = new Player(null);
+  player.setUsername("folio-charge-during-teleport");
+  player.getSession = () => ({ sendClientPacket: () => true, write: () => true });
+  player.setLocation(new core.Location(3200, 3200));
+  player.setRegistered(true);
+  player.sendMessage = () => {};
+
+  const first = new core.Item(core.ItemIdentifiers.ARCHIVISTS_FOLIO);
+  first.setMetaValue("fractured-archive:folio-charges", 20);
+  const clicked = new core.Item(core.ItemIdentifiers.ARCHIVISTS_FOLIO);
+  clicked.setMetaValue("fractured-archive:folio-charges", 10);
+  player.getInventory().setItem(0, first);
+  player.getInventory().setItem(1, clicked);
+  player.getInventory().setItem(2, new core.Item(core.ItemIdentifiers.ASCENSION_SHARDS, 1));
+
+  ItemActionPacketListener.handleAction(player, 93, core.ItemIdentifiers.ARCHIVISTS_FOLIO, 1, 1, "Read");
+  assert.equal(player.isTeleportingReturn(), true, "Read starts the native teleport task");
+  ItemActionPacketListener.handleAction(player, 93, core.ItemIdentifiers.ARCHIVISTS_FOLIO, 1, 3, "Charge");
+  assert.equal(player.getInventory().getItems()[1].getMetaValue("fractured-archive:folio-charges"), 15);
+
+  for (let tick = 0; tick < 5; tick++) core.TaskManager.process();
+
+  const items = player.getInventory().getItems();
+  assert.equal(player.getLocation().getX(), 4127, "the actual teleport task reaches the lobby");
+  assert.equal(items[0].getMetaValue("fractured-archive:folio-charges"), 20);
+  assert.equal(items[1].getMetaValue("fractured-archive:folio-charges"), 14);
+});

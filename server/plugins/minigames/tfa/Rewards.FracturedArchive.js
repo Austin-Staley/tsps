@@ -27,6 +27,7 @@ const CAMELOT = { minX: 2745, maxX: 2776, minY: 3489, maxY: 3524 };
 const LOBBY = { x: 4127, y: 5508, z: 0 };
 
 let core = null;
+const folioReplacements = new WeakMap();
 
 const plural = (count) => `${count} charge${count === 1 ? "" : "s"}`;
 
@@ -80,13 +81,13 @@ function zealRequirements(event) {
 // ---------------------------------------------------------------- the folio
 
 const itemCharges = (item) => Number(item?.getMetaValue?.(FOLIO_CHARGES_META)) || 0;
-const isFolio = (item) => item?.getId?.() === core.ItemIdentifiers.ARCHIVISTS_FOLIO || item?.getId?.() === core.ItemIdentifiers.ARCHIVISTS_FOLIO_INERT_;
 
-/** The slot now holding `item` (it may have moved), else any folio with charges. */
+/** The slot now holding this folio, following replacements made when its charges change. */
 function slotOf(player, item) {
   const items = player.getInventory().getItems();
-  const found = items.indexOf(item);
-  return found >= 0 ? found : items.findIndex((other) => isFolio(other) && itemCharges(other) > 0);
+  let current = item;
+  while (folioReplacements.has(current)) current = folioReplacements.get(current);
+  return items.indexOf(current);
 }
 
 /** Puts `count` charges on the folio in `slot`: the charged folio carries them, none is the inert one. */
@@ -94,6 +95,8 @@ function setCharges(player, slot, count) {
   const { Item, ItemIdentifiers } = core;
   const folio = new Item(count > 0 ? ItemIdentifiers.ARCHIVISTS_FOLIO : ItemIdentifiers.ARCHIVISTS_FOLIO_INERT_, 1);
   if (count > 0) folio.setMetaValue(FOLIO_CHARGES_META, count);
+  const previous = player.getInventory().getItems()[slot];
+  if (previous) folioReplacements.set(previous, folio);
   player.getInventory().setItem(slot, folio);
   player.getInventory().refreshItems();
 }

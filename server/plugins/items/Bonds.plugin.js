@@ -368,7 +368,12 @@ function movePouchBonds({ player, buttonId }) {
   const { id, toPouch } = MOVE_BUTTONS.get(buttonId);
   const quantity = Number(player.getAttribute(POUCH_QUANTITY_ATTRIBUTE)) || 0;
   if (quantity === QUANTITY_X) {
-    player.setEnteredAmountAction({ execute: (amount) => moveBonds(player, id, toPouch, amount) });
+    player.setEnteredAmountAction({
+      execute: (amount) => {
+        if (player.getInterfaceId?.() !== BOND_MANAGEMENT_INTERFACE) return;
+        moveBonds(player, id, toPouch, amount);
+      },
+    });
     player.getPacketSender().sendEnterAmountPrompt(toPouch ? "Move how many bonds to your pouch?" : "Move how many bonds to your inventory?");
     return true;
   }

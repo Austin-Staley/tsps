@@ -93,9 +93,17 @@ function makePlayer(name) {
     getBank: () => bank,
     getCurrentBankTab: () => 0,
     sent: [],
+    interfaceId: -1,
+    getInterfaceId() {
+      return this.interfaceId;
+    },
+    setInterfaceId(interfaceId) {
+      this.interfaceId = interfaceId;
+    },
     getPacketSender() {
       const record = (kind) => (...args) => {
         this.sent.push([kind, ...args]);
+        if (kind === "interface") this.interfaceId = args[0];
         return sender;
       };
       const sender = {
@@ -432,6 +440,7 @@ test("the pouch deposits and withdraws, shows its counts and stops at 100 bonds"
   assert.equal(pouch(TRADEABLE_BOND), 0);
   assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 6);
 
+  player.setInterfaceId(863);
   press(19); // X
   press(12);
   player.amountAction.execute(2);
@@ -473,6 +482,27 @@ test("a stale convert dialog action does nothing once the pouch is closed", () =
   player.amountAction.execute(1);
   assert.equal(player.getInventory().getAmount(UNTRADEABLE_BOND), 1);
   assert.equal(player.getInventory().getAmount(COINS), CONVERT_FEE);
+});
+
+test("a stale Move-X amount does nothing after Back leaves the bond pouch", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  player.getInventory().adds(TRADEABLE_BOND, 3);
+  const press = (group, child) => handlers.buttons.get(uid(group, child))({ player, buttonId: uid(group, child) });
+
+  press(109, 37); // Account tab: Bond Pouch
+  press(861, 7); // View Your Bonds
+  press(863, 19); // X
+  press(863, 12); // Move to Pouch
+  const stale = player.amountAction;
+  assert.equal(player.getInterfaceId(), 863);
+
+  press(863, 2); // Back to bond_main
+  assert.equal(player.getInterfaceId(), 861);
+  stale.execute(1);
+
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 3);
+  assert.equal(player.getAttribute("bonds:pouch-tradeable") ?? 0, 0);
 });
 
 test("withdrawing into a full inventory keeps the bonds in the pouch; a full pouch refuses deposits", () => {
