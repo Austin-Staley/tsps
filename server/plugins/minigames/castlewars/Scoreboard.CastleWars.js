@@ -10,8 +10,9 @@
  * castlewars_zamorak_totalscore); no cache script reads the castlewars_wins / castlewars_loss /
  * castlewars_games_played varps, so the server writes both lines.
  *
- * Game.CastleWars.js tells it each player's result ("castlewars:player-result") and the game's
- * winner ("castlewars:game-won") when a game ends. A tie is a game played, neither won nor lost.
+ * Game.CastleWars.js tells it each real (non-bot) player's result ("castlewars:player-result")
+ * and the game's winner ("castlewars:game-won", only when a real player of the leading side is
+ * still in the game) when a game ends. A tie is a game played, neither won nor lost.
  * The teams' wins are kept in data/saves/castle-wars-scoreboard.json.
  */
 
@@ -26,9 +27,9 @@ const TOTAL_COMPONENT = {
 };
 const TEAM_NAME = { saradomin: "Saradomin", zamorak: "Zamorak" };
 
-const GAMES_ATTRIBUTE = "castle-wars:games-played";
-const WINS_ATTRIBUTE = "castle-wars:wins";
-const LOSSES_ATTRIBUTE = "castle-wars:losses";
+const GAMES_ATTRIBUTE = "castlewars:games-played";
+const WINS_ATTRIBUTE = "castlewars:wins";
+const LOSSES_ATTRIBUTE = "castlewars:losses";
 
 let FILE = path.join(process.cwd(), "data", "saves", "castle-wars-scoreboard.json");
 let world = null;
