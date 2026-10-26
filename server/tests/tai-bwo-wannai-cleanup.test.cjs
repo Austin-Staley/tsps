@@ -705,6 +705,8 @@ test('a spawn left alone goes after 50 minutes', (t) => {
   assert.equal(Events._spawned.has(snake), true);
   tick(2);
   assert.equal(Events._spawned.has(snake), false);
+});
+
 test('a pickup that fills the last slot during a swing: the result cuts nothing and gives nothing', (t) => {
   const p = villager(t);
   t.mock.method(Math, 'random', () => 0);
