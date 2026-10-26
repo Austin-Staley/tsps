@@ -40,7 +40,6 @@ export function BugReportPanel({ plugin }: { plugin: BugReportPlugin }): JSX.Ele
     const subscribe = useCallback((listener: () => void) => plugin.subscribe(listener), [plugin]);
     const getSnapshot = useCallback(() => plugin.getState(), [plugin]);
     const state: BugReportState = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-    const ready = state.description.trim().length > 0;
     return (
         <form
             className="rl-sidebar-panel-content rl-sidebar-scrollable"
@@ -86,7 +85,9 @@ export function BugReportPanel({ plugin }: { plugin: BugReportPlugin }): JSX.Ele
                     {state.notice}
                 </p>
             ) : null}
-            <button type="submit" className="rl-sidebar-text-button" disabled={!ready}>
+            {/* Not disabled on an empty description: a greyed button that ignores clicks reads as
+                broken. `required` makes the browser say what is missing instead. */}
+            <button type="submit" className="rl-sidebar-text-button">
                 Open GitHub issue
             </button>
         </form>
