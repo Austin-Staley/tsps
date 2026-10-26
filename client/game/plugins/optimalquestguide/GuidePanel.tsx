@@ -102,7 +102,9 @@ export function GuidePanel({ plugin }: { plugin: GuidePlugin }): JSX.Element {
     const close = useCallback(() => setMenu(undefined), []);
     const openMenu = useCallback((event: MouseEvent, uri: string) => {
         event.preventDefault();
-        setMenu({ x: event.clientX, y: event.clientY, uri });
+        // The menu is inside the sidebar's retina zoom; the mouse is in page pixels.
+        const zoom = (event.currentTarget as Element).currentCSSZoom ?? 1;
+        setMenu({ x: event.clientX / zoom, y: event.clientY / zoom, uri });
     }, []);
 
     const rows = visibleRows(view, plugin.config, search);

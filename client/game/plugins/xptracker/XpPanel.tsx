@@ -216,7 +216,9 @@ export function XpPanel({ plugin }: { plugin: XpTrackerPlugin }): JSX.Element {
     const openMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
         e.preventDefault();
         e.stopPropagation();
-        setMenu({ x: e.clientX, y: e.clientY, items });
+        // The menu is inside the sidebar's retina zoom; the mouse is in page pixels.
+        const zoom = (e.currentTarget as Element).currentCSSZoom ?? 1;
+        setMenu({ x: e.clientX / zoom, y: e.clientY / zoom, items });
     }, []);
     const overallItems = useMemo<MenuItem[]>(() => [
         { label: "Reset All", run: () => plugin.resetAndInitState() },

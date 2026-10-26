@@ -64,6 +64,15 @@
     --sidebar-panel-width: min(242px, calc(100vw - 52px));
 }
 
+/* RuneLite's sizes are tiny on a retina screen, so the sidebar is drawn half as big again there:
+   each pixel of the fonts and icons is then 3 device pixels, not 2. useSidebarMode.ts repeats
+   the query and the scale. */
+@media (min-resolution: 2dppx) and (pointer: fine) {
+    .rl-sidebar:not(.mobile) {
+        zoom: 1.5;
+    }
+}
+
 /* Icon strip */
 .rl-sidebar-rail {
     width: var(--sidebar-rail-width);
