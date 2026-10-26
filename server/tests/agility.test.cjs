@@ -734,7 +734,7 @@ test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets
   try {
     const course = COURSES.find((entry) => entry.key === "wilderness");
     const player = createPlayer(3004, 3937, 0);
-    player.setAttribute(Dispenser.ATTRIBUTE("deposit"), 1);
+    player.setAttribute(Dispenser.ATTRIBUTES.deposit, 1);
     const varbit = (name) => player.state.varbits.get(CacheDefinitions.getVarbitId(name));
     runLap(course, player);
     assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "a paid lap: streak 1");
@@ -742,7 +742,7 @@ test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets
     player.setLocation(new Location(3004, 3937, 0));
     runLap(course, player);
     assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "the untagged lap's pipe reset it, so this lap starts again at 1");
-    assert.equal(player.getAttribute(Dispenser.ATTRIBUTE("deposit")), 1, "the payment stays");
+    assert.equal(player.getAttribute(Dispenser.ATTRIBUTES.deposit), 1, "the payment stays");
     assert.equal(varbit("wildy_agility_token_available"), 1, "this lap's own ticket");
   } finally {
     for (const name of answers) delete hooks.answers[name];
