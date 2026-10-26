@@ -7,6 +7,7 @@ const Tithe = require("./Tithe.Farming");
 const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
+const Tools = require("./Tools.Farming");
 const { pauseForLevelUp } = require("../SkillActions");
 
 const FARM_ATTRIBUTE = "farming:state";
@@ -748,6 +749,7 @@ function attach(api) {
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
     api.onPlayerLogout(Tithe.titheLogout);
+    api.onPlayerLogout(Tools.logout);
     api.onCustomEvent("level-up:popup-opened", pauseWork);
     api.onObjectInteraction(objectInteraction);
     api.onItemOnObject(itemOnObject, { noted: false });
@@ -760,6 +762,7 @@ function attach(api) {
     api.onCustomEvent(core.Bank.INVENTORY_OP_EVENT, Guild.bankStorageOp);
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Tools.click);
     api.onInterfaceActionClick(Spells.farmingButton);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);
     api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);

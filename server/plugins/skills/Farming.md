@@ -50,9 +50,10 @@ This is **not a verified 1:1 implementation**. In particular:
   1/11 roll per successful log and regrows independently after 200 game ticks
   (120 seconds), including time offline. Woodcutting Guild redwoods retain
   Forestry's 440-tick depletion timer and 199-tick respawn.
-- Geomancy, storage, contracts, and Tithe rewards use existing dialogue menus;
-  their original dedicated interfaces are not reproduced. The native Tithe
-  status overlay is mounted during a run (details below).
+- Geomancy, seed-vault storage, contracts, and Tithe rewards use existing
+  dialogue menus; their original dedicated interfaces are not reproduced.
+  Leprechaun storage uses the native main and side screens described below.
+  The native Tithe status overlay is mounted during a run (details below).
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
@@ -69,6 +70,32 @@ This is **not a verified 1:1 implementation**. In particular:
   included in the patch coverage claim. No in-game or smoke tests were run.
 
 ## Verification
+
+### Native leprechaun storage
+
+Exchange opens `farming_tools` and `farming_tools_side` as main and side modals,
+matching normal-world RSProx recordings 224/00238, 227/01533, 230/02879,
+232/03121 and 238/04221/04223. In 238/04221, Exchange at tick60 opens both
+screens, enables OP1 on the four quantity selectors and runs the modal background
+script on the arrival tick. Cache125/126 and scripts1055-1064/2748-2751 supply
+the rows, quantity-dependent ops and packed varbits; enum136 maps watering cans
+and enum2193 supplies capacities. All component and varbit IDs resolve by name.
+
+The same saved `farm.tools` and `farm.toolMeta` back the interface and NPC/item
+deposits. Counts include the extra-bit fields for tools, buckets and compost.
+Magic secateurs stay separate from normal ones; watering cans and bottomless
+buckets retain cloned charge metadata. Withdrawals use the inventory's actual
+addable amount, including note-stack limits. The shared Bank PIN guard remains
+in front of storage and is checked again for native actions. Closed screens,
+walk-away, trade/death, logout and stale amount answers cannot transfer items.
+
+The [Tool Leprechaun](https://oldschool.runescape.wiki/w/Tool_Leprechaun) Wiki
+supplies storage capacities and noted deposits/withdrawals. No ordinary-world
+recording shows every quantity/Banknotes path: their op order follows the cache;
+Banknotes uses the selected quantity, and X remembers a positive amount for the
+open session. The amount prompt wording is ours. Produce noting is unchanged.
+
+### Other Farming verification
 
 Geomancy refuses casting while attacking or being attacked, before rune
 consumption, Magic XP, animation or patch updates. It retains the existing
