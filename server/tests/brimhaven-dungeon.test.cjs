@@ -288,3 +288,129 @@ test("paid once, asking for permanent access without 1,000,000: the 875 offer ta
   assert.equal(coinsOf(p), 1125, "not charged twice for one visit");
   assert.equal(varbit(p, "karam_dungeon_doordata") & 1, 1);
 });
+
+// The vines. Vine 1 at (2690,9564): the entrance side is east (2691), the deeper side west (2689).
+const VINE = [2690, 9564, 0];
+const OUTER = [2691, 9564, 0];
+const INNER = [2689, 9564, 0];
+
+function vineAt(tile = VINE) {
+  core.RegionManager.loadMapFiles(tile[0], tile[1]);
+  return MapObjects.get(CacheDefinitions.getLocId("karam_dungeon_vineblocking1"), new core.Location(...tile), null) ?? null;
+}
+
+/** A real player on `tile` with `woodcutting`, holding `items`. */
+function cutter(t, tile, woodcutting, items = []) {
+  const { p, messages } = visitor(t);
+  p.setLocation(new core.Location(...tile));
+  p.getSkillManager().setCurrentLevel(core.Skill.WOODCUTTING, woodcutting, false).setMaxLevels(core.Skill.WOODCUTTING, woodcutting, false);
+  for (const name of items) p.getInventory().adds(CacheDefinitions.getObjId(name), 1);
+  p.setNeedsPlacement(false);
+  return { p, messages };
+}
+
+function chop(p) {
+  const object = vineAt();
+  assert.ok(object, "the vine stands");
+  const definition = ObjectDefinition.forPlayer(object.getId(), p);
+  const event = { player: p, object, objectId: object.getId(), definition, clickType: 1, location: { x: VINE[0], y: VINE[1], z: 0 }, handled: false };
+  PluginManager.emitObjectInteraction(event);
+  return event;
+}
+
+/** One game tick for this player: tasks, then their movement. */
+function tick(p) {
+  core.TaskManager.process();
+  p.getMovementQueue().process();
+}
+
+test("going deeper: an axe and level 10; a roll every 2 ticks, then through, and the vine back a tick later", (t) => {
+  const { p, messages } = cutter(t, OUTER, 10, ["bronze_axe"]);
+  t.mock.method(Math, "random", () => 0);
+  assert.equal(chop(p).handled, true);
+  assert.deepEqual(messages, ["You try to chop through the vines."]);
+  tick(p);
+  assert.ok(vineAt(), "still standing after one tick");
+  tick(p);
+  assert.deepEqual(messages, ["You try to chop through the vines.", "You hack your way through the vines."]);
+  assert.equal(vineAt(), null, "cut, for everyone");
+  tick(p);
+  assert.ok(vineAt(), "back a tick later");
+  for (let i = 0; i < 3; i++) tick(p);
+  assert.deepEqual(at(p), INNER);
+  assert.equal(p.hasFlag(require("../plugins/areas/brimhavendungeon/Vines.BrimhavenDungeon").IGNORE_CLIPPING_FLAG), false, "clipping is back");
+});
+
+test("going deeper needs the axe and the level; a blessed axe won't do", (t) => {
+  const low = cutter(t, OUTER, 9, ["bronze_axe"]);
+  chop(low.p);
+  assert.deepEqual(low.messages, ["You need a Woodcutting level of 10 to chop through these vines."]);
+  const bare = cutter(t, OUTER, 99);
+  chop(bare.p);
+  assert.deepEqual(bare.messages, ["You don't have an axe which you can use."]);
+  const blessed = cutter(t, OUTER, 99, ["blessed_axe"]);
+  chop(blessed.p);
+  assert.deepEqual(blessed.messages, ["You don't have an axe which you can use."]);
+  for (const { p } of [low, bare, blessed]) {
+    for (let i = 0; i < 4; i++) tick(p);
+    assert.deepEqual(at(p), OUTER);
+  }
+});
+
+test("going back out needs no axe or level: cut by hand", (t) => {
+  const { p, messages } = cutter(t, INNER, 1);
+  chop(p);
+  tick(p);
+  tick(p);
+  assert.deepEqual(messages, ["You try to chop through the vines.", "You hack your way through the vines."]);
+  for (let i = 0; i < 4; i++) tick(p);
+  assert.deepEqual(at(p), OUTER);
+});
+
+test("missed rolls keep chopping; walking off stops it; a second click doesn't cut twice", (t) => {
+  const { p, messages } = cutter(t, OUTER, 10, ["bronze_axe"]);
+  const random = t.mock.method(Math, "random", () => 0.999);
+  chop(p);
+  chop(p);
+  for (let i = 0; i < 8; i++) tick(p);
+  assert.ok(vineAt(), "no luck yet");
+  assert.equal(messages.filter((text) => text.startsWith("You hack")).length, 0);
+  random.mock.mockImplementation(() => 0);
+  p.getMovementQueue().addSteps(new core.Location(2692, 9564, 0));
+  for (let i = 0; i < 4; i++) tick(p);
+  assert.deepEqual(at(p), [2692, 9564, 0]);
+  assert.ok(vineAt(), "walking off stopped the chopping");
+  assert.equal(messages.filter((text) => text.startsWith("You hack")).length, 0);
+});
+
+test("the cut chance is the Wiki's chart: bronze about 25% at 1 and 78% at 99, dragon all but certain from level 4", () => {
+  const { cutChance } = require("../plugins/areas/brimhavendungeon/Vines.BrimhavenDungeon");
+  assert.equal(cutChance(1, { tier: 0 }), 65 / 256);
+  assert.equal(cutChance(99, { tier: 0 }), 201 / 256);
+  assert.ok(cutChance(4, { tier: 7 }) >= 255 / 256, "the Wiki chart reads 100%");
+  assert.ok(cutChance(1, { tier: 7 }) < 1 && cutChance(1, { tier: 7 }) > 0.9);
+});
+
+test("a vine cut and regrown since the click is still chopped: the standing one is used", (t) => {
+  const { p, messages } = cutter(t, OUTER, 61, ["dragon_axe"]);
+  t.mock.method(Math, "random", () => 0);
+  const stale = vineAt();
+  // Someone else cuts it and it regrows before this player's click arrives.
+  core.ObjectManager.deregister(stale, true);
+  core.ObjectManager.register(new core.GameObject(stale.getId(), stale.getLocation().clone(), stale.getType(), stale.getFace(), null), true);
+  const event = { player: p, object: stale, objectId: stale.getId(), definition: ObjectDefinition.forPlayer(stale.getId(), p), clickType: 1, location: { x: VINE[0], y: VINE[1], z: 0 }, handled: false };
+  PluginManager.emitObjectInteraction(event);
+  for (let i = 0; i < 6; i++) tick(p);
+  assert.ok(messages.includes("You hack your way through the vines."));
+  assert.deepEqual(at(p), INNER);
+});
+
+test("a rake used on the Brimhaven vines does nothing: they are chopped down, not cleared", (t) => {
+  const { p } = cutter(t, OUTER, 1, ["rake"]);
+  const object = vineAt();
+  const event = { player: p, object, objectId: object.getId(), itemId: CacheDefinitions.getObjId("rake"), slot: 0, location: { x: VINE[0], y: VINE[1], z: 0 }, handled: false };
+  PluginManager.emitItemOnObject(event);
+  for (let i = 0; i < 4; i++) tick(p);
+  assert.ok(vineAt(), "the vine still stands");
+  assert.deepEqual(at(p), OUTER);
+});
