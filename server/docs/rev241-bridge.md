@@ -30,19 +30,9 @@ cd server && yarn test:rev241
 
 ## RSA key
 
-The bridge does not use Jagex's public key (that value is still in `NetworkConstants` for the old browser login and must not be copied into the Kevlar client). On first start the server writes a 1024-bit key, public exponent **65537**, to `server/data/rev241/rsa.json`. The copy in this branch is the stable key. The private exponent stays in that file on the server.
+The bridge does not use Jagex's public key (that value is still in `NetworkConstants` for the old browser login and must not be copied into the Kevlar client). On first start the server writes a 1024-bit key, public exponent **65537**, to `server/data/rev241/rsa.json`. That file holds the private exponent: it is gitignored and must never be committed. Each install generates its own key, and it stays stable across restarts for as long as the file is kept. Delete it to rotate the key (then update the client config).
 
-Public modulus, unsigned big-endian hex (128 bytes, high bit set, so a signed byte array needs a leading `00`):
-
-```
-c43effd8705246a5171225d6929961d38f4707b48ce1536459366d58d00b37947b9949ce522a9ca36812865d8d3385ab9e0a2a554733aaa93b3cbf213207bdc7811943b910fcaf592e6d84eda8734cbc525249fe49a2f470de2b40d1f0e24485348166bc7a11255b95318b1c9992da4e465569f259b85651b3fdea4aa254ca3b
-```
-
-Decimal:
-
-```
-137808691890195325918702578722419124399289738232286454294752263207315545085587688175290284419360456395220878115747161302203756103801512532075528009452934815705809790158761630998346708239590582458350267167976139583879107835846244830007777486278040414540235329166398736204485969799785280338599735757699644967483
-```
+The server also writes the public half to `server/data/rev241/rsa.public.json` (`modulusHex`, decimal `modulus`, `exponent`). That is the value to copy into the Kevlar tsps profile. The modulus is 128 bytes with the high bit set, so a signed byte array needs a leading `00`.
 
 Public exponent: `65537`.
 
@@ -64,7 +54,7 @@ The RSA modulus is read from the gamepack when the client class initialises. A R
 Proposed change, for Austin to apply in kevlar-client:
 
 1. Find the launcher class that calls `RuneLite.main` (the Gradle `application` main class, or a search for `jav_config` / `RuneLite.main`). The change goes there, not in a plugin.
-2. Before the gamepack is loaded, replace Jagex's 1024-bit modulus with the hex modulus above. Public exponent stays `65537`. If the gamepack stores the integer as a signed byte array, prepend `00` because this modulus has its high bit set.
+2. Before the gamepack is loaded, replace Jagex's 1024-bit modulus with `modulusHex` from `rsa.public.json`. Public exponent stays `65537`. If the gamepack stores the integer as a signed byte array, prepend `00` because this modulus has its high bit set.
 3. Pass `--jav_config` pointing at a local jav_config whose single world is `127.0.0.1:43595`, and pass `--insecure-write-credentials`.
 
 Nothing in this repository connects to `oldschool*.runescape.com` or downloads a gamepack.

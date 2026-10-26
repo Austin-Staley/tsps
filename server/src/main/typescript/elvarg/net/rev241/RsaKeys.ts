@@ -46,19 +46,40 @@ export function generateRsaMaterial(): RsaMaterial {
   };
 }
 
+/** Public half only (safe to copy into a client config): `data/rev241/rsa.public.json`. */
+export function rsaPublicPath(root = process.cwd()): string {
+  return path.join(root, "data", "rev241", "rsa.public.json");
+}
+
+function writePublicExport(root: string, material: RsaMaterial): void {
+  const out = JSON.stringify(
+    { modulusHex: modulusHex(material), modulus: material.modulus, exponent: PUBLIC_EXPONENT },
+    null,
+    2,
+  );
+  const file = rsaPublicPath(root);
+  if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== out) fs.writeFileSync(file, out);
+}
+
+/**
+ * Loads the key, or generates one on first start. rsa.json holds the private exponent and is
+ * gitignored; never commit it. The public modulus is also written to rsa.public.json.
+ */
 export function loadOrCreateRsa(root = process.cwd()): RsaMaterial {
   const file = rsaKeyPath(root);
+  let material: RsaMaterial;
   if (fs.existsSync(file)) {
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as RsaMaterial;
-    if (!parsed.modulus || !parsed.privatePem || !parsed.publicPem) {
+    material = JSON.parse(fs.readFileSync(file, "utf8")) as RsaMaterial;
+    if (!material.modulus || !material.privatePem || !material.publicPem) {
       throw new Error(`rev241 RSA key at ${file} is incomplete`);
     }
-    return parsed;
+  } else {
+    material = generateRsaMaterial();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(material, null, 2), { mode: 0o600 });
   }
-  const created = generateRsaMaterial();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(created, null, 2));
-  return created;
+  writePublicExport(root, material);
+  return material;
 }
 
 export function rsaBlockSize(material: RsaMaterial): number {

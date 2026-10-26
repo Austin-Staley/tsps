@@ -266,12 +266,12 @@ export class Rev241Translator {
       case ServerPacketId.WIDGET_SET_ITEM:
         return this.frame(ServerOp.IF_SETOBJECT, encodeIfSetObject(payload.readInt32BE(0), payload.readUInt16BE(4), payload.readInt32BE(6)));
       case ServerPacketId.WIDGET_SET_FLAGS_RANGE:
-        return this.frame(ServerOp.IF_SETEVENTS, encodeIfSetEvents(
+        return this.frame(ServerOp.IF_SETEVENTS_V2, encodeIfSetEvents(
           payload.readInt32BE(0), payload.readUInt16BE(4), payload.readUInt16BE(6), payload.readInt32BE(8), payload.readInt32BE(8),
         ));
       case ServerPacketId.WIDGET_SET_FLAGS_RANGE_V2:
         // TODO: events1/events2 are the browser flags and op mask. Confirm clicks register on the stock client.
-        return this.frame(ServerOp.IF_SETEVENTS, encodeIfSetEvents(
+        return this.frame(ServerOp.IF_SETEVENTS_V2, encodeIfSetEvents(
           payload.readInt32BE(0), payload.readUInt16BE(4), payload.readUInt16BE(6), payload.readInt32BE(8), payload.readInt32BE(12),
         ));
       case ServerPacketId.VARP_SMALL:

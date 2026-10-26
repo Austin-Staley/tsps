@@ -94,3 +94,7 @@ client/tests/artifacts/
 
 # Per-deployment world overrides (WorldDefinition.readWorldConfig)
 server/data/definitions/world.local.json
+
+# rev241 bridge RSA key (private exponent) and its public export: generated per install on first start
+server/data/rev241/rsa.json
+server/data/rev241/rsa.public.json

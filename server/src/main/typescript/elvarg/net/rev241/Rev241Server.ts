@@ -245,7 +245,7 @@ function hashName(name: string): bigint {
 type Phase = "init" | "js5" | "login" | "game";
 
 class Rev241Socket {
-  private buffer = Buffer.alloc(0);
+  private buffer: Buffer = Buffer.alloc(0);
   private phase: Phase = "init";
   private xor = 0;
   private sessionId = 0n;
