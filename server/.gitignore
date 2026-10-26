@@ -21,5 +21,6 @@ Server
 data/saves/ai-bots.json
 data/saves/colosseum-scoreboard.json
 data/saves/araxxor-scoreboard.json
-data/saves/tzhaar-ket-rak-scoreboard.json
-data/saves/tzhaar-ket-rak-scoreboard.json.tmp
+# Every boss/minigame scoreboard keeps its world records here (and a .tmp while saving).
+data/saves/*-scoreboard.json
+data/saves/*-scoreboard.json.tmp
