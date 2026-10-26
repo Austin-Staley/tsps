@@ -107,3 +107,11 @@ The Ardougne farm count is split. Only its low bit has a name (`ardougne_cloak_l
   - The Falador shield's messages: restored, full, spent and Check.
   - The Explorer's ring's energy messages, and the extra teleports line on ring 2's Check.
 - **Explorer's ring recharge:** the Wiki says the ring's charges only come back after logging out and in. Here they reset at midnight like the others.
+
+## Explorer’s ring daily allowances
+
+The ring’s limited run-energy/free-alchemy counters are now owned by a separate persisted record. The Wiki specifies replenishing after logging out/back in; staying online across midnight does not restore uses. The existing shared diary daily record can advance when another reward is used, so its current spent counts migrate eagerly at login before any player actions. After migration, other diary rewards cannot reset the ring.
+
+Counts remain shared across ring tiers, including four energy restores used on ring3 followed by upgrading to ring4 (which allows three). Same-day relog and real PlayerSave round trips retain spent uses; a qualifying next-day login resets both counters and transmits zero. Every use/reset/migration requests a save. Six real-object tests cover these cases; the legacy diary/alchemy checks pass as well (29 focused checks). No alchemy casting or interface is added by this prerequisite fix.
+
+Source: [Explorer’s ring4](https://oldschool.runescape.wiki/w/Explorer%27s_ring_4), Benefits: daily energy and alchemy charges replenish on logging back in. The shipped cache supplies the named energy/alchemy varbits and each ring tier’s menu/submenus. The local RSProx index contains ring mentions but no indexed lumbridge_alchemy interface/actions; reset/migration behavior comes from the Wiki and the migration safety design, not a captured midnight session.
