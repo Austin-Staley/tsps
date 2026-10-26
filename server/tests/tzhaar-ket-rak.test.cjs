@@ -22,6 +22,8 @@ before(async () => {
   Dialogue = require('../plugins/minigames/tzhaarketrak/Dialogue.TzHaarKetRak');
   Challenge = require('../plugins/minigames/tzhaarketrak/Challenge.TzHaarKetRak');
   Rewards = require('../plugins/minigames/tzhaarketrak/Rewards.TzHaarKetRak');
+  // Completions and deaths reach the scoreboard's world records: keep them out of data/saves.
+  require('../plugins/minigames/tzhaarketrak/Scoreboard.TzHaarKetRak')._useFile(path.join(require('node:os').tmpdir(), `ket-rak-scoreboard-${process.pid}.json`));
   const api = new Proxy({
     core: {
       ...core,
