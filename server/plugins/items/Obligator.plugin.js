@@ -73,10 +73,10 @@ function defenceOf(target, index) {
     : target.getAsPlayer().getBonusManager().getDefenceBonus()[index];
 }
 
-/** Two rolls, three when the target resists crush better than stab or slash (Wiki: Passive effect). */
+/** Two base rolls plus one for each stab/slash defence above crush (Wiki: Passive effect). */
 function rollCount(target) {
   const crush = defenceOf(target, CRUSH);
-  return BASE_ROLLS + (defenceOf(target, STAB) > crush || defenceOf(target, SLASH) > crush ? 1 : 0);
+  return BASE_ROLLS + Number(defenceOf(target, STAB) > crush) + Number(defenceOf(target, SLASH) > crush);
 }
 
 /** 1.2 against a 2x2, 1.4 against a 3x3 or larger. */
@@ -175,6 +175,16 @@ function checkCharges({ player, item }) {
   return true;
 }
 
+function refundsFit(inventory, refunds) {
+  const items = inventory.getItems();
+  const newStacks = refunds.filter((refund) => !items.some((held) =>
+    held.getId() === refund.getId() && JSON.stringify(held.getMeta() ?? null) === JSON.stringify(refund.getMeta() ?? null)
+  )).length;
+  return newStacks <= inventory.getFreeSlots() && refunds.every((refund) =>
+    inventory.getAddableAmount(refund) >= refund.getAmount()
+  );
+}
+
 /** Wiki: uncharging returns every unused shard and rune (partial batches return their runes and no shard). */
 function uncharge({ player, item }) {
   const left = charges(item);
@@ -189,11 +199,12 @@ function uncharge({ player, item }) {
     [ItemIdentifiers.NATURE_RUNE, (left / CHARGES_PER_BATCH) * NATURE_RUNES_PER_BATCH],
     [ItemIdentifiers.DEATH_RUNE, (left / CHARGES_PER_BATCH) * DEATH_RUNES_PER_BATCH],
   ].filter(([, amount]) => amount >= 1);
-  if (inventory.getFreeSlots() < returned.filter(([id]) => !inventory.contains(id)).length) {
+  const refunds = returned.map(([id, amount]) => new Item(id, Math.floor(amount)));
+  if (!refundsFit(inventory, refunds)) {
     player.sendMessage("Your inventory is too full to hold the shards and runes.");
     return true;
   }
-  for (const [id, amount] of returned) inventory.addItem(new Item(id, Math.floor(amount)));
+  for (const refund of refunds) inventory.addItem(refund);
   setCharges(player, item, 0);
   player.sendMessage("You uncharge your Obligator, regaining its ascension shards and runes.");
   return true;

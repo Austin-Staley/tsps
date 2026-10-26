@@ -8,6 +8,8 @@ Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
 const { Item } = require('../dist/game/model/Item');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const { MAX_STACK_AMOUNT } = require('../dist/game/model/container/StackType');
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 
 const Zorya = require('../plugins/items/ZoryasTome.plugin');
@@ -27,7 +29,7 @@ Zorya.register({
     onCustomEvent: () => {},
 });
 
-const NPC = { isPlayer: () => false };
+const NPC = { isPlayer: () => false, getLocation: () => ({ getX: () => 1, getY: () => 0 }), getSize: () => 1 };
 
 function playerWithTome({ id = I.ZORYAS_TOME, charges = 0, special = 0 } = {}) {
     const tome = new Item(id, 1);
@@ -39,6 +41,7 @@ function playerWithTome({ id = I.ZORYAS_TOME, charges = 0, special = 0 } = {}) {
     const player = {
         isPlayer: () => true,
         getAsPlayer: () => player,
+        getLocation: () => ({ getX: () => 0, getY: () => 0 }),
         getEquipment: () => ({ getItems: () => equipment, refreshItems: () => {} }),
         getCombat: () => ({ setCastSpell: (spell) => { castSpell = spell; }, reset: () => {} }),
         getUpdateFlag: () => ({ flag: () => {} }),
@@ -53,6 +56,8 @@ function inventory({ astral = 0, nature = 0 } = {}) {
     const inv = {
         astral, nature, added: [],
         getAmount: (id) => (id === I.ASTRAL_RUNE ? inv.astral : id === I.NATURE_RUNE ? inv.nature : 0),
+        getItems: () => inv.added,
+        getAddableAmount: (item) => item.getAmount(),
         deleteNumber: (id, n) => { if (id === I.ASTRAL_RUNE) inv.astral -= n; else inv.nature -= n; },
         refreshItems: () => {}, contains: () => true, getFreeSlots: () => 28,
         addItem: (item) => inv.added.push(item),
@@ -77,6 +82,36 @@ test('charging spends 3 astral and 2 nature a charge, uncharging returns them, a
     Zorya._test.uncharge({ player, item: tome });
     assert.deepEqual(inv.added.map((i) => [i.getId(), i.getAmount()]), [[I.ASTRAL_RUNE, 9], [I.NATURE_RUNE, 6]]);
     assert.equal(tome.getId(), I.ZORYAS_TOME_UNCHARGED_);
+});
+
+test("each delayed tome hit retains its cast spell and impact graphic", () => {
+    const PendingHit = core.PendingHit;
+    const originalPrepareHits = PendingHit.prototype.prepareHits;
+    const originalDrain = core.CombatSpecial.drain;
+    PendingHit.prototype.prepareHits = () => [];
+    core.CombatSpecial.drain = () => {};
+    try {
+        const built = playerWithTome({ charges: 5 });
+        const method = resolvers[0].resolve(built.player);
+        method.canAttack(built.player, NPC);
+        const normalHit = method.hits(built.player, NPC)[0];
+        const normalSpell = built.castSpell;
+        assert.equal(normalHit.getSpell(), normalSpell);
+        assert.equal(normalSpell.endGraphic().id, 4429);
+
+        built.player.isSpecialActivated = () => true;
+        built.player.getSpecialPercentage = () => 100;
+        method.canAttack(built.player, NPC);
+        const specialHit = method.hits(built.player, NPC)[0];
+        const specialSpell = built.castSpell;
+        assert.equal(specialHit.getSpell(), specialSpell);
+        assert.notEqual(specialSpell, normalSpell, "the second cast has its own spell state");
+        assert.equal(normalHit.getSpell().endGraphic().id, 4429, "a later special cast cannot rewrite the earlier impact");
+        assert.equal(specialHit.getSpell().endGraphic().id, 4430);
+    } finally {
+        PendingHit.prototype.prepareHits = originalPrepareHits;
+        core.CombatSpecial.drain = originalDrain;
+    }
 });
 
 test('every cast spends a charge, base max hit is 18 at 3 ticks, and the last charge degrades it', () => {
@@ -120,4 +155,24 @@ test("Zorya's flow: the special buffs accuracy and damage, a landed hit buffs th
     method.canAttack(built.player, NPC);
     const plain = request(); onMaxHit(plain);
     assert.equal(plain.maxHit, 20, 'the buff ends after 30 seconds');
+});
+
+
+test("uncharge keeps all charges when the real inventory cannot fit every rune refund", () => {
+    const owner = { getUsername: () => "test", getPacketSender: () => ({}) };
+    const inv = new Inventory(owner);
+    inv.refreshItems = () => inv;
+    const tome = new Item(I.ZORYAS_TOME, 1);
+    tome.setMetaValue(CHARGES_META_KEY, 1);
+    inv.setItem(0, tome);
+    inv.setItem(1, new Item(I.ASTRAL_RUNE, MAX_STACK_AMOUNT));
+    for (let slot = 2; slot < 28; slot++) inv.setItem(slot, new Item(I.COINS, 1));
+    const player = { getInventory: () => inv, sendMessage() {} };
+
+    Zorya._test.uncharge({ player, item: tome });
+
+    assert.equal(Zorya._test.chargesOf(tome), 1);
+    assert.equal(tome.getId(), I.ZORYAS_TOME);
+    assert.equal(inv.getAmount(I.ASTRAL_RUNE), MAX_STACK_AMOUNT);
+    assert.equal(inv.getAmount(I.NATURE_RUNE), 0);
 });

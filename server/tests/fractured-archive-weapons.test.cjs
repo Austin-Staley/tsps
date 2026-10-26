@@ -7,6 +7,9 @@ Server.installProductionPathResolver();
 
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const { Item } = require('../dist/game/model/Item');
+const { MAX_STACK_AMOUNT } = require('../dist/game/model/container/StackType');
 const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
 const { Ammunition, RangedWeapon } = require('../dist/game/content/combat/ranged/RangedData');
 const Crossbows = require('../plugins/items/AscensionCrossbows.plugin');
@@ -33,7 +36,7 @@ const core = {
     Equipment, ItemIdentifiers, WeaponInterfaces, RangedCombatMethod, MeleeCombatMethod, PendingHit, Animation,
     Graphic: class { constructor(id) { this.id = id; } },
     Flag: { APPEARANCE: 1 },
-    Item: class { constructor(id, amount) { this.id = id; this.amount = amount; } },
+    Item: class { constructor(id, amount) { this.id = id; this.amount = amount; } getId() { return this.id; } getAmount() { return this.amount; } getMeta() { return null; } },
 };
 for (const plugin of [Crossbows, Obligator]) {
     plugin.register({
@@ -60,7 +63,9 @@ function player(worn, extra = {}) {
         getInventory: () => ({
             getAmount: (id) => stacks[id] ?? 0,
             deleteNumber: (id, n) => { stacks[id] -= n; },
-            addItem: (item) => { stacks[item.id] = (stacks[item.id] ?? 0) + item.amount; },
+            getItems: () => Object.entries(stacks).map(([id, amount]) => new core.Item(Number(id), amount)),
+            getAddableAmount: (item) => item.getAmount(),
+            addItem: (item) => { stacks[item.getId()] = (stacks[item.getId()] ?? 0) + item.getAmount(); },
             contains: (id) => (stacks[id] ?? 0) > 0,
             getFreeSlots: () => 28,
             refreshItems() {},
@@ -119,10 +124,11 @@ test('the obligator and the crossbows have their cache weapon types and stances'
     assert.deepEqual(chain.getFightType().map((f) => f.getAnimation()), [15123, 15123, 15122]);
 });
 
-test('thrust rolls twice, three times when stab or slash beat crush; sizes add 20% and 40%', () => {
+test('thrust adds a roll for each melee defence above crush; sizes add 20% and 40%', () => {
     assert.equal(Obligator._test.rollCount(npc(1, [0, 0, 0])), 2);
     assert.equal(Obligator._test.rollCount(npc(1, [10, 0, 5])), 3);
     assert.equal(Obligator._test.rollCount(npc(1, [0, 10, 5])), 3);
+    assert.equal(Obligator._test.rollCount(npc(1, [10, 10, 5])), 4, 'stab and slash each add a roll');
     assert.deepEqual([1, 2, 3, 5].map((s) => Obligator._test.sizeMultiplier(npc(s))), [1, 1.2, 1.4, 1.4]);
 });
 
@@ -283,4 +289,41 @@ test('real Obligator thrust applies incoming equipment reactions only to the sel
         assert.equal(graphics, 1, 'Elysian reacts to the winner once, not each candidate');
         assert.equal(incomingCalls, 4);
     } finally { Math.random = random; }
+});
+
+test("uncharge refuses atomically when actual refund stacks are capped", () => {
+    const owner = { getUsername: () => "test", getPacketSender: () => ({}) };
+    const inventory = new Inventory(owner);
+    inventory.refreshItems = () => inventory;
+    // Cache-backed ItemDefinition is intentionally unavailable in this unit test; mirror the
+    // production container's stack-capacity calculation over this real Inventory's slots.
+    inventory.getAddableAmount = function (item) {
+        const held = this.getItems().find((candidate) => candidate.getId() === item.getId() &&
+            JSON.stringify(candidate.getMeta() ?? null) === JSON.stringify(item.getMeta() ?? null));
+        return held ? Math.min(item.getAmount(), Math.max(0, MAX_STACK_AMOUNT - held.getAmount()))
+            : this.getFreeSlots() > 0 ? Math.min(item.getAmount(), MAX_STACK_AMOUNT) : 0;
+    };
+    const mace = new Item(ItemIdentifiers.OBLIGATOR, 1);
+    mace.setMetaValue(Obligator._test.CHARGES_META_KEY, 10);
+    inventory.setItem(0, mace);
+    inventory.setItem(1, new Item(ItemIdentifiers.ASCENSION_SHARDS, MAX_STACK_AMOUNT));
+    inventory.setItem(2, new Item(ItemIdentifiers.NATURE_RUNE, MAX_STACK_AMOUNT));
+    inventory.setItem(3, new Item(ItemIdentifiers.DEATH_RUNE, MAX_STACK_AMOUNT));
+    for (let slot = 4; slot < 28; slot++) inventory.setItem(slot, new Item(ItemIdentifiers.COINS, 1));
+    const user = {
+        getInventory: () => inventory,
+        getEquipment: () => ({ refreshItems() {} }),
+        getUpdateFlag: () => ({ flag() {} }),
+        sendMessage() {},
+    };
+
+    Obligator._test.uncharge({ player: user, item: mace });
+
+    assert.equal(Obligator._test.charges(mace), 10);
+    assert.equal(mace.getId(), ItemIdentifiers.OBLIGATOR);
+    assert.deepEqual([
+        inventory.getAmount(ItemIdentifiers.ASCENSION_SHARDS),
+        inventory.getAmount(ItemIdentifiers.NATURE_RUNE),
+        inventory.getAmount(ItemIdentifiers.DEATH_RUNE),
+    ], [MAX_STACK_AMOUNT, MAX_STACK_AMOUNT, MAX_STACK_AMOUNT]);
 });

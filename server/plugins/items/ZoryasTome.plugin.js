@@ -37,6 +37,7 @@ const SPECIAL = { ANIMATION: 15140, FEMALE_ANIMATION: 15147, START: 4432, FEMALE
 let core = null;
 let TomeCombatMethod = null;
 const spells = new WeakMap();
+const spellKinds = new WeakMap();
 /** Each player's flow buff: { attacks, expires }. */
 const buffs = new WeakMap();
 /** What each player's current cast is: "normal" | "buffed" | "special". */
@@ -71,22 +72,29 @@ function buffAttacks(player) {
 }
 
 function spellFor(player) {
-  let spell = spells.get(player);
+  const kind = casts.get(player) ?? "normal";
+  let byKind = spells.get(player);
+  if (!byKind) {
+    byKind = new Map();
+    spells.set(player, byKind);
+  }
+  let spell = byKind.get(kind);
   if (spell) return spell;
   const { CombatNormalSpell, Animation, Graphic, GraphicHeight, Projectile } = core;
-  const gfx = () => (casts.get(player) === "special" ? SPECIAL : STANDARD);
+  const gfx = kind === "special" ? SPECIAL : STANDARD;
   const female = () => player.getAppearance?.().isMale?.() === false;
   spell = new CombatNormalSpell({
     spellId: () => ids().ZORYAS_TOME,
     maximumHit: () => BASE_MAX_HIT,
-    castAnimation: () => new Animation(female() ? gfx().FEMALE_ANIMATION : gfx().ANIMATION),
-    startGraphic: () => new Graphic(female() ? gfx().FEMALE_START : gfx().START, GraphicHeight.HIGH),
-    castProjectile: (cast, castOn) => Projectile.createProjectile(cast, castOn, gfx().PROJECTILE, 0, 20, 43, 31),
-    endGraphic: () => new Graphic(gfx().END),
+    castAnimation: () => new Animation(female() ? gfx.FEMALE_ANIMATION : gfx.ANIMATION),
+    startGraphic: () => new Graphic(female() ? gfx.FEMALE_START : gfx.START, GraphicHeight.HIGH),
+    castProjectile: (cast, castOn) => Projectile.createProjectile(cast, castOn, gfx.PROJECTILE, 0, 20, 43, 31),
+    endGraphic: () => new Graphic(gfx.END),
     baseExperience: () => 0,
     levelRequired: () => 1,
   });
-  spells.set(player, spell);
+  byKind.set(kind, spell);
+  spellKinds.set(spell, kind);
   return spell;
 }
 
@@ -129,9 +137,9 @@ function tomeMethod() {
         return false;
       }
       // Its built-in spell is the only one it casts, whatever is selected or autocast.
-      player.getCombat().setCastSpell(spellFor(player));
       useCharge(player);
       startCast(player);
+      player.getCombat().setCastSpell(spellFor(player));
       return true;
     }
 
@@ -142,9 +150,9 @@ function tomeMethod() {
 
     hits(character, target) {
       const spell = spellFor(character.getAsPlayer());
-      const hit = new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell));
+      const hit = new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell), true).setSpell(spell);
       spell.onHitCalc(hit);
-      if (casts.get(character) === "special") specialHits.add(hit);
+      if (spellKinds.get(spell) === "special") specialHits.add(hit);
       return [hit];
     }
 
@@ -183,8 +191,9 @@ function onHitResolved({ attacker, hit }) {
 
 function boosted(request) {
   const player = request.attacker;
-  if (!player?.isPlayer?.() || request.spell !== spells.get(player)) return false;
-  return casts.get(player) === "special" || casts.get(player) === "buffed";
+  if (!player?.isPlayer?.() || !spellKinds.has(request.spell)) return false;
+  const kind = spellKinds.get(request.spell);
+  return kind === "special" || kind === "buffed";
 }
 
 function onMaxHit(request) {
@@ -242,6 +251,16 @@ function checkCharges({ player, item }) {
   return true;
 }
 
+function refundsFit(inventory, refunds) {
+  const items = inventory.getItems();
+  const newStacks = refunds.filter((refund) => !items.some((held) =>
+    held.getId() === refund.getId() && JSON.stringify(held.getMeta() ?? null) === JSON.stringify(refund.getMeta() ?? null)
+  )).length;
+  return newStacks <= inventory.getFreeSlots() && refunds.every((refund) =>
+    inventory.getAddableAmount(refund) >= refund.getAmount()
+  );
+}
+
 /** Wiki: uncharging returns every rune spent. */
 function uncharge({ player, item }) {
   const { Item } = core;
@@ -251,13 +270,15 @@ function uncharge({ player, item }) {
     return true;
   }
   const inventory = player.getInventory();
-  const needed = [ids().ASTRAL_RUNE, ids().NATURE_RUNE].filter((id) => !inventory.contains(id)).length;
-  if (inventory.getFreeSlots() < needed) {
+  const refunds = [
+    new Item(ids().ASTRAL_RUNE, charges * ASTRAL_PER_CHARGE),
+    new Item(ids().NATURE_RUNE, charges * NATURE_PER_CHARGE),
+  ];
+  if (!refundsFit(inventory, refunds)) {
     player.sendMessage("Your inventory is too full to hold the runes.");
     return true;
   }
-  inventory.addItem(new Item(ids().ASTRAL_RUNE, charges * ASTRAL_PER_CHARGE));
-  inventory.addItem(new Item(ids().NATURE_RUNE, charges * NATURE_PER_CHARGE));
+  for (const rune of refunds) inventory.addItem(rune);
   setCharges(player, item, 0);
   player.sendMessage(
     `You uncharge your Zorya's tome, regaining ${(charges * ASTRAL_PER_CHARGE).toLocaleString()} astral and ${(charges * NATURE_PER_CHARGE).toLocaleString()} nature runes.`
