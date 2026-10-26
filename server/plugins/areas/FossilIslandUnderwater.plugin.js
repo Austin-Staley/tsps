@@ -207,12 +207,18 @@ function breathe(player) {
     if (oxygen.get(player) !== DATA.oxygen.max) { oxygen.set(player, DATA.oxygen.max); sendOxygen(player); }
     return;
   }
+  // Out of air: drown on the first tick the player isn't mid-swim through an obstacle or hole (its
+  // steps would carry them back down), not just on the drain cadence, which back-to-back crossings
+  // could otherwise always land on.
+  if (oxygen.get(player) === 0) {
+    if (!ObstacleRunner.isBusy(player)) drown(player);
+    return;
+  }
   const ticks = drainTicks.get(player) + 1;
   if (ticks < DATA.oxygen.everyTicks) { drainTicks.set(player, ticks); return; }
   drainTicks.set(player, 0);
   oxygen.set(player, Math.max(0, oxygen.get(player) - DATA.oxygen.drain));
   sendOxygen(player);
-  // Not mid-swim through an obstacle or hole: its steps would carry the player back down.
   if (oxygen.get(player) === 0 && !ObstacleRunner.isBusy(player)) drown(player);
 }
 

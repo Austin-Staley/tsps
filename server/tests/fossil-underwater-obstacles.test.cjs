@@ -151,3 +151,34 @@ test('a double click mid-swim changes nothing', (t) => {
   tick(6);
   assert.deepEqual(at(p), [3757, 10260, 1]);
 });
+
+test('out of oxygen, back-to-back hole crossings no longer put off drowning: it comes the first tick between swims', (t) => {
+  const Underwater = require('../plugins/areas/FossilIslandUnderwater.plugin');
+  Underwater.register(new Proxy({ core, onServerStartup: (fn) => fn() }, { get: (target, key) => (key in target ? target[key] : () => {}) }));
+  const [x, y] = beside(3772, 10267);
+  const p = realPlayer(t, x, y);
+  t.after(() => Underwater._test.oxygen.delete(p));
+  Underwater._test.followWater(p);
+  assert.ok(Underwater._test.oxygen.has(p), 'under water');
+  Underwater._test.oxygen.set(p, 0);
+  const holes = [[3772, 10267], [3823, 10247]];
+  for (let crossing = 0; crossing < 20 && Underwater._test.oxygen.has(p); crossing++) {
+    const [hx, hy] = holes[crossing % 2];
+    const [bx, by] = beside(hx, hy);
+    if (at(p)[0] !== bx || at(p)[1] !== by) p.setLocation(new Location(bx, by, 1));
+    navigate(p, 30966, hx, hy);
+    tick(6);
+  }
+  assert.equal(Underwater._test.oxygen.has(p), false, 'drowned and out of the water');
+});
+
+test('out of oxygen and not mid-swim, the very next underwater tick drowns the player, not only a drain tick', (t) => {
+  const Underwater = require('../plugins/areas/FossilIslandUnderwater.plugin');
+  const [x, y] = beside(3823, 10247);
+  const p = realPlayer(t, x, y);
+  t.after(() => Underwater._test.oxygen.delete(p));
+  Underwater._test.followWater(p); // just in: the drain count starts again
+  Underwater._test.oxygen.set(p, 0);
+  Underwater._test.underwaterTick(); // the first of three ticks to the next drain
+  assert.equal(Underwater._test.oxygen.has(p), false, 'drowned on the first idle tick');
+});
