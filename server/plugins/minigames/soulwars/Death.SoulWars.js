@@ -95,7 +95,7 @@ function died(event) {
   if (killer?.isPlayer?.() && game.teamOf(killer) && game.teamOf(killer) !== team) {
     game.statsOf(killer).kills++;
     Common.addVarp(killer, "total_kills", 1);
-    Scoreboard.playerKilled();
+    Scoreboard.playerKilled(game, killer, player);
     game.active?.(killer);
   }
   player.moveTo(game.area.at(respawnTile(game, team)));

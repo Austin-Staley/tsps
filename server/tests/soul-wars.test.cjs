@@ -1083,3 +1083,18 @@ test('the scoreboard: a game with an empty side is no game for the world, and ot
   assert.equal(viewBoard(other, core.CacheDefinitions.getLocId('castlewars_scoreboard')), false);
   assert.equal(boardText(other), undefined);
 });
+
+test('the scoreboard: a game with bots alone on one side is no game for the world', () => {
+  Scoreboard._useFile(require('node:path').join(scoreboardDir, `${Math.random()}.json`));
+  const human = fakePlayer();
+  const bot = fakePlayer();
+  bot.isPlayerBot = () => true;
+  const game = new Match.Game([human, bot]);
+  game.start();
+  const victim = game.teamOf(human) === game.teamOf(bot) ? null : bot;
+  if (victim) for (const fn of hooks.death) fn({ player: bot, killer: human, handled: false });
+  game.finish(game.teamOf(human));
+  viewBoard(human);
+  assert.match(boardText(human), /Global statistics<br>Games played: 0<br>Players killed: 0<br>Avatars killed: 0$/);
+  assert.match(boardText(human), /^Your Soul Wars statistics<br>Games played: 1<br>/, 'the player still counts their own game');
+});

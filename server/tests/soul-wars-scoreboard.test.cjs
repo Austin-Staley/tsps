@@ -88,20 +88,53 @@ test("the reader's lines are their own saved Soul Wars counters, in thousands", 
   assert.deepEqual(lines(p).slice(1, 5), ['Games played: 1,234', 'Games won: 600', 'Players killed: 2,500', 'Deaths: 7']);
 });
 
-test("the world's records are every player's and survive a restart", (t) => {
+test("the world's records are every player's and survive a restart; bot-only games and bot-on-bot kills don't count", (t) => {
   const file = path.join(scratch, 'restart.json');
   Scoreboard._useFile(file);
-  Scoreboard.playerKilled();
-  Scoreboard.playerKilled();
-  Scoreboard.avatarKilled();
-  Scoreboard.gameEnded({ starters: { blue: 3, red: 2 } });
-  Scoreboard.gameEnded({ starters: { blue: 3, red: 0 } }); // not a real game
-  Scoreboard._useFile(file);
+  const human = realPlayer(t);
+  const other = realPlayer(t);
+  const bot = { isPlayerBot: () => true };
+  const real = { members: { blue: new Set([human, bot]), red: new Set([other, bot]) } };
+  Scoreboard.gameStarted(real);
+  Scoreboard.playerKilled(real, human, other);
+  Scoreboard.playerKilled(real, bot, human);
+  Scoreboard.playerKilled(real, bot, bot); // bot on bot: not counted
+  Scoreboard.avatarKilled(real);
+  Scoreboard.gameEnded(real);
+  const bots = { members: { blue: new Set([human]), red: new Set([bot]) } }; // no real player on red
+  Scoreboard.gameStarted(bots);
+  Scoreboard.playerKilled(bots, human, bot);
+  Scoreboard.avatarKilled(bots);
+  Scoreboard.gameEnded(bots);
+  assert.equal(fs.existsSync(file), true);
+  Scoreboard._useFile(file); // as a restart reads it again
   const a = realPlayer(t);
   const b = realPlayer(t);
   view(a);
   view(b);
   for (const p of [a, b]) assert.deepEqual(lines(p).slice(7), ['Games played: 1', 'Players killed: 2', 'Avatars killed: 1']);
+});
+
+test('nothing is saved until a counted game ends', (t) => {
+  const file = path.join(scratch, 'lazy.json');
+  Scoreboard._useFile(file);
+  const a = realPlayer(t);
+  const b = realPlayer(t);
+  const game = { members: { blue: new Set([a]), red: new Set([b]) } };
+  Scoreboard.gameStarted(game);
+  Scoreboard.playerKilled(game, a, b);
+  Scoreboard.avatarKilled(game);
+  assert.equal(fs.existsSync(file), false, 'kills during the game are not written one by one');
+  view(a);
+  assert.equal(lines(a)[8], 'Players killed: 0', 'the world sees a game once it ends');
+  Scoreboard.gameEnded(game);
+  assert.equal(fs.existsSync(file), true);
+});
+
+test('every line fits the text box without a scrollbar (204 px at 18 px a line)', (t) => {
+  const p = realPlayer(t);
+  view(p);
+  assert.ok(lines(p).length <= Math.floor(204 / 18));
 });
 
 test('viewing twice shows the board twice and counts nothing', (t) => {

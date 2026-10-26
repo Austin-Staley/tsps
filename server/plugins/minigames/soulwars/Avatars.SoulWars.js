@@ -75,7 +75,7 @@ function avatarDied({ npc }) {
     Common.varbit(player, `soul_wars_${team}_avatar_check`, 0);
   }
   game.scored(scorer);
-  Scoreboard.avatarKilled();
+  Scoreboard.avatarKilled(game);
   Common.later(Common.data.returnTicks, () => {
     if (game.over) return;
     spawnAvatar(game, team);

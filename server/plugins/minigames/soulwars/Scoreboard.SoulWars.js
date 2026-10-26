@@ -5,12 +5,13 @@
  *
  * Wiki (Scoreboard (Soul Wars)): "See your scores here." It shows stats from the reader's own
  * games and the minigame's global ones: games played, players killed and Avatars killed. The
- * interface is one text box (soul_wars_stats:scroll_text) that no cache script fills, so the
+ * interface's only text is soul_wars_stats:scroll_text, which no cache script fills, so the
  * server writes it. The reader's lines are the game's own lifetime counters (Stats.SoulWars.js:
- * soul_wars_total_games / _wins / _kills / _deaths). The world's are counted here: a real game
- * when it ends (both sides had players, as its Zeal needs), each enemy player killed
- * (Death.SoulWars.js) and each Avatar killed (Avatars.SoulWars.js), and kept in
- * data/saves/soul-wars-scoreboard.json.
+ * soul_wars_total_games / _wins / _kills / _deaths; a game counts for the player on entry).
+ * The world's are counted per game and added when it ends, saved once then: a game counts when
+ * each side started with a real (non-bot) player, with its enemy players killed
+ * (Death.SoulWars.js; a bot killing a bot is not counted) and its Avatars killed
+ * (Avatars.SoulWars.js). They are kept in data/saves/soul-wars-scoreboard.json.
  */
 
 const fs = require("node:fs");
@@ -50,25 +51,39 @@ function save() {
   }
 }
 
-function bump(key) {
-  records()[key]++;
-  save();
+/** Per game: the kills and Avatar kills it has seen, and whether it counts for the world. */
+const tallies = new WeakMap();
+
+const real = (player) => player?.isPlayerBot?.() !== true;
+
+/** A game began: it counts for the world when each side starts with a real (non-bot) player. */
+function gameStarted(game) {
+  const realOn = (team) => [...(game.members?.[team] ?? [])].some(real);
+  tallies.set(game, { counts: realOn("blue") && realOn("red"), playersKilled: 0, avatarsKilled: 0 });
 }
 
-/** An enemy player killed in a game (Death.SoulWars.js). */
-function playerKilled() {
-  bump("playersKilled");
+/** `killer` killed `victim`, an enemy, in `game` (Death.SoulWars.js). Bots killing bots don't count. */
+function playerKilled(game, killer, victim) {
+  const tally = tallies.get(game);
+  if (tally && (real(killer) || real(victim))) tally.playersKilled++;
 }
 
-/** An Avatar killed (Avatars.SoulWars.js). */
-function avatarKilled() {
-  bump("avatarsKilled");
+/** An Avatar killed in `game` (Avatars.SoulWars.js). */
+function avatarKilled(game) {
+  const tally = tallies.get(game);
+  if (tally) tally.avatarsKilled++;
 }
 
-/** A game ended: it counts when both sides started with players, as Match.finish pays Zeal. */
+/** A game ended: what it counted joins the world's records, saved once. */
 function gameEnded(game) {
-  if (!(game?.starters?.blue > 0 && game?.starters?.red > 0)) return;
-  bump("games");
+  const tally = tallies.get(game);
+  tallies.delete(game);
+  if (!tally?.counts) return;
+  const totals = records();
+  totals.games++;
+  totals.playersKilled += tally.playersKilled;
+  totals.avatarsKilled += tally.avatarsKilled;
+  save();
 }
 
 function text(player) {
@@ -96,12 +111,13 @@ function view(event) {
 }
 
 function attachScoreboard(api) {
+  Match.onStart(gameStarted);
   Match.onEnd(gameEnded);
   api.onObjectInteraction("Scoreboard", { View: view });
 }
 
 module.exports = {
-  attachScoreboard, playerKilled, avatarKilled, gameEnded, view, text,
+  attachScoreboard, gameStarted, playerKilled, avatarKilled, gameEnded, view, text,
   SCOREBOARD_LOC, INTERFACE_NAME, TEXT_COMPONENT,
   /** Tests: read and write the world's records at `file` instead, from scratch. */
   _useFile(file) { FILE = file; world = null; },
